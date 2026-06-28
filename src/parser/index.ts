@@ -22,6 +22,7 @@ import type { ParseCcdaOptions } from "./types.js";
 import type { CcdaWarning } from "./warnings.js";
 import { positionOf } from "../model/dom.js";
 import { buildDocument, CcdaDocument } from "../model/document.js";
+import { serializeDocument } from "../serialize/serialize-dom.js";
 
 /**
  * Parse a C-CDA XML payload into an immutable {@link CcdaDocument}.
@@ -71,7 +72,8 @@ export function parseCcda(raw: string, options: ParseCcdaOptions = {}): CcdaDocu
   }
 
   const parts = buildDocument(root, { emit });
-  return new CcdaDocument({ ...parts, warnings });
+  const serialized = serializeDocument(doc);
+  return new CcdaDocument({ ...parts, warnings, serialized });
 }
 
 /**

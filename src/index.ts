@@ -52,6 +52,9 @@ export type { FatalCode } from "./parser/errors.js";
 export { CcdaDocument, buildDocument } from "./model/document.js";
 export type { CcdaDocumentInit } from "./model/document.js";
 
+// Spec-clean serializer (Postel's-Law emit side; symmetric with parseCcda).
+export { serializeCcda } from "./serialize/index.js";
+
 // Header + patient + section models.
 export { buildHeader } from "./model/header.js";
 export type { CcdaHeader, CcdaPatient, HumanName } from "./model/header.js";

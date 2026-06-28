@@ -15,11 +15,12 @@ lenient parser that turns real-world, vendor-quirky input into **warnings** rath
 [`@xmldom/xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) (exact-pinned), the hardened W3C-DOM
 substrate for C-CDA's XML.
 
-> **Status:** pre-alpha (`0.0.x`), not yet published to npm. Through **Phase 3** the parser ships
+> **Status:** pre-alpha (`0.0.x`), not yet published to npm. Through **Phase 4** the parser ships
 > document recognition, the US Realm header + patient demographics, section framing, the
 > reconciliation triad (Problems / Medications / Allergies), and the discrete-data families
-> (Results / Vital Signs / Immunizations) with a computable UCUM unit check. A spec-clean serializer
-> lands in a later phase.
+> (Results / Vital Signs / Immunizations) with a computable UCUM unit check — plus a **spec-clean,
+> round-trip serializer** (`serializeCcda` / `toString()`) and immutable copy-with
+> (`withWarnings`). A document **builder** API lands in a later phase.
 
 ## Install
 
@@ -99,6 +100,29 @@ Every physical quantity is checked against a **computable, zero-dependency UCUM 
 letter-case slip caught (`UCUM_CASE_SUSPECT`), but the **raw unit is always preserved — never
 normalized away**. An unrecognized `value xsi:type` is kept as `unsupported`; nothing is dropped.
 
+## Serialize & round-trip (Phase 4)
+
+The conservative _emit_ half of Postel's Law. `serializeCcda(doc)` (or `doc.toString()`) re-emits a
+parsed document as spec-clean C-CDA XML with a guaranteed UTF-8 declaration:
+
+```ts
+import { parseCcda, serializeCcda } from "@cosyte/ccda";
+
+const doc = parseCcda(xml);
+const out = serializeCcda(doc); // === doc.toString()
+```
+
+- **Faithful, no silent loss.** The output is snapshotted from the parsed XML at parse time, not
+  rebuilt from the read-model, so every attribute, namespace declaration (`xmlns` / `xmlns:xsi` /
+  `xmlns:sdtc`), `templateId`, and unmodeled element survives. Serialization is a **fixed point** —
+  `parseCcda(serializeCcda(doc))` re-serializes to the identical string.
+- **Immutable copy-with.** Models are immutable; the sanctioned mutation is `doc.withWarnings(extra)`,
+  which returns a **new** document with extra warnings appended, sharing every parsed field by
+  reference and leaving the original untouched.
+
+> A hand-constructed document (not produced by `parseCcda`) retains no source XML, so `toString()`
+> throws — a document builder API lands in a later phase.
+
 ### Code systems & provenance
 
 Slot validation (`checkCodeSlot`, exported OIDs `SNOMED_CT` / `RXNORM` / `ICD10_CM` / `NDC` / `UNII` /
@@ -122,7 +146,9 @@ checks.
 - **LOINC deprecation is a curated set** — `checkLoincDeprecation` flags a curated list of known
   deprecated LOINC codes, not every deprecation in the LOINC release. As with all code-system checks,
   this is recognition only — membership validation needs a licensed terminology service.
-- **No serializer/builder yet** — parse only; the spec-clean emit half of Postel's Law is a later phase.
+- **Serializer is round-trip emit, not a builder** — `serializeCcda` / `toString()` faithfully re-emit
+  a _parsed_ document (the spec-clean emit half of Postel's Law); constructing or editing a document
+  from scratch needs the builder API, which is a later phase.
 - **No vendor profile system yet** — `getMrn()` selects the first `patientRole/id` extension; a
   profile-aware override is planned.
 

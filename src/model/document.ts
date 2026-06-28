@@ -73,6 +73,15 @@ export interface CcdaDocumentInit {
   readonly immunizations: readonly Immunization[];
   readonly nonXmlBody?: ED;
   readonly warnings: readonly CcdaWarning[];
+  /**
+   * The spec-clean XML snapshot captured from the source DOM at parse time,
+   * returned by {@link CcdaDocument.toString}. Populated by `parseCcda`; absent
+   * for a hand-constructed document (which therefore cannot be serialized until
+   * a builder API lands).
+   *
+   * @internal
+   */
+  readonly serialized?: string;
 }
 
 /**
@@ -113,6 +122,9 @@ export class CcdaDocument {
   /** Lenient-parse warnings, frozen at the model boundary. */
   public readonly warnings: readonly CcdaWarning[];
 
+  /** Spec-clean XML snapshot of the source DOM; `undefined` for a hand-constructed doc. @internal */
+  readonly #serialized: string | undefined;
+
   /**
    * Construct a `CcdaDocument`. Freezes the `warnings` array (after a `slice`)
    * so callers cannot mutate parser output after handoff.
@@ -132,6 +144,85 @@ export class CcdaDocument {
     this.immunizations = init.immunizations;
     this.nonXmlBody = init.nonXmlBody;
     this.warnings = Object.freeze(init.warnings.slice());
+    this.#serialized = init.serialized;
+  }
+
+  /**
+   * Serialize this document back to spec-clean C-CDA XML — the conservative
+   * *emit* half of the Postel's-Law contract. Returns the faithful re-emission
+   * of the source the parser read (no silent loss of unmodeled content), with a
+   * guaranteed XML declaration. Serialization is a fixed point:
+   * `parseCcda(doc.toString()).toString() === doc.toString()`.
+   *
+   * @returns The spec-clean XML text.
+   * @throws {Error} If this document was hand-constructed (not produced by
+   *   {@link parseCcda}) and so retains no source document to emit — a document
+   *   builder API lands in a later phase.
+   * @example
+   * ```ts
+   * const doc = parseCcda(xml);
+   * const xmlOut = doc.toString();
+   * ```
+   */
+  public toString(): string {
+    if (this.#serialized === undefined) {
+      throw new Error(
+        "CcdaDocument.toString: no source document retained. Only documents produced " +
+          "by parseCcda can be serialized; a document builder API lands in a later phase.",
+      );
+    }
+    return this.#serialized;
+  }
+
+  /**
+   * Return a **new** `CcdaDocument` with `additional` warnings appended,
+   * structurally sharing every parsed field (header, sections, entries, and the
+   * serialized snapshot) with this instance by reference. The original is never
+   * mutated — the immutable copy-with foundation a later builder phase extends
+   * to content edits. A downstream pass (e.g. profile-aware validation) uses
+   * this to annotate a document without re-parsing.
+   *
+   * @param additional - Warnings to append after the existing ones.
+   * @returns A new document; this instance is unchanged.
+   * @example
+   * ```ts
+   * const annotated = doc.withWarnings([
+   *   { code: "SECTION_PLACEMENT_SUSPECT", message: "...", position: {} },
+   * ]);
+   * // doc.warnings is unchanged; annotated.warnings has the extra entry.
+   * ```
+   */
+  public withWarnings(additional: readonly CcdaWarning[]): CcdaDocument {
+    const init: {
+      documentType?: DocumentType;
+      templateIds: readonly II[];
+      header: CcdaHeader;
+      sections: readonly CcdaSection[];
+      problems: readonly ProblemConcern[];
+      medications: readonly Medication[];
+      allergies: readonly AllergyConcern[];
+      results: readonly ResultOrganizer[];
+      vitals: readonly VitalSignsOrganizer[];
+      immunizations: readonly Immunization[];
+      nonXmlBody?: ED;
+      warnings: readonly CcdaWarning[];
+      serialized?: string;
+    } = {
+      templateIds: this.templateIds,
+      header: this.header,
+      sections: this.sections,
+      problems: this.problems,
+      medications: this.medications,
+      allergies: this.allergies,
+      results: this.results,
+      vitals: this.vitals,
+      immunizations: this.immunizations,
+      warnings: [...this.warnings, ...additional],
+    };
+    if (this.documentType !== undefined) init.documentType = this.documentType;
+    if (this.nonXmlBody !== undefined) init.nonXmlBody = this.nonXmlBody;
+    if (this.#serialized !== undefined) init.serialized = this.#serialized;
+    return new CcdaDocument(init);
   }
 
   /**
