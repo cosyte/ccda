@@ -41,6 +41,17 @@ export const WARNING_CODES = {
   MULTIPLE_RECORD_TARGETS: "MULTIPLE_RECORD_TARGETS",
   MISSING_ASSIGNING_AUTHORITY: "MISSING_ASSIGNING_AUTHORITY",
   ENCODING_BOM_STRIPPED: "ENCODING_BOM_STRIPPED",
+  NEGATION_VS_NULLFLAVOR_AMBIGUOUS: "NEGATION_VS_NULLFLAVOR_AMBIGUOUS",
+  ALLERGEN_GRANULARITY_SUSPECT: "ALLERGEN_GRANULARITY_SUSPECT",
+  CODE_NARRATIVE_MISMATCH: "CODE_NARRATIVE_MISMATCH",
+  NARRATIVE_REFERENCE_BROKEN: "NARRATIVE_REFERENCE_BROKEN",
+  UNEXPECTED_CODE_SYSTEM: "UNEXPECTED_CODE_SYSTEM",
+  DEPRECATED_CODE_SYSTEM: "DEPRECATED_CODE_SYSTEM",
+  MISSING_DOSE_QUANTITY: "MISSING_DOSE_QUANTITY",
+  MISSING_ROUTE_CODE: "MISSING_ROUTE_CODE",
+  MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED: "MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED",
+  PROBLEM_STATUS_INDETERMINATE: "PROBLEM_STATUS_INDETERMINATE",
+  SECTION_PLACEMENT_SUSPECT: "SECTION_PLACEMENT_SUSPECT",
 } as const;
 
 /**
@@ -304,6 +315,242 @@ export function encodingBomStripped(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.ENCODING_BOM_STRIPPED,
     message: `A UTF-8 byte-order mark was stripped from the head of the input.`,
+    position,
+  };
+}
+
+/**
+ * Build a `NEGATION_VS_NULLFLAVOR_AMBIGUOUS` warning. Emitted when a clinical
+ * act carries **both** `@negationInd="true"` and a `@nullFlavor` — two distinct
+ * "this did not / is not known" signals at once. The parser never collapses
+ * them: both are preserved on the model and this flags the ambiguity.
+ *
+ * @example
+ * ```ts
+ * import { negationVsNullFlavorAmbiguous } from "@cosyte/ccda";
+ * const w = negationVsNullFlavorAmbiguous({ path: "observation" }, "NI");
+ * ```
+ */
+export function negationVsNullFlavorAmbiguous(
+  position: CcdaPosition,
+  nullFlavor: string,
+): CcdaWarning {
+  return {
+    code: WARNING_CODES.NEGATION_VS_NULLFLAVOR_AMBIGUOUS,
+    message: `Act carries both negationInd="true" and nullFlavor "${nullFlavor}"; modeled as distinct fields, not collapsed.`,
+    position,
+  };
+}
+
+/**
+ * Build an `ALLERGEN_GRANULARITY_SUSPECT` warning. Emitted when an allergen is
+ * coded at a product/branded level (a dose-form or strength is detectable in
+ * the RxNorm display) where an ingredient-level concept is expected — the code
+ * is preserved, the granularity is flagged for review.
+ *
+ * @example
+ * ```ts
+ * import { allergenGranularitySuspect } from "@cosyte/ccda";
+ * const w = allergenGranularitySuspect({ path: "playingEntity" });
+ * ```
+ */
+export function allergenGranularitySuspect(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.ALLERGEN_GRANULARITY_SUSPECT,
+    message: `Allergen appears coded at product level where an ingredient-level concept is expected; granularity flagged.`,
+    position,
+  };
+}
+
+/**
+ * Build a `CODE_NARRATIVE_MISMATCH` warning. Emitted when a coded entry value
+ * and the narrative text it references via `<reference value="#id">` disagree.
+ * The parser surfaces **both** and picks no winner — a safety-critical
+ * fail-safe so a structured/narrative divergence is never silently resolved.
+ *
+ * @example
+ * ```ts
+ * import { codeNarrativeMismatch } from "@cosyte/ccda";
+ * const w = codeNarrativeMismatch({ path: "value" }, "problem");
+ * ```
+ */
+export function codeNarrativeMismatch(position: CcdaPosition, slot: string): CcdaWarning {
+  return {
+    code: WARNING_CODES.CODE_NARRATIVE_MISMATCH,
+    message: `Coded ${slot} value and its referenced narrative disagree; both preserved, no winner chosen.`,
+    position,
+  };
+}
+
+/**
+ * Build a `NARRATIVE_REFERENCE_BROKEN` warning. Emitted when an entry's
+ * `<reference value="#id">` points at a narrative `ID` that is not present in
+ * the section's narrative index — the structured data is kept, the dangling
+ * reference is flagged.
+ *
+ * @example
+ * ```ts
+ * import { narrativeReferenceBroken } from "@cosyte/ccda";
+ * const w = narrativeReferenceBroken({ path: "reference" }, "prob1");
+ * ```
+ */
+export function narrativeReferenceBroken(position: CcdaPosition, referenceId: string): CcdaWarning {
+  return {
+    code: WARNING_CODES.NARRATIVE_REFERENCE_BROKEN,
+    message: `Narrative reference "#${referenceId}" does not resolve to any ID in the section narrative.`,
+    position,
+  };
+}
+
+/**
+ * Build an `UNEXPECTED_CODE_SYSTEM` warning. Emitted when a coded value's
+ * `@codeSystem` OID is not one of the systems expected for that slot (e.g. a
+ * non-RxNorm OID on a medication, a non-SNOMED/ICD-10 OID on a problem). The
+ * value is preserved verbatim.
+ *
+ * @example
+ * ```ts
+ * import { unexpectedCodeSystem } from "@cosyte/ccda";
+ * const w = unexpectedCodeSystem({ path: "value" }, "1.2.3", "problem");
+ * ```
+ */
+export function unexpectedCodeSystem(
+  position: CcdaPosition,
+  observedOid: string,
+  slot: string,
+): CcdaWarning {
+  return {
+    code: WARNING_CODES.UNEXPECTED_CODE_SYSTEM,
+    message: `Code system OID "${observedOid}" is not expected for the ${slot} slot; value preserved.`,
+    position,
+  };
+}
+
+/**
+ * Build a `DEPRECATED_CODE_SYSTEM` warning. Emitted when a coded value uses a
+ * deprecated code system (ICD-9-CM diagnosis/procedure) where its modern
+ * successor (ICD-10-CM/PCS, SNOMED) is expected — the value is preserved.
+ *
+ * @example
+ * ```ts
+ * import { deprecatedCodeSystem } from "@cosyte/ccda";
+ * const w = deprecatedCodeSystem({ path: "value" }, "2.16.840.1.113883.6.103", "problem");
+ * ```
+ */
+export function deprecatedCodeSystem(
+  position: CcdaPosition,
+  observedOid: string,
+  slot: string,
+): CcdaWarning {
+  return {
+    code: WARNING_CODES.DEPRECATED_CODE_SYSTEM,
+    message: `Code system OID "${observedOid}" is deprecated for the ${slot} slot; prefer its modern successor. Value preserved.`,
+    position,
+  };
+}
+
+/**
+ * Build a `MISSING_DOSE_QUANTITY` warning. Emitted when a Medication Activity
+ * carries no `doseQuantity` — a safety-critical field. The dose is preserved as
+ * absent (never defaulted) and the gap is flagged.
+ *
+ * @example
+ * ```ts
+ * import { missingDoseQuantity } from "@cosyte/ccda";
+ * const w = missingDoseQuantity({ path: "substanceAdministration" });
+ * ```
+ */
+export function missingDoseQuantity(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.MISSING_DOSE_QUANTITY,
+    message: `Medication activity has no doseQuantity; dose preserved as absent, never defaulted.`,
+    position,
+  };
+}
+
+/**
+ * Build a `MISSING_ROUTE_CODE` warning. Emitted when a Medication Activity
+ * carries no `routeCode`. The route is preserved as absent (never defaulted)
+ * and the gap is flagged.
+ *
+ * @example
+ * ```ts
+ * import { missingRouteCode } from "@cosyte/ccda";
+ * const w = missingRouteCode({ path: "substanceAdministration" });
+ * ```
+ */
+export function missingRouteCode(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.MISSING_ROUTE_CODE,
+    message: `Medication activity has no routeCode; route preserved as absent, never defaulted.`,
+    position,
+  };
+}
+
+/**
+ * Build a `MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED` warning. A Medication Activity
+ * carries its dosing period (`IVL_TS`) and frequency (`PIVL_TS`) as sibling
+ * `effectiveTime` elements distinguished by `xsi:type`. This is emitted when
+ * extra `effectiveTime` siblings cannot be classified into those two slots —
+ * all are preserved, none discarded.
+ *
+ * @example
+ * ```ts
+ * import { multipleEffectiveTimesUnresolved } from "@cosyte/ccda";
+ * const w = multipleEffectiveTimesUnresolved({ path: "substanceAdministration" }, 3);
+ * ```
+ */
+export function multipleEffectiveTimesUnresolved(
+  position: CcdaPosition,
+  count: number,
+): CcdaWarning {
+  return {
+    code: WARNING_CODES.MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED,
+    message: `Medication carries ${String(count)} effectiveTime elements that could not be classified as duration vs frequency; all preserved.`,
+    position,
+  };
+}
+
+/**
+ * Build a `PROBLEM_STATUS_INDETERMINATE` warning. Emitted when a Problem
+ * Concern Act's `statusCode` is absent or carries a token outside the
+ * recognized `active`/`completed`/`suspended`/`aborted` set — the active vs
+ * resolved state cannot be determined, so it is reported as `unknown`.
+ *
+ * @example
+ * ```ts
+ * import { problemStatusIndeterminate } from "@cosyte/ccda";
+ * const w = problemStatusIndeterminate({ path: "act" });
+ * ```
+ */
+export function problemStatusIndeterminate(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.PROBLEM_STATUS_INDETERMINATE,
+    message: `Problem concern statusCode is missing or unrecognized; active/resolved state is indeterminate.`,
+    position,
+  };
+}
+
+/**
+ * Build a `SECTION_PLACEMENT_SUSPECT` warning. Emitted when a recognized
+ * clinical entry template appears in a section where it does not belong (e.g. a
+ * Medication Activity inside the Problems section) — the entry is still
+ * extracted, but the misplacement is flagged.
+ *
+ * @example
+ * ```ts
+ * import { sectionPlacementSuspect } from "@cosyte/ccda";
+ * const w = sectionPlacementSuspect({ path: "entry" }, "medications", "problems");
+ * ```
+ */
+export function sectionPlacementSuspect(
+  position: CcdaPosition,
+  entryExpectedSection: string,
+  foundInSection: string,
+): CcdaWarning {
+  return {
+    code: WARNING_CODES.SECTION_PLACEMENT_SUSPECT,
+    message: `An entry template that belongs in the "${entryExpectedSection}" section was found in the "${foundInSection}" section; extracted but flagged.`,
     position,
   };
 }

@@ -55,8 +55,45 @@ export type { CcdaDocumentInit } from "./model/document.js";
 // Header + patient + section models.
 export { buildHeader } from "./model/header.js";
 export type { CcdaHeader, CcdaPatient, HumanName } from "./model/header.js";
-export { buildSection } from "./model/section.js";
+export { buildSection, buildNarrativeIndex } from "./model/section.js";
 export type { CcdaSection } from "./model/section.js";
+
+// Clinical entry layer (Phase 2 reconciliation triad: Problems, Medications, Allergies).
+export {
+  extractClinical,
+  extractProblems,
+  extractMedications,
+  extractAllergies,
+} from "./model/entries/index.js";
+export type {
+  ClinicalEntries,
+  Problem,
+  ProblemConcern,
+  ProblemStatus,
+  Medication,
+  MedicationFrequency,
+  Allergy,
+  AllergyConcern,
+  AllergyReaction,
+  ConcernStatus,
+} from "./model/entries/index.js";
+
+// Code-system OIDs + slot validation used by the entry layer.
+export {
+  SNOMED_CT,
+  RXNORM,
+  ICD10_CM,
+  ICD10_PCS,
+  ICD9_CM_DX,
+  ICD9_CM_PROC,
+  LOINC,
+  NDC,
+  UNII,
+  NCI_ROUTE,
+  checkCodeSlot,
+  looksProductLevel,
+} from "./model/code-systems.js";
+export type { CodeSlot } from "./model/code-systems.js";
 
 // Recognition tables — document types + section catalog.
 export {

@@ -135,11 +135,16 @@ function recognize(
  * Index a narrative `<text>` block by the `ID` attributes carried on its
  * descendant elements, mapping each `ID` to that node's trimmed text. C-CDA
  * entries reference narrative via `<reference value="#id">`; this index lets
- * Phase 2 resolve those references without re-walking the DOM.
+ * the entry layer resolve those references without re-walking the DOM.
  *
- * @internal
+ * @example
+ * ```ts
+ * import { buildNarrativeIndex, child } from "@cosyte/ccda";
+ * const index = buildNarrativeIndex(child(sectionEl, "text")!);
+ * console.log(index.get("problem1"));
+ * ```
  */
-function buildNarrativeIndex(textEl: Element): ReadonlyMap<string, string> {
+export function buildNarrativeIndex(textEl: Element): ReadonlyMap<string, string> {
   const index = new Map<string, string>();
   let level: Element[] = [...childElements(textEl)];
   while (level.length > 0) {
