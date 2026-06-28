@@ -1,0 +1,48 @@
+import { describe, expect, it } from "vitest";
+import { sortedCodeSet } from "@cosyte/test-utils";
+
+import { WARNING_CODES, FATAL_CODES } from "../src/index.js";
+
+/**
+ * The warning + fatal code surface is part of the public contract — consumers
+ * branch on `w.code`, so adding/removing/renaming a code is a reviewable event.
+ * These inline snapshots turn any such change into a failing diff.
+ */
+describe("code surface stability", () => {
+  it("warning codes are stable", () => {
+    expect(sortedCodeSet(WARNING_CODES)).toMatchInlineSnapshot(`
+      [
+        "ENCODING_BOM_STRIPPED",
+        "INVALID_NULL_FLAVOR",
+        "MALFORMED_DATETIME",
+        "MISSING_ASSIGNING_AUTHORITY",
+        "MISSING_TEMPLATE_ID",
+        "MULTIPLE_RECORD_TARGETS",
+        "SECTION_MATCHED_BY_LOINC_FALLBACK",
+        "TEMPLATE_EXTENSION_ABSENT",
+        "UNKNOWN_DOCUMENT_TEMPLATE",
+        "UNKNOWN_NAMESPACE_PREFIX",
+        "UNKNOWN_SECTION_CODE",
+      ]
+    `);
+  });
+
+  it("fatal codes are stable", () => {
+    expect(sortedCodeSet(FATAL_CODES)).toMatchInlineSnapshot(`
+      [
+        "ELEMENT_DEPTH_LIMIT_EXCEEDED",
+        "ENTITY_EXPANSION_LIMIT",
+        "INPUT_SIZE_LIMIT_EXCEEDED",
+        "NODE_COUNT_LIMIT_EXCEEDED",
+        "NOT_A_CLINICAL_DOCUMENT",
+        "NOT_WELL_FORMED_XML",
+        "XXE_OR_DTD_PRESENT",
+      ]
+    `);
+  });
+
+  it("every code key equals its value (snapshot-safe registries)", () => {
+    for (const [k, v] of Object.entries(WARNING_CODES)) expect(k).toBe(v);
+    for (const [k, v] of Object.entries(FATAL_CODES)) expect(k).toBe(v);
+  });
+});
