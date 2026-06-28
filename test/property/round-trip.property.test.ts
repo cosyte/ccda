@@ -8,22 +8,19 @@
  *
  *   - the **lenient-mode** invariant runs against the real parser — `parseCcda` must never throw a
  *     non-fatal on arbitrary input, and every recovered warning must carry a registered code; and
- *   - the **round-trip** invariant is `it.todo` until the serializer (`serializeCcda` /
- *     `doc.toString()`) lands. The body is written against the real runner so it typechecks and
- *     lints now, and flips on by changing `it.todo` to `it` once a serializer exists.
+ *   - the **round-trip** invariant runs against the real serializer
+ *     (`serializeCcda` / `doc.toString()`): for a spec-valid document `x`,
+ *     `parse(serialize(x))` is canonically equal to `x` and serialization is a
+ *     fixed point (`serialize(parse(serialize(x))) === serialize(x)`).
  */
 
 import { describe, it } from "vitest";
 import fc from "fast-check";
 import { lenientNeverThrowsProperty, roundTripProperty } from "@cosyte/test-utils";
 
-import {
-  FATAL_CODES,
-  WARNING_CODES,
-  parseCcda,
-  type CcdaDocument,
-  type CcdaWarning,
-} from "../../src/index.js";
+import { FATAL_CODES, WARNING_CODES, parseCcda, type CcdaDocument } from "../../src/index.js";
+
+import { specCleanCcdaXml } from "./_arbitraries.js";
 
 const fatalCodes = new Set<string>(Object.values(FATAL_CODES));
 const knownWarningCodes = new Set<string>(Object.values(WARNING_CODES));
@@ -36,20 +33,6 @@ const knownWarningCodes = new Set<string>(Object.values(WARNING_CODES));
  */
 function hostileInput(): fc.Arbitrary<string> {
   return fc.string();
-}
-
-/** Minimal round-trip carrier until the real spec-clean model arbitrary lands. */
-interface RoundTripStub {
-  readonly warnings: readonly CcdaWarning[];
-}
-
-/**
- * Placeholder arbitrary for **spec-clean** values — the round-trip generator. Replace it with a
- * generator of spec-valid documents the builder/serializer can emit, so `parse(serialize(x))` can be
- * asserted structurally equal to `x`.
- */
-function specCleanCcda(): fc.Arbitrary<RoundTripStub> {
-  return fc.constant({ warnings: [] } satisfies RoundTripStub);
 }
 
 describe("ccda conformance (archetype invariants)", () => {
@@ -70,23 +53,15 @@ describe("ccda conformance (archetype invariants)", () => {
     });
   });
 
-  // TODO: flip `it.todo` -> `it` once a serializer (`serializeCcda` / `doc.toString()`)
-  // exists. The body already typechecks and lints against the real runner.
-  it.todo("round-trips — parse(serialize(x)) is structurally equal to x", () => {
-    roundTripProperty({
-      arbitrary: specCleanCcda(),
-      // Replace with the real serializer once it lands.
-      serialize: (value) => JSON.stringify(value),
-      // Replace with the real parser once it returns the model type the arbitrary produces.
-      parse: (raw): RoundTripStub => {
-        const decoded: unknown = JSON.parse(raw);
-        const warnings =
-          typeof decoded === "object" && decoded !== null && "warnings" in decoded
-            ? (decoded as RoundTripStub).warnings
-            : [];
-        return { warnings };
-      },
-      equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+  it("round-trips — parse(serialize(x)) is canonically equal to x", () => {
+    roundTripProperty<CcdaDocument>({
+      arbitrary: specCleanCcdaXml().map((xml) => parseCcda(xml)),
+      serialize: (doc) => doc.toString(),
+      parse: (raw) => parseCcda(raw),
+      // The serialized XML is the canonical form, so structural equality is
+      // equality of that form (mirrors @cosyte/hl7's round-trip equals).
+      equals: (a, b) => a.toString() === b.toString(),
+      numRuns: 80,
     });
   });
 });
