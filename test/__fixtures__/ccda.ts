@@ -462,6 +462,242 @@ export const SMOKING_UNKNOWN_SECTION = `
         </section>
       </component>`;
 
+/**
+ * A Plan of Treatment section (`…22.2.10`, LOINC `18776-5`) carrying one of each
+ * planned-entry template — Planned Observation (`…4.44`, `RQO`), Planned Act
+ * (`…4.39`, `INT`), Planned Encounter (`…4.40`, `APT`), Planned Procedure
+ * (`…4.41`, `INT`), Planned Medication Activity (`…4.42`, `INT`, drug in the
+ * consumable), and Planned Supply (`…4.43`, `INT`). Every item is future/ordered,
+ * never performed.
+ */
+export const PLAN_OF_TREATMENT_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.10" extension="2014-06-09"/>
+          <code code="18776-5" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Plan of Treatment</title>
+          <text><content ID="plan1">Order CBC</content></text>
+          <entry>
+            <observation classCode="OBS" moodCode="RQO">
+              <templateId root="2.16.840.1.113883.10.20.22.4.44" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="plan-obs-1"/>
+              <code code="58410-2" codeSystem="2.16.840.1.113883.6.1" displayName="CBC panel"/>
+              <statusCode code="active"/>
+              <effectiveTime value="20240801"/>
+              <text><reference value="#plan1"/></text>
+            </observation>
+          </entry>
+          <entry>
+            <act classCode="ACT" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.39" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="plan-act-1"/>
+              <code code="409073007" codeSystem="2.16.840.1.113883.6.96" displayName="Education"/>
+              <statusCode code="active"/>
+            </act>
+          </entry>
+          <entry>
+            <encounter classCode="ENC" moodCode="APT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.40" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="plan-enc-1"/>
+              <code code="99213" codeSystem="2.16.840.1.113883.6.12" displayName="Office visit"/>
+              <statusCode code="active"/>
+            </encounter>
+          </entry>
+          <entry>
+            <procedure classCode="PROC" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.41" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="plan-proc-1"/>
+              <code code="73761001" codeSystem="2.16.840.1.113883.6.96" displayName="Colonoscopy"/>
+              <statusCode code="active"/>
+            </procedure>
+          </entry>
+          <entry>
+            <substanceAdministration classCode="SBADM" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.42" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="plan-med-1"/>
+              <statusCode code="active"/>
+              <consumable>
+                <manufacturedProduct>
+                  <manufacturedMaterial>
+                    <code code="314076" codeSystem="2.16.840.1.113883.6.88" displayName="Lisinopril 10 MG Oral Tablet"/>
+                  </manufacturedMaterial>
+                </manufacturedProduct>
+              </consumable>
+            </substanceAdministration>
+          </entry>
+          <entry>
+            <supply classCode="SPLY" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.43" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="plan-sup-1"/>
+              <code code="58938008" codeSystem="2.16.840.1.113883.6.96" displayName="Wheelchair"/>
+              <statusCode code="active"/>
+            </supply>
+          </entry>
+        </section>
+      </component>`;
+
+/**
+ * A Functional Status section (`…22.2.14`, LOINC `47420-5`) carrying a Functional
+ * Status Organizer (`…4.66`) whose components are a Functional Status Observation
+ * (`…4.67`) and an Assessment Scale Observation (`…4.69`), plus a standalone
+ * Functional Status Observation directly under a second `<entry>`.
+ */
+export const FUNCTIONAL_STATUS_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.14"/>
+          <code code="47420-5" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Functional Status</title>
+          <text><content ID="func1">Ambulation</content></text>
+          <entry>
+            <organizer classCode="CLUSTER" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.66" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.21" extension="func-org-1"/>
+              <statusCode code="completed"/>
+              <component>
+                <observation classCode="OBS" moodCode="EVN">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.67" extension="2014-06-09"/>
+                  <id root="2.16.840.1.113883.19.5.99999.21" extension="func-obs-1"/>
+                  <code code="54522-8" codeSystem="2.16.840.1.113883.6.1" displayName="Functional status"/>
+                  <statusCode code="completed"/>
+                  <value xsi:type="CD" code="165245003" codeSystem="2.16.840.1.113883.6.96" displayName="Able to walk"/>
+                  <text><reference value="#func1"/></text>
+                </observation>
+              </component>
+              <component>
+                <observation classCode="OBS" moodCode="EVN">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.69" extension="2014-06-09"/>
+                  <id root="2.16.840.1.113883.19.5.99999.21" extension="func-scale-1"/>
+                  <code code="75275-8" codeSystem="2.16.840.1.113883.6.1" displayName="Barthel index total"/>
+                  <statusCode code="completed"/>
+                  <value xsi:type="PQ" value="85" unit="1"/>
+                </observation>
+              </component>
+            </organizer>
+          </entry>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.67" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.21" extension="func-obs-2"/>
+              <code code="54522-8" codeSystem="2.16.840.1.113883.6.1" displayName="Functional status"/>
+              <statusCode code="completed"/>
+              <value xsi:type="CD" code="129019007" codeSystem="2.16.840.1.113883.6.96" displayName="Self-care"/>
+            </observation>
+          </entry>
+        </section>
+      </component>`;
+
+/**
+ * A Mental Status section (`…22.2.56`, LOINC `10190-7`) carrying a standalone
+ * Mental Status Observation (`…4.74`) — a coded cognition finding.
+ */
+export const MENTAL_STATUS_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.56"/>
+          <code code="10190-7" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Mental Status</title>
+          <text><content ID="ment1">Oriented</content></text>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.74" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.22" extension="ment-obs-1"/>
+              <code code="8693-4" codeSystem="2.16.840.1.113883.6.1" displayName="Mental status"/>
+              <statusCode code="completed"/>
+              <value xsi:type="CD" code="247663003" codeSystem="2.16.840.1.113883.6.96" displayName="Orientation finding"/>
+              <text><reference value="#ment1"/></text>
+            </observation>
+          </entry>
+        </section>
+      </component>`;
+
+/**
+ * A Family History section (`…22.2.15`, LOINC `10157-6`) carrying one Family
+ * History Organizer (`…4.45`): the relative (father, male, born 1950, deceased)
+ * via `relatedSubject`, plus a Family History Observation (`…4.46`) whose
+ * condition (myocardial infarction) carries a nested Age Observation (`…4.31`,
+ * age 57) and a Family History Death Observation (`…4.47`, cause of death).
+ */
+export const FAMILY_HISTORY_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.15"/>
+          <code code="10157-6" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Family History</title>
+          <text><content ID="fhx1">Father — heart attack</content></text>
+          <entry>
+            <organizer classCode="CLUSTER" moodCode="EVN" xmlns:sdtc="urn:hl7-org:sdtc">
+              <templateId root="2.16.840.1.113883.10.20.22.4.45" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.23" extension="fhx-org-1"/>
+              <statusCode code="completed"/>
+              <subject>
+                <relatedSubject classCode="PRS">
+                  <code code="FTH" codeSystem="2.16.840.1.113883.5.111" displayName="Father"/>
+                  <subject>
+                    <administrativeGenderCode code="M" codeSystem="2.16.840.1.113883.5.1" displayName="Male"/>
+                    <birthTime value="19500101"/>
+                    <sdtc:deceasedInd value="true"/>
+                  </subject>
+                </relatedSubject>
+              </subject>
+              <component>
+                <observation classCode="OBS" moodCode="EVN">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.46" extension="2015-08-01"/>
+                  <id root="2.16.840.1.113883.19.5.99999.23" extension="fhx-obs-1"/>
+                  <code code="64572001" codeSystem="2.16.840.1.113883.6.96" displayName="Condition"/>
+                  <statusCode code="completed"/>
+                  <effectiveTime><low value="20070101"/></effectiveTime>
+                  <value xsi:type="CD" code="22298006" codeSystem="2.16.840.1.113883.6.96" displayName="Myocardial infarction"/>
+                  <text><reference value="#fhx1"/></text>
+                  <entryRelationship typeCode="SUBJ">
+                    <observation classCode="OBS" moodCode="EVN">
+                      <templateId root="2.16.840.1.113883.10.20.22.4.31"/>
+                      <code code="397659008" codeSystem="2.16.840.1.113883.6.96" displayName="Age"/>
+                      <statusCode code="completed"/>
+                      <value xsi:type="PQ" value="57" unit="a"/>
+                    </observation>
+                  </entryRelationship>
+                  <entryRelationship typeCode="CAUS">
+                    <observation classCode="OBS" moodCode="EVN">
+                      <templateId root="2.16.840.1.113883.10.20.22.4.47"/>
+                      <code code="ASSERTION" codeSystem="2.16.840.1.113883.5.4"/>
+                      <statusCode code="completed"/>
+                      <value xsi:type="CD" code="419620001" codeSystem="2.16.840.1.113883.6.96" displayName="Death"/>
+                    </observation>
+                  </entryRelationship>
+                </observation>
+              </component>
+            </organizer>
+          </entry>
+        </section>
+      </component>`;
+
+/**
+ * A Past Medical History section (`…22.2.20`, LOINC `11348-0`) carrying a **bare**
+ * Problem Observation (`…4.4`) directly under the `<entry>` — historical, not
+ * wrapped in a Problem Concern Act (so it never double-counts with Problems).
+ */
+export const PAST_MEDICAL_HISTORY_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.20"/>
+          <code code="11348-0" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Past Medical History</title>
+          <text><content ID="pmh1">Appendectomy history</content></text>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.4" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.24" extension="pmh-obs-1"/>
+              <code code="55607006" codeSystem="2.16.840.1.113883.6.96" displayName="Problem"/>
+              <statusCode code="completed"/>
+              <effectiveTime><low value="20050101"/></effectiveTime>
+              <value xsi:type="CD" code="74400008" codeSystem="2.16.840.1.113883.6.96" displayName="Appendicitis"/>
+              <text><reference value="#pmh1"/></text>
+            </observation>
+          </entry>
+        </section>
+      </component>`;
+
 /** All three triad sections concatenated, for the end-to-end extraction test. */
 export const TRIAD_SECTIONS = `${PROBLEMS_SECTION}${MEDICATIONS_SECTION}${ALLERGY_ENTRY_SECTION}`;
 

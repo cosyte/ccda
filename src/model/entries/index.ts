@@ -32,6 +32,24 @@ export {
 export { extractEncounters, type Encounter } from "./encounter.js";
 export { extractSmokingStatus, type SmokingStatus } from "./social-history.js";
 export {
+  extractPlannedItems,
+  type PlannedItem,
+  type PlannedItemKind,
+} from "./plan-of-treatment.js";
+export {
+  extractFunctionalStatus,
+  extractMentalStatus,
+  type StatusDomain,
+  type StatusObservation,
+} from "./functional-mental-status.js";
+export {
+  extractFamilyHistory,
+  type FamilyHistory,
+  type FamilyHistoryObservation,
+  type FamilyMember,
+} from "./family-history.js";
+export { extractPastMedicalHistory } from "./past-medical-history.js";
+export {
   checkUcumUnit,
   readObservationValue,
   readReferenceRange,
@@ -59,6 +77,22 @@ export {
   PROCEDURE_ACTIVITY_OBSERVATION,
   ENCOUNTER_ACTIVITY,
   SMOKING_STATUS_OBSERVATION,
+  PLANNED_ACT,
+  PLANNED_ENCOUNTER,
+  PLANNED_PROCEDURE,
+  PLANNED_MEDICATION_ACTIVITY,
+  PLANNED_SUPPLY,
+  PLANNED_OBSERVATION,
+  FUNCTIONAL_STATUS_ORGANIZER,
+  FUNCTIONAL_STATUS_OBSERVATION,
+  MENTAL_STATUS_ORGANIZER,
+  MENTAL_STATUS_OBSERVATION,
+  ASSESSMENT_SCALE_OBSERVATION,
+  FAMILY_HISTORY_ORGANIZER,
+  FAMILY_HISTORY_OBSERVATION,
+  FAMILY_HISTORY_DEATH_OBSERVATION,
+  AGE_OBSERVATION,
+  classifyDisposition,
   childEntries,
   entryAct,
   anyEntryAct,
@@ -74,4 +108,5 @@ export {
   resolveNarrative,
   reconcileCode,
   type ConcernStatus,
+  type EventDisposition,
 } from "./shared.js";

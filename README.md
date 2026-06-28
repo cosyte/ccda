@@ -15,14 +15,15 @@ lenient parser that turns real-world, vendor-quirky input into **warnings** rath
 [`@xmldom/xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) (exact-pinned), the hardened W3C-DOM
 substrate for C-CDA's XML.
 
-> **Status:** pre-alpha (`0.0.x`), not yet published to npm. Through **Phase 5** the parser ships
+> **Status:** pre-alpha (`0.0.x`), not yet published to npm. Through **Phase 5b** the parser ships
 > document recognition, the US Realm header + patient demographics, section framing, the
 > reconciliation triad (Problems / Medications / Allergies), the discrete-data families
 > (Results / Vital Signs / Immunizations) with a computable UCUM unit check, Procedures (with a
 > safety-critical performed-vs-planned `moodCode` split) / Encounters / Social-History smoking status,
-> and per-document-type required-section (SHALL) validation — plus a **spec-clean, round-trip
-> serializer** (`serializeCcda` / `toString()`) and immutable copy-with (`withWarnings`). A document
-> **builder** API lands in a later phase.
+> the deferred clinical sections (Plan of Treatment / Functional Status / Mental Status / Family
+> History / Past Medical History), and per-document-type required-section (SHALL) validation — plus a
+> **spec-clean, round-trip serializer** (`serializeCcda` / `toString()`) and immutable copy-with
+> (`withWarnings`). A document **builder** API lands in a later phase.
 
 ## Install
 
@@ -50,6 +51,10 @@ doc.getImmunizations()[0]?.vaccine?.code; // CVX vaccine code
 doc.getProcedures()[0]?.disposition; // "performed" vs "planned" (moodCode, never guessed)
 doc.getEncounters()[0]?.code?.code; // encounter type (CPT / SNOMED / ActEncounterCode)
 doc.getSmokingStatus()[0]?.value?.code; // SNOMED smoking-status concept
+doc.getPlannedItems()[0]?.disposition; // planned only — never read as performed
+doc.getFunctionalStatus()[0]?.value; // functional finding (domain-tagged, never mental)
+doc.getFamilyHistory()[0]?.relative?.relationship?.code; // relative + their conditions
+doc.getPastMedicalHistory()[0]?.value?.code; // historical problem (bare, not a concern)
 doc.warnings; // stable, positional tolerance warnings (never throws on quirks)
 ```
 
@@ -158,6 +163,31 @@ and SHALL sections outside the recognized catalog (e.g. Hospital Course, Physica
 type with an empty table therefore means _"no unconditional in-catalog SHALL section is asserted yet"_ —
 not _"this type has no requirements"_. Broadening a table is additive and safe.
 
+## What it extracts (Phase 5b) — the deferred clinical sections
+
+- **Plan of Treatment** — via `getPlannedItems()`: the six planned-entry templates a Plan of Treatment
+  section (`…22.2.10`) can carry — Planned Act (`…22.4.39`), Encounter (`…22.4.40`), Procedure
+  (`…22.4.41`), Medication Activity (`…22.4.42`), Supply (`…22.4.43`), and Observation (`…22.4.44`) —
+  kept apart by a `kind` discriminant. **Everything here is future/ordered, never performed:** each
+  item's `moodCode` is read into the same performed-vs-planned `disposition` as Procedures (a planned
+  mood → `"planned"`), and the two are **never conflated**; a missing/unrecognized mood leaves
+  `disposition` undefined rather than guessing.
+- **Functional Status** / **Mental Status** — via `getFunctionalStatus()` / `getMentalStatus()`: the
+  Functional/Mental Status Observations (`…22.4.67` / `…22.4.74`), read whether standalone or clustered
+  in a status Organizer (`…22.4.66` / `…22.4.75`), plus any Assessment Scale Observation (`…22.4.69`,
+  flagged `assessmentScale`) inside such an organizer. Each finding is `domain`-tagged so the two are
+  **never conflated**; a standalone assessment scale (whose domain can't be determined from its template
+  alone) is deliberately not captured.
+- **Family History** — via `getFamilyHistory()`: the Family History Organizer (`…22.4.45`) → Observation
+  (`…22.4.46`) tree. The relative's identity (relationship, gender, birth time, `sdtc:deceasedInd`) is a
+  structured `relative` (not flattened into each condition); each condition carries its coded `value`,
+  an optional Age Observation (`…22.4.31`, age at onset), and a `causeOfDeath` flag from a Family History
+  Death Observation (`…22.4.47`).
+- **Past Medical History** — via `getPastMedicalHistory()`: the **bare** Problem Observations (`…22.4.4`)
+  a Past Medical History section (`…22.2.20`) carries directly under each `<entry>` (not wrapped in a
+  Problem Concern Act), reusing the Problems model — so a past problem never double-counts as an active
+  one.
+
 ### Code systems & provenance
 
 Slot validation (`checkCodeSlot`, exported OIDs `SNOMED_CT` / `RXNORM` / `ICD10_CM` / `NDC` / `UNII` /
@@ -170,10 +200,10 @@ checks.
 
 ## Known limitations
 
-- **Nine entry families (so far)** — Problems / Medications / Allergies / Results / Vital Signs /
-  Immunizations / Procedures / Encounters / Social-History smoking status are extracted; the remaining
-  sections (Plan of Treatment, Functional Status, Family History, …) still carry only identity and
-  narrative.
+- **Fourteen entry families (so far)** — Problems / Medications / Allergies / Results / Vital Signs /
+  Immunizations / Procedures / Encounters / Social-History smoking status / Plan of Treatment /
+  Functional Status / Mental Status / Family History / Past Medical History are extracted; any remaining
+  sections still carry only identity and narrative.
 - **UCUM validation is grammatical, on a curated atom subset** — the validator checks that a unit is
   well-formed UCUM (case-sensitive prefixes/atoms, `.`/`/` terms, `[…]` and `{…}` forms) against a
   curated table of the prefixes and atoms that appear in lab Results and Vital Signs, not the full

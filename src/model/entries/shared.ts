@@ -73,6 +73,74 @@ export const PROCEDURE_ACTIVITY_OBSERVATION = "2.16.840.1.113883.10.20.22.4.13";
 export const ENCOUNTER_ACTIVITY = "2.16.840.1.113883.10.20.22.4.49";
 /** Smoking Status — Meaningful Use observation (current smoking status). */
 export const SMOKING_STATUS_OBSERVATION = "2.16.840.1.113883.10.20.22.4.78";
+/** Planned Act — a `<act>` planned/ordered service in the Plan of Treatment. */
+export const PLANNED_ACT = "2.16.840.1.113883.10.20.22.4.39";
+/** Planned Encounter — a planned `<encounter>` in the Plan of Treatment. */
+export const PLANNED_ENCOUNTER = "2.16.840.1.113883.10.20.22.4.40";
+/** Planned Procedure — a planned/ordered `<procedure>` in the Plan of Treatment. */
+export const PLANNED_PROCEDURE = "2.16.840.1.113883.10.20.22.4.41";
+/** Planned Medication Activity — a planned `<substanceAdministration>` in the Plan. */
+export const PLANNED_MEDICATION_ACTIVITY = "2.16.840.1.113883.10.20.22.4.42";
+/** Planned Supply — a planned `<supply>` (device/material) in the Plan of Treatment. */
+export const PLANNED_SUPPLY = "2.16.840.1.113883.10.20.22.4.43";
+/** Planned Observation — a planned/ordered `<observation>` in the Plan of Treatment. */
+export const PLANNED_OBSERVATION = "2.16.840.1.113883.10.20.22.4.44";
+/** Functional Status Organizer — clusters Functional Status Observations. */
+export const FUNCTIONAL_STATUS_ORGANIZER = "2.16.840.1.113883.10.20.22.4.66";
+/** Functional Status Observation — a single coded functional-status finding + value. */
+export const FUNCTIONAL_STATUS_OBSERVATION = "2.16.840.1.113883.10.20.22.4.67";
+/** Mental Status Organizer — clusters Mental Status Observations. */
+export const MENTAL_STATUS_ORGANIZER = "2.16.840.1.113883.10.20.22.4.75";
+/** Mental Status Observation — a single coded mental-status finding + value. */
+export const MENTAL_STATUS_OBSERVATION = "2.16.840.1.113883.10.20.22.4.74";
+/** Assessment Scale Observation — a scored scale (e.g. PHQ-9) usable in either status section. */
+export const ASSESSMENT_SCALE_OBSERVATION = "2.16.840.1.113883.10.20.22.4.69";
+/** Family History Organizer — one family member + their Family History Observations. */
+export const FAMILY_HISTORY_ORGANIZER = "2.16.840.1.113883.10.20.22.4.45";
+/** Family History Observation — a relative's condition (coded in `value`). */
+export const FAMILY_HISTORY_OBSERVATION = "2.16.840.1.113883.10.20.22.4.46";
+/** Family History Death Observation — marks a condition as the cause of death. */
+export const FAMILY_HISTORY_DEATH_OBSERVATION = "2.16.840.1.113883.10.20.22.4.47";
+/** Age Observation — the relative's age (a `PQ` in years) at onset/death. */
+export const AGE_OBSERVATION = "2.16.840.1.113883.10.20.22.4.31";
+
+/**
+ * The performed-vs-planned disposition of a clinical act, derived from its
+ * `@moodCode`: `EVN` → `"performed"`; a planned mood (`INT`/`RQO`/`PRMS`/`PRP`/
+ * `APT`/`ARQ`) → `"planned"`. Shared by Procedures and the Plan of Treatment so
+ * a planned act is **never** read as performed (and vice versa).
+ *
+ * @example
+ * ```ts
+ * import type { EventDisposition } from "@cosyte/ccda";
+ * const d: EventDisposition = "planned";
+ * ```
+ */
+export type EventDisposition = "performed" | "planned";
+
+/** The HL7 ActMood codes that mark a *planned/ordered* (not performed) act. @internal */
+const PLANNED_MOODS: ReadonlySet<string> = new Set(["INT", "RQO", "PRMS", "PRP", "APT", "ARQ"]);
+
+/**
+ * Classify a `@moodCode` into an {@link EventDisposition}, **never guessing**:
+ * `EVN` → `"performed"`, a recognized planned mood → `"planned"`, and `undefined`
+ * for a missing or unrecognized mood (the caller decides whether to flag it).
+ * Pure — emits nothing — so each extractor pairs it with its own warning.
+ *
+ * @example
+ * ```ts
+ * import { classifyDisposition } from "@cosyte/ccda";
+ * classifyDisposition("INT"); // "planned"
+ * classifyDisposition("EVN"); // "performed"
+ * classifyDisposition("GOL"); // undefined
+ * ```
+ */
+export function classifyDisposition(moodCode: string | undefined): EventDisposition | undefined {
+  if (moodCode === undefined) return undefined;
+  if (moodCode === "EVN") return "performed";
+  if (PLANNED_MOODS.has(moodCode)) return "planned";
+  return undefined;
+}
 
 /** Each top-level entry act/organizer root mapped to its home section key. @internal */
 export const ENTRY_ROOT_TO_SECTION: ReadonlyMap<string, string> = new Map([
@@ -87,6 +155,17 @@ export const ENTRY_ROOT_TO_SECTION: ReadonlyMap<string, string> = new Map([
   [PROCEDURE_ACTIVITY_OBSERVATION, "procedures"],
   [ENCOUNTER_ACTIVITY, "encounters"],
   [SMOKING_STATUS_OBSERVATION, "socialHistory"],
+  [PLANNED_ACT, "planOfTreatment"],
+  [PLANNED_ENCOUNTER, "planOfTreatment"],
+  [PLANNED_PROCEDURE, "planOfTreatment"],
+  [PLANNED_MEDICATION_ACTIVITY, "planOfTreatment"],
+  [PLANNED_SUPPLY, "planOfTreatment"],
+  [PLANNED_OBSERVATION, "planOfTreatment"],
+  [FUNCTIONAL_STATUS_ORGANIZER, "functionalStatus"],
+  [FUNCTIONAL_STATUS_OBSERVATION, "functionalStatus"],
+  [MENTAL_STATUS_ORGANIZER, "mentalStatus"],
+  [MENTAL_STATUS_OBSERVATION, "mentalStatus"],
+  [FAMILY_HISTORY_ORGANIZER, "familyHistory"],
 ]);
 
 /**
@@ -415,6 +494,7 @@ const ACT_NAMES = [
   "organizer",
   "procedure",
   "encounter",
+  "supply",
 ] as const;
 
 /**

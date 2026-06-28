@@ -20,12 +20,16 @@ import {
   extractClinical,
   type AllergyConcern,
   type Encounter,
+  type FamilyHistory,
   type Immunization,
   type Medication,
+  type PlannedItem,
+  type Problem,
   type Procedure,
   type ProblemConcern,
   type ResultOrganizer,
   type SmokingStatus,
+  type StatusObservation,
   type VitalSignsOrganizer,
 } from "./entries/index.js";
 import { parseEd, type ED } from "./types/ed.js";
@@ -64,6 +68,11 @@ import type { Element } from "@xmldom/xmldom";
  *   procedures: [],
  *   encounters: [],
  *   smokingStatus: [],
+ *   plannedItems: [],
+ *   functionalStatus: [],
+ *   mentalStatus: [],
+ *   familyHistory: [],
+ *   pastMedicalHistory: [],
  *   warnings: [],
  * };
  * ```
@@ -82,6 +91,11 @@ export interface CcdaDocumentInit {
   readonly procedures: readonly Procedure[];
   readonly encounters: readonly Encounter[];
   readonly smokingStatus: readonly SmokingStatus[];
+  readonly plannedItems: readonly PlannedItem[];
+  readonly functionalStatus: readonly StatusObservation[];
+  readonly mentalStatus: readonly StatusObservation[];
+  readonly familyHistory: readonly FamilyHistory[];
+  readonly pastMedicalHistory: readonly Problem[];
   readonly nonXmlBody?: ED;
   readonly warnings: readonly CcdaWarning[];
   /**
@@ -134,6 +148,16 @@ export class CcdaDocument {
   public readonly encounters: readonly Encounter[];
   /** Extracted Smoking Status observations from Social History. Empty when none. */
   public readonly smokingStatus: readonly SmokingStatus[];
+  /** Extracted planned items from the Plan of Treatment — all future/ordered (across all sections). Empty when none. */
+  public readonly plannedItems: readonly PlannedItem[];
+  /** Extracted Functional Status findings (across all sections). Empty when none. */
+  public readonly functionalStatus: readonly StatusObservation[];
+  /** Extracted Mental Status findings (across all sections). Empty when none. */
+  public readonly mentalStatus: readonly StatusObservation[];
+  /** Extracted Family History Organizers — one per relative (across all sections). Empty when none. */
+  public readonly familyHistory: readonly FamilyHistory[];
+  /** Extracted Past Medical History problems — bare historical Problem Observations. Empty when none. */
+  public readonly pastMedicalHistory: readonly Problem[];
   /** The quarantined `nonXMLBody` content for an unstructured document (base64 never decoded). */
   public readonly nonXmlBody: ED | undefined;
   /** Lenient-parse warnings, frozen at the model boundary. */
@@ -162,6 +186,11 @@ export class CcdaDocument {
     this.procedures = init.procedures;
     this.encounters = init.encounters;
     this.smokingStatus = init.smokingStatus;
+    this.plannedItems = init.plannedItems;
+    this.functionalStatus = init.functionalStatus;
+    this.mentalStatus = init.mentalStatus;
+    this.familyHistory = init.familyHistory;
+    this.pastMedicalHistory = init.pastMedicalHistory;
     this.nonXmlBody = init.nonXmlBody;
     this.warnings = Object.freeze(init.warnings.slice());
     this.#serialized = init.serialized;
@@ -227,6 +256,11 @@ export class CcdaDocument {
       procedures: readonly Procedure[];
       encounters: readonly Encounter[];
       smokingStatus: readonly SmokingStatus[];
+      plannedItems: readonly PlannedItem[];
+      functionalStatus: readonly StatusObservation[];
+      mentalStatus: readonly StatusObservation[];
+      familyHistory: readonly FamilyHistory[];
+      pastMedicalHistory: readonly Problem[];
       nonXmlBody?: ED;
       warnings: readonly CcdaWarning[];
       serialized?: string;
@@ -243,6 +277,11 @@ export class CcdaDocument {
       procedures: this.procedures,
       encounters: this.encounters,
       smokingStatus: this.smokingStatus,
+      plannedItems: this.plannedItems,
+      functionalStatus: this.functionalStatus,
+      mentalStatus: this.mentalStatus,
+      familyHistory: this.familyHistory,
+      pastMedicalHistory: this.pastMedicalHistory,
       warnings: [...this.warnings, ...additional],
     };
     if (this.documentType !== undefined) init.documentType = this.documentType;
@@ -447,6 +486,80 @@ export class CcdaDocument {
   public getSmokingStatus(): readonly SmokingStatus[] {
     return this.smokingStatus;
   }
+
+  /**
+   * The patient's planned items from the Plan of Treatment — each future/ordered
+   * (never performed), carrying its planned `code`, `kind`, and a `disposition`
+   * of `"planned"` derived from `moodCode` (never read as performed). Empty when
+   * the document carries no Plan of Treatment entries.
+   *
+   * @example
+   * ```ts
+   * const orders = doc.getPlannedItems().filter((p) => p.kind === "medicationActivity");
+   * console.log(orders[0]?.code?.code);
+   * ```
+   */
+  public getPlannedItems(): readonly PlannedItem[] {
+    return this.plannedItems;
+  }
+
+  /**
+   * The patient's Functional Status findings — ADLs, mobility, and self-care
+   * observations (plus any scored assessment scales). Empty when the document
+   * carries no Functional Status entries.
+   *
+   * @example
+   * ```ts
+   * const scales = doc.getFunctionalStatus().filter((o) => o.assessmentScale);
+   * console.log(scales[0]?.code?.code);
+   * ```
+   */
+  public getFunctionalStatus(): readonly StatusObservation[] {
+    return this.functionalStatus;
+  }
+
+  /**
+   * The patient's Mental Status findings — cognition and mood observations (plus
+   * any scored assessment scales such as a PHQ-9). Empty when the document
+   * carries no Mental Status entries.
+   *
+   * @example
+   * ```ts
+   * for (const o of doc.getMentalStatus()) console.log(o.code?.code, o.value?.kind);
+   * ```
+   */
+  public getMentalStatus(): readonly StatusObservation[] {
+    return this.mentalStatus;
+  }
+
+  /**
+   * The patient's Family History — one {@link FamilyHistory} per relative, each
+   * carrying the relative's structured identity and their recorded conditions.
+   * Empty when the document carries no Family History entries.
+   *
+   * @example
+   * ```ts
+   * for (const h of doc.getFamilyHistory())
+   *   console.log(h.relative.relationship?.code, h.observations.length);
+   * ```
+   */
+  public getFamilyHistory(): readonly FamilyHistory[] {
+    return this.familyHistory;
+  }
+
+  /**
+   * The patient's Past Medical History — historical problems carried as bare
+   * Problem Observations (distinct from the active-concern Problems section).
+   * Empty when the document carries no Past Medical History entries.
+   *
+   * @example
+   * ```ts
+   * console.log(doc.getPastMedicalHistory()[0]?.value?.code);
+   * ```
+   */
+  public getPastMedicalHistory(): readonly Problem[] {
+    return this.pastMedicalHistory;
+  }
 }
 
 /**
@@ -486,6 +599,11 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
     procedures: readonly Procedure[];
     encounters: readonly Encounter[];
     smokingStatus: readonly SmokingStatus[];
+    plannedItems: readonly PlannedItem[];
+    functionalStatus: readonly StatusObservation[];
+    mentalStatus: readonly StatusObservation[];
+    familyHistory: readonly FamilyHistory[];
+    pastMedicalHistory: readonly Problem[];
     nonXmlBody?: ED;
   } = {
     templateIds,
@@ -500,6 +618,11 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
     procedures: [],
     encounters: [],
     smokingStatus: [],
+    plannedItems: [],
+    functionalStatus: [],
+    mentalStatus: [],
+    familyHistory: [],
+    pastMedicalHistory: [],
   };
   if (documentType !== undefined) out.documentType = documentType;
 
@@ -521,6 +644,11 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
       out.procedures = entries.procedures;
       out.encounters = entries.encounters;
       out.smokingStatus = entries.smokingStatus;
+      out.plannedItems = entries.plannedItems;
+      out.functionalStatus = entries.functionalStatus;
+      out.mentalStatus = entries.mentalStatus;
+      out.familyHistory = entries.familyHistory;
+      out.pastMedicalHistory = entries.pastMedicalHistory;
       validateRequiredSections(root, documentType, out.sections, ctx);
     } else {
       const nonXmlBody = child(component, "nonXMLBody");
