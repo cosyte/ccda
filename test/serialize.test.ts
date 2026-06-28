@@ -98,6 +98,9 @@ describe("CcdaDocument.toString — hand-constructed guard", () => {
       results: [],
       vitals: [],
       immunizations: [],
+      procedures: [],
+      encounters: [],
+      smokingStatus: [],
       warnings: [],
     });
     expect(() => doc.toString()).toThrow(/no source document retained/);

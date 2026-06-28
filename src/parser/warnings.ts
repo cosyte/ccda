@@ -59,6 +59,11 @@ export const WARNING_CODES = {
   RESULT_VALUE_TYPE_UNHANDLED: "RESULT_VALUE_TYPE_UNHANDLED",
   IMMUNIZATION_REFUSED: "IMMUNIZATION_REFUSED",
   DEPRECATED_LOINC: "DEPRECATED_LOINC",
+  REQUIRED_SECTION_MISSING: "REQUIRED_SECTION_MISSING",
+  PROCEDURE_MOOD_UNEXPECTED: "PROCEDURE_MOOD_UNEXPECTED",
+  PLANNED_VS_PERFORMED_AMBIGUOUS: "PLANNED_VS_PERFORMED_AMBIGUOUS",
+  SMOKING_STATUS_UNKNOWN: "SMOKING_STATUS_UNKNOWN",
+  SMOKING_STATUS_CODE_UNRECOGNIZED: "SMOKING_STATUS_CODE_UNRECOGNIZED",
 } as const;
 
 /**
@@ -700,6 +705,115 @@ export function deprecatedLoinc(position: CcdaPosition, loincCode: string): Ccda
   return {
     code: WARNING_CODES.DEPRECATED_LOINC,
     message: `LOINC code "${loincCode}" is deprecated; prefer its current successor. Code preserved.`,
+    position,
+  };
+}
+
+/**
+ * Build a `REQUIRED_SECTION_MISSING` warning. Emitted when a recognized
+ * document type's required (SHALL) section is absent from the document — a
+ * conformance gap surfaced as a **warning, never a fatal**, so the document
+ * still parses (fail-safe: a missing required section never blocks reading the
+ * data that *is* present). `sectionKey` is a structural catalog key, not PHI.
+ *
+ * @example
+ * ```ts
+ * import { requiredSectionMissing } from "@cosyte/ccda";
+ * const w = requiredSectionMissing({ path: "/ClinicalDocument" }, "ccd", "problems");
+ * ```
+ */
+export function requiredSectionMissing(
+  position: CcdaPosition,
+  documentType: string,
+  sectionKey: string,
+): CcdaWarning {
+  return {
+    code: WARNING_CODES.REQUIRED_SECTION_MISSING,
+    message: `Document type "${documentType}" requires a "${sectionKey}" section (SHALL), but none was found; parsed without it.`,
+    position,
+  };
+}
+
+/**
+ * Build a `PROCEDURE_MOOD_UNEXPECTED` warning. Emitted when a Procedure entry
+ * carries a `@moodCode` outside the recognized performed (`EVN`) or planned
+ * (`INT`/`RQO`/`PRMS`/`PRP`/`APT`/`ARQ`) set — the procedure is still extracted,
+ * but its performed-vs-planned disposition cannot be classified. The `moodCode`
+ * token is structural metadata, not PHI.
+ *
+ * @example
+ * ```ts
+ * import { procedureMoodUnexpected } from "@cosyte/ccda";
+ * const w = procedureMoodUnexpected({ path: "procedure" }, "GOL");
+ * ```
+ */
+export function procedureMoodUnexpected(position: CcdaPosition, moodCode: string): CcdaWarning {
+  return {
+    code: WARNING_CODES.PROCEDURE_MOOD_UNEXPECTED,
+    message: `Procedure moodCode "${moodCode}" is neither a performed (EVN) nor a recognized planned mood; extracted but unclassified.`,
+    position,
+  };
+}
+
+/**
+ * Build a `PLANNED_VS_PERFORMED_AMBIGUOUS` warning. Emitted when a Procedure
+ * entry carries **no** `@moodCode` at all — the parser cannot tell whether the
+ * procedure was actually performed (`EVN`) or merely planned/ordered (`INT`).
+ * The two are **never conflated**: the procedure is extracted with an undefined
+ * disposition and the ambiguity is flagged.
+ *
+ * @example
+ * ```ts
+ * import { plannedVsPerformedAmbiguous } from "@cosyte/ccda";
+ * const w = plannedVsPerformedAmbiguous({ path: "procedure" });
+ * ```
+ */
+export function plannedVsPerformedAmbiguous(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.PLANNED_VS_PERFORMED_AMBIGUOUS,
+    message: `Procedure entry has no moodCode; performed (EVN) vs planned (INT) is ambiguous — never conflated, left unclassified.`,
+    position,
+  };
+}
+
+/**
+ * Build a `SMOKING_STATUS_UNKNOWN` warning. Emitted when a Smoking Status
+ * observation's value is explicitly an "unknown" concept — a `@nullFlavor`, or
+ * one of the SNOMED "unknown if ever smoked" / "current status unknown" codes.
+ * The value is preserved; this surfaces that smoking status is recorded as
+ * genuinely unknown rather than simply absent.
+ *
+ * @example
+ * ```ts
+ * import { smokingStatusUnknown } from "@cosyte/ccda";
+ * const w = smokingStatusUnknown({ path: "observation/value" });
+ * ```
+ */
+export function smokingStatusUnknown(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.SMOKING_STATUS_UNKNOWN,
+    message: `Smoking status is recorded as unknown (nullFlavor or an "unknown" SNOMED concept); preserved, flagged as unknown.`,
+    position,
+  };
+}
+
+/**
+ * Build a `SMOKING_STATUS_CODE_UNRECOGNIZED` warning. Emitted when a Smoking
+ * Status observation's coded value is not a member of the expected Smoking
+ * Status value set (`2.16.840.1.113883.11.20.9.38`) — the code is preserved
+ * verbatim, but it falls outside the recognized smoking-status concepts. The
+ * SNOMED code is a structural identifier, not PHI.
+ *
+ * @example
+ * ```ts
+ * import { smokingStatusCodeUnrecognized } from "@cosyte/ccda";
+ * const w = smokingStatusCodeUnrecognized({ path: "observation/value" }, "12345678");
+ * ```
+ */
+export function smokingStatusCodeUnrecognized(position: CcdaPosition, code: string): CcdaWarning {
+  return {
+    code: WARNING_CODES.SMOKING_STATUS_CODE_UNRECOGNIZED,
+    message: `Smoking status code "${code}" is not in the recognized Smoking Status value set; preserved verbatim.`,
     position,
   };
 }

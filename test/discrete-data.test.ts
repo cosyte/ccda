@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import { parseCcda, WARNING_CODES, type CcdaWarning } from "../src/index.js";
 import {
   buildCcda,
+  NO_REQUIRED_SECTIONS_DOC_OID,
   RESULTS_SECTION,
   VITALS_SECTION,
   IMMUNIZATIONS_SECTION,
@@ -92,7 +93,13 @@ const MINIMAL_IMMUNIZATIONS_SECTION = `
 
 describe("results — Tier-1 extraction", () => {
   it("extracts a Result Organizer with a UCUM-checked value and reference range", () => {
-    const doc = parseCcda(buildCcda({ sections: RESULTS_SECTION, mrnAssigningAuthority: true }));
+    const doc = parseCcda(
+      buildCcda({
+        docTypeOid: NO_REQUIRED_SECTIONS_DOC_OID,
+        sections: RESULTS_SECTION,
+        mrnAssigningAuthority: true,
+      }),
+    );
     const panel = doc.getResults()[0];
     expect(panel?.code?.code).toBe("58410-2");
     expect(panel?.statusCode).toBe("completed");
@@ -270,7 +277,13 @@ describe("results — polymorphic observation value", () => {
 
 describe("vital signs — Tier-1 extraction", () => {
   it("extracts a Vital Signs Organizer with a UCUM-checked PQ value", () => {
-    const doc = parseCcda(buildCcda({ sections: VITALS_SECTION, mrnAssigningAuthority: true }));
+    const doc = parseCcda(
+      buildCcda({
+        docTypeOid: NO_REQUIRED_SECTIONS_DOC_OID,
+        sections: VITALS_SECTION,
+        mrnAssigningAuthority: true,
+      }),
+    );
     const cluster = doc.getVitals()[0];
     expect(cluster?.statusCode).toBe("completed");
     const vital = cluster?.vitals[0];
@@ -315,7 +328,11 @@ describe("vital signs — Tier-1 extraction", () => {
 describe("immunizations — Tier-1 extraction", () => {
   it("extracts an Immunization Activity with its CVX vaccine, dose, and route", () => {
     const doc = parseCcda(
-      buildCcda({ sections: IMMUNIZATIONS_SECTION, mrnAssigningAuthority: true }),
+      buildCcda({
+        docTypeOid: NO_REQUIRED_SECTIONS_DOC_OID,
+        sections: IMMUNIZATIONS_SECTION,
+        mrnAssigningAuthority: true,
+      }),
     );
     const imm = doc.getImmunizations()[0];
     expect(imm?.vaccine?.code).toBe("140");

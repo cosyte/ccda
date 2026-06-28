@@ -19,10 +19,13 @@ import { buildSection, type CcdaSection } from "./section.js";
 import {
   extractClinical,
   type AllergyConcern,
+  type Encounter,
   type Immunization,
   type Medication,
+  type Procedure,
   type ProblemConcern,
   type ResultOrganizer,
+  type SmokingStatus,
   type VitalSignsOrganizer,
 } from "./entries/index.js";
 import { parseEd, type ED } from "./types/ed.js";
@@ -30,8 +33,10 @@ import { parseIi, type II } from "./types/ii.js";
 import type { ParseCtx } from "./types/_shared.js";
 import { pickMrn } from "../helpers/pick-mrn.js";
 import { documentTypeForOid, R21_EXTENSION, type DocumentType } from "../parser/templates.js";
+import { missingRequiredSections } from "../parser/required-sections.js";
 import {
   missingTemplateId,
+  requiredSectionMissing,
   templateExtensionAbsent,
   unknownDocumentTemplate,
 } from "../parser/warnings.js";
@@ -56,6 +61,9 @@ import type { Element } from "@xmldom/xmldom";
  *   results: [],
  *   vitals: [],
  *   immunizations: [],
+ *   procedures: [],
+ *   encounters: [],
+ *   smokingStatus: [],
  *   warnings: [],
  * };
  * ```
@@ -71,6 +79,9 @@ export interface CcdaDocumentInit {
   readonly results: readonly ResultOrganizer[];
   readonly vitals: readonly VitalSignsOrganizer[];
   readonly immunizations: readonly Immunization[];
+  readonly procedures: readonly Procedure[];
+  readonly encounters: readonly Encounter[];
+  readonly smokingStatus: readonly SmokingStatus[];
   readonly nonXmlBody?: ED;
   readonly warnings: readonly CcdaWarning[];
   /**
@@ -117,6 +128,12 @@ export class CcdaDocument {
   public readonly vitals: readonly VitalSignsOrganizer[];
   /** Extracted Immunization Activities (across all sections). Empty when none. */
   public readonly immunizations: readonly Immunization[];
+  /** Extracted procedures — performed or planned (across all sections). Empty when none. */
+  public readonly procedures: readonly Procedure[];
+  /** Extracted Encounter Activities — visits/admissions (across all sections). Empty when none. */
+  public readonly encounters: readonly Encounter[];
+  /** Extracted Smoking Status observations from Social History. Empty when none. */
+  public readonly smokingStatus: readonly SmokingStatus[];
   /** The quarantined `nonXMLBody` content for an unstructured document (base64 never decoded). */
   public readonly nonXmlBody: ED | undefined;
   /** Lenient-parse warnings, frozen at the model boundary. */
@@ -142,6 +159,9 @@ export class CcdaDocument {
     this.results = init.results;
     this.vitals = init.vitals;
     this.immunizations = init.immunizations;
+    this.procedures = init.procedures;
+    this.encounters = init.encounters;
+    this.smokingStatus = init.smokingStatus;
     this.nonXmlBody = init.nonXmlBody;
     this.warnings = Object.freeze(init.warnings.slice());
     this.#serialized = init.serialized;
@@ -204,6 +224,9 @@ export class CcdaDocument {
       results: readonly ResultOrganizer[];
       vitals: readonly VitalSignsOrganizer[];
       immunizations: readonly Immunization[];
+      procedures: readonly Procedure[];
+      encounters: readonly Encounter[];
+      smokingStatus: readonly SmokingStatus[];
       nonXmlBody?: ED;
       warnings: readonly CcdaWarning[];
       serialized?: string;
@@ -217,6 +240,9 @@ export class CcdaDocument {
       results: this.results,
       vitals: this.vitals,
       immunizations: this.immunizations,
+      procedures: this.procedures,
+      encounters: this.encounters,
+      smokingStatus: this.smokingStatus,
       warnings: [...this.warnings, ...additional],
     };
     if (this.documentType !== undefined) init.documentType = this.documentType;
@@ -377,6 +403,50 @@ export class CcdaDocument {
   public getImmunizations(): readonly Immunization[] {
     return this.immunizations;
   }
+
+  /**
+   * The patient's procedures — each carrying its procedure `code`, status, and a
+   * `disposition` of `"performed"` vs `"planned"` derived from `moodCode` (never
+   * conflated). Empty when the document carries no Procedures entries.
+   *
+   * @example
+   * ```ts
+   * const performed = doc.getProcedures().filter((p) => p.disposition === "performed");
+   * console.log(performed[0]?.code?.code);
+   * ```
+   */
+  public getProcedures(): readonly Procedure[] {
+    return this.procedures;
+  }
+
+  /**
+   * The patient's Encounter Activities — each carrying the encounter type `code`,
+   * status, and visit period. Empty when the document carries no Encounters
+   * entries.
+   *
+   * @example
+   * ```ts
+   * for (const e of doc.getEncounters()) console.log(e.code?.code, e.effectiveTime);
+   * ```
+   */
+  public getEncounters(): readonly Encounter[] {
+    return this.encounters;
+  }
+
+  /**
+   * The patient's Smoking Status observations (from Social History) — each
+   * carrying the SNOMED smoking-status `value` and an `unknown` flag for the
+   * explicitly-unknown form. Empty when the document records no smoking status.
+   *
+   * @example
+   * ```ts
+   * const known = doc.getSmokingStatus().filter((s) => !s.unknown);
+   * console.log(known[0]?.value?.code);
+   * ```
+   */
+  public getSmokingStatus(): readonly SmokingStatus[] {
+    return this.smokingStatus;
+  }
 }
 
 /**
@@ -413,6 +483,9 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
     results: readonly ResultOrganizer[];
     vitals: readonly VitalSignsOrganizer[];
     immunizations: readonly Immunization[];
+    procedures: readonly Procedure[];
+    encounters: readonly Encounter[];
+    smokingStatus: readonly SmokingStatus[];
     nonXmlBody?: ED;
   } = {
     templateIds,
@@ -424,6 +497,9 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
     results: [],
     vitals: [],
     immunizations: [],
+    procedures: [],
+    encounters: [],
+    smokingStatus: [],
   };
   if (documentType !== undefined) out.documentType = documentType;
 
@@ -442,6 +518,10 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
       out.results = entries.results;
       out.vitals = entries.vitals;
       out.immunizations = entries.immunizations;
+      out.procedures = entries.procedures;
+      out.encounters = entries.encounters;
+      out.smokingStatus = entries.smokingStatus;
+      validateRequiredSections(root, documentType, out.sections, ctx);
     } else {
       const nonXmlBody = child(component, "nonXMLBody");
       if (nonXmlBody !== undefined) {
@@ -490,4 +570,32 @@ function recognizeDocumentType(
 
   ctx.emit(unknownDocumentTemplate(positionOf(root), firstRootedOid ?? ""));
   return undefined;
+}
+
+/**
+ * Emit `REQUIRED_SECTION_MISSING` for each SHALL section a recognized
+ * {@link DocumentType} requires but the document does not carry. Collects the
+ * recognized catalog `key`s present across the framed sections and their
+ * subsections (depth-first), then flags the conservative SHALL set from
+ * {@link missingRequiredSections}. A no-op when the document type is
+ * unrecognized (nothing to validate against). Never throws.
+ *
+ * @internal
+ */
+function validateRequiredSections(
+  root: Element,
+  documentType: DocumentType | undefined,
+  sections: readonly CcdaSection[],
+  ctx: ParseCtx,
+): void {
+  if (documentType === undefined) return;
+  const presentKeys = new Set<string>();
+  const visit = (section: CcdaSection): void => {
+    if (section.key !== undefined) presentKeys.add(section.key);
+    for (const sub of section.subsections) visit(sub);
+  };
+  for (const section of sections) visit(section);
+  for (const key of missingRequiredSections(documentType, presentKeys)) {
+    ctx.emit(requiredSectionMissing(positionOf(root), documentType, key));
+  }
 }

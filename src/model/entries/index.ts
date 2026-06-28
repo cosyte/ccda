@@ -24,6 +24,14 @@ export { extractResults, type Result, type ResultOrganizer } from "./result.js";
 export { extractVitals, type VitalSign, type VitalSignsOrganizer } from "./vital.js";
 export { extractImmunizations, type Immunization } from "./immunization.js";
 export {
+  extractProcedures,
+  type Procedure,
+  type ProcedureKind,
+  type ProcedureDisposition,
+} from "./procedure.js";
+export { extractEncounters, type Encounter } from "./encounter.js";
+export { extractSmokingStatus, type SmokingStatus } from "./social-history.js";
+export {
   checkUcumUnit,
   readObservationValue,
   readReferenceRange,
@@ -46,6 +54,11 @@ export {
   VITAL_SIGN_OBSERVATION,
   IMMUNIZATION_ACTIVITY,
   IMMUNIZATION_MEDICATION_INFORMATION,
+  PROCEDURE_ACTIVITY_PROCEDURE,
+  PROCEDURE_ACTIVITY_ACT,
+  PROCEDURE_ACTIVITY_OBSERVATION,
+  ENCOUNTER_ACTIVITY,
+  SMOKING_STATUS_OBSERVATION,
   childEntries,
   entryAct,
   anyEntryAct,

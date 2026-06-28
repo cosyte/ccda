@@ -15,12 +15,14 @@ lenient parser that turns real-world, vendor-quirky input into **warnings** rath
 [`@xmldom/xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) (exact-pinned), the hardened W3C-DOM
 substrate for C-CDA's XML.
 
-> **Status:** pre-alpha (`0.0.x`), not yet published to npm. Through **Phase 4** the parser ships
+> **Status:** pre-alpha (`0.0.x`), not yet published to npm. Through **Phase 5** the parser ships
 > document recognition, the US Realm header + patient demographics, section framing, the
-> reconciliation triad (Problems / Medications / Allergies), and the discrete-data families
-> (Results / Vital Signs / Immunizations) with a computable UCUM unit check — plus a **spec-clean,
-> round-trip serializer** (`serializeCcda` / `toString()`) and immutable copy-with
-> (`withWarnings`). A document **builder** API lands in a later phase.
+> reconciliation triad (Problems / Medications / Allergies), the discrete-data families
+> (Results / Vital Signs / Immunizations) with a computable UCUM unit check, Procedures (with a
+> safety-critical performed-vs-planned `moodCode` split) / Encounters / Social-History smoking status,
+> and per-document-type required-section (SHALL) validation — plus a **spec-clean, round-trip
+> serializer** (`serializeCcda` / `toString()`) and immutable copy-with (`withWarnings`). A document
+> **builder** API lands in a later phase.
 
 ## Install
 
@@ -45,6 +47,9 @@ doc.getAllergies()[0]?.allergies[0]?.allergen?.code; // offending substance
 doc.getResults()[0]?.results[0]?.value; // polymorphic ObservationValue (UCUM-checked PQ, coded, …)
 doc.getVitals()[0]?.vitals[0]?.value; // e.g. systolic BP, units intact
 doc.getImmunizations()[0]?.vaccine?.code; // CVX vaccine code
+doc.getProcedures()[0]?.disposition; // "performed" vs "planned" (moodCode, never guessed)
+doc.getEncounters()[0]?.code?.code; // encounter type (CPT / SNOMED / ActEncounterCode)
+doc.getSmokingStatus()[0]?.value?.code; // SNOMED smoking-status concept
 doc.warnings; // stable, positional tolerance warnings (never throws on quirks)
 ```
 
@@ -123,6 +128,36 @@ const out = serializeCcda(doc); // === doc.toString()
 > A hand-constructed document (not produced by `parseCcda`) retains no source XML, so `toString()`
 > throws — a document builder API lands in a later phase.
 
+## What it extracts (Phase 5) — Procedures, Encounters, Social History
+
+- **Procedures** — via `getProcedures()`: the three Procedure Activity templates — an
+  altering/operative `<procedure>` (`…22.4.14`), a non-altering `<act>` service (`…22.4.12`), and an
+  assessment `<observation>` (`…22.4.13`) — kept apart by a `kind` discriminant. **`moodCode` is
+  safety-critical:** a performed procedure (`EVN`) and a planned/ordered one
+  (`INT`/`RQO`/`PRMS`/`PRP`/`APT`/`ARQ`) become a `disposition` of `"performed"` vs `"planned"` and are
+  **never conflated** — a missing mood is `PLANNED_VS_PERFORMED_AMBIGUOUS`, an unrecognized mood is
+  `PROCEDURE_MOOD_UNEXPECTED`, both leaving `disposition` undefined rather than guessing.
+- **Encounters** — via `getEncounters()`: the Encounter Activity (`…22.4.49`) — the visit type `code`,
+  `statusCode`, and visit-period `effectiveTime`.
+- **Social History — Smoking Status** — via `getSmokingStatus()`: the Smoking Status — Meaningful Use
+  observation (`…22.4.78`). An explicitly-unknown status (a `nullFlavor` or an "unknown" SNOMED concept)
+  sets `unknown: true` and emits `SMOKING_STATUS_UNKNOWN` — never silently read as "never smoked"; a
+  value outside the Current Smoking Status value set is preserved and flagged
+  `SMOKING_STATUS_CODE_UNRECOGNIZED`.
+
+### Required-section validation
+
+For a recognized `DocumentType`, a required (SHALL) catalog section that is absent surfaces a
+`REQUIRED_SECTION_MISSING` **warning** — never a fatal, so a missing section never blocks reading the
+data that _is_ present. `requiredSectionKeys(documentType)` and
+`missingRequiredSections(documentType, presentKeys)` expose the table directly.
+
+The table is **conservative**: it asserts only unconditional, in-catalog, high-confidence SHALL
+constraints and deliberately omits choice constraints (`SHALL contain A OR B`), SHOULD/MAY sections,
+and SHALL sections outside the recognized catalog (e.g. Hospital Course, Physical Exam). A document
+type with an empty table therefore means _"no unconditional in-catalog SHALL section is asserted yet"_ —
+not _"this type has no requirements"_. Broadening a table is additive and safe.
+
 ### Code systems & provenance
 
 Slot validation (`checkCodeSlot`, exported OIDs `SNOMED_CT` / `RXNORM` / `ICD10_CM` / `NDC` / `UNII` /
@@ -135,9 +170,10 @@ checks.
 
 ## Known limitations
 
-- **Six entry families (so far)** — Problems / Medications / Allergies / Results / Vital Signs /
-  Immunizations are extracted; the remaining sections (Procedures, Encounters, …) still carry only
-  identity and narrative.
+- **Nine entry families (so far)** — Problems / Medications / Allergies / Results / Vital Signs /
+  Immunizations / Procedures / Encounters / Social-History smoking status are extracted; the remaining
+  sections (Plan of Treatment, Functional Status, Family History, …) still carry only identity and
+  narrative.
 - **UCUM validation is grammatical, on a curated atom subset** — the validator checks that a unit is
   well-formed UCUM (case-sensitive prefixes/atoms, `.`/`/` terms, `[…]` and `{…}` forms) against a
   curated table of the prefixes and atoms that appear in lab Results and Vital Signs, not the full
