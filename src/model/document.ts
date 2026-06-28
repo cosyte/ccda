@@ -16,6 +16,12 @@
 import { child, children, positionOf } from "./dom.js";
 import { buildHeader, type CcdaHeader, type CcdaPatient } from "./header.js";
 import { buildSection, type CcdaSection } from "./section.js";
+import {
+  extractClinical,
+  type AllergyConcern,
+  type Medication,
+  type ProblemConcern,
+} from "./entries/index.js";
 import { parseEd, type ED } from "./types/ed.js";
 import { parseIi, type II } from "./types/ii.js";
 import type { ParseCtx } from "./types/_shared.js";
@@ -41,6 +47,9 @@ import type { Element } from "@xmldom/xmldom";
  *   templateIds: [],
  *   header: { recordTargets: [] },
  *   sections: [],
+ *   problems: [],
+ *   medications: [],
+ *   allergies: [],
  *   warnings: [],
  * };
  * ```
@@ -50,6 +59,9 @@ export interface CcdaDocumentInit {
   readonly templateIds: readonly II[];
   readonly header: CcdaHeader;
   readonly sections: readonly CcdaSection[];
+  readonly problems: readonly ProblemConcern[];
+  readonly medications: readonly Medication[];
+  readonly allergies: readonly AllergyConcern[];
   readonly nonXmlBody?: ED;
   readonly warnings: readonly CcdaWarning[];
 }
@@ -75,6 +87,12 @@ export class CcdaDocument {
   public readonly header: CcdaHeader;
   /** Top-level framed sections from the `structuredBody`. Empty for an unstructured document. */
   public readonly sections: readonly CcdaSection[];
+  /** Extracted Problem Concern Acts (across all sections). Empty when none. */
+  public readonly problems: readonly ProblemConcern[];
+  /** Extracted Medication Activities (across all sections). Empty when none. */
+  public readonly medications: readonly Medication[];
+  /** Extracted Allergy Concern Acts (across all sections). Empty when none. */
+  public readonly allergies: readonly AllergyConcern[];
   /** The quarantined `nonXMLBody` content for an unstructured document (base64 never decoded). */
   public readonly nonXmlBody: ED | undefined;
   /** Lenient-parse warnings, frozen at the model boundary. */
@@ -91,6 +109,9 @@ export class CcdaDocument {
     this.templateIds = init.templateIds;
     this.header = init.header;
     this.sections = init.sections;
+    this.problems = init.problems;
+    this.medications = init.medications;
+    this.allergies = init.allergies;
     this.nonXmlBody = init.nonXmlBody;
     this.warnings = Object.freeze(init.warnings.slice());
   }
@@ -160,6 +181,48 @@ export class CcdaDocument {
     for (const section of this.sections) visit(section);
     return out;
   }
+
+  /**
+   * The patient's Problem Concern Acts — each wrapping one or more coded
+   * problems with an active/resolved status. Empty when the document carries no
+   * Problems entries.
+   *
+   * @example
+   * ```ts
+   * const active = doc.getProblems().filter((c) => c.status === "active");
+   * console.log(active[0]?.problems[0]?.value?.code);
+   * ```
+   */
+  public getProblems(): readonly ProblemConcern[] {
+    return this.problems;
+  }
+
+  /**
+   * The patient's Medication Activities — each carrying the RxNorm drug, dose,
+   * route, and timing. Empty when the document carries no Medications entries.
+   *
+   * @example
+   * ```ts
+   * for (const m of doc.getMedications()) console.log(m.drug?.code, m.dose?.value);
+   * ```
+   */
+  public getMedications(): readonly Medication[] {
+    return this.medications;
+  }
+
+  /**
+   * The patient's Allergy Concern Acts — each wrapping one or more
+   * allergy/intolerance observations (including the "No Known Allergies"
+   * negated form). Empty when the document carries no Allergies entries.
+   *
+   * @example
+   * ```ts
+   * const nka = doc.getAllergies().some((c) => c.allergies.some((a) => a.noKnownAllergy));
+   * ```
+   */
+  public getAllergies(): readonly AllergyConcern[] {
+    return this.allergies;
+  }
 }
 
 /**
@@ -190,8 +253,11 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
     templateIds: readonly II[];
     header: CcdaHeader;
     sections: readonly CcdaSection[];
+    problems: readonly ProblemConcern[];
+    medications: readonly Medication[];
+    allergies: readonly AllergyConcern[];
     nonXmlBody?: ED;
-  } = { templateIds, header, sections: [] };
+  } = { templateIds, header, sections: [], problems: [], medications: [], allergies: [] };
   if (documentType !== undefined) out.documentType = documentType;
 
   const component = child(root, "component");
@@ -202,6 +268,10 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
         .map((comp) => child(comp, "section"))
         .filter((s): s is Element => s !== undefined)
         .map((s) => buildSection(s, ctx));
+      const entries = extractClinical(structuredBody, ctx);
+      out.problems = entries.problems;
+      out.medications = entries.medications;
+      out.allergies = entries.allergies;
     } else {
       const nonXmlBody = child(component, "nonXMLBody");
       if (nonXmlBody !== undefined) {

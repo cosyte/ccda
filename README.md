@@ -36,6 +36,9 @@ doc.documentType; // e.g. "ccd" — one of the 12 US Realm document types (or un
 doc.getPatient()?.name?.family; // patient demographics from the recordTarget
 doc.getMrn(); // the patient's medical record number
 doc.findSection("allergies")?.narrativeText; // framed section narrative
+doc.getProblems()[0]?.problems[0]?.value?.code; // coded condition (SNOMED CT / ICD-10-CM)
+doc.getMedications()[0]?.drug?.code; // RxNorm drug
+doc.getAllergies()[0]?.allergies[0]?.allergen?.code; // offending substance
 doc.warnings; // stable, positional tolerance warnings (never throws on quirks)
 ```
 
@@ -59,10 +62,35 @@ non-`ClinicalDocument` root) is always a thrown `CcdaParseError`.
 - **HL7 v3 datatypes** — `II`, `ST`, `BL`, `CD`, `PQ`, `IVL_PQ`, `TS`, `IVL_TS`, `ED`, with
   variable-precision v3 datetime parsing and null-flavor handling.
 
-## Known limitations (Phase 1)
+## What it extracts (Phase 2) — the reconciliation triad
 
-- **No clinical entry extraction yet** — sections carry identity + narrative only; structured entries
-  (problems, medications, results, …) arrive in Phase 2+.
+- **Problems** — Problem Concern Acts via `getProblems()`: the coded condition (`value`, SNOMED CT /
+  ICD-10-CM), the concern `status` (active / resolved / inactive / unknown), and `effectiveTime`.
+- **Medications** — Medication Activities via `getMedications()`: the RxNorm `drug`, the
+  `dose` / `doseRange`, the `route`, and the therapy-window `duration` (`IVL_TS`) split from the
+  periodic `frequency` (`PIVL_TS`); `moodCode` distinguishes an administration from a plan/order.
+- **Allergies** — Allergy Concern Acts via `getAllergies()`: the `allergen` substance, each reaction's
+  `manifestation` + `severity`, and the propensity `criticality` (severity and criticality never
+  merged). "No Known Allergies" is a distinct `noKnownAllergy` flag, never confused with a `nullFlavor`.
+
+Two safety-critical reconciliations stay conservative: a coded value that disagrees with its narrative
+surfaces **both** (`CODE_NARRATIVE_MISMATCH`) and picks no winner, and a missing `doseQuantity` /
+`routeCode` is preserved-as-absent and flagged, never silently defaulted.
+
+### Code systems & provenance
+
+Slot validation (`checkCodeSlot`, exported OIDs `SNOMED_CT` / `RXNORM` / `ICD10_CM` / `NDC` / `UNII` /
+`NCI_ROUTE` / …) is **structural recognition only** — it checks that a coded value's `@codeSystem` OID
+is one expected for its slot and flags a deprecated (ICD-9) or unexpected terminology. It deliberately
+does **not** verify that a code is a real member of its system: that needs licensed terminology
+content (SNOMED CT / RxNorm via UMLS), which this suite never bundles. The OIDs themselves are public
+identifiers, not redistributable code-system data — bring your own terminology service for membership
+checks.
+
+## Known limitations
+
+- **Triad only (so far)** — Problems / Medications / Allergies are extracted; the remaining sections
+  (Results, Vitals, Procedures, Immunizations, …) still carry identity + narrative only.
 - **No serializer/builder yet** — parse only; the spec-clean emit half of Postel's Law is a later phase.
 - **No vendor profile system yet** — `getMrn()` selects the first `patientRole/id` extension; a
   profile-aware override is planned.

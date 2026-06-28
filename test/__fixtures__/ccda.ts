@@ -49,6 +49,177 @@ export const ALLERGIES_SECTION = `
         </section>
       </component>`;
 
+/**
+ * A Problems section (`…22.2.5.1`) carrying one Problem Concern Act
+ * (`…22.4.3`) → Problem Observation (`…22.4.4`). The coded problem is SNOMED CT
+ * "Essential hypertension"; the narrative agrees, the concern is `active`.
+ */
+export const PROBLEMS_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.5.1" extension="2015-08-01"/>
+          <code code="11450-4" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Problems</title>
+          <text><content ID="prob1">Essential hypertension</content></text>
+          <entry>
+            <act classCode="ACT" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.3" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.2" extension="prob-act-1"/>
+              <statusCode code="active"/>
+              <effectiveTime><low value="20210101"/></effectiveTime>
+              <entryRelationship typeCode="SUBJ">
+                <observation classCode="OBS" moodCode="EVN">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.4" extension="2015-08-01"/>
+                  <id root="2.16.840.1.113883.19.5.99999.2" extension="prob-obs-1"/>
+                  <code code="55607006" codeSystem="2.16.840.1.113883.6.96" displayName="Problem"/>
+                  <statusCode code="completed"/>
+                  <effectiveTime><low value="20210101"/></effectiveTime>
+                  <value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96" displayName="Essential hypertension"/>
+                  <text><reference value="#prob1"/></text>
+                </observation>
+              </entryRelationship>
+            </act>
+          </entry>
+        </section>
+      </component>`;
+
+/**
+ * A Medications section (`…22.2.1.1`) carrying one Medication Activity
+ * (`…22.4.16`): RxNorm Lisinopril via `manufacturedMaterial/code`, a scalar
+ * `doseQuantity`, an NCI `routeCode`, and the two `effectiveTime` siblings —
+ * `IVL_TS` duration + `PIVL_TS` frequency.
+ */
+export const MEDICATIONS_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.1.1" extension="2015-08-01"/>
+          <code code="10160-0" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Medications</title>
+          <text><content ID="med1">Lisinopril 10 MG Oral Tablet</content></text>
+          <entry>
+            <substanceAdministration classCode="SBADM" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.16" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.3" extension="med-1"/>
+              <statusCode code="active"/>
+              <effectiveTime xsi:type="IVL_TS"><low value="20210101"/><high value="20211231"/></effectiveTime>
+              <effectiveTime xsi:type="PIVL_TS" institutionSpecified="true" operator="A">
+                <period value="24" unit="h"/>
+              </effectiveTime>
+              <routeCode code="C38288" codeSystem="2.16.840.1.113883.3.26.1.1" displayName="Oral"/>
+              <doseQuantity value="10" unit="mg"/>
+              <consumable>
+                <manufacturedProduct classCode="MANU">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.23" extension="2014-06-09"/>
+                  <manufacturedMaterial>
+                    <code code="314076" codeSystem="2.16.840.1.113883.6.88" displayName="Lisinopril 10 MG Oral Tablet"/>
+                  </manufacturedMaterial>
+                </manufacturedProduct>
+              </consumable>
+              <text><reference value="#med1"/></text>
+            </substanceAdministration>
+          </entry>
+        </section>
+      </component>`;
+
+/**
+ * An Allergies section (`…22.2.6.1`) carrying one Allergy Concern Act
+ * (`…22.4.30`) → Allergy-Intolerance Observation (`…22.4.7`): an RxNorm
+ * allergen at `participant/.../playingEntity/code`, a Reaction (`…22.4.9`) with
+ * a nested Severity (`…22.4.8`), and a propensity Criticality (`…22.4.145`).
+ */
+export const ALLERGY_ENTRY_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.6.1" extension="2015-08-01"/>
+          <code code="48765-2" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Allergies</title>
+          <text><content ID="alg1">Penicillin G</content></text>
+          <entry>
+            <act classCode="ACT" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.30" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.4" extension="alg-act-1"/>
+              <statusCode code="active"/>
+              <effectiveTime><low value="20200101"/></effectiveTime>
+              <entryRelationship typeCode="SUBJ">
+                <observation classCode="OBS" moodCode="EVN">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.7" extension="2014-06-09"/>
+                  <id root="2.16.840.1.113883.19.5.99999.4" extension="alg-obs-1"/>
+                  <code code="ASSERTION" codeSystem="2.16.840.1.113883.5.4"/>
+                  <statusCode code="completed"/>
+                  <value xsi:type="CD" code="416098002" codeSystem="2.16.840.1.113883.6.96" displayName="Drug allergy"/>
+                  <participant typeCode="CSM">
+                    <participantRole classCode="MANU">
+                      <playingEntity classCode="MMAT">
+                        <code code="7980" codeSystem="2.16.840.1.113883.6.88" displayName="Penicillin G"/>
+                      </playingEntity>
+                    </participantRole>
+                  </participant>
+                  <entryRelationship typeCode="MFST" inversionInd="true">
+                    <observation classCode="OBS" moodCode="EVN">
+                      <templateId root="2.16.840.1.113883.10.20.22.4.9" extension="2014-06-09"/>
+                      <code code="ASSERTION" codeSystem="2.16.840.1.113883.5.4"/>
+                      <statusCode code="completed"/>
+                      <value xsi:type="CD" code="247472004" codeSystem="2.16.840.1.113883.6.96" displayName="Hives"/>
+                      <entryRelationship typeCode="SUBJ" inversionInd="true">
+                        <observation classCode="OBS" moodCode="EVN">
+                          <templateId root="2.16.840.1.113883.10.20.22.4.8" extension="2014-06-09"/>
+                          <code code="SEV" codeSystem="2.16.840.1.113883.5.4"/>
+                          <statusCode code="completed"/>
+                          <value xsi:type="CD" code="6736007" codeSystem="2.16.840.1.113883.6.96" displayName="Moderate"/>
+                        </observation>
+                      </entryRelationship>
+                    </observation>
+                  </entryRelationship>
+                  <entryRelationship typeCode="SUBJ" inversionInd="true">
+                    <observation classCode="OBS" moodCode="EVN">
+                      <templateId root="2.16.840.1.113883.10.20.22.4.145"/>
+                      <code code="82606-5" codeSystem="2.16.840.1.113883.6.1"/>
+                      <statusCode code="completed"/>
+                      <value xsi:type="CD" code="CRITH" codeSystem="2.16.840.1.113883.5.1063" displayName="High criticality"/>
+                    </observation>
+                  </entryRelationship>
+                  <text><reference value="#alg1"/></text>
+                </observation>
+              </entryRelationship>
+            </act>
+          </entry>
+        </section>
+      </component>`;
+
+/**
+ * An Allergies section asserting **No Known Allergies** — the Allergy-
+ * Intolerance Observation carries `negationInd="true"` (and no `nullFlavor`),
+ * the safety-critical "negated, not unknown" form.
+ */
+export const NKA_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.6.1" extension="2015-08-01"/>
+          <code code="48765-2" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Allergies</title>
+          <text>No known allergies.</text>
+          <entry>
+            <act classCode="ACT" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.30" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.5" extension="nka-act-1"/>
+              <statusCode code="active"/>
+              <entryRelationship typeCode="SUBJ">
+                <observation classCode="OBS" moodCode="EVN" negationInd="true">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.7" extension="2014-06-09"/>
+                  <id root="2.16.840.1.113883.19.5.99999.5" extension="nka-obs-1"/>
+                  <code code="ASSERTION" codeSystem="2.16.840.1.113883.5.4"/>
+                  <statusCode code="completed"/>
+                  <value xsi:type="CD" code="419199007" codeSystem="2.16.840.1.113883.6.96" displayName="Allergy to substance"/>
+                </observation>
+              </entryRelationship>
+            </act>
+          </entry>
+        </section>
+      </component>`;
+
+/** All three triad sections concatenated, for the end-to-end extraction test. */
+export const TRIAD_SECTIONS = `${PROBLEMS_SECTION}${MEDICATIONS_SECTION}${ALLERGY_ENTRY_SECTION}`;
+
 /** A problems section recognized only by LOINC code (no recognized templateId). */
 export const LOINC_ONLY_SECTION = `
       <component>

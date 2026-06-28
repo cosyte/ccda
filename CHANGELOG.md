@@ -14,6 +14,33 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 2 — the clinical reconciliation triad.** `parseCcda(xml)` now extracts the three
+  reconciliation entries from a structured body, surfaced on `CcdaDocument` via `getProblems()`,
+  `getMedications()`, and `getAllergies()` (and the `doc.problems` / `doc.medications` /
+  `doc.allergies` arrays):
+  - **Problems** — Problem Concern Act (`…22.4.3`) → Problem Observation (`…22.4.4`); the coded
+    condition (`value xsi:type="CD"`, SNOMED CT / ICD-10-CM), the concern `status`
+    (active / resolved / inactive / unknown), and `effectiveTime`.
+  - **Medications** — Medication Activity (`…22.4.16`); the RxNorm drug reached via
+    `consumable/manufacturedProduct/manufacturedMaterial/code`, `dose`/`doseRange`, `route`, and the
+    two `effectiveTime` siblings split by `xsi:type` into an `IVL_TS` therapy window (`duration`) and
+    a `PIVL_TS` periodic `frequency` — `moodCode` (administered vs planned) kept distinct.
+  - **Allergies** — Allergy Concern Act (`…22.4.30`) → Allergy-Intolerance Observation (`…22.4.7`);
+    the allergen at `participant/participantRole/playingEntity/code`, each Reaction (`…22.4.9`) with
+    its nested Severity (`…22.4.8`), and the propensity-level Criticality (`…22.4.145`) — severity and
+    criticality never merged. The `negationInd="true"` "No Known Allergies" assertion is modeled as a
+    distinct `noKnownAllergy` flag, never conflated with a `nullFlavor` (value unknown).
+  - **Code-system recognition** — structural `@codeSystem` OID validation per coded slot
+    (`checkCodeSlot`, exported OIDs `SNOMED_CT` / `RXNORM` / `ICD10_CM` / `NDC` / `UNII` /
+    `NCI_ROUTE` / …), flagging a deprecated (ICD-9) or unexpected terminology. Recognition only — it
+    never bundles licensed terminology content; see the README "Code systems & provenance" note.
+  - **Eleven new Tier-2 warning codes** for the entry layer: `NEGATION_VS_NULLFLAVOR_AMBIGUOUS`,
+    `CODE_NARRATIVE_MISMATCH`, `NARRATIVE_REFERENCE_BROKEN`, `UNEXPECTED_CODE_SYSTEM`,
+    `DEPRECATED_CODE_SYSTEM`, `MISSING_DOSE_QUANTITY`, `MISSING_ROUTE_CODE`,
+    `MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED`, `PROBLEM_STATUS_INDETERMINATE`,
+    `ALLERGEN_GRANULARITY_SUSPECT`, and `SECTION_PLACEMENT_SUSPECT`. The two safety-critical
+    reconciliations are conservative: a code↔narrative disagreement surfaces **both** and picks no
+    winner; a missing `doseQuantity`/`routeCode` is preserved-as-absent and flagged, never defaulted.
 - **Phase 1 — the working parser.** `parseCcda(xml)` turns a real C-CDA R2.1 document into an
   immutable `CcdaDocument`:
   - **Document recognition** — all 12 US Realm document types (CCD, Discharge Summary, Referral Note,
