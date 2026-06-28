@@ -89,5 +89,7 @@
     "vite": "7.3.6",
     "vitest": "4.1.4"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@xmldom/xmldom": "0.9.10"
+  }
 }

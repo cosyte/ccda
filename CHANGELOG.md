@@ -22,6 +22,11 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
   `0.0.x` ladder, and the property-based conformance harness from `@cosyte/test-utils`.
 - `VERSION` export plus the archetype stubs (`parseCcda`, `WARNING_CODES`, `FATAL_CODES`) — to
   be filled in by subsequent phases.
+- Ratified the XML-parser ADR (`docs/adr/0001-xml-parser.md` → **Accepted**) and added the first
+  runtime dependency: **`@xmldom/xmldom`** (exact-pinned), chosen for a faithful W3C-DOM round-trip
+  (namespaces, attributes, mixed narrative content, `xsi:type`) and an XXE-safe, hardenable posture —
+  **1 of the ≤ 3** runtime-dep cap, intended as the shared XML substrate with `@cosyte/ncpdp`. No
+  parse-layer code yet; Phase 1 configures and consumes it.
 
 ### Changed
 
