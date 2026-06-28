@@ -14,6 +14,33 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 5b — deferred clinical sections (Plan of Treatment, Functional / Mental Status, Family /
+  Past Medical History).** `parseCcda(xml)` now extracts five more entry families, surfaced on
+  `CcdaDocument` via `getPlannedItems()`, `getFunctionalStatus()`, `getMentalStatus()`,
+  `getFamilyHistory()`, `getPastMedicalHistory()` (and the matching `doc.plannedItems` /
+  `doc.functionalStatus` / `doc.mentalStatus` / `doc.familyHistory` / `doc.pastMedicalHistory` arrays):
+  - **Plan of Treatment** — the six planned-entry templates (`…22.4.39`–`…22.4.44`: Act, Encounter,
+    Procedure, Medication Activity, Supply, Observation), kept apart by a `kind` discriminant.
+    **Everything here is future/ordered, never performed:** each item's `moodCode` is read into the same
+    performed-vs-planned `disposition` as Procedures (a planned mood → `"planned"`), **never conflated**;
+    a missing/unrecognized mood leaves `disposition` undefined rather than guessing. A Planned Medication
+    Activity's drug is read from its `consumable`.
+  - **Functional Status** / **Mental Status** — the Functional/Mental Status Observations (`…22.4.67` /
+    `…22.4.74`), read standalone or as members of a status Organizer (`…22.4.66` / `…22.4.75`), plus any
+    Assessment Scale Observation (`…22.4.69`, flagged `assessmentScale`) inside such an organizer. Each
+    finding is `domain`-tagged so the two are **never conflated**; a standalone assessment scale (domain
+    indeterminable from its template) is deliberately not captured.
+  - **Family History** — the Family History Organizer (`…22.4.45`) → Observation (`…22.4.46`) tree. The
+    relative's identity (relationship, gender, birth time, `sdtc:deceasedInd`) is a structured `relative`
+    (not flattened); each condition carries its coded `value`, an optional Age Observation (`…22.4.31`,
+    age at onset), and a `causeOfDeath` flag from a Family History Death Observation (`…22.4.47`).
+  - **Past Medical History** — the **bare** Problem Observations (`…22.4.4`) a Past Medical History
+    section (`…22.2.20`) carries directly under each `<entry>` (not in a Problem Concern Act), reusing
+    the Problems model — so a past problem never double-counts as an active one.
+  - **No new warning codes** — the deferred sections reuse the existing Tier-2 registry (e.g.
+    `CODE_NARRATIVE_MISMATCH`, `NEGATION_VS_NULLFLAVOR_AMBIGUOUS`), and the required-section table is
+    unchanged. (The Care Plan document's SHALL sections — `healthConcerns` + `goals` — already landed in
+    Phase 5; a Plan of Treatment Section stays **excluded** because a Care Plan SHALL NOT contain one.)
 - **Phase 5 — Procedures, Encounters, Social-History smoking status + required-section validation.**
   `parseCcda(xml)` now extracts three more entry families and validates a document's SHALL sections,
   surfaced on `CcdaDocument` via `getProcedures()`, `getEncounters()`, `getSmokingStatus()` (and the

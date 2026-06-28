@@ -25,13 +25,24 @@ import { extractImmunizations, type Immunization } from "./immunization.js";
 import { extractProcedures, type Procedure } from "./procedure.js";
 import { extractEncounters, type Encounter } from "./encounter.js";
 import { extractSmokingStatus, type SmokingStatus } from "./social-history.js";
+import { extractPlannedItems, type PlannedItem } from "./plan-of-treatment.js";
+import {
+  extractFunctionalStatus,
+  extractMentalStatus,
+  type StatusObservation,
+} from "./functional-mental-status.js";
+import { extractFamilyHistory, type FamilyHistory } from "./family-history.js";
+import { extractPastMedicalHistory } from "./past-medical-history.js";
+import type { Problem } from "./problem.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
  * The clinical entries extracted from a document body: the reconciliation triad
  * (Problems, Medications, Allergies), the discrete-data sections (Results, Vital
- * Signs, Immunizations), and the Phase-5 sections (Procedures, Encounters,
- * Social-History smoking status). Empty arrays when a body carries none.
+ * Signs, Immunizations), the Phase-5 sections (Procedures, Encounters,
+ * Social-History smoking status), and the deferred clinical sections (Plan of
+ * Treatment, Functional/Mental Status, Family/Past Medical History). Empty
+ * arrays when a body carries none.
  *
  * @example
  * ```ts
@@ -51,6 +62,11 @@ export interface ClinicalEntries {
   readonly procedures: readonly Procedure[];
   readonly encounters: readonly Encounter[];
   readonly smokingStatus: readonly SmokingStatus[];
+  readonly plannedItems: readonly PlannedItem[];
+  readonly functionalStatus: readonly StatusObservation[];
+  readonly mentalStatus: readonly StatusObservation[];
+  readonly familyHistory: readonly FamilyHistory[];
+  readonly pastMedicalHistory: readonly Problem[];
 }
 
 /**
@@ -76,6 +92,11 @@ export function extractClinical(structuredBody: Element, ctx: ParseCtx): Clinica
   const procedures: Procedure[] = [];
   const encounters: Encounter[] = [];
   const smokingStatus: SmokingStatus[] = [];
+  const plannedItems: PlannedItem[] = [];
+  const functionalStatus: StatusObservation[] = [];
+  const mentalStatus: StatusObservation[] = [];
+  const familyHistory: FamilyHistory[] = [];
+  const pastMedicalHistory: Problem[] = [];
 
   for (const sectionEl of allSectionElements(structuredBody)) {
     const key = sectionKeyOf(sectionEl);
@@ -90,6 +111,11 @@ export function extractClinical(structuredBody: Element, ctx: ParseCtx): Clinica
     procedures.push(...extractProcedures(sectionEl, narrativeById, ctx));
     encounters.push(...extractEncounters(sectionEl, narrativeById, ctx));
     smokingStatus.push(...extractSmokingStatus(sectionEl, narrativeById, ctx));
+    plannedItems.push(...extractPlannedItems(sectionEl, narrativeById, ctx));
+    functionalStatus.push(...extractFunctionalStatus(sectionEl, narrativeById, ctx));
+    mentalStatus.push(...extractMentalStatus(sectionEl, narrativeById, ctx));
+    familyHistory.push(...extractFamilyHistory(sectionEl, narrativeById, ctx));
+    pastMedicalHistory.push(...extractPastMedicalHistory(sectionEl, narrativeById, ctx));
 
     flagMisplacedEntries(sectionEl, key, ctx);
   }
@@ -104,6 +130,11 @@ export function extractClinical(structuredBody: Element, ctx: ParseCtx): Clinica
     procedures,
     encounters,
     smokingStatus,
+    plannedItems,
+    functionalStatus,
+    mentalStatus,
+    familyHistory,
+    pastMedicalHistory,
   };
 }
 

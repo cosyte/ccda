@@ -25,12 +25,14 @@ import {
   PROCEDURE_ACTIVITY_OBSERVATION,
   PROCEDURE_ACTIVITY_PROCEDURE,
   childEntries,
+  classifyDisposition,
   entryAct,
   idsOf,
   readNegation,
   reconcileCode,
   resolveNarrative,
   statusCodeOf,
+  type EventDisposition,
 } from "./shared.js";
 import { readObservationValue, type ObservationValue } from "./observation.js";
 import type { Element } from "@xmldom/xmldom";
@@ -61,7 +63,7 @@ export type ProcedureKind = "procedure" | "act" | "observation";
  * const d: ProcedureDisposition = "performed";
  * ```
  */
-export type ProcedureDisposition = "performed" | "planned";
+export type ProcedureDisposition = EventDisposition;
 
 /**
  * A single procedure. `kind` is the template variant; `code` is the procedure
@@ -102,9 +104,6 @@ const PROCEDURE_VARIANTS: ReadonlyArray<{
   { element: "act", root: PROCEDURE_ACTIVITY_ACT, kind: "act" },
   { element: "observation", root: PROCEDURE_ACTIVITY_OBSERVATION, kind: "observation" },
 ];
-
-/** The HL7 ActMood codes that mark a *planned/ordered* (not performed) act. @internal */
-const PLANNED_MOODS: ReadonlySet<string> = new Set(["INT", "RQO", "PRMS", "PRP", "APT", "ARQ"]);
 
 /**
  * Extract every procedure from a Procedures `<section>` element. Each `<entry>`
@@ -194,8 +193,8 @@ function classifyMood(
     ctx.emit(plannedVsPerformedAmbiguous(positionOf(el)));
     return undefined;
   }
-  if (moodCode === "EVN") return "performed";
-  if (PLANNED_MOODS.has(moodCode)) return "planned";
+  const disposition = classifyDisposition(moodCode);
+  if (disposition !== undefined) return disposition;
   ctx.emit(procedureMoodUnexpected(positionOf(el), moodCode));
   return undefined;
 }

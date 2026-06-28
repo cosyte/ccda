@@ -124,8 +124,13 @@ function buildConcern(
   return out;
 }
 
-/** Build one Problem Observation. @internal */
-function buildProblem(
+/**
+ * Build one Problem Observation from its `<observation>` element. Exported so the
+ * Past Medical History extractor can reuse it — that section carries bare Problem
+ * Observations (`…22.4.4`) at the entry top level, not wrapped in a concern act.
+ * @internal
+ */
+export function buildProblem(
   obs: Element,
   narrativeById: ReadonlyMap<string, string>,
   ctx: ParseCtx,
