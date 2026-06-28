@@ -30,6 +30,14 @@ export const DOC_TYPES: ReadonlyArray<{ readonly key: string; readonly oid: stri
   { key: "transferSummary", oid: `${DOC_OID}.13` },
 ];
 
+/**
+ * A document-type OID whose required-section (SHALL) table is empty (Progress
+ * Note). Use it when a test asserts *clean extraction* (zero warnings) for a
+ * single section, so the per-document-type required-section validation does not
+ * add unrelated `REQUIRED_SECTION_MISSING` noise.
+ */
+export const NO_REQUIRED_SECTIONS_DOC_OID = `${DOC_OID}.9`;
+
 /** A single allergies section (recognized by templateId root) as a `<component>`. */
 export const ALLERGIES_SECTION = `
       <component>
@@ -324,6 +332,132 @@ export const IMMUNIZATIONS_SECTION = `
               </consumable>
               <text><reference value="#imm1"/></text>
             </substanceAdministration>
+          </entry>
+        </section>
+      </component>`;
+
+/**
+ * A Procedures section (`…22.2.7.1`) carrying one performed Procedure Activity
+ * Procedure (`…22.4.14`, `moodCode="EVN"`): a SNOMED CT appendectomy `code`,
+ * `completed` status, and an effective time. The narrative agrees.
+ */
+export const PROCEDURES_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.7.1" extension="2014-06-09"/>
+          <code code="47519-4" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Procedures</title>
+          <text><content ID="proc1">Appendectomy</content></text>
+          <entry>
+            <procedure classCode="PROC" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.14" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.9" extension="proc-1"/>
+              <code code="80146002" codeSystem="2.16.840.1.113883.6.96" displayName="Appendectomy"/>
+              <statusCode code="completed"/>
+              <effectiveTime value="20230615"/>
+              <text><reference value="#proc1"/></text>
+            </procedure>
+          </entry>
+        </section>
+      </component>`;
+
+/**
+ * A Procedures section carrying one *planned* Procedure Activity Procedure
+ * (`moodCode="INT"`) — exercises the planned-vs-performed disposition split so a
+ * planned procedure is never read as performed.
+ */
+export const PLANNED_PROCEDURE_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.7.1" extension="2014-06-09"/>
+          <code code="47519-4" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Procedures</title>
+          <text><content ID="proc2">Planned colonoscopy</content></text>
+          <entry>
+            <procedure classCode="PROC" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.14" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.9" extension="proc-2"/>
+              <code code="73761001" codeSystem="2.16.840.1.113883.6.96" displayName="Colonoscopy"/>
+              <statusCode code="active"/>
+              <effectiveTime value="20240701"/>
+              <text><reference value="#proc2"/></text>
+            </procedure>
+          </entry>
+        </section>
+      </component>`;
+
+/**
+ * An Encounters section (`…22.2.22.1`) carrying one Encounter Activity
+ * (`…22.4.49`): an ambulatory-visit `code` (HL7 ActEncounterCode), `completed`
+ * status, and a visit-period `effectiveTime`.
+ */
+export const ENCOUNTERS_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.22.1" extension="2015-08-01"/>
+          <code code="46240-8" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Encounters</title>
+          <text><content ID="enc1">Office outpatient visit</content></text>
+          <entry>
+            <encounter classCode="ENC" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.49" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.10" extension="enc-1"/>
+              <code code="99213" codeSystem="2.16.840.1.113883.6.12" displayName="Office outpatient visit 15 minutes"/>
+              <statusCode code="completed"/>
+              <effectiveTime><low value="20230615"/><high value="20230615"/></effectiveTime>
+              <text><reference value="#enc1"/></text>
+            </encounter>
+          </entry>
+        </section>
+      </component>`;
+
+/**
+ * A Social History section (`…22.2.17`) carrying one Smoking Status — Meaningful
+ * Use observation (`…22.4.78`): LOINC `72166-2` `code`, a SNOMED CT "Former
+ * smoker" `value` from the Current Smoking Status value set, and an effective
+ * time.
+ */
+export const SOCIAL_HISTORY_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.17"/>
+          <code code="29762-2" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Social History</title>
+          <text><content ID="smk1">Former smoker</content></text>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.78" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.11" extension="smk-1"/>
+              <code code="72166-2" codeSystem="2.16.840.1.113883.6.1" displayName="Tobacco smoking status"/>
+              <statusCode code="completed"/>
+              <effectiveTime value="20230615"/>
+              <value xsi:type="CD" code="8517006" codeSystem="2.16.840.1.113883.6.96" displayName="Former smoker"/>
+              <text><reference value="#smk1"/></text>
+            </observation>
+          </entry>
+        </section>
+      </component>`;
+
+/**
+ * A Social History section asserting an **explicitly unknown** smoking status —
+ * the value is the SNOMED CT "Unknown if ever smoked" concept (`266927001`),
+ * the safety-critical "unknown, not never-smoked" form.
+ */
+export const SMOKING_UNKNOWN_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.17"/>
+          <code code="29762-2" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Social History</title>
+          <text>Smoking status unknown.</text>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.78" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.11" extension="smk-2"/>
+              <code code="72166-2" codeSystem="2.16.840.1.113883.6.1" displayName="Tobacco smoking status"/>
+              <statusCode code="completed"/>
+              <value xsi:type="CD" code="266927001" codeSystem="2.16.840.1.113883.6.96" displayName="Unknown if ever smoked"/>
+            </observation>
           </entry>
         </section>
       </component>`;

@@ -63,6 +63,16 @@ export const VITAL_SIGN_OBSERVATION = "2.16.840.1.113883.10.20.22.4.27";
 export const IMMUNIZATION_ACTIVITY = "2.16.840.1.113883.10.20.22.4.52";
 /** Immunization Medication Information — the `manufacturedMaterial` carrying the CVX. */
 export const IMMUNIZATION_MEDICATION_INFORMATION = "2.16.840.1.113883.10.20.22.4.54";
+/** Procedure Activity Procedure — a `<procedure>` (an altering/operative act). */
+export const PROCEDURE_ACTIVITY_PROCEDURE = "2.16.840.1.113883.10.20.22.4.14";
+/** Procedure Activity Act — an `<act>` procedure (a non-altering service). */
+export const PROCEDURE_ACTIVITY_ACT = "2.16.840.1.113883.10.20.22.4.12";
+/** Procedure Activity Observation — an `<observation>` procedure (an assessment). */
+export const PROCEDURE_ACTIVITY_OBSERVATION = "2.16.840.1.113883.10.20.22.4.13";
+/** Encounter Activity — the `<encounter>` for one visit/admission. */
+export const ENCOUNTER_ACTIVITY = "2.16.840.1.113883.10.20.22.4.49";
+/** Smoking Status — Meaningful Use observation (current smoking status). */
+export const SMOKING_STATUS_OBSERVATION = "2.16.840.1.113883.10.20.22.4.78";
 
 /** Each top-level entry act/organizer root mapped to its home section key. @internal */
 export const ENTRY_ROOT_TO_SECTION: ReadonlyMap<string, string> = new Map([
@@ -72,6 +82,11 @@ export const ENTRY_ROOT_TO_SECTION: ReadonlyMap<string, string> = new Map([
   [RESULT_ORGANIZER, "results"],
   [VITAL_SIGNS_ORGANIZER, "vitalSigns"],
   [IMMUNIZATION_ACTIVITY, "immunizations"],
+  [PROCEDURE_ACTIVITY_PROCEDURE, "procedures"],
+  [PROCEDURE_ACTIVITY_ACT, "procedures"],
+  [PROCEDURE_ACTIVITY_OBSERVATION, "procedures"],
+  [ENCOUNTER_ACTIVITY, "encounters"],
+  [SMOKING_STATUS_OBSERVATION, "socialHistory"],
 ]);
 
 /**
@@ -392,8 +407,15 @@ export function anyEntryAct(entry: Element): Element | undefined {
   return undefined;
 }
 
-/** The four element names a C-CDA `<entry>` act can take. @internal */
-const ACT_NAMES = ["act", "substanceAdministration", "observation", "organizer"] as const;
+/** The element names a C-CDA `<entry>` clinical act can take. @internal */
+const ACT_NAMES = [
+  "act",
+  "substanceAdministration",
+  "observation",
+  "organizer",
+  "procedure",
+  "encounter",
+] as const;
 
 /**
  * Parse the direct `<id>` children of an act/observation into {@link II}s.

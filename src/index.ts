@@ -72,6 +72,9 @@ export {
   extractResults,
   extractVitals,
   extractImmunizations,
+  extractProcedures,
+  extractEncounters,
+  extractSmokingStatus,
   checkUcumUnit,
   readObservationValue,
   readReferenceRange,
@@ -91,6 +94,11 @@ export type {
   VitalSign,
   VitalSignsOrganizer,
   Immunization,
+  Procedure,
+  ProcedureKind,
+  ProcedureDisposition,
+  Encounter,
+  SmokingStatus,
   ObservationValue,
   ReferenceRange,
   ConcernStatus,
@@ -128,6 +136,9 @@ export {
   R21_EXTENSION,
 } from "./parser/templates.js";
 export type { DocumentType, SectionInfo } from "./parser/templates.js";
+
+// Per-document-type required-section (SHALL) validation tables.
+export { requiredSectionKeys, missingRequiredSections } from "./parser/required-sections.js";
 
 // HL7 v3 datatype layer (interfaces + parsers + null-flavor / datetime helpers).
 export * from "./model/types/index.js";

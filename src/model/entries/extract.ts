@@ -22,12 +22,16 @@ import { extractAllergies, type AllergyConcern } from "./allergy.js";
 import { extractResults, type ResultOrganizer } from "./result.js";
 import { extractVitals, type VitalSignsOrganizer } from "./vital.js";
 import { extractImmunizations, type Immunization } from "./immunization.js";
+import { extractProcedures, type Procedure } from "./procedure.js";
+import { extractEncounters, type Encounter } from "./encounter.js";
+import { extractSmokingStatus, type SmokingStatus } from "./social-history.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
  * The clinical entries extracted from a document body: the reconciliation triad
- * (Problems, Medications, Allergies) plus the discrete-data sections (Results,
- * Vital Signs, Immunizations). Empty arrays when a body carries none.
+ * (Problems, Medications, Allergies), the discrete-data sections (Results, Vital
+ * Signs, Immunizations), and the Phase-5 sections (Procedures, Encounters,
+ * Social-History smoking status). Empty arrays when a body carries none.
  *
  * @example
  * ```ts
@@ -44,6 +48,9 @@ export interface ClinicalEntries {
   readonly results: readonly ResultOrganizer[];
   readonly vitals: readonly VitalSignsOrganizer[];
   readonly immunizations: readonly Immunization[];
+  readonly procedures: readonly Procedure[];
+  readonly encounters: readonly Encounter[];
+  readonly smokingStatus: readonly SmokingStatus[];
 }
 
 /**
@@ -66,6 +73,9 @@ export function extractClinical(structuredBody: Element, ctx: ParseCtx): Clinica
   const results: ResultOrganizer[] = [];
   const vitals: VitalSignsOrganizer[] = [];
   const immunizations: Immunization[] = [];
+  const procedures: Procedure[] = [];
+  const encounters: Encounter[] = [];
+  const smokingStatus: SmokingStatus[] = [];
 
   for (const sectionEl of allSectionElements(structuredBody)) {
     const key = sectionKeyOf(sectionEl);
@@ -77,11 +87,24 @@ export function extractClinical(structuredBody: Element, ctx: ParseCtx): Clinica
     results.push(...extractResults(sectionEl, narrativeById, ctx));
     vitals.push(...extractVitals(sectionEl, narrativeById, ctx));
     immunizations.push(...extractImmunizations(sectionEl, narrativeById, ctx));
+    procedures.push(...extractProcedures(sectionEl, narrativeById, ctx));
+    encounters.push(...extractEncounters(sectionEl, narrativeById, ctx));
+    smokingStatus.push(...extractSmokingStatus(sectionEl, narrativeById, ctx));
 
     flagMisplacedEntries(sectionEl, key, ctx);
   }
 
-  return { problems, medications, allergies, results, vitals, immunizations };
+  return {
+    problems,
+    medications,
+    allergies,
+    results,
+    vitals,
+    immunizations,
+    procedures,
+    encounters,
+    smokingStatus,
+  };
 }
 
 /** Every `<section>` element under a body, depth-first (top-level then nested). @internal */

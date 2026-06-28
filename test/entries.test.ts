@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import { parseCcda, WARNING_CODES, type CcdaWarning } from "../src/index.js";
 import {
   buildCcda,
+  NO_REQUIRED_SECTIONS_DOC_OID,
   PROBLEMS_SECTION,
   MEDICATIONS_SECTION,
   ALLERGY_ENTRY_SECTION,
@@ -24,7 +25,13 @@ function codes(warnings: readonly CcdaWarning[]): string[] {
 
 describe("clinical entries — Tier-1 extraction", () => {
   it("extracts all three triad members from a clean document", () => {
-    const doc = parseCcda(buildCcda({ sections: TRIAD_SECTIONS, mrnAssigningAuthority: true }));
+    const doc = parseCcda(
+      buildCcda({
+        docTypeOid: NO_REQUIRED_SECTIONS_DOC_OID,
+        sections: TRIAD_SECTIONS,
+        mrnAssigningAuthority: true,
+      }),
+    );
     expect(doc.getProblems().length).toBe(1);
     expect(doc.getMedications().length).toBe(1);
     expect(doc.getAllergies().length).toBe(1);
