@@ -1,12 +1,12 @@
 /**
  * Clinical-entry extraction walker. Given a `structuredBody`, it visits every
  * `<section>` (depth-first, including nested subsections), resolves each
- * section's narrative index, and runs the Problems / Medications / Allergies
- * extractors. Section recognition here is **silent** — Phase 1's `buildSection`
- * already emitted the section-level warnings (LOINC fallback, unknown code), so
- * re-emitting them would double-count. The only new section-level signal is
- * `SECTION_PLACEMENT_SUSPECT`: a triad entry whose home section differs from
- * the section it was found in.
+ * section's narrative index, and runs the Problems / Medications / Allergies /
+ * Results / Vital Signs / Immunizations extractors. Section recognition here is
+ * **silent** — Phase 1's `buildSection` already emitted the section-level
+ * warnings (LOINC fallback, unknown code), so re-emitting them would
+ * double-count. The only new section-level signal is `SECTION_PLACEMENT_SUSPECT`:
+ * an entry whose home section differs from the section it was found in.
  */
 
 import { child, children, positionOf } from "../dom.js";
@@ -15,15 +15,19 @@ import { sectionForLoinc, sectionForTemplateRoot } from "../../parser/templates.
 import { sectionPlacementSuspect } from "../../parser/warnings.js";
 import { parseCd } from "../types/cd.js";
 import type { ParseCtx } from "../types/_shared.js";
-import { TRIAD_ROOT_TO_SECTION, anyEntryAct, childEntries, templateRoots } from "./shared.js";
+import { ENTRY_ROOT_TO_SECTION, anyEntryAct, childEntries, templateRoots } from "./shared.js";
 import { extractProblems, type ProblemConcern } from "./problem.js";
 import { extractMedications, type Medication } from "./medication.js";
 import { extractAllergies, type AllergyConcern } from "./allergy.js";
+import { extractResults, type ResultOrganizer } from "./result.js";
+import { extractVitals, type VitalSignsOrganizer } from "./vital.js";
+import { extractImmunizations, type Immunization } from "./immunization.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
  * The clinical entries extracted from a document body: the reconciliation triad
- * (Problems, Medications, Allergies). Empty arrays when a body carries none.
+ * (Problems, Medications, Allergies) plus the discrete-data sections (Results,
+ * Vital Signs, Immunizations). Empty arrays when a body carries none.
  *
  * @example
  * ```ts
@@ -37,6 +41,9 @@ export interface ClinicalEntries {
   readonly problems: readonly ProblemConcern[];
   readonly medications: readonly Medication[];
   readonly allergies: readonly AllergyConcern[];
+  readonly results: readonly ResultOrganizer[];
+  readonly vitals: readonly VitalSignsOrganizer[];
+  readonly immunizations: readonly Immunization[];
 }
 
 /**
@@ -56,6 +63,9 @@ export function extractClinical(structuredBody: Element, ctx: ParseCtx): Clinica
   const problems: ProblemConcern[] = [];
   const medications: Medication[] = [];
   const allergies: AllergyConcern[] = [];
+  const results: ResultOrganizer[] = [];
+  const vitals: VitalSignsOrganizer[] = [];
+  const immunizations: Immunization[] = [];
 
   for (const sectionEl of allSectionElements(structuredBody)) {
     const key = sectionKeyOf(sectionEl);
@@ -64,11 +74,14 @@ export function extractClinical(structuredBody: Element, ctx: ParseCtx): Clinica
     problems.push(...extractProblems(sectionEl, narrativeById, ctx));
     medications.push(...extractMedications(sectionEl, narrativeById, ctx));
     allergies.push(...extractAllergies(sectionEl, narrativeById, ctx));
+    results.push(...extractResults(sectionEl, narrativeById, ctx));
+    vitals.push(...extractVitals(sectionEl, narrativeById, ctx));
+    immunizations.push(...extractImmunizations(sectionEl, narrativeById, ctx));
 
     flagMisplacedEntries(sectionEl, key, ctx);
   }
 
-  return { problems, medications, allergies };
+  return { problems, medications, allergies, results, vitals, immunizations };
 }
 
 /** Every `<section>` element under a body, depth-first (top-level then nested). @internal */
@@ -119,7 +132,7 @@ function flagMisplacedEntries(
     const act = anyEntryAct(entry);
     if (act === undefined) continue;
     for (const root of templateRoots(act)) {
-      const home = TRIAD_ROOT_TO_SECTION.get(root);
+      const home = ENTRY_ROOT_TO_SECTION.get(root);
       if (home !== undefined && home !== sectionKey) {
         ctx.emit(sectionPlacementSuspect(positionOf(act), home, sectionKey));
         break;

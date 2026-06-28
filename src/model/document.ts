@@ -19,8 +19,11 @@ import { buildSection, type CcdaSection } from "./section.js";
 import {
   extractClinical,
   type AllergyConcern,
+  type Immunization,
   type Medication,
   type ProblemConcern,
+  type ResultOrganizer,
+  type VitalSignsOrganizer,
 } from "./entries/index.js";
 import { parseEd, type ED } from "./types/ed.js";
 import { parseIi, type II } from "./types/ii.js";
@@ -50,6 +53,9 @@ import type { Element } from "@xmldom/xmldom";
  *   problems: [],
  *   medications: [],
  *   allergies: [],
+ *   results: [],
+ *   vitals: [],
+ *   immunizations: [],
  *   warnings: [],
  * };
  * ```
@@ -62,6 +68,9 @@ export interface CcdaDocumentInit {
   readonly problems: readonly ProblemConcern[];
   readonly medications: readonly Medication[];
   readonly allergies: readonly AllergyConcern[];
+  readonly results: readonly ResultOrganizer[];
+  readonly vitals: readonly VitalSignsOrganizer[];
+  readonly immunizations: readonly Immunization[];
   readonly nonXmlBody?: ED;
   readonly warnings: readonly CcdaWarning[];
 }
@@ -93,6 +102,12 @@ export class CcdaDocument {
   public readonly medications: readonly Medication[];
   /** Extracted Allergy Concern Acts (across all sections). Empty when none. */
   public readonly allergies: readonly AllergyConcern[];
+  /** Extracted Result Organizers — lab/diagnostic panels (across all sections). Empty when none. */
+  public readonly results: readonly ResultOrganizer[];
+  /** Extracted Vital Signs Organizers — vital-reading clusters (across all sections). Empty when none. */
+  public readonly vitals: readonly VitalSignsOrganizer[];
+  /** Extracted Immunization Activities (across all sections). Empty when none. */
+  public readonly immunizations: readonly Immunization[];
   /** The quarantined `nonXMLBody` content for an unstructured document (base64 never decoded). */
   public readonly nonXmlBody: ED | undefined;
   /** Lenient-parse warnings, frozen at the model boundary. */
@@ -112,6 +127,9 @@ export class CcdaDocument {
     this.problems = init.problems;
     this.medications = init.medications;
     this.allergies = init.allergies;
+    this.results = init.results;
+    this.vitals = init.vitals;
+    this.immunizations = init.immunizations;
     this.nonXmlBody = init.nonXmlBody;
     this.warnings = Object.freeze(init.warnings.slice());
   }
@@ -223,6 +241,51 @@ export class CcdaDocument {
   public getAllergies(): readonly AllergyConcern[] {
     return this.allergies;
   }
+
+  /**
+   * The patient's Result Organizers — lab/diagnostic panels, each carrying its
+   * member Result Observations with UCUM-checked values and reference ranges.
+   * Empty when the document carries no Results entries.
+   *
+   * @example
+   * ```ts
+   * for (const panel of doc.getResults())
+   *   for (const r of panel.results) console.log(r.code?.code, r.interpretation?.code);
+   * ```
+   */
+  public getResults(): readonly ResultOrganizer[] {
+    return this.results;
+  }
+
+  /**
+   * The patient's Vital Signs Organizers — reading clusters, each carrying its
+   * member Vital Sign Observations with UCUM-checked `PQ` values. Empty when the
+   * document carries no Vital Signs entries.
+   *
+   * @example
+   * ```ts
+   * for (const cluster of doc.getVitals())
+   *   for (const v of cluster.vitals) console.log(v.code?.code, v.value);
+   * ```
+   */
+  public getVitals(): readonly VitalSignsOrganizer[] {
+    return this.vitals;
+  }
+
+  /**
+   * The patient's Immunization Activities — each carrying the CVX vaccine, dose,
+   * route, and date (including the `refused` not-administered form). Empty when
+   * the document carries no Immunizations entries.
+   *
+   * @example
+   * ```ts
+   * const given = doc.getImmunizations().filter((i) => i.refused !== true);
+   * console.log(given[0]?.vaccine?.code);
+   * ```
+   */
+  public getImmunizations(): readonly Immunization[] {
+    return this.immunizations;
+  }
 }
 
 /**
@@ -256,8 +319,21 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
     problems: readonly ProblemConcern[];
     medications: readonly Medication[];
     allergies: readonly AllergyConcern[];
+    results: readonly ResultOrganizer[];
+    vitals: readonly VitalSignsOrganizer[];
+    immunizations: readonly Immunization[];
     nonXmlBody?: ED;
-  } = { templateIds, header, sections: [], problems: [], medications: [], allergies: [] };
+  } = {
+    templateIds,
+    header,
+    sections: [],
+    problems: [],
+    medications: [],
+    allergies: [],
+    results: [],
+    vitals: [],
+    immunizations: [],
+  };
   if (documentType !== undefined) out.documentType = documentType;
 
   const component = child(root, "component");
@@ -272,6 +348,9 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
       out.problems = entries.problems;
       out.medications = entries.medications;
       out.allergies = entries.allergies;
+      out.results = entries.results;
+      out.vitals = entries.vitals;
+      out.immunizations = entries.immunizations;
     } else {
       const nonXmlBody = child(component, "nonXMLBody");
       if (nonXmlBody !== undefined) {

@@ -51,12 +51,27 @@ export const REACTION_OBSERVATION = "2.16.840.1.113883.10.20.22.4.9";
 export const SEVERITY_OBSERVATION = "2.16.840.1.113883.10.20.22.4.8";
 /** Criticality Observation — the clinical criticality of the propensity. */
 export const CRITICALITY_OBSERVATION = "2.16.840.1.113883.10.20.22.4.145";
+/** Result Organizer — the panel/battery wrapper around Result Observations. */
+export const RESULT_ORGANIZER = "2.16.840.1.113883.10.20.22.4.1";
+/** Result Observation — a single coded lab/diagnostic result + its value. */
+export const RESULT_OBSERVATION = "2.16.840.1.113883.10.20.22.4.2";
+/** Vital Signs Organizer — the cluster wrapper around Vital Sign Observations. */
+export const VITAL_SIGNS_ORGANIZER = "2.16.840.1.113883.10.20.22.4.26";
+/** Vital Sign Observation — a single coded vital sign + its `PQ` value. */
+export const VITAL_SIGN_OBSERVATION = "2.16.840.1.113883.10.20.22.4.27";
+/** Immunization Activity — the `substanceAdministration` for one vaccination. */
+export const IMMUNIZATION_ACTIVITY = "2.16.840.1.113883.10.20.22.4.52";
+/** Immunization Medication Information — the `manufacturedMaterial` carrying the CVX. */
+export const IMMUNIZATION_MEDICATION_INFORMATION = "2.16.840.1.113883.10.20.22.4.54";
 
-/** The triad's top-level act/activity roots, each mapped to its home section key. @internal */
-export const TRIAD_ROOT_TO_SECTION: ReadonlyMap<string, string> = new Map([
+/** Each top-level entry act/organizer root mapped to its home section key. @internal */
+export const ENTRY_ROOT_TO_SECTION: ReadonlyMap<string, string> = new Map([
   [PROBLEM_CONCERN_ACT, "problems"],
   [MEDICATION_ACTIVITY, "medications"],
   [ALLERGY_CONCERN_ACT, "allergies"],
+  [RESULT_ORGANIZER, "results"],
+  [VITAL_SIGNS_ORGANIZER, "vitalSigns"],
+  [IMMUNIZATION_ACTIVITY, "immunizations"],
 ]);
 
 /**
@@ -150,6 +165,26 @@ export function relatedObservations(el: Element, root: string): readonly Element
   const out: Element[] = [];
   for (const er of children(el, "entryRelationship")) {
     const obs = child(er, "observation");
+    if (obs !== undefined && hasTemplateRoot(obs, root)) out.push(obs);
+  }
+  return out;
+}
+
+/**
+ * All `component/observation` children of an organizer whose `observation`
+ * carries the given `templateId` root. An organizer (Result, Vital Signs) nests
+ * its member observations through `<component>` rather than `entryRelationship`.
+ *
+ * @example
+ * ```ts
+ * import { componentObservations, RESULT_OBSERVATION } from "@cosyte/ccda";
+ * const results = componentObservations(organizer, RESULT_OBSERVATION);
+ * ```
+ */
+export function componentObservations(el: Element, root: string): readonly Element[] {
+  const out: Element[] = [];
+  for (const comp of children(el, "component")) {
+    const obs = child(comp, "observation");
     if (obs !== undefined && hasTemplateRoot(obs, root)) out.push(obs);
   }
   return out;

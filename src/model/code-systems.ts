@@ -15,7 +15,8 @@
 
 import type { CD } from "./types/cd.js";
 import type { ParseCtx } from "./types/_shared.js";
-import { deprecatedCodeSystem, unexpectedCodeSystem } from "../parser/warnings.js";
+import { deprecatedCodeSystem, deprecatedLoinc, unexpectedCodeSystem } from "../parser/warnings.js";
+import type { CcdaPosition } from "../parser/types.js";
 
 /** SNOMED CT — clinical findings, problems, allergen substances. */
 export const SNOMED_CT = "2.16.840.1.113883.6.96";
@@ -37,6 +38,10 @@ export const NDC = "2.16.840.1.113883.6.69";
 export const UNII = "2.16.840.1.113883.4.9";
 /** NCI Thesaurus — the C-CDA `routeCode` value set source. */
 export const NCI_ROUTE = "2.16.840.1.113883.3.26.1.1";
+/** CVX — CDC vaccine administered code system (immunizations). */
+export const CVX = "2.16.840.1.113883.12.292";
+/** HL7 ObservationInterpretation — the `interpretationCode` value set source. */
+export const INTERPRETATION = "2.16.840.1.113883.5.83";
 
 /**
  * The coded slots whose terminology binding the parser checks. Each names a
@@ -48,7 +53,7 @@ export const NCI_ROUTE = "2.16.840.1.113883.3.26.1.1";
  * const slot: CodeSlot = "problem";
  * ```
  */
-export type CodeSlot = "problem" | "medication" | "allergen" | "route";
+export type CodeSlot = "problem" | "medication" | "allergen" | "route" | "vaccine";
 
 interface SlotBinding {
   readonly expected: readonly string[];
@@ -61,6 +66,7 @@ const SLOT_BINDINGS: Readonly<Record<CodeSlot, SlotBinding>> = {
   medication: { expected: [RXNORM, NDC], deprecated: [] },
   allergen: { expected: [RXNORM, UNII, NDC, SNOMED_CT], deprecated: [] },
   route: { expected: [NCI_ROUTE], deprecated: [] },
+  vaccine: { expected: [CVX], deprecated: [] },
 };
 
 /**
@@ -115,4 +121,40 @@ export function looksProductLevel(displayName: string | undefined): boolean {
   return /\b(?:tablet|capsule|solution|injection|cream|ointment|patch|spray|suspension|syrup|inhaler|oral|topical)\b/iu.test(
     displayName,
   );
+}
+
+/**
+ * Known-deprecated LOINC observation codes mapped (in the warning) to "prefer a
+ * successor". A small curated set, not the full LOINC release — LOINC's
+ * deprecation status is licensed *data* the suite does not bundle. The classic
+ * clinical example is BMI `41909-3` (deprecated → `39156-5`). @internal
+ */
+const DEPRECATED_LOINC: ReadonlySet<string> = new Set([
+  "41909-3", // Body mass index — deprecated, use 39156-5
+  "8478-0", // Mean blood pressure — deprecated
+  "8357-6", // Blood pressure method — deprecated
+]);
+
+/**
+ * Flag a result/vital observation `code` that is a known-deprecated LOINC. Emits
+ * `DEPRECATED_LOINC` (code preserved) only when the value is in the LOINC code
+ * system and a recognized-deprecated code; otherwise silent. A value with no
+ * `code` or a non-LOINC system is left unchecked.
+ *
+ * @example
+ * ```ts
+ * import { checkLoincDeprecation } from "@cosyte/ccda";
+ * checkLoincDeprecation(observationCode, { path: "code" }, ctx);
+ * ```
+ */
+export function checkLoincDeprecation(
+  code: CD | undefined,
+  position: CcdaPosition,
+  ctx: ParseCtx,
+): void {
+  if (code?.code === undefined) return;
+  if (code.codeSystem !== undefined && code.codeSystem !== LOINC) return;
+  if (DEPRECATED_LOINC.has(code.code)) {
+    ctx.emit(deprecatedLoinc(position, code.code));
+  }
 }

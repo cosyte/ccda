@@ -52,6 +52,13 @@ export const WARNING_CODES = {
   MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED: "MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED",
   PROBLEM_STATUS_INDETERMINATE: "PROBLEM_STATUS_INDETERMINATE",
   SECTION_PLACEMENT_SUSPECT: "SECTION_PLACEMENT_SUSPECT",
+  NON_UCUM_UNIT: "NON_UCUM_UNIT",
+  UCUM_CASE_SUSPECT: "UCUM_CASE_SUSPECT",
+  MISSING_UNIT_ON_PQ: "MISSING_UNIT_ON_PQ",
+  FREE_TEXT_REFERENCE_RANGE: "FREE_TEXT_REFERENCE_RANGE",
+  RESULT_VALUE_TYPE_UNHANDLED: "RESULT_VALUE_TYPE_UNHANDLED",
+  IMMUNIZATION_REFUSED: "IMMUNIZATION_REFUSED",
+  DEPRECATED_LOINC: "DEPRECATED_LOINC",
 } as const;
 
 /**
@@ -551,6 +558,148 @@ export function sectionPlacementSuspect(
   return {
     code: WARNING_CODES.SECTION_PLACEMENT_SUSPECT,
     message: `An entry template that belongs in the "${entryExpectedSection}" section was found in the "${foundInSection}" section; extracted but flagged.`,
+    position,
+  };
+}
+
+/**
+ * Build a `NON_UCUM_UNIT` warning. Emitted when a `PQ` `@unit` is not a
+ * well-formed UCUM unit (validated by the computable grammar). The raw unit
+ * string and the value are **preserved verbatim** — never normalized away — so
+ * the quantity is never silently re-dimensioned. The `@unit` is structural
+ * metadata, not PHI.
+ *
+ * @example
+ * ```ts
+ * import { nonUcumUnit } from "@cosyte/ccda";
+ * const w = nonUcumUnit({ path: "value" }, "cc");
+ * ```
+ */
+export function nonUcumUnit(position: CcdaPosition, unit: string): CcdaWarning {
+  return {
+    code: WARNING_CODES.NON_UCUM_UNIT,
+    message: `Unit "${unit}" is not a well-formed UCUM unit; value preserved verbatim, never normalized.`,
+    position,
+  };
+}
+
+/**
+ * Build a `UCUM_CASE_SUSPECT` warning. Emitted when a `PQ` `@unit` differs only
+ * in letter case from a canonical clinical UCUM spelling — `ML` for `mL`
+ * (megaliter vs milliliter), `Mg` for `mg`, `mEq` for `meq`. The value is
+ * preserved; the likely fix is a single case change.
+ *
+ * @example
+ * ```ts
+ * import { ucumCaseSuspect } from "@cosyte/ccda";
+ * const w = ucumCaseSuspect({ path: "value" }, "ML");
+ * ```
+ */
+export function ucumCaseSuspect(position: CcdaPosition, unit: string): CcdaWarning {
+  return {
+    code: WARNING_CODES.UCUM_CASE_SUSPECT,
+    message: `Unit "${unit}" looks like a letter-case slip of a canonical UCUM unit; value preserved, review the casing.`,
+    position,
+  };
+}
+
+/**
+ * Build a `MISSING_UNIT_ON_PQ` warning. Emitted when a physical-quantity value
+ * carries a numeric `@value` but no `@unit` — a dimensionless measurement where
+ * a unit is expected. The value is preserved; the missing unit is flagged, never
+ * defaulted.
+ *
+ * @example
+ * ```ts
+ * import { missingUnitOnPq } from "@cosyte/ccda";
+ * const w = missingUnitOnPq({ path: "value" });
+ * ```
+ */
+export function missingUnitOnPq(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.MISSING_UNIT_ON_PQ,
+    message: `Physical-quantity value has a numeric value but no @unit; preserved as dimensionless, never defaulted.`,
+    position,
+  };
+}
+
+/**
+ * Build a `FREE_TEXT_REFERENCE_RANGE` warning. Emitted when a result's
+ * `referenceRange` carries free text instead of a structured `IVL_PQ`
+ * (`low`/`high`) — the text is preserved on the range, but it cannot be compared
+ * numerically against the result value.
+ *
+ * @example
+ * ```ts
+ * import { freeTextReferenceRange } from "@cosyte/ccda";
+ * const w = freeTextReferenceRange({ path: "referenceRange" });
+ * ```
+ */
+export function freeTextReferenceRange(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.FREE_TEXT_REFERENCE_RANGE,
+    message: `Reference range is free text, not a structured low/high interval; preserved as text, not numerically comparable.`,
+    position,
+  };
+}
+
+/**
+ * Build a `RESULT_VALUE_TYPE_UNHANDLED` warning. Emitted when a result/vital
+ * observation `value` carries an `xsi:type` the model does not specialize
+ * (anything beyond `PQ`/`CD`/`CE`/`ST`/`IVL_PQ`). The raw value is preserved as
+ * an `unsupported` value so nothing is dropped — only the typed view is absent.
+ * The type name is structural metadata, not PHI.
+ *
+ * @example
+ * ```ts
+ * import { resultValueTypeUnhandled } from "@cosyte/ccda";
+ * const w = resultValueTypeUnhandled({ path: "value" }, "RTO");
+ * ```
+ */
+export function resultValueTypeUnhandled(position: CcdaPosition, xsiType: string): CcdaWarning {
+  return {
+    code: WARNING_CODES.RESULT_VALUE_TYPE_UNHANDLED,
+    message: `Observation value xsi:type "${xsiType}" is not specialized; raw value preserved as unsupported.`,
+    position,
+  };
+}
+
+/**
+ * Build an `IMMUNIZATION_REFUSED` warning. Emitted (informationally) when an
+ * Immunization Activity carries `@negationInd="true"` — the vaccine was **not**
+ * administered (refused / not given). The negation is modeled distinctly on
+ * `refused`; this surfaces it so a refusal is never read as an administration.
+ *
+ * @example
+ * ```ts
+ * import { immunizationRefused } from "@cosyte/ccda";
+ * const w = immunizationRefused({ path: "substanceAdministration" });
+ * ```
+ */
+export function immunizationRefused(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.IMMUNIZATION_REFUSED,
+    message: `Immunization activity carries negationInd="true" (vaccine not administered / refused); modeled as refused, never as given.`,
+    position,
+  };
+}
+
+/**
+ * Build a `DEPRECATED_LOINC` warning. Emitted when a result/vital observation
+ * `code` is a known-deprecated LOINC (e.g. BMI `41909-3`, superseded by
+ * `39156-5`) — the code is preserved; the deprecation is flagged for review. The
+ * LOINC code is a structural identifier, not PHI.
+ *
+ * @example
+ * ```ts
+ * import { deprecatedLoinc } from "@cosyte/ccda";
+ * const w = deprecatedLoinc({ path: "code" }, "41909-3");
+ * ```
+ */
+export function deprecatedLoinc(position: CcdaPosition, loincCode: string): CcdaWarning {
+  return {
+    code: WARNING_CODES.DEPRECATED_LOINC,
+    message: `LOINC code "${loincCode}" is deprecated; prefer its current successor. Code preserved.`,
     position,
   };
 }
