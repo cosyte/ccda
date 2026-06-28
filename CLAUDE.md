@@ -19,10 +19,12 @@ immutability + explicit mutation, and the profile system.
 - **Scaffolded from the shared `@cosyte/*` parser template.** Pre-alpha `0.0.x`, not yet published to
   npm. `src/index.ts` carries archetype **stubs** (`parseCcda`, `WARNING_CODES`, `FATAL_CODES`)
   — the real parser lands in subsequent phases.
-- **XML-parser dependency is a pending one-way-door decision.** C-CDA is XML, and the shared standard
-  permits an XML-parser runtime dep for `ccda`/`ncpdp` **per an ADR** — but the scaffold stays
-  **zero-dep** until the parse layer actually lands. See `docs/adr/0001-xml-parser.md` (status:
-  proposed); do **not** add the dependency before that ADR is ratified.
+- **XML-parser dependency: ratified (one-way door).** C-CDA is XML, and the shared standard permits an
+  XML-parser runtime dep for `ccda`/`ncpdp` **per an ADR**. `docs/adr/0001-xml-parser.md` is now
+  **Accepted** — `@xmldom/xmldom` (exact-pinned, **1 of the ≤ 3** runtime-dep cap), chosen for faithful
+  DOM round-trip + a hardenable (XXE-safe) posture. The parse layer (Phase 1) configures and consumes
+  it; do **not** add a _second_ XML library — reuse this one (and coordinate `@cosyte/ncpdp` onto the
+  same substrate).
 
 ## Tech Stack (the shared `@cosyte/*` standard)
 
@@ -42,9 +44,9 @@ a summary.
   property-based conformance invariants come from `@cosyte/test-utils` (round-trip, lenient-mode,
   immutability, warning-code stability) — the format-specific arbitraries stay in this repo.
 - **CI/CD:** thin callers of the reusable `cosyte/.github` workflows.
-- **Runtime deps:** **Zero for now.** Node stdlib only until the XML-parser ADR
-  (`docs/adr/0001-xml-parser.md`) lands; the standard then caps `ccda` at **≤ 3** justified runtime
-  deps.
+- **Runtime deps:** **One** — `@xmldom/xmldom` (exact-pinned), ratified by
+  `docs/adr/0001-xml-parser.md` for C-CDA's XML parse + spec-clean serialize. The standard caps `ccda`
+  at **≤ 3** justified runtime deps; this is **1 of 3**. No other runtime dep without an ADR.
 - **License:** MIT.
 
 ## Engineering Guardrails
@@ -81,8 +83,8 @@ Mirrors the three disciplines in the meta-repo's `documentation/conventions.md` 
 
 _Preserved from the pre-scaffold planning `CLAUDE.md`. The sections above are the shared `@cosyte/*`
 standard (authoritative for tooling/stack/disciplines); the notes below are the C-CDA-specific design
-intent. Where they overlap, the standard above wins — e.g. runtime deps are **zero today** pending
-`docs/adr/0001-xml-parser.md`, and the sibling `@cosyte/hl7` now lives at `../hl7` (the old
+intent. Where they overlap, the standard above wins — e.g. runtime deps are now **one** (`@xmldom/xmldom`, ratified by
+`docs/adr/0001-xml-parser.md`), and the sibling `@cosyte/hl7` now lives at `../hl7` (the old
 `../hl7-parser` path is stale)._
 
 A TypeScript library for the HL7 Consolidated CDA R2.1 standard.
@@ -91,7 +93,7 @@ A TypeScript library for the HL7 Consolidated CDA R2.1 standard.
 
 - **North star:** A developer can parse a real-world, vendor-quirky C-CDA document and pull useful sections out of it in one line — without having read the C-CDA IG.
 - **Sibling package:** `@cosyte/hl7` (lives at `../hl7`). This project mirrors its style, tooling, and guardrails. When in doubt, do what `@cosyte/hl7` did.
-- **Deliberate divergence from the sibling:** runtime dependencies are allowed here (for XML parsing). Target ≤ 3 runtime deps, each justified. (Pending the XML-parser ADR — `docs/adr/0001-xml-parser.md` — none are added yet.)
+- **Deliberate divergence from the sibling:** runtime dependencies are allowed here (for XML parsing). Target ≤ 3 runtime deps, each justified. (Ratified: `@xmldom/xmldom` via `docs/adr/0001-xml-parser.md` — **1 of 3**.)
 
 ## Hard gates
 
