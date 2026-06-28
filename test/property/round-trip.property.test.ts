@@ -4,43 +4,52 @@
  * **format-specific arbitraries** (the `Ccda` generators below).
  *
  * This file is the intended shape for every `@cosyte/*` parser (see `@cosyte/hl7`'s
- * `test/property/`). While `@cosyte/ccda` is still a scaffold:
+ * `test/property/`):
  *
- *   - the **lenient-mode** invariant runs today against the stub parser (it must never throw on
- *     arbitrary input and must only emit registered warning codes) — a real, passing guard; and
+ *   - the **lenient-mode** invariant runs against the real parser — `parseCcda` must never throw a
+ *     non-fatal on arbitrary input, and every recovered warning must carry a registered code; and
  *   - the **round-trip** invariant is `it.todo` until the serializer (`serializeCcda` /
- *     `result.toString()`) lands. The body is written against the real runner so it typechecks and
+ *     `doc.toString()`) lands. The body is written against the real runner so it typechecks and
  *     lints now, and flips on by changing `it.todo` to `it` once a serializer exists.
- *
- * Replace the placeholder arbitraries with real spec-clean and hostile generators as the parser
- * grows, and add the `immutabilityProperty` + warning-code snapshot guards (see `@cosyte/test-utils`).
  */
 
 import { describe, it } from "vitest";
 import fc from "fast-check";
 import { lenientNeverThrowsProperty, roundTripProperty } from "@cosyte/test-utils";
 
-import { FATAL_CODES, WARNING_CODES, parseCcda, type ParsedCcda } from "../../src/index.js";
+import {
+  FATAL_CODES,
+  WARNING_CODES,
+  parseCcda,
+  type CcdaDocument,
+  type CcdaWarning,
+} from "../../src/index.js";
 
 const fatalCodes = new Set<string>(Object.values(FATAL_CODES));
 const knownWarningCodes = new Set<string>(Object.values(WARNING_CODES));
 
 /**
  * Placeholder arbitrary for **hostile / quirky** input — the lenient-mode generator. Today this is
- * just arbitrary strings; replace it with a generator that emits real C-CDA quirks (truncated
- * segments, unknown elements, encoding oddities) the lenient parser must recover into warnings.
+ * arbitrary strings (which the parser rejects as Tier-3 not-well-formed / not-a-ClinicalDocument
+ * fatals); replace it with a generator that emits real C-CDA quirks (unknown templates, missing
+ * stamps, encoding oddities) the lenient parser must recover into warnings.
  */
 function hostileInput(): fc.Arbitrary<string> {
   return fc.string();
 }
 
+/** Minimal round-trip carrier until the real spec-clean model arbitrary lands. */
+interface RoundTripStub {
+  readonly warnings: readonly CcdaWarning[];
+}
+
 /**
- * Placeholder arbitrary for **spec-clean** values — the round-trip generator. Today it produces the
- * stub's parsed shape; replace it with a generator of spec-valid messages the builder/serializer can
- * emit, so `parse(serialize(x))` can be asserted structurally equal to `x`.
+ * Placeholder arbitrary for **spec-clean** values — the round-trip generator. Replace it with a
+ * generator of spec-valid documents the builder/serializer can emit, so `parse(serialize(x))` can be
+ * asserted structurally equal to `x`.
  */
-function specCleanCcda(): fc.Arbitrary<ParsedCcda> {
-  return fc.constant({ value: {}, warnings: [] } satisfies ParsedCcda);
+function specCleanCcda(): fc.Arbitrary<RoundTripStub> {
+  return fc.constant({ warnings: [] } satisfies RoundTripStub);
 }
 
 describe("ccda conformance (archetype invariants)", () => {
@@ -48,35 +57,34 @@ describe("ccda conformance (archetype invariants)", () => {
     lenientNeverThrowsProperty({
       arbitrary: hostileInput(),
       parse: (raw: string) => parseCcda(raw),
-      // The stub parser never throws; once real fatals exist, only those may escape as throws.
+      // Only Tier-3 fatals (a code in FATAL_CODES) may escape as a throw.
       isFatal: (err) =>
         typeof err === "object" &&
         err !== null &&
         "code" in err &&
         fatalCodes.has(String(err.code)),
-      getWarnings: (parsed) => (parsed as ParsedCcda).warnings,
+      getWarnings: (doc) => (doc as CcdaDocument).warnings,
       isKnownCode: (code) => knownWarningCodes.has(code),
       hasPositionalContext: (warning) =>
         warning.position === undefined || typeof warning.position === "object",
     });
   });
 
-  // TODO: flip `it.todo` -> `it` once a serializer (`serializeCcda` / `result.toString()`)
+  // TODO: flip `it.todo` -> `it` once a serializer (`serializeCcda` / `doc.toString()`)
   // exists. The body already typechecks and lints against the real runner.
   it.todo("round-trips — parse(serialize(x)) is structurally equal to x", () => {
     roundTripProperty({
       arbitrary: specCleanCcda(),
       // Replace with the real serializer once it lands.
       serialize: (value) => JSON.stringify(value),
-      // Replace with the real parser once it returns the model type the arbitrary produces. The
-      // placeholder reconstructs the stub shape from the wire string without an unsafe cast.
-      parse: (raw): ParsedCcda => {
+      // Replace with the real parser once it returns the model type the arbitrary produces.
+      parse: (raw): RoundTripStub => {
         const decoded: unknown = JSON.parse(raw);
         const warnings =
           typeof decoded === "object" && decoded !== null && "warnings" in decoded
-            ? (decoded as ParsedCcda).warnings
+            ? (decoded as RoundTripStub).warnings
             : [];
-        return { value: {}, warnings };
+        return { warnings };
       },
       equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
     });

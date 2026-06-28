@@ -1,17 +1,25 @@
 /**
- * Public entry point for the `@cosyte/ccda` package.
+ * Public entry point for the `@cosyte/ccda` package — a lenient, PHI-aware
+ * parser for HL7 Consolidated CDA R2.1 documents.
  *
- * This is the **archetype scaffold** for a cosyte standard parser (see the meta-repo's
- * `documentation/conventions.md` → "The standard parser archetype"). The real parser, model,
- * serializer, helpers, and profile system are populated in subsequent phases; these stubs keep the
- * module resolvable and typed so the build/typecheck/lint/test pipeline verifies end-to-end, and
- * they pin the public shape every sibling `@cosyte/*` parser shares.
+ * `parseCcda` turns vendor-quirky C-CDA XML into an immutable
+ * {@link CcdaDocument}: the recognized {@link DocumentType}, the US Realm
+ * {@link CcdaHeader}, and the framed {@link CcdaSection}s — with recoverable
+ * deviations surfaced as stable-coded {@link CcdaWarning}s rather than thrown.
+ * The XML substrate is hardened against XXE / billion-laughs / oversized input
+ * (Tier-3 {@link FatalCode}s). This module re-exports the public surface every
+ * sibling `@cosyte/*` parser mirrors.
+ *
+ * @example
+ * ```ts
+ * import { parseCcda } from "@cosyte/ccda";
+ * const doc = parseCcda(xml);
+ * console.log(doc.documentType, doc.getPatient()?.name?.text, doc.getMrn());
+ * ```
  */
 
 /**
- * Library version string, synced with `package.json#version` at build time by downstream phases.
- * Exported now so consumers (and the type-check pipeline) have at least one symbol to resolve
- * through the `exports` map.
+ * Library version string, synced with `package.json#version` at build time.
  *
  * @example
  * ```ts
@@ -21,131 +29,53 @@
  */
 export const VERSION = "0.0.0";
 
-/**
- * The result of parsing a C-CDA payload.
- *
- * Mirrors the cosyte parser archetype: a parsed value plus the **warnings** the lenient parser
- * recovered from (Tier-2 deviations). The real model — an immutable document with dot-path access,
- * named helpers, and a spec-clean serializer — lands in subsequent phases; for now this captures the
- * minimal lenient-parse contract.
- */
-export interface ParsedCcda {
-  /** The parsed in-memory representation. A structural stub until the real model lands. */
-  readonly value: Record<string, unknown>;
-  /** Tier-2 deviations recovered during a lenient parse — stable code + position, never thrown. */
-  readonly warnings: readonly CcdaWarning[];
-}
+// Parser entry point + options.
+export { parseCcda } from "./parser/index.js";
+export type {
+  ParseCcdaOptions,
+  CcdaParseLimits,
+  OnWarningCallback,
+  CcdaPosition,
+} from "./parser/types.js";
 
-/**
- * A single Tier-2 tolerance warning.
- *
- * Warnings carry a **stable** {@link WarningCode} plus positional context so consumers can branch on
- * `w.code === WARNING_CODES.SOME_CODE` without the code churning — renaming a code is a breaking
- * change. The serializer never emits these; they describe what the lenient parser tolerated.
- */
-export interface CcdaWarning {
-  /** The stable warning code. One of the values in {@link WARNING_CODES}. */
-  readonly code: WarningCode;
-  /** Human-readable detail for logs (never contains PHI). */
-  readonly message: string;
-  /** Positional context (offset/segment/element — refined as the parser grows). */
-  readonly position?: { readonly offset: number };
-}
+// Hardened XML substrate + the safety caps it enforces (tunable via options).
+export { parseSecureXml, resolveLimits, DEFAULT_LIMITS } from "./parser/secure-xml.js";
+export type { ResolvedLimits } from "./parser/secure-xml.js";
 
-/**
- * Options for {@link parseCcda}.
- *
- * The parser is **lenient by default** (Postel's Law): vendor quirks become {@link CcdaWarning}s
- * rather than failures. Set `strict` to escalate every Tier-2 deviation to a thrown error.
- */
-export interface ParseCcdaOptions {
-  /** When `true`, escalate every Tier-2 deviation to a thrown error instead of a warning. */
-  readonly strict?: boolean;
-}
+// Tier-2 warning registry + Tier-3 fatal registry (stable public contract).
+export { WARNING_CODES } from "./parser/warnings.js";
+export type { WarningCode, CcdaWarning } from "./parser/warnings.js";
+export { FATAL_CODES, CcdaParseError } from "./parser/errors.js";
+export type { FatalCode } from "./parser/errors.js";
 
-/**
- * Parse a C-CDA payload into a {@link ParsedCcda}.
- *
- * **Lenient by default** — real-world, vendor-quirky input parses rather than throws, emitting
- * {@link CcdaWarning}s instead (Postel's Law). The complementary serializer (added in a later
- * phase) always emits spec-clean output. Only unrecoverable structural corruption throws (a Tier-3
- * {@link FatalCode}).
- *
- * @param raw - The raw C-CDA payload (`string` for now; `Buffer`/`Uint8Array` support is added
- *   alongside the real parser).
- * @param options - Parse options; see {@link ParseCcdaOptions}. Lenient unless `strict` is set.
- * @returns The parsed value plus any recovered Tier-2 warnings.
- * @throws Only on a Tier-3 {@link FatalCode} (unrecoverable structural corruption), or — once
- *   implemented — on any Tier-2 deviation when `options.strict` is `true`.
- * @example
- * ```ts
- * import { parseCcda } from "@cosyte/ccda";
- *
- * const { value, warnings } = parseCcda(raw);
- * for (const w of warnings) console.warn(w.code, w.position);
- * ```
- */
-export function parseCcda(raw: string, options: ParseCcdaOptions = {}): ParsedCcda {
-  // Archetype stub: the real lenient tokenizer/model lands in subsequent phases. The signature and
-  // return shape are the load-bearing contract here (mirrored across the sibling @cosyte/* parsers).
-  void raw;
-  void options;
-  return { value: {}, warnings: [] };
-}
+// Document model + convenience accessors.
+export { CcdaDocument, buildDocument } from "./model/document.js";
+export type { CcdaDocumentInit } from "./model/document.js";
 
-/**
- * Stable **Tier-2 warning code** registry — the lenient parser's recoverable deviations.
- *
- * Each code is its own value (`key === value`) so the set survives `Object.values(...)` into a
- * snapshot tripwire (see `@cosyte/test-utils`' `sortedCodeSet`). These codes are part of the public
- * contract: consumers branch on them, so renaming or removing one is a **breaking change**. Real
- * codes are added here as the parser grows; this placeholder keeps the shape resolvable.
- *
- * @example
- * ```ts
- * import { WARNING_CODES } from "@cosyte/ccda";
- *
- * if (warning.code === WARNING_CODES.EXAMPLE_TOLERATED_DEVIATION) {
- *   // handle the tolerated deviation
- * }
- * ```
- */
-export const WARNING_CODES = {
-  /** Placeholder Tier-2 code — replace with the parser's real recoverable-deviation codes. */
-  EXAMPLE_TOLERATED_DEVIATION: "EXAMPLE_TOLERATED_DEVIATION",
-} as const;
+// Header + patient + section models.
+export { buildHeader } from "./model/header.js";
+export type { CcdaHeader, CcdaPatient, HumanName } from "./model/header.js";
+export { buildSection } from "./model/section.js";
+export type { CcdaSection } from "./model/section.js";
 
-/**
- * A value from {@link WARNING_CODES} — the type consumers narrow `warning.code` against.
- */
-export type WarningCode = (typeof WARNING_CODES)[keyof typeof WARNING_CODES];
+// Recognition tables — document types + section catalog.
+export {
+  documentTypeForOid,
+  sectionForTemplateRoot,
+  sectionForLoinc,
+  CDA_DOCUMENT_OID,
+  R21_EXTENSION,
+} from "./parser/templates.js";
+export type { DocumentType, SectionInfo } from "./parser/templates.js";
 
-/**
- * Stable **Tier-3 fatal code** registry — unrecoverable structural corruption.
- *
- * Tier-3 codes are **always thrown**, even in lenient mode: they mark input the parser cannot
- * recover into a structured result. Like {@link WARNING_CODES} these are `key === value` and part of
- * the public contract. Real codes are added as the parser grows; this placeholder keeps the shape
- * resolvable.
- *
- * @example
- * ```ts
- * import { FATAL_CODES } from "@cosyte/ccda";
- *
- * try {
- *   parseCcda(raw);
- * } catch (err) {
- *   // err carries a code from FATAL_CODES
- *   void FATAL_CODES.EXAMPLE_UNRECOVERABLE;
- * }
- * ```
- */
-export const FATAL_CODES = {
-  /** Placeholder Tier-3 code — replace with the parser's real unrecoverable-corruption codes. */
-  EXAMPLE_UNRECOVERABLE: "EXAMPLE_UNRECOVERABLE",
-} as const;
+// HL7 v3 datatype layer (interfaces + parsers + null-flavor / datetime helpers).
+export * from "./model/types/index.js";
 
-/**
- * A value from {@link FATAL_CODES} — the type carried by a thrown fatal error.
- */
-export type FatalCode = (typeof FATAL_CODES)[keyof typeof FATAL_CODES];
+// HL7 v3 namespaces.
+export { V3_NS, XSI_NS, SDTC_NS, isRecognizedNamespace } from "./parser/namespaces.js";
+
+// Namespace-aware DOM read helpers.
+export { attr, child, children, childElements, text, xsiType, positionOf } from "./model/dom.js";
+
+// MRN selection helper (overridable by a later profile-aware variant).
+export { pickMrn } from "./helpers/pick-mrn.js";
