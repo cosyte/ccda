@@ -14,6 +14,33 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 3 — discrete clinical data: Results, Vital Signs, Immunizations.** `parseCcda(xml)` now
+  extracts the three discrete-data entry families, surfaced on `CcdaDocument` via `getResults()`,
+  `getVitals()`, and `getImmunizations()` (and the `doc.results` / `doc.vitals` /
+  `doc.immunizations` arrays):
+  - **Results** — Result Organizer (`…22.4.1`) → Result Observation (`…22.4.2`); the LOINC-coded
+    analyte, the polymorphic observation `value` read into a discriminated `ObservationValue` union
+    (`physicalQuantity` / `coded` / `string` / `range` / `unsupported`, selected by `xsi:type`), the
+    `referenceRange` (structured `IVL_PQ` bounds, else free-text), and the `interpretationCode`.
+  - **Vital Signs** — Vital Signs Organizer (`…22.4.26`) → Vital Sign Observation (`…22.4.27`); same
+    UCUM-checked `ObservationValue` machinery, no reference range.
+  - **Immunizations** — Immunization Activity (`…22.4.52`); the CVX vaccine reached via
+    `consumable/manufacturedProduct/manufacturedMaterial/code`, `dose`, `route`, `effectiveTime`, and
+    `statusCode`. A `negationInd="true"` refusal is modeled as a distinct `refused` flag (emitting
+    `IMMUNIZATION_REFUSED`), never conflated with a `nullFlavor`.
+  - **Computable, zero-dep UCUM grammar** — a recursive-descent validator (`isValidUcumUnit`,
+    `isUcumCaseSuspect`) runs on every physical quantity. A non-UCUM unit is flagged
+    (`NON_UCUM_UNIT`) and a letter-case slip of a canonical unit (`UCUM_CASE_SUSPECT`) is caught, but
+    the **raw unit string is always preserved — units are never normalized away**. Property-based
+    invariants back the grammar (well-formed-by-construction always validates; a canonical unit is
+    never reported case-suspect; an annotation suffix never changes validity).
+  - **Code-system recognition** — CVX (`CVX`) for vaccines and the HL7 `INTERPRETATION` system, plus
+    LOINC deprecation checking (`checkLoincDeprecation`) on result/vital analyte codes.
+  - **Seven new Tier-2 warning codes** for the discrete-data layer: `NON_UCUM_UNIT`,
+    `UCUM_CASE_SUSPECT`, `MISSING_UNIT_ON_PQ`, `FREE_TEXT_REFERENCE_RANGE`,
+    `RESULT_VALUE_TYPE_UNHANDLED`, `IMMUNIZATION_REFUSED`, and `DEPRECATED_LOINC`. The lenient
+    invariant holds throughout: an unrecognized `value xsi:type` is preserved as `unsupported`
+    (nothing dropped), and a `PQ` with a non-UCUM unit keeps its raw unit.
 - **Phase 2 — the clinical reconciliation triad.** `parseCcda(xml)` now extracts the three
   reconciliation entries from a structured body, surfaced on `CcdaDocument` via `getProblems()`,
   `getMedications()`, and `getAllergies()` (and the `doc.problems` / `doc.medications` /

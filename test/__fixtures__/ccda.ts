@@ -217,6 +217,117 @@ export const NKA_SECTION = `
         </section>
       </component>`;
 
+/**
+ * A Results section (`…22.2.3.1`) carrying one Result Organizer (`…22.4.1`) →
+ * Result Observation (`…22.4.2`): LOINC Hemoglobin with a `PQ` value in `g/dL`
+ * (valid UCUM), a structured `IVL_PQ` reference range, and a `N` interpretation.
+ */
+export const RESULTS_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.3.1" extension="2015-08-01"/>
+          <code code="30954-2" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Results</title>
+          <text><content ID="res1">Hemoglobin 13.5 g/dL</content></text>
+          <entry>
+            <organizer classCode="BATTERY" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.1" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.6" extension="res-org-1"/>
+              <code code="58410-2" codeSystem="2.16.840.1.113883.6.1" displayName="CBC panel"/>
+              <statusCode code="completed"/>
+              <component>
+                <observation classCode="OBS" moodCode="EVN">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.2" extension="2015-08-01"/>
+                  <id root="2.16.840.1.113883.19.5.99999.6" extension="res-obs-1"/>
+                  <code code="718-7" codeSystem="2.16.840.1.113883.6.1" displayName="Hemoglobin"/>
+                  <statusCode code="completed"/>
+                  <effectiveTime value="20240101"/>
+                  <value xsi:type="PQ" value="13.5" unit="g/dL"/>
+                  <interpretationCode code="N" codeSystem="2.16.840.1.113883.5.83"/>
+                  <referenceRange>
+                    <observationRange>
+                      <value xsi:type="IVL_PQ">
+                        <low value="12" unit="g/dL"/>
+                        <high value="16" unit="g/dL"/>
+                      </value>
+                    </observationRange>
+                  </referenceRange>
+                  <text><reference value="#res1"/></text>
+                </observation>
+              </component>
+            </organizer>
+          </entry>
+        </section>
+      </component>`;
+
+/**
+ * A Vital Signs section (`…22.2.4.1`) carrying one Vital Signs Organizer
+ * (`…22.4.26`) → Vital Sign Observation (`…22.4.27`): LOINC systolic BP with a
+ * `PQ` value in `mm[Hg]` (valid UCUM) and an effective time.
+ */
+export const VITALS_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.4.1" extension="2015-08-01"/>
+          <code code="8716-3" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Vital Signs</title>
+          <text><content ID="vit1">Systolic BP 120 mm[Hg]</content></text>
+          <entry>
+            <organizer classCode="CLUSTER" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.26" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.7" extension="vit-org-1"/>
+              <statusCode code="completed"/>
+              <effectiveTime value="20240101"/>
+              <component>
+                <observation classCode="OBS" moodCode="EVN">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.27" extension="2015-08-01"/>
+                  <id root="2.16.840.1.113883.19.5.99999.7" extension="vit-obs-1"/>
+                  <code code="8480-6" codeSystem="2.16.840.1.113883.6.1" displayName="Systolic blood pressure"/>
+                  <statusCode code="completed"/>
+                  <effectiveTime value="20240101"/>
+                  <value xsi:type="PQ" value="120" unit="mm[Hg]"/>
+                  <text><reference value="#vit1"/></text>
+                </observation>
+              </component>
+            </organizer>
+          </entry>
+        </section>
+      </component>`;
+
+/**
+ * An Immunizations section (`…22.2.2.1`) carrying one Immunization Activity
+ * (`…22.4.52`): a CVX vaccine via `manufacturedMaterial/code`, a `doseQuantity`,
+ * an NCI `routeCode`, and an administration date.
+ */
+export const IMMUNIZATIONS_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.2.1" extension="2015-08-01"/>
+          <code code="11369-6" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Immunizations</title>
+          <text><content ID="imm1">Influenza, seasonal, injectable</content></text>
+          <entry>
+            <substanceAdministration classCode="SBADM" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.52" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.8" extension="imm-1"/>
+              <statusCode code="completed"/>
+              <effectiveTime value="20240101"/>
+              <routeCode code="C28161" codeSystem="2.16.840.1.113883.3.26.1.1" displayName="Intramuscular"/>
+              <doseQuantity value="0.5" unit="mL"/>
+              <consumable>
+                <manufacturedProduct classCode="MANU">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.54" extension="2014-06-09"/>
+                  <manufacturedMaterial>
+                    <code code="140" codeSystem="2.16.840.1.113883.12.292" displayName="Influenza, seasonal, injectable"/>
+                  </manufacturedMaterial>
+                </manufacturedProduct>
+              </consumable>
+              <text><reference value="#imm1"/></text>
+            </substanceAdministration>
+          </entry>
+        </section>
+      </component>`;
+
 /** All three triad sections concatenated, for the end-to-end extraction test. */
 export const TRIAD_SECTIONS = `${PROBLEMS_SECTION}${MEDICATIONS_SECTION}${ALLERGY_ENTRY_SECTION}`;
 

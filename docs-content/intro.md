@@ -11,9 +11,11 @@ Parse real-world, vendor-quirky C-CDA and pull fields out in one line — withou
 lenient parser and an immutable model. It mirrors the API shape of the reference parser, `@cosyte/hl7`.
 Its single runtime dependency is the hardened W3C-DOM substrate `@xmldom/xmldom` (exact-pinned).
 
-> **Status:** pre-alpha (`0.0.x`), not yet published to npm. **Phase 1** ships the working parser:
-> document recognition, the US Realm header + patient demographics, and section framing (identity +
-> narrative). Clinical entry extraction and a spec-clean serializer land in later phases.
+> **Status:** pre-alpha (`0.0.x`), not yet published to npm. Through **Phase 3** the parser ships
+> document recognition, the US Realm header + patient demographics, section framing, the
+> reconciliation triad (Problems / Medications / Allergies), and the discrete-data families
+> (Results / Vital Signs / Immunizations) with a computable UCUM unit check. A spec-clean serializer
+> lands in a later phase.
 
 ## Install
 
@@ -32,6 +34,9 @@ doc.documentType; // e.g. "ccd" — one of the 12 US Realm document types (or un
 doc.getPatient()?.name?.family; // patient demographics from the recordTarget
 doc.getMrn(); // the patient's medical record number
 doc.findSection("allergies")?.narrativeText; // framed section narrative
+doc.getProblems()[0]?.problems[0]?.value?.code; // coded condition (SNOMED CT / ICD-10-CM)
+doc.getResults()[0]?.results[0]?.value; // polymorphic ObservationValue (UCUM-checked PQ, coded, …)
+doc.getImmunizations()[0]?.vaccine?.code; // CVX vaccine code
 doc.warnings; // stable, positional tolerance warnings
 ```
 
@@ -50,9 +55,11 @@ oversized/over-deep/over-wide documents, malformed XML, a non-`ClinicalDocument`
 - **HL7 v3 datatypes** — `II`, `ST`, `BL`, `CD`, `PQ`, `IVL_PQ`, `TS`, `IVL_TS`, `ED`, with
   variable-precision v3 datetime parsing and null-flavor handling.
 
-## Known limitations (Phase 1)
+## Known limitations
 
-- No clinical entry extraction yet — sections carry identity + narrative only (Phase 2+).
+- Six entry families extracted (Problems / Medications / Allergies / Results / Vital Signs /
+  Immunizations); the remaining sections carry identity + narrative only.
+- UCUM validation is grammatical, on a curated atom subset; the raw unit is always preserved.
 - No serializer/builder yet — parse only.
 - No vendor profile system yet — `getMrn()` selects the first `patientRole/id` extension.
 

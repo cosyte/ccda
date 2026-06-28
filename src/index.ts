@@ -58,12 +58,20 @@ export type { CcdaHeader, CcdaPatient, HumanName } from "./model/header.js";
 export { buildSection, buildNarrativeIndex } from "./model/section.js";
 export type { CcdaSection } from "./model/section.js";
 
-// Clinical entry layer (Phase 2 reconciliation triad: Problems, Medications, Allergies).
+// Clinical entry layer: the reconciliation triad (Problems, Medications,
+// Allergies) plus the discrete-data sections (Results, Vital Signs,
+// Immunizations) and their shared observation-value machinery.
 export {
   extractClinical,
   extractProblems,
   extractMedications,
   extractAllergies,
+  extractResults,
+  extractVitals,
+  extractImmunizations,
+  checkUcumUnit,
+  readObservationValue,
+  readReferenceRange,
 } from "./model/entries/index.js";
 export type {
   ClinicalEntries,
@@ -75,8 +83,18 @@ export type {
   Allergy,
   AllergyConcern,
   AllergyReaction,
+  Result,
+  ResultOrganizer,
+  VitalSign,
+  VitalSignsOrganizer,
+  Immunization,
+  ObservationValue,
+  ReferenceRange,
   ConcernStatus,
 } from "./model/entries/index.js";
+
+// Computable UCUM unit validation (zero-dep grammar) used by the entry layer.
+export { isValidUcumUnit, isUcumCaseSuspect } from "./model/ucum.js";
 
 // Code-system OIDs + slot validation used by the entry layer.
 export {
@@ -90,7 +108,10 @@ export {
   NDC,
   UNII,
   NCI_ROUTE,
+  CVX,
+  INTERPRETATION,
   checkCodeSlot,
+  checkLoincDeprecation,
   looksProductLevel,
 } from "./model/code-systems.js";
 export type { CodeSlot } from "./model/code-systems.js";

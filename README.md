@@ -15,9 +15,11 @@ lenient parser that turns real-world, vendor-quirky input into **warnings** rath
 [`@xmldom/xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) (exact-pinned), the hardened W3C-DOM
 substrate for C-CDA's XML.
 
-> **Status:** pre-alpha (`0.0.x`), not yet published to npm. **Phase 1** ships the working parser:
-> document recognition, the US Realm header + patient demographics, and section framing (identity +
-> narrative). Clinical entry extraction and a spec-clean serializer land in later phases.
+> **Status:** pre-alpha (`0.0.x`), not yet published to npm. Through **Phase 3** the parser ships
+> document recognition, the US Realm header + patient demographics, section framing, the
+> reconciliation triad (Problems / Medications / Allergies), and the discrete-data families
+> (Results / Vital Signs / Immunizations) with a computable UCUM unit check. A spec-clean serializer
+> lands in a later phase.
 
 ## Install
 
@@ -39,6 +41,9 @@ doc.findSection("allergies")?.narrativeText; // framed section narrative
 doc.getProblems()[0]?.problems[0]?.value?.code; // coded condition (SNOMED CT / ICD-10-CM)
 doc.getMedications()[0]?.drug?.code; // RxNorm drug
 doc.getAllergies()[0]?.allergies[0]?.allergen?.code; // offending substance
+doc.getResults()[0]?.results[0]?.value; // polymorphic ObservationValue (UCUM-checked PQ, coded, …)
+doc.getVitals()[0]?.vitals[0]?.value; // e.g. systolic BP, units intact
+doc.getImmunizations()[0]?.vaccine?.code; // CVX vaccine code
 doc.warnings; // stable, positional tolerance warnings (never throws on quirks)
 ```
 
@@ -77,6 +82,23 @@ Two safety-critical reconciliations stay conservative: a coded value that disagr
 surfaces **both** (`CODE_NARRATIVE_MISMATCH`) and picks no winner, and a missing `doseQuantity` /
 `routeCode` is preserved-as-absent and flagged, never silently defaulted.
 
+## What it extracts (Phase 3) — discrete clinical data
+
+- **Results** — Result Organizers via `getResults()`: the LOINC-coded analyte, the polymorphic
+  observation `value` as a discriminated `ObservationValue` (`physicalQuantity` / `coded` / `string` /
+  `range` / `unsupported`, selected by `xsi:type`), the `referenceRange` (structured `IVL_PQ` bounds,
+  else free-text), and the `interpretation`.
+- **Vital Signs** — Vital Signs Organizers via `getVitals()`: the same UCUM-checked `ObservationValue`
+  machinery, no reference range.
+- **Immunizations** — Immunization Activities via `getImmunizations()`: the CVX `vaccine`, `dose`,
+  `route`, `effectiveTime`, and `statusCode`. A refusal (`negationInd="true"`) is a distinct `refused`
+  flag (`IMMUNIZATION_REFUSED`), never confused with a `nullFlavor`.
+
+Every physical quantity is checked against a **computable, zero-dependency UCUM grammar**
+(`isValidUcumUnit`, `isUcumCaseSuspect`): a non-UCUM unit is flagged (`NON_UCUM_UNIT`) and a
+letter-case slip caught (`UCUM_CASE_SUSPECT`), but the **raw unit is always preserved — never
+normalized away**. An unrecognized `value xsi:type` is kept as `unsupported`; nothing is dropped.
+
 ### Code systems & provenance
 
 Slot validation (`checkCodeSlot`, exported OIDs `SNOMED_CT` / `RXNORM` / `ICD10_CM` / `NDC` / `UNII` /
@@ -89,8 +111,17 @@ checks.
 
 ## Known limitations
 
-- **Triad only (so far)** — Problems / Medications / Allergies are extracted; the remaining sections
-  (Results, Vitals, Procedures, Immunizations, …) still carry identity + narrative only.
+- **Six entry families (so far)** — Problems / Medications / Allergies / Results / Vital Signs /
+  Immunizations are extracted; the remaining sections (Procedures, Encounters, …) still carry only
+  identity and narrative.
+- **UCUM validation is grammatical, on a curated atom subset** — the validator checks that a unit is
+  well-formed UCUM (case-sensitive prefixes/atoms, `.`/`/` terms, `[…]` and `{…}` forms) against a
+  curated table of the prefixes and atoms that appear in lab Results and Vital Signs, not the full
+  UCUM atom registry. A valid but uncurated atom may read as `NON_UCUM_UNIT`; the raw unit is always
+  preserved, so nothing is lost.
+- **LOINC deprecation is a curated set** — `checkLoincDeprecation` flags a curated list of known
+  deprecated LOINC codes, not every deprecation in the LOINC release. As with all code-system checks,
+  this is recognition only — membership validation needs a licensed terminology service.
 - **No serializer/builder yet** — parse only; the spec-clean emit half of Postel's Law is a later phase.
 - **No vendor profile system yet** — `getMrn()` selects the first `patientRole/id` extension; a
   profile-aware override is planned.
