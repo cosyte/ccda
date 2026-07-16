@@ -205,6 +205,17 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Fixed
 
+- **The release can actually bump the version.** `package.json` had no `version` script, so the
+  shared pipeline's `pnpm run version` failed with `Command "version" not found` and the release
+  aborted before opening a "Version Packages" PR. Adds `scripts/sync-version.mjs` (the `hl7`
+  reference, retargeted at `src/index.ts`) and the `version` script that runs it after
+  `changeset version`, so the bump and the `VERSION` constant land in the same commit.
+- **`VERSION` is no longer typed as a string literal.** It was declared `export const VERSION =
+"0.0.0"`, giving it the literal type `"0.0.0"` — so the exported type would change on every
+  release, making each version bump a breaking type change. Now annotated `: string`, matching the
+  `hl7` reference. Type-only; the runtime value is unchanged. Done now because the package is
+  unpublished — after the first publish this would itself be a breaking change.
+
 - **The Release workflow can actually start.** `.github/workflows/release.yml` calls the shared
   `cosyte/.github` pipeline, which requests `contents`/`id-token`/`pull-requests: write`, but declared
   no `permissions:` of its own — so it inherited the repo default of `contents: read`. A called
