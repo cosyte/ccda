@@ -1,6 +1,6 @@
 {
   "name": "@cosyte/ccda",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "C-CDA parser, serializer, and builder for Node.js and TypeScript — lenient on parse, spec-clean on emit.",
   "keywords": [
     "ccda",
