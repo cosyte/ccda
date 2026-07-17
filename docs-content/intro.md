@@ -8,14 +8,20 @@ sidebar_position: 1
 
 Parse real-world, vendor-quirky C-CDA and pull fields out in one line — without reading the spec.
 `@cosyte/ccda` is a near-zero-dependency TypeScript toolkit following the cosyte parser archetype: a
-lenient parser and an immutable model. It mirrors the API shape of the reference parser, `@cosyte/hl7`.
-Its single runtime dependency is the hardened W3C-DOM substrate `@xmldom/xmldom` (exact-pinned).
+lenient parser (quirks become **warnings**, not failures — Postel's Law), an immutable model, and a
+spec-clean, round-trip serializer. It mirrors the API shape of the reference parser, `@cosyte/hl7`.
+Its single runtime dependency is the hardened W3C-DOM substrate `@xmldom/xmldom` (exact-pinned),
+configured XXE-safe.
 
-> **Status:** pre-alpha (`0.0.x`), not yet published to npm. Through **Phase 3** the parser ships
-> document recognition, the US Realm header + patient demographics, section framing, the
-> reconciliation triad (Problems / Medications / Allergies), and the discrete-data families
-> (Results / Vital Signs / Immunizations) with a computable UCUM unit check. A spec-clean serializer
-> lands in a later phase.
+> **Status:** pre-alpha (`0.0.x`), not yet published to npm. Through **Phase 5b** the parser ships
+> document recognition (all 12 US Realm types), the US Realm header + patient demographics, section
+> framing, the reconciliation triad (Problems / Medications / Allergies), the discrete-data families
+> (Results / Vital Signs / Immunizations) with a computable UCUM unit check, Procedures / Encounters /
+> Social-History smoking status, the deferred clinical sections (Plan of Treatment / Functional Status /
+> Mental Status / Family History / Past Medical History), per-document-type required-section (SHALL)
+> validation, and a **round-trip serializer** (`serializeCcda` / `toString()`). A document **builder**
+> API (constructing or editing a document from scratch) lands in a later phase — see
+> [Troubleshooting](./troubleshooting) for the exact "what's not yet parsed" list.
 
 ## Install
 
@@ -25,44 +31,103 @@ npm install @cosyte/ccda
 
 ## Parse a document
 
-```ts
+```ts runnable
 import { parseCcda } from "@cosyte/ccda";
+
+// Synthetic CCD — invented "Jane Q. Doe", fake OIDs/IDs. Never a real document.
+const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <realmCode code="US"/>
+  <templateId root="2.16.840.1.113883.10.20.22.1.1" extension="2015-08-01"/>
+  <templateId root="2.16.840.1.113883.10.20.22.1.2" extension="2015-08-01"/>
+  <id root="2.16.840.1.113883.19.5.99999.1" extension="DOC-0001"/>
+  <code code="34133-9" codeSystem="2.16.840.1.113883.6.1" displayName="Summarization of Episode Note"/>
+  <title>Synthetic Continuity of Care Document</title>
+  <effectiveTime value="20240101120000-0500"/>
+  <languageCode code="en-US"/>
+  <recordTarget>
+    <patientRole>
+      <id root="2.16.840.1.113883.19.5" extension="MRN-00042" assigningAuthorityName="Sample Hospital"/>
+      <patient>
+        <name><given>Jane</given><given>Q</given><family>Doe</family></name>
+        <administrativeGenderCode code="F" codeSystem="2.16.840.1.113883.5.1" displayName="Female"/>
+        <birthTime value="19800101"/>
+      </patient>
+    </patientRole>
+  </recordTarget>
+  <component>
+    <structuredBody>
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.5.1" extension="2015-08-01"/>
+          <code code="11450-4" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Problems</title>
+          <text><content ID="prob1">Essential hypertension</content></text>
+          <entry>
+            <act classCode="ACT" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.3" extension="2015-08-01"/>
+              <statusCode code="active"/>
+              <entryRelationship typeCode="SUBJ">
+                <observation classCode="OBS" moodCode="EVN">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.4" extension="2015-08-01"/>
+                  <code code="55607006" codeSystem="2.16.840.1.113883.6.96"/>
+                  <value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96" displayName="Essential hypertension"/>
+                  <text><reference value="#prob1"/></text>
+                </observation>
+              </entryRelationship>
+            </act>
+          </entry>
+        </section>
+      </component>
+    </structuredBody>
+  </component>
+</ClinicalDocument>`;
 
 const doc = parseCcda(xml);
 
-doc.documentType; // e.g. "ccd" — one of the 12 US Realm document types (or undefined)
-doc.getPatient()?.name?.family; // patient demographics from the recordTarget
-doc.getMrn(); // the patient's medical record number
-doc.findSection("allergies")?.narrativeText; // framed section narrative
-doc.getProblems()[0]?.problems[0]?.value?.code; // coded condition (SNOMED CT / ICD-10-CM)
-doc.getResults()[0]?.results[0]?.value; // polymorphic ObservationValue (UCUM-checked PQ, coded, …)
-doc.getImmunizations()[0]?.vaccine?.code; // CVX vaccine code
-doc.warnings; // stable, positional tolerance warnings
+doc.documentType; // => "ccd"
+doc.getPatient()?.name?.family; // => "Doe"
+doc.getMrn(); // => "MRN-00042"
+doc.findSection("problems")?.title; // => "Problems"
+doc.getProblems()[0]?.status; // => "active"
+doc.getProblems()[0]?.problems[0]?.value?.code; // => "59621000"
+
+// This CCD carries only a Problems section, so the required-section (SHALL)
+// check flags the sections it expects but does not find — as warnings, never
+// fatals, so the data that IS present still parses.
+doc.warnings.every((w) => w.code === "REQUIRED_SECTION_MISSING"); // => true
 ```
 
 The parser is **lenient by default** — recoverable vendor quirks become stable-coded warnings on
-`doc.warnings`, not failures (Postel's Law). `{ strict: true }` escalates the first tolerated deviation
-to a thrown `CcdaParseError`; unrecoverable or hostile input (DTD/XXE, billion-laughs entity expansion,
-oversized/over-deep/over-wide documents, malformed XML, a non-`ClinicalDocument` root) always throws.
+`doc.warnings` (also delivered live to `options.onWarning`), not failures. `{ strict: true }` escalates
+the first tolerated deviation to a thrown `CcdaParseError`; unrecoverable or hostile input (DTD/XXE,
+billion-laughs entity expansion, oversized/over-deep/over-wide documents, malformed XML, a
+non-`ClinicalDocument` root) always throws.
 
-## What it extracts (Phase 1)
+## What it extracts today
 
 - **Document type** — all 12 US Realm document types resolved from the root `templateId`.
 - **US Realm header** — document identity and the `recordTarget` patient (demographics + identifiers),
   via `getPatient()` / `getMrn()`.
 - **Sections** — framed by `templateId` with a LOINC-code fallback, with nested subsections, narrative
   text, and a narrative `ID`→text index, via `findSection()` / `allSections()`.
+- **Clinical entries** — Problems, Medications, Allergies, Results, Vital Signs, Immunizations,
+  Procedures, Encounters, Smoking Status, Plan of Treatment, Functional/Mental Status, Family History,
+  and Past Medical History, with the safety-critical distinctions (performed-vs-planned,
+  severity-vs-criticality, negated-vs-unknown) kept apart, never conflated.
 - **HL7 v3 datatypes** — `II`, `ST`, `BL`, `CD`, `PQ`, `IVL_PQ`, `TS`, `IVL_TS`, `ED`, with
   variable-precision v3 datetime parsing and null-flavor handling.
-
-## Known limitations
-
-- Six entry families extracted (Problems / Medications / Allergies / Results / Vital Signs /
-  Immunizations); the remaining sections carry identity + narrative only.
-- UCUM validation is grammatical, on a curated atom subset; the raw unit is always preserved.
-- No serializer/builder yet — parse only.
-- No vendor profile system yet — `getMrn()` selects the first `patientRole/id` extension.
+- **Serialize** — `serializeCcda(doc)` / `doc.toString()` re-emits a **parsed** document as spec-clean
+  XML (a fixed point), with no silent loss.
 
 ## Next
 
-- Read the **API reference** for every export, generated from source.
+- **[Installation](./installation)** — prerequisites + a smoke test.
+- **[Quickstart](./quickstart)** — parse a CCD and pull demographics + the problem/med/allergy triad.
+- **[Core Concepts](./spec-notes-model)** — the document model, the tolerance tiers, the clinical entry
+  layer, and the datatype/code-system machinery.
+- **[Cookbook](./cookbook)** — task-oriented recipes.
+- **[Troubleshooting & known limitations](./troubleshooting)** — the error model and the explicit
+  "what's not yet parsed" list.
+- The **API reference** for every export is generated from source by the docs site (TypeDoc), not
+  hand-authored here.

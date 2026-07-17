@@ -12,6 +12,28 @@ this file is maintained by hand (Changesets handles the version bump and publish
 The first pre-alpha release (`0.0.1`) will ship the initial public API surface. The package begins
 its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until first alpha).
 
+### Documentation
+
+- **`docs-content/` now ships the full canonical Diátaxis spine (DOCS-CONTENT-P5), gated hard to the
+  shipped Phase-5b parse surface.** The sidebar was Overview-only. This authors the rest of the spine
+  every `@cosyte/*` package shares: four **Core Concepts** pages (the document model — recognition,
+  header, section framing; the tolerance tiers + warning-code model with the seven Tier-3 fatals; the
+  clinical entry layer — the 14 extracted families and their safety-critical distinctions; and
+  datatypes / code systems / computable UCUM / the round-trip serializer), **Installation** and
+  **Quickstart** tutorials (parse a CCD, read demographics + the Problem/Medication/Allergy triad, a
+  Result, and an Immunization), a task-oriented **Guides** cookbook, and a **Troubleshooting & known
+  limitations** page with an explicit **"what's not yet parsed"** list (no builder API; entry families
+  beyond the 14; recognition-not-membership code checks; curated-UCUM; inert `nonXMLBody`). The stale
+  `intro.md` status banner (it read "Phase 3 / six families") is refreshed to the current shipped
+  reality (Phase 5b + serializer) with an honest status banner; **no unshipped API is documented**.
+- **A doc/code-agreement gate — every runnable docs snippet is executed against the built package.**
+  `test/docs-content.test.ts` runs `docSnippetSuite()` (from `@cosyte/vitest-config/snippets`) over
+  `docs-content/`, extracting each ` ```ts runnable ` block, compiling it, executing it against the
+  **built** ESM artifact, and asserting its inline `// =>` results — so a documented example can never
+  silently drift from the shipped code. Bumps the `@cosyte/vitest-config` devDependency to `^0.0.2`
+  for its `/snippets` export. Synthetic-only fixtures throughout (an invented patient, fake OIDs).
+  Docs and tests only — no runtime or public-API change.
+
 ### Security
 
 - **Dev-dependency advisory remediation (no runtime impact — both overridden
