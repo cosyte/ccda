@@ -25,9 +25,19 @@
  * Observation, LOINC + UCUM). Every section carries the entries-required
  * templateId only when it has entries; a section for which no content is supplied
  * is emitted as a spec-clean empty `nullFlavor="NI"` section so the document
- * stays conformant. The other eleven document types, C-CDA document *editing*,
- * and the bring-your-own-credentials terminology adapter are deferred to a later
- * CCDA-P7 increment.
+ * stays conformant.
+ *
+ * **SHALL `effectiveTime` on every entry.** Each act/observation the builder
+ * emits carries the `effectiveTime` its C-CDA R2.1 template requires — the
+ * Problem/Allergy Concern Acts and their observations, the Medication Activity
+ * IVL_TS duration, and the Result/Vital Signs organizers and observations. When
+ * the caller supplied a time it is used; when a SHALL requires the element but no
+ * time is known the slot is filled with `nullFlavor="UNK"` (satisfying the
+ * cardinality without fabricating a clinical timestamp, and read back as absent),
+ * mirroring how the header's SHALL `addr`/`telecom` and the never-guessed
+ * dose/route are handled. The other eleven document types, C-CDA document
+ * *editing*, and the bring-your-own-credentials terminology adapter are deferred
+ * to a later CCDA-P7 increment.
  *
  * @packageDocumentation
  */
@@ -307,6 +317,12 @@ export interface BuildCcdaResultPanel {
   readonly code: BuildCode;
   /** The organizer `statusCode`; defaults to `"completed"`. */
   readonly status?: string;
+  /**
+   * The panel's span/collection time as an HL7 date string. Emitted as the
+   * organizer's `effectiveTime`; when omitted the SHALL slot is filled with
+   * `nullFlavor="UNK"` (the member observations still carry their own times).
+   */
+  readonly effectiveTime?: string;
   /** The member Result Observations (at least one for a populated panel). */
   readonly results: readonly BuildCcdaResult[];
 }
@@ -356,6 +372,11 @@ export interface BuildCcdaVital {
 export interface BuildCcdaVitalsPanel {
   /** The organizer `statusCode`; defaults to `"completed"`. */
   readonly status?: string;
+  /**
+   * The cluster's reading time as an HL7 date string. Emitted as the organizer's
+   * SHALL `effectiveTime`; when omitted the slot is filled with `nullFlavor="UNK"`.
+   */
+  readonly effectiveTime?: string;
   /** The member Vital Sign Observations (at least one for a populated panel). */
   readonly vitals: readonly BuildCcdaVital[];
 }
@@ -420,6 +441,74 @@ function formatEffectiveTime(input: Date | string | undefined): string {
     `${p(d.getUTCFullYear(), 4)}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}` +
     `${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}+0000`
   );
+}
+
+/**
+ * A point-in-time `<effectiveTime>` for an observation-level SHALL slot (the
+ * Result Observation `…22.4.2` / Vital Sign Observation `…22.4.27`, and the
+ * Result/Vital Signs organizers). When the caller supplied a time it is emitted
+ * as an `@value`; when nothing is known the element is emitted with
+ * `nullFlavor="UNK"` — the SHALL cardinality is satisfied **without inventing** a
+ * clinical timestamp, and the parser reads a `nullFlavor` time back as absent
+ * (`date === undefined`), never as a real `Date`.
+ * @internal
+ */
+function pointEffectiveTime(doc: Document, value: string | undefined): Element {
+  return value === undefined
+    ? el(doc, "effectiveTime", { nullFlavor: "UNK" })
+    : el(doc, "effectiveTime", { value });
+}
+
+/**
+ * A Concern Act / concern-scoped observation `<effectiveTime>` (the
+ * concern-tracking window). The C-CDA Concern Act pattern (shared by the Problem
+ * and Allergy Concern Acts) SHALL contain effectiveTime [1..1]; when the concern
+ * is **active** it SHALL contain a `low`, and when **completed** (a resolved
+ * concern) it SHALL contain a `high` — on the Problem Concern Act `…22.4.3` these
+ * are CONF:1198-7504 (active→low) and CONF:1198-10085 (completed→high); the
+ * Allergy Concern Act `…22.4.30` carries the same generic rule under its own
+ * constraint ids. The Problem/Allergy-Intolerance Observation likewise SHALL
+ * carry an effectiveTime whose `low` is the onset. The `low` carries the onset
+ * when supplied, else `nullFlavor="UNK"`; a resolved concern adds a
+ * `nullFlavor="UNK"` `high` — the builder never invents a resolution date it was
+ * not given.
+ * @internal
+ */
+function concernEffectiveTime(
+  doc: Document,
+  onset: string | undefined,
+  status: "active" | "resolved" | "inactive" | undefined,
+): Element {
+  const et = el(doc, "effectiveTime");
+  et.appendChild(
+    onset === undefined ? el(doc, "low", { nullFlavor: "UNK" }) : el(doc, "low", { value: onset }),
+  );
+  if (status === "resolved") et.appendChild(el(doc, "high", { nullFlavor: "UNK" }));
+  return et;
+}
+
+/**
+ * The Medication Activity duration `<effectiveTime xsi:type="IVL_TS">` — the
+ * therapy window. C-CDA Medication Activity SHALL contain this effectiveTime
+ * [1..1] (CONF:1098-7495; it SHALL be an IVL_TS, CONF:1098-7496). Bounds are
+ * emitted when supplied; when the window is unknown a `nullFlavor="UNK"` `low`
+ * keeps the SHALL satisfied without a confident-wrong date (and satisfies
+ * CONF:1098-32890 — it carries a `low`, not an invented `@value`). The separate
+ * `PIVL_TS` frequency remains a distinct, caller-supplied-only sibling.
+ * @internal
+ */
+function medicationDuration(
+  doc: Document,
+  duration: { readonly low?: string; readonly high?: string } | undefined,
+): Element {
+  const ivl = typedEl(doc, "effectiveTime", "IVL_TS");
+  ivl.appendChild(
+    duration?.low === undefined
+      ? el(doc, "low", { nullFlavor: "UNK" })
+      : el(doc, "low", { value: duration.low }),
+  );
+  if (duration?.high !== undefined) ivl.appendChild(el(doc, "high", { value: duration.high }));
+  return ivl;
 }
 
 /**
@@ -757,9 +846,10 @@ function problemEntry(
     }),
     el(doc, "statusCode", { code: "completed" }),
   );
-  if (p.onset !== undefined) {
-    obs.appendChild(el(doc, "effectiveTime", undefined, el(doc, "low", { value: p.onset })));
-  }
+  // Problem Observation (…22.4.4) SHALL carry an effectiveTime — always emitted,
+  // onset as low when supplied (nullFlavor="UNK" otherwise), plus a nullFlavor
+  // high for a resolved problem (resolved-but-date-unknown), never a guessed date.
+  obs.appendChild(concernEffectiveTime(doc, p.onset, p.status));
   obs.appendChild(cdValue(doc, p.problem, SNOMED_CT));
   obs.appendChild(el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })));
 
@@ -771,9 +861,9 @@ function problemEntry(
     el(doc, "id", { root: SYNTH_ROOT, extension: id("prob-act") }),
     el(doc, "statusCode", { code: concernStatusCode(p.status) }),
   );
-  if (p.onset !== undefined) {
-    act.appendChild(el(doc, "effectiveTime", undefined, el(doc, "low", { value: p.onset })));
-  }
+  // Problem Concern Act (…22.4.3) SHALL contain effectiveTime [1..1]
+  // (active→SHALL low CONF:1198-7504; completed→SHALL high CONF:1198-10085).
+  act.appendChild(concernEffectiveTime(doc, p.onset, p.status));
   act.appendChild(el(doc, "entryRelationship", { typeCode: "SUBJ" }, obs));
   return el(doc, "entry", undefined, act);
 }
@@ -825,6 +915,11 @@ function allergyEntry(
     el(doc, "code", { code: "ASSERTION", codeSystem: ACT_CODE }),
     el(doc, "statusCode", { code: "completed" }),
   );
+  // Allergy-Intolerance Observation (…22.4.7) SHALL carry an effectiveTime whose
+  // low is the biological onset. No onset is supplied to the builder, so the low
+  // is nullFlavor="UNK" (a resolved concern adds a nullFlavor high) — the SHALL is
+  // satisfied without inventing a clinical time.
+  obs.appendChild(concernEffectiveTime(doc, undefined, a.status));
   // The observation value is the propensity *type* (NOT the allergen). It defaults
   // to the neutral SNOMED "Allergy to substance" (419199007) — never a guessed
   // "Drug allergy", which would mis-classify a food/environmental allergen. A
@@ -846,8 +941,12 @@ function allergyEntry(
     el(doc, "templateId", { root: ALLERGY_CONCERN_ACT, extension: R21 }),
     el(doc, "id", { root: SYNTH_ROOT, extension: id("alg-act") }),
     el(doc, "statusCode", { code: concernStatusCode(a.status) }),
-    el(doc, "entryRelationship", { typeCode: "SUBJ" }, obs),
   );
+  // Allergy Concern Act (…22.4.30) SHALL contain effectiveTime [1..1] under the
+  // shared Concern Act rule (active→SHALL low; completed→SHALL high), emitted
+  // before the entryRelationship per the Act element order.
+  act.appendChild(concernEffectiveTime(doc, undefined, a.status));
+  act.appendChild(el(doc, "entryRelationship", { typeCode: "SUBJ" }, obs));
   return el(doc, "entry", undefined, act);
 }
 
@@ -974,13 +1073,10 @@ function medicationEntry(
   );
   // Timing is two distinct effectiveTime siblings — an IVL_TS therapy window and
   // a PIVL_TS periodic frequency — never conflated (mirrors how the parser reads
-  // them back). Only what the caller supplied is emitted.
-  if (m.duration !== undefined) {
-    const ivl = typedEl(doc, "effectiveTime", "IVL_TS");
-    if (m.duration.low !== undefined) ivl.appendChild(el(doc, "low", { value: m.duration.low }));
-    if (m.duration.high !== undefined) ivl.appendChild(el(doc, "high", { value: m.duration.high }));
-    sbadm.appendChild(ivl);
-  }
+  // them back). The IVL_TS duration is a SHALL slot (CONF:1098-7495), so it is
+  // ALWAYS emitted (nullFlavor="UNK" low when no window is supplied); the PIVL_TS
+  // frequency is optional and emitted only when the caller supplied it.
+  sbadm.appendChild(medicationDuration(doc, m.duration));
   if (m.frequency !== undefined) {
     sbadm.appendChild(
       typedEl(
@@ -1060,6 +1156,10 @@ function resultOrganizerEntry(
     }),
     el(doc, "statusCode", { code: panel.status ?? "completed" }),
   );
+  // Result Organizer (…22.4.1) effectiveTime spans the contained observations.
+  // Emitted for spec-completeness (nullFlavor="UNK" unless the caller supplied a
+  // panel time) — the member observations each carry their own required time.
+  organizer.appendChild(pointEffectiveTime(doc, panel.effectiveTime));
   for (const result of panel.results) {
     organizer.appendChild(
       el(doc, "component", undefined, resultObservation(doc, result, text, id)),
@@ -1095,9 +1195,10 @@ function resultObservation(
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     el(doc, "statusCode", { code: "completed" }),
   );
-  if (result.effectiveTime !== undefined) {
-    obs.appendChild(el(doc, "effectiveTime", { value: result.effectiveTime }));
-  }
+  // Result Observation (…22.4.2) SHALL contain effectiveTime [1..1] — the
+  // clinically-relevant measurement time. Always emitted (nullFlavor="UNK" when
+  // the caller supplied none), never a guessed timestamp.
+  obs.appendChild(pointEffectiveTime(doc, result.effectiveTime));
   obs.appendChild(value);
   if (result.interpretation !== undefined) {
     obs.appendChild(
@@ -1204,6 +1305,9 @@ function vitalsOrganizerEntry(
     codeEl(doc, "code", VITAL_SIGNS_CLUSTER),
     el(doc, "statusCode", { code: panel.status ?? "completed" }),
   );
+  // Vital Signs Organizer (…22.4.26) SHALL contain effectiveTime [1..1] — always
+  // emitted (nullFlavor="UNK" unless a panel time was supplied).
+  organizer.appendChild(pointEffectiveTime(doc, panel.effectiveTime));
   for (const vital of panel.vitals) {
     organizer.appendChild(el(doc, "component", undefined, vitalObservation(doc, vital, text, id)));
   }
@@ -1240,9 +1344,9 @@ function vitalObservation(
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     el(doc, "statusCode", { code: "completed" }),
   );
-  if (vital.effectiveTime !== undefined) {
-    obs.appendChild(el(doc, "effectiveTime", { value: vital.effectiveTime }));
-  }
+  // Vital Sign Observation (…22.4.27) SHALL contain effectiveTime [1..1] — the
+  // reading time. Always emitted (nullFlavor="UNK" when none supplied).
+  obs.appendChild(pointEffectiveTime(doc, vital.effectiveTime));
   obs.appendChild(
     typedValue(doc, "PQ", { value: vital.quantity.value.toString(), unit: vital.quantity.unit }),
   );

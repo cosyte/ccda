@@ -508,3 +508,161 @@ describe("buildCcda — defaults, escaping, and input validation", () => {
     );
   });
 });
+
+describe("buildCcda — SHALL effectiveTime conformance (all sections)", () => {
+  /** A populated build that supplies NO times anywhere — every SHALL effectiveTime
+   * slot must therefore be filled with nullFlavor="UNK", and the build must stay
+   * warning-free. */
+  const NO_TIMES: BuildCcdaInit = {
+    patient: { mrn: "M" },
+    problems: [{ problem: { code: "59621000", displayName: "Essential hypertension" } }],
+    allergies: [{ allergen: { code: "2670", displayName: "Codeine" } }],
+    medications: [
+      {
+        drug: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" },
+        dose: { value: 1, unit: "{tablet}" },
+        route: { code: "C38288", displayName: "Oral" },
+      },
+    ],
+    results: [
+      {
+        code: { code: "24323-8", displayName: "Comprehensive metabolic panel" },
+        results: [
+          {
+            test: { code: "2345-7", displayName: "Glucose" },
+            quantity: { value: 95, unit: "mg/dL" },
+          },
+        ],
+      },
+    ],
+    vitalSigns: [
+      {
+        vitals: [
+          {
+            code: { code: "8480-6", displayName: "Systolic blood pressure" },
+            quantity: { value: 120, unit: "mm[Hg]" },
+          },
+        ],
+      },
+    ],
+  };
+
+  it("fills every SHALL effectiveTime slot with nullFlavor when no time is supplied, warning-free", () => {
+    const doc = buildCcda(NO_TIMES);
+    expect(doc.warnings).toEqual([]);
+    // Serialized fixed point still holds with the nullFlavor slots present.
+    const xml = serializeCcda(doc);
+    expect(parseCcda(xml).toString()).toBe(xml);
+  });
+
+  it("emits the Problem Concern Act + Observation effectiveTime as nullFlavor low, never a date", () => {
+    const concern = buildCcda(NO_TIMES).getProblems()[0];
+    expect(concern?.effectiveTime?.low?.nullFlavor).toBe("UNK");
+    expect(concern?.effectiveTime?.low?.date).toBeUndefined();
+    const obs = concern?.problems[0];
+    expect(obs?.effectiveTime?.low?.nullFlavor).toBe("UNK");
+    expect(obs?.effectiveTime?.low?.date).toBeUndefined();
+  });
+
+  it("emits a resolved Problem Concern Act effectiveTime with a nullFlavor high (resolved, date unknown)", () => {
+    const concern = buildCcda({
+      patient: { mrn: "M" },
+      problems: [
+        {
+          problem: { code: "59621000", displayName: "Essential hypertension" },
+          status: "resolved",
+        },
+      ],
+    }).getProblems()[0];
+    expect(concern?.status).toBe("resolved");
+    expect(concern?.effectiveTime?.high?.nullFlavor).toBe("UNK");
+    expect(concern?.effectiveTime?.high?.date).toBeUndefined();
+  });
+
+  it("uses a supplied problem onset as the effectiveTime low (a real date), no invented high", () => {
+    const concern = buildCcda({
+      patient: { mrn: "M" },
+      problems: [
+        { problem: { code: "59621000", displayName: "Essential hypertension" }, onset: "20210101" },
+      ],
+    }).getProblems()[0];
+    expect(concern?.effectiveTime?.low?.raw).toBe("20210101");
+    expect(concern?.effectiveTime?.low?.date).toBeInstanceOf(Date);
+    expect(concern?.effectiveTime?.high).toBeUndefined();
+  });
+
+  it("emits the Allergy Concern Act effectiveTime as a nullFlavor low, never a date", () => {
+    const concern = buildCcda(NO_TIMES).getAllergies()[0];
+    expect(concern?.effectiveTime?.low?.nullFlavor).toBe("UNK");
+    expect(concern?.effectiveTime?.low?.date).toBeUndefined();
+  });
+
+  it("always emits the Medication Activity IVL_TS duration (nullFlavor low), no timing ambiguity", () => {
+    const doc = buildCcda(NO_TIMES);
+    expect(doc.warnings.map((w) => w.code)).not.toContain("MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED");
+    const med = doc.getMedications()[0];
+    expect(med?.duration?.low?.nullFlavor).toBe("UNK");
+    expect(med?.duration?.low?.date).toBeUndefined();
+    // The XML carries the SHALL IVL_TS effectiveTime.
+    expect(serializeCcda(doc)).toContain('type="IVL_TS"');
+  });
+
+  it("still emits a supplied medication duration as real bounds", () => {
+    const med = buildCcda(RICH_INIT).getMedications()[0];
+    expect(med?.duration?.low?.raw).toBe("20210101");
+    expect(med?.duration?.high?.raw).toBe("20211231");
+  });
+
+  it("emits the Result Observation effectiveTime as nullFlavor, read back as absent (no date)", () => {
+    const result = buildCcda(NO_TIMES).getResults()[0]?.results[0];
+    expect(result?.effectiveTime?.nullFlavor).toBe("UNK");
+    expect(result?.effectiveTime?.value?.date).toBeUndefined();
+    expect(result?.effectiveTime?.low).toBeUndefined();
+  });
+
+  it("still round-trips a supplied Result Observation effectiveTime as a real value", () => {
+    const glucose = buildCcda(RICH_INIT).getResults()[0]?.results[0];
+    expect(glucose?.effectiveTime?.value?.raw).toBe("20240102");
+    expect(glucose?.effectiveTime?.value?.date).toBeInstanceOf(Date);
+  });
+
+  it("emits the Vital Sign Observation effectiveTime as nullFlavor, read back as absent (no date)", () => {
+    const vital = buildCcda(NO_TIMES).getVitals()[0]?.vitals[0];
+    expect(vital?.effectiveTime?.nullFlavor).toBe("UNK");
+    expect(vital?.effectiveTime?.value?.date).toBeUndefined();
+  });
+
+  it("honors a supplied panel effectiveTime on the Result and Vital Signs organizers", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      results: [
+        {
+          code: { code: "24323-8", displayName: "CMP" },
+          effectiveTime: "20240102",
+          results: [
+            {
+              test: { code: "2345-7", displayName: "Glucose" },
+              quantity: { value: 95, unit: "mg/dL" },
+            },
+          ],
+        },
+      ],
+      vitalSigns: [
+        {
+          effectiveTime: "20240102",
+          vitals: [
+            {
+              code: { code: "8480-6", displayName: "Systolic blood pressure" },
+              quantity: { value: 120, unit: "mm[Hg]" },
+            },
+          ],
+        },
+      ],
+    });
+    expect(doc.warnings).toEqual([]);
+    // Two supplied organizer times → two @value effectiveTimes on organizers.
+    expect(
+      (serializeCcda(doc).match(/<effectiveTime value="20240102"/g) ?? []).length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+});

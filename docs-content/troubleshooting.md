@@ -27,15 +27,15 @@ import { parseCcda } from "@cosyte/ccda";
 parseCcda("<Foo>hello</Foo>"); // throws CcdaParseError (NOT_A_CLINICAL_DOCUMENT)
 ```
 
-| Fatal code (throws) | Meaning |
-|---|---|
-| `XXE_OR_DTD_PRESENT` | The document declared a DTD or an external entity. |
-| `ENTITY_EXPANSION_LIMIT` | Too many `&…;` entity references (billion-laughs). |
-| `INPUT_SIZE_LIMIT_EXCEEDED` | Decoded input exceeds the byte cap. |
-| `ELEMENT_DEPTH_LIMIT_EXCEEDED` | Element nesting too deep. |
-| `NODE_COUNT_LIMIT_EXCEEDED` | Too many element nodes. |
-| `NOT_WELL_FORMED_XML` | The bytes did not parse as XML. |
-| `NOT_A_CLINICAL_DOCUMENT` | Well-formed, but the root element is not `ClinicalDocument`. |
+| Fatal code (throws)            | Meaning                                                      |
+| ------------------------------ | ------------------------------------------------------------ |
+| `XXE_OR_DTD_PRESENT`           | The document declared a DTD or an external entity.           |
+| `ENTITY_EXPANSION_LIMIT`       | Too many `&…;` entity references (billion-laughs).           |
+| `INPUT_SIZE_LIMIT_EXCEEDED`    | Decoded input exceeds the byte cap.                          |
+| `ELEMENT_DEPTH_LIMIT_EXCEEDED` | Element nesting too deep.                                    |
+| `NODE_COUNT_LIMIT_EXCEEDED`    | Too many element nodes.                                      |
+| `NOT_WELL_FORMED_XML`          | The bytes did not parse as XML.                              |
+| `NOT_A_CLINICAL_DOCUMENT`      | Well-formed, but the root element is not `ClinicalDocument`. |
 
 Narrow on the caught error via `err instanceof CcdaParseError` and `err.code === FATAL_CODES.*` (see
 [Tolerance & the warning model](./spec-notes-tolerance)). Everything a real-world EHR does short of
@@ -44,15 +44,15 @@ non-UCUM unit — is a warning you triage, not an exception you catch.
 
 ## Common symptoms
 
-| Symptom | Likely cause | What to do |
-|---|---|---|
-| `documentType` is `undefined` | The root `templateId` set contains no recognized document-type OID (or none at all) | Check for `UNKNOWN_DOCUMENT_TEMPLATE` / `MISSING_TEMPLATE_ID`; the document still parsed as a generic `ClinicalDocument`. |
-| A section has `key: undefined` | Its `templateId` and LOINC `code` matched nothing in the catalog | `UNKNOWN_SECTION_CODE` was raised; the section is retained as narrative-only — read `section.narrativeText`. |
-| `getMedications()[0].dose` is `undefined` | The Medication Activity carried no `doseQuantity` | `MISSING_DOSE_QUANTITY` was raised; the value is preserved-as-absent, never defaulted. |
-| A procedure's `disposition` is `undefined` | The entry had no `moodCode`, or an unrecognized one | `PLANNED_VS_PERFORMED_AMBIGUOUS` / `PROCEDURE_MOOD_UNEXPECTED` was raised; performed and planned are never conflated. |
-| A `CODE_NARRATIVE_MISMATCH` warning | A coded value and its referenced narrative disagree | Both are preserved and no winner is chosen; route the record to human review. |
-| A `NON_UCUM_UNIT` / `UCUM_CASE_SUSPECT` warning | The `PQ` `@unit` is not well-formed UCUM (or a case slip) | The raw unit is preserved, never normalized; a case slip is usually a single-character fix. |
-| `doc.toString()` throws | The document was hand-constructed, not produced by `parseCcda` or `buildCcda` | Only parsed/built documents retain source XML to serialize; construct from scratch with `buildCcda`. |
+| Symptom                                         | Likely cause                                                                        | What to do                                                                                                                |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `documentType` is `undefined`                   | The root `templateId` set contains no recognized document-type OID (or none at all) | Check for `UNKNOWN_DOCUMENT_TEMPLATE` / `MISSING_TEMPLATE_ID`; the document still parsed as a generic `ClinicalDocument`. |
+| A section has `key: undefined`                  | Its `templateId` and LOINC `code` matched nothing in the catalog                    | `UNKNOWN_SECTION_CODE` was raised; the section is retained as narrative-only — read `section.narrativeText`.              |
+| `getMedications()[0].dose` is `undefined`       | The Medication Activity carried no `doseQuantity`                                   | `MISSING_DOSE_QUANTITY` was raised; the value is preserved-as-absent, never defaulted.                                    |
+| A procedure's `disposition` is `undefined`      | The entry had no `moodCode`, or an unrecognized one                                 | `PLANNED_VS_PERFORMED_AMBIGUOUS` / `PROCEDURE_MOOD_UNEXPECTED` was raised; performed and planned are never conflated.     |
+| A `CODE_NARRATIVE_MISMATCH` warning             | A coded value and its referenced narrative disagree                                 | Both are preserved and no winner is chosen; route the record to human review.                                             |
+| A `NON_UCUM_UNIT` / `UCUM_CASE_SUSPECT` warning | The `PQ` `@unit` is not well-formed UCUM (or a case slip)                           | The raw unit is preserved, never normalized; a case slip is usually a single-character fix.                               |
+| `doc.toString()` throws                         | The document was hand-constructed, not produced by `parseCcda` or `buildCcda`       | Only parsed/built documents retain source XML to serialize; construct from scratch with `buildCcda`.                      |
 
 ## Keeping PHI out of logs
 
@@ -68,11 +68,16 @@ and any snippet would risk leaking PHI.
 Depth tracks the parser, and never leads it. As of **Phase 5b**, these are the deliberate boundaries —
 authored here so a reader never relies on something absent. They grow as the parser ships more phases.
 
-- **Document builder is a first slice — CCD with Problems + Allergies.** `buildCcda(init)` constructs a
-  spec-clean CCD (US Realm header + Problems + Allergies; the other CCD SHALL sections emitted empty,
-  `nullFlavor="NI"`) and round-trips through the parse model. Richer section builders, the other document
-  types, editing an existing document, and a bring-your-own-credentials terminology adapter are a later
-  increment. `serializeCcda` / `toString()` re-emit a **parsed or built** document; a hand-constructed
+- **Document builder emits a CCD with five discrete-data sections.** `buildCcda(init)` constructs a
+  spec-clean CCD (US Realm header + **Problems, Allergies, Medications, Results, Vital Signs**; any CCD
+  SHALL section with no supplied content emitted empty, `nullFlavor="NI"`) and round-trips through the
+  parse model with zero warnings. Every entry emits the `SHALL`-cardinality `effectiveTime` its template
+  requires — the caller's time when supplied, else `nullFlavor="UNK"` (never a fabricated timestamp, read
+  back as absent). The remaining sections, the other eleven document types, editing an existing document,
+  and a bring-your-own-credentials terminology adapter are a later increment. The builder does not assert
+  full XSD element-order or the complete Schematron rule set (grounded against the raw IG text, not a
+  validator run), so a built document is expected-but-not-proven to pass an external IG validator.
+  `serializeCcda` / `toString()` re-emit a **parsed or built** document; a hand-constructed
   `CcdaDocument` (neither parsed nor built) cannot be serialized (`toString()` throws).
 - **Fourteen entry families are extracted; other sections carry identity + narrative only.** Problems,
   Medications, Allergies, Results, Vital Signs, Immunizations, Procedures, Encounters, Social-History
@@ -81,7 +86,7 @@ authored here so a reader never relies on something absent. They grow as the par
   Directives, Medical Equipment) is framed and its narrative retained, but its entries are not yet
   modeled. Nothing is dropped — the narrative and raw structure are preserved.
 - **Code checks are recognition, not membership.** `checkCodeSlot` / `checkLoincDeprecation` verify a
-  code's *system* is the one expected for its slot (and flag deprecated/unexpected systems); they do
+  code's _system_ is the one expected for its slot (and flag deprecated/unexpected systems); they do
   **not** verify a code is a real member of SNOMED CT / RxNorm / LOINC. That needs a licensed
   terminology service — bring your own.
 - **UCUM validation is grammatical, on a curated atom subset.** The validator checks well-formed UCUM

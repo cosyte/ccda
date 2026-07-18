@@ -78,6 +78,34 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (third slice) — builder emits the `SHALL` `effectiveTime` on every entry.** Closes the
+  conformance gap the previous slice flagged in the README known-limitations: `buildCcda` emitted each
+  act/observation's `effectiveTime` **only when the caller supplied a time**, so a built document
+  round-tripped but was not Schematron-complete (several R2.1 `SHALL`-cardinality `effectiveTime` slots
+  could be absent). Every affected template now emits the element its IG constraint requires, across
+  **all** sections — the Problems/Allergies concern acts + observations, the Medication Activity `IVL_TS`
+  duration, and the Results/Vital Signs organizers + observations.
+  - Where the caller supplied a time it is used; where a `SHALL` requires the element but no time is known
+    the slot is `nullFlavor="UNK"` — satisfying the cardinality **without fabricating** a clinical
+    timestamp, and read back as absent (`date === undefined`), never a real time. Mirrors the header's
+    `SHALL` `addr`/`telecom` and the never-guessed `dose`/`route`.
+  - Per-template cardinality, confirmed against the C-CDA R2.1 IG before emitting: Problem/Allergy
+    **Concern Act** `effectiveTime` `SHALL` [1..1] under the shared Concern Act rule (active→`low`,
+    completed→`high` — on the Problem Concern Act `…22.4.3` these are CONF:1198-7504 / CONF:1198-10085;
+    the Allergy Concern Act `…22.4.30` carries the same rule under its own ids); Problem `…22.4.4` and
+    Allergy-Intolerance `…22.4.7` **Observations** carry `low`
+    (onset); **Medication Activity `…22.4.16`** `IVL_TS` duration `SHALL` [1..1] (CONF:1098-7495/-7496,
+    -32890); Result `…22.4.2` and Vital Sign `…22.4.27` **Observations** `SHALL` [1..1]; Result `…22.4.1`
+    and Vital Signs `…22.4.26` **Organizers** span the members.
+  - New optional inputs `BuildCcdaResultPanel.effectiveTime` / `BuildCcdaVitalsPanel.effectiveTime` (the
+    organizer span time). No new required fields, no parser change, no warning-code change. The
+    round-trip-by-construction invariant and the zero-warning clean build still hold; a `nullFlavor="UNK"`
+    time is explicitly tested not to re-parse into a fabricated `Date`.
+  - **Deferred:** a caller-supplied allergy/problem resolution date; the reaction/severity/criticality
+    optional `effectiveTime` (0..1, no `SHALL` gap); full XSD element-order + Schematron completeness — no
+    external validator was reachable, so cardinality was grounded against the raw IG text, not asserted by
+    a validator run.
+
 - **Phase 7 (second slice) — richer builder section emitters (Medications, Results, Vital Signs).**
   Extends `buildCcda` from the header + Problems + Allergies of the first slice to emit **populated,
   discrete-data** clinical sections that were previously empty `nullFlavor="NI"` placeholders. Each new

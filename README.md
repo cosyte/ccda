@@ -294,10 +294,18 @@ checks.
   document from scratch, `buildCcda` emits a spec-clean CCD with the US Realm header + **Problems,
   Allergies, Medications, Results, and Vital Signs**; the remaining sections, the other eleven document
   types, and editing an existing document are a later increment. "Spec-clean" here means well-formed,
-  correctly-templated, and **round-tripping** through `parseCcda` with zero warnings — not yet fully
-  Schematron-complete: some `SHALL`-cardinality slots the parser does not enforce (notably each
-  observation/act's `effectiveTime`) are emitted only when supplied, so a `buildCcda` document is not
-  guaranteed to pass an external IG validator until that gap is closed.
+  correctly-templated, and **round-tripping** through `parseCcda` with zero warnings. Every entry now
+  emits the `SHALL`-cardinality `effectiveTime` its C-CDA R2.1 template requires — the Problems/Allergies
+  concern acts + observations, the Medication Activity `IVL_TS` duration, and the Results/Vital Signs
+  organizers + observations. When the caller supplied a time it is used; when a `SHALL` requires the
+  element but no time is known the slot is `nullFlavor="UNK"` (satisfying the cardinality without inventing
+  a clinical time, read back as absent), the same fail-safe as the header's `SHALL` `addr`/`telecom` and
+  the never-guessed `dose`/`route`. **Residual (not yet closed):** the builder does not assert full XSD
+  element-order or the complete Schematron rule set, and this gap was grounded against the raw C-CDA R2.1
+  IG text rather than a validator run — no external C-CDA/Schematron IG validator was reachable in the
+  build environment — so a `buildCcda` document is expected-but-not-proven to pass an external IG
+  validator. The reaction/severity/criticality sub-observations' optional (`0..1`, non-`SHALL`)
+  `effectiveTime` is not emitted.
 - **Vendor profiles tolerate, they never relax safety** — a `CcdaProfile` only downgrades the
   **non-safety-critical** deviations it expects (re-badged `PROFILE_QUIRK_APPLIED`, flagged
   `expected`); it can never tolerate a dose/allergen/unit/identity/code-system warning (refused at
