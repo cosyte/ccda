@@ -15,8 +15,11 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 ### Tooling
 
 - **PHI commit-scanner (`scripts/phi-scan.ts`, `pnpm phi-scan`).** A zero-dependency, C-CDA-shape-aware
-  scanner refuses fixtures (and any `src/` file that embeds a document in a JSDoc `@example`) that
-  carry real-looking PHI, so a real clinical document can never be committed by accident. It does NOT
+  scanner refuses any committed/staged file carrying real-looking PHI in a C-CDA document — recognized
+  by a native extension (`.cda`/`.ccda`/`.xml`) or a C-CDA marker — so a real clinical document can
+  never be committed by accident. Hand-written `src/` / `scripts/` code gets a conservative
+  dashed-SSN + email shape pass only (structurally scanning source would flag illustrative `@example`
+  snippets); it is not a fixture location. It does NOT
   import the package's `@xmldom/xmldom` runtime dep — a commit gate must run without a build and must
   tolerate the malformed / fragmentary XML a real leaked document arrives as. Detection is
   element-scoped, not a blind text regex, so a coded value (`<code code="55607006"/>`) or a template
