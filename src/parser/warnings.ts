@@ -64,6 +64,7 @@ export const WARNING_CODES = {
   PLANNED_VS_PERFORMED_AMBIGUOUS: "PLANNED_VS_PERFORMED_AMBIGUOUS",
   SMOKING_STATUS_UNKNOWN: "SMOKING_STATUS_UNKNOWN",
   SMOKING_STATUS_CODE_UNRECOGNIZED: "SMOKING_STATUS_CODE_UNRECOGNIZED",
+  PROFILE_QUIRK_APPLIED: "PROFILE_QUIRK_APPLIED",
 } as const;
 
 /**
@@ -108,6 +109,23 @@ export interface CcdaWarning {
   readonly code: WarningCode;
   readonly message: string;
   readonly position: CcdaPosition;
+  /**
+   * `true` when an active {@link CcdaProfile} *expected* this deviation and
+   * downgraded it — the warning is retained (never dropped) but flagged so a
+   * consumer can filter known, tolerated noise from novel deviations. In strict
+   * mode an `expected` warning does **not** escalate to a thrown error. Absent
+   * (not `false`) when no profile touched the warning.
+   */
+  readonly expected?: boolean;
+  /** The name of the {@link CcdaProfile} that tolerated this warning, when `expected`. */
+  readonly profile?: string;
+  /**
+   * When `code` is {@link WARNING_CODES.PROFILE_QUIRK_APPLIED}, the original
+   * warning code the profile tolerated — so the specific deviation
+   * (`DEPRECATED_LOINC`, `TEMPLATE_EXTENSION_ABSENT`, …) is never lost, only
+   * re-badged as expected.
+   */
+  readonly toleratedCode?: WarningCode;
 }
 
 /**
@@ -815,5 +833,35 @@ export function smokingStatusCodeUnrecognized(position: CcdaPosition, code: stri
     code: WARNING_CODES.SMOKING_STATUS_CODE_UNRECOGNIZED,
     message: `Smoking status code "${code}" is not in the recognized Smoking Status value set; preserved verbatim.`,
     position,
+  };
+}
+
+/**
+ * Build a `PROFILE_QUIRK_APPLIED` warning — the downgraded form an active
+ * {@link CcdaProfile} produces from a deviation it *expects*. The original
+ * warning is **not dropped**: its code moves to `toleratedCode`, the deviation
+ * is re-badged `PROFILE_QUIRK_APPLIED`, `expected` is set, and the tolerating
+ * profile is named — so a consumer can filter known, grounded noise while the
+ * fact of the deviation, and where it was, survive. A profile can only ever
+ * reach this path for a **non-safety-critical** code (enforced at profile-
+ * definition time); safety-critical warnings can never be tolerated. The
+ * original `message` is preserved so the specifics (which OID, which LOINC)
+ * are not lost — it is PHI-free by the same construction as every other factory.
+ *
+ * @example
+ * ```ts
+ * import { profileQuirkApplied, deprecatedLoinc } from "@cosyte/ccda";
+ * const original = deprecatedLoinc({ path: "code" }, "41909-3");
+ * const w = profileQuirkApplied(original, "smartScorecard");
+ * ```
+ */
+export function profileQuirkApplied(original: CcdaWarning, profileName: string): CcdaWarning {
+  return {
+    code: WARNING_CODES.PROFILE_QUIRK_APPLIED,
+    message: `Profile "${profileName}" expected ${original.code}: ${original.message}`,
+    position: original.position,
+    expected: true,
+    profile: profileName,
+    toleratedCode: original.code,
   };
 }

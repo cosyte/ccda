@@ -22,6 +22,9 @@ import type { ParseCcdaOptions } from "./types.js";
 import type { CcdaWarning } from "./warnings.js";
 import { positionOf } from "../model/dom.js";
 import { buildDocument, CcdaDocument } from "../model/document.js";
+import { wrapEmitterWithProfile } from "../profiles/apply.js";
+import { getDefaultCcdaProfile } from "../profiles/registry.js";
+import type { CcdaProfile } from "../profiles/types.js";
 import { serializeDocument } from "../serialize/serialize-dom.js";
 
 /**
@@ -51,7 +54,11 @@ import { serializeDocument } from "../serialize/serialize-dom.js";
 export function parseCcda(raw: string, options: ParseCcdaOptions = {}): CcdaDocument {
   const limits = resolveLimits(options.limits);
   const warnings: CcdaWarning[] = [];
-  const emit = makeEmitter(warnings, options);
+  const profile = resolveProfile(options);
+  // The profile transform runs FIRST (it may re-badge a warning as an expected
+  // PROFILE_QUIRK_APPLIED), then the base emitter records / escalates it. An
+  // `expected` warning never escalates in strict mode — see makeEmitter.
+  const emit = wrapEmitterWithProfile(makeEmitter(warnings, options), profile);
 
   const doc = parseSecureXml(raw, limits, emit);
 
@@ -73,7 +80,28 @@ export function parseCcda(raw: string, options: ParseCcdaOptions = {}): CcdaDocu
 
   const parts = buildDocument(root, { emit });
   const serialized = serializeDocument(doc);
-  return new CcdaDocument({ ...parts, warnings, serialized });
+  const init = { ...parts, warnings, serialized };
+  if (profile !== undefined) {
+    return new CcdaDocument({
+      ...init,
+      profile: { name: profile.name, lineage: profile.lineage },
+    });
+  }
+  return new CcdaDocument(init);
+}
+
+/**
+ * Resolve the effective profile for a parse. An explicit `options.profile` wins:
+ * a {@link CcdaProfile} is used as-is; `null` opts out of the process-scoped
+ * default for this call. When `profile` is omitted, the process-scoped default
+ * ({@link setDefaultCcdaProfile}) applies, or `undefined` when none is set.
+ *
+ * @internal
+ */
+function resolveProfile(options: ParseCcdaOptions): CcdaProfile | undefined {
+  if (options.profile === null) return undefined;
+  if (options.profile !== undefined) return options.profile;
+  return getDefaultCcdaProfile();
 }
 
 /**
@@ -90,7 +118,10 @@ function makeEmitter(
   options: ParseCcdaOptions,
 ): (warning: CcdaWarning) => void {
   return (warning) => {
-    if (options.strict === true) {
+    // An `expected` warning is one a profile deliberately tolerated — it must
+    // NOT escalate in strict mode (the whole point of the profile is that this
+    // deviation is known/benign). It is still recorded below so nothing is lost.
+    if (options.strict === true && warning.expected !== true) {
       // Strict mode escalates a Tier-2 warning into a thrown CcdaParseError so
       // callers have one catch surface. `code` is typed `FatalCode` at compile
       // time (the six Tier-3 codes) to keep exhaustive-switch checks honest for

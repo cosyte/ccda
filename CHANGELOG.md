@@ -78,6 +78,36 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 6 — vendor / conformance profile system (registry with provenance).** A `defineCcdaProfile()`
+  engine mirroring the sibling `@cosyte/hl7` profile shape (`name` / `lineage` / `describe()` /
+  `extends`-merge), a provenance-backed built-in registry (`ccdaProfiles`, `getCcdaProfile`,
+  `listCcdaProfiles`), and a process-scoped default (`set/getDefaultCcdaProfile`). `parseCcda(xml,
+{ profile })` applies it — a profile downgrades the **non-safety-critical** deviations it _expects_
+  to a `PROFILE_QUIRK_APPLIED` warning (flagged `expected: true`, carrying the original `toleratedCode`
+  in a preserved `doc.warnings` entry — a tolerated deviation is **never dropped**), and never changes
+  an extracted clinical value (it operates purely at the warning-emitter layer). `doc.profile` records
+  the applied profile's name + lineage.
+  - **Safety gate (the load-bearing rule).** A profile can **never** tolerate a safety-critical warning
+    code — patient identity (`MISSING_ASSIGNING_AUTHORITY`, `MULTIPLE_RECORD_TARGETS`), allergy
+    negation/granularity, dose/route/timing, UCUM units, code↔narrative mismatch, unhandled value
+    types, active-vs-resolved / planned-vs-performed status, a wrong/unknown code system
+    (`UNEXPECTED_CODE_SYSTEM`), a malformed datetime (`MALFORMED_DATETIME`), or a missing SHALL section.
+    Attempting to tolerate one throws `CcdaProfileDefinitionError` at definition time (`SAFETY_CRITICAL_CODES`).
+  - **Evidence-backed built-ins (no invented vendor quirks, per ADR 0018).** `ccdaProfiles.smartScorecard`
+    — deprecated-terminology tolerance grounded in the public SMART C-CDA Scorecard rubric + D'Amore
+    et al., _JAMIA_ 2014 (deprecated BMI LOINC 41909-3, ICD-9 in newer docs, malformed `nullFlavor`
+    tokens). `ccdaProfiles.legacyR11` — R1.1-origin receive-tolerance (absent 2015-08-01 version stamp,
+    LOINC-fallback section matching) grounded in ONC §170.315(b)(1)'s receive-both-R2.1-and-R1.1
+    requirement + the CC0 HL7/C-CDA-Examples corpus. Plus the conservative `default` baseline
+    (tolerates nothing). Named per-vendor (Epic/Cerner/…) profiles deliberately await a real
+    vendor-attributed grounding document — the anti-invention rule stands.
+  - New public surface: `defineCcdaProfile`, `ccdaProfiles`, `getCcdaProfile`, `listCcdaProfiles`,
+    `setDefaultCcdaProfile`, `getDefaultCcdaProfile`, `applyProfile`, `wrapEmitterWithProfile`,
+    `SAFETY_CRITICAL_CODES`, `isSafetyCriticalCode`, `profileQuirkApplied`, `CcdaProfileDefinitionError`,
+    the `PROFILE_QUIRK_APPLIED` warning code, and the `CcdaProfile` / `DefineCcdaProfileOptions` /
+    `QuirkTolerance` / `QuirkMatch` / `ProfileProvenance` / `ProfileAttribution` types. Synthetic-only
+    test fixtures (reuse the existing `buildCcda` builder); no realistic PHI.
+
 - **Phase 5b — deferred clinical sections (Plan of Treatment, Functional / Mental Status, Family /
   Past Medical History).** `parseCcda(xml)` now extracts five more entry families, surfaced on
   `CcdaDocument` via `getPlannedItems()`, `getFunctionalStatus()`, `getMentalStatus()`,
