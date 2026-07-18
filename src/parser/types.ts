@@ -13,6 +13,7 @@
 // with `import type` so it contributes zero runtime cost and `./warnings.ts`
 // remains the single source of truth for `CcdaWarning`.
 import type { CcdaWarning } from "./warnings.js";
+import type { CcdaProfile } from "../profiles/types.js";
 
 /**
  * Structural locator attached to every warning and fatal error. Every field
@@ -110,4 +111,13 @@ export interface ParseCcdaOptions {
   readonly onWarning?: OnWarningCallback;
   /** Override one or more of the default safety caps applied before DOM construction. */
   readonly limits?: CcdaParseLimits;
+  /**
+   * The vendor/conformance {@link CcdaProfile} to apply. A profile downgrades the
+   * **non-safety-critical** deviations it expects to `PROFILE_QUIRK_APPLIED`
+   * (flagged `expected`) — it never changes an extracted value and can never
+   * tolerate a safety-critical warning. Omit to consult the process-scoped
+   * default ({@link setDefaultCcdaProfile}); pass `null` to opt out of that
+   * default for this call.
+   */
+  readonly profile?: CcdaProfile | null;
 }

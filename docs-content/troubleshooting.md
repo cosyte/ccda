@@ -88,8 +88,14 @@ authored here so a reader never relies on something absent. They grow as the par
 - **`nonXMLBody` base64 is left inert.** An Unstructured Document's wrapped payload is exposed but never
   decoded — decoding an arbitrary embedded blob is a needless attack surface and a PHI decision the
   caller owns.
-- **No vendor profile system yet.** `getMrn()` selects the first `patientRole/id` extension; a
-  profile-aware `defineProfile()` override (mirroring the sibling parsers) is planned.
+- **Vendor profiles only quiet benign noise.** `parseCcda(xml, { profile })` (or a process default via
+  `setDefaultCcdaProfile`) applies a `CcdaProfile` that downgrades the non-safety-critical deviations it
+  expects to `PROFILE_QUIRK_APPLIED` (flagged `expected`, carrying the original `toleratedCode`) — it
+  never drops a warning and never touches an extracted value. A profile **cannot** tolerate a
+  safety-critical warning (dose, unit, allergen, identity, wrong code system, malformed datetime, …);
+  `defineCcdaProfile()` throws if you try. Built-ins: `ccdaProfiles.smartScorecard` (deprecated
+  terminology) and `ccdaProfiles.legacyR11` (R1.1-origin structural tolerance), each with cited
+  provenance; named per-vendor profiles await a real grounding document (ADR 0018).
 - **The required-section (SHALL) table is conservative.** It asserts only unconditional, in-catalog,
   high-confidence SHALL constraints; it omits choice constraints (`SHALL contain A OR B`), SHOULD/MAY
   sections, and SHALL sections outside the recognized catalog. An empty table for a document type means

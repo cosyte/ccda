@@ -99,6 +99,13 @@ export interface CcdaDocumentInit {
   readonly nonXmlBody?: ED;
   readonly warnings: readonly CcdaWarning[];
   /**
+   * The {@link CcdaProfile} applied at parse time (its `name` + resolved
+   * `lineage`), or absent when no profile was active. Attribution only — the
+   * profile's effect is already reflected in `warnings` (tolerated deviations
+   * re-badged `PROFILE_QUIRK_APPLIED`, flagged `expected`).
+   */
+  readonly profile?: ProfileAttribution;
+  /**
    * The spec-clean XML snapshot captured from the source DOM at parse time,
    * returned by {@link CcdaDocument.toString}. Populated by `parseCcda`; absent
    * for a hand-constructed document (which therefore cannot be serialized until
@@ -107,6 +114,23 @@ export interface CcdaDocumentInit {
    * @internal
    */
   readonly serialized?: string;
+}
+
+/**
+ * PHI-free attribution for the {@link CcdaProfile} a document was parsed under —
+ * just the profile's `name` and resolved `lineage`, not the whole profile
+ * object. Mirrors the sibling `@cosyte/hl7` `msg.profile` shape.
+ *
+ * @example
+ * ```ts
+ * import { parseCcda, ccdaProfiles } from "@cosyte/ccda";
+ * const doc = parseCcda(xml, { profile: ccdaProfiles.smartScorecard });
+ * console.log(doc.profile?.name); // "smartScorecard"
+ * ```
+ */
+export interface ProfileAttribution {
+  readonly name: string;
+  readonly lineage: readonly string[];
 }
 
 /**
@@ -162,6 +186,8 @@ export class CcdaDocument {
   public readonly nonXmlBody: ED | undefined;
   /** Lenient-parse warnings, frozen at the model boundary. */
   public readonly warnings: readonly CcdaWarning[];
+  /** The profile applied at parse time (name + lineage), or `undefined` when none was active. */
+  public readonly profile: ProfileAttribution | undefined;
 
   /** Spec-clean XML snapshot of the source DOM; `undefined` for a hand-constructed doc. @internal */
   readonly #serialized: string | undefined;
@@ -193,6 +219,7 @@ export class CcdaDocument {
     this.pastMedicalHistory = init.pastMedicalHistory;
     this.nonXmlBody = init.nonXmlBody;
     this.warnings = Object.freeze(init.warnings.slice());
+    this.profile = init.profile;
     this.#serialized = init.serialized;
   }
 
@@ -262,6 +289,7 @@ export class CcdaDocument {
       familyHistory: readonly FamilyHistory[];
       pastMedicalHistory: readonly Problem[];
       nonXmlBody?: ED;
+      profile?: ProfileAttribution;
       warnings: readonly CcdaWarning[];
       serialized?: string;
     } = {
@@ -286,6 +314,7 @@ export class CcdaDocument {
     };
     if (this.documentType !== undefined) init.documentType = this.documentType;
     if (this.nonXmlBody !== undefined) init.nonXmlBody = this.nonXmlBody;
+    if (this.profile !== undefined) init.profile = this.profile;
     if (this.#serialized !== undefined) init.serialized = this.#serialized;
     return new CcdaDocument(init);
   }

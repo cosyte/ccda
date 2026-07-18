@@ -43,14 +43,14 @@ export { parseSecureXml, resolveLimits, DEFAULT_LIMITS } from "./parser/secure-x
 export type { ResolvedLimits } from "./parser/secure-xml.js";
 
 // Tier-2 warning registry + Tier-3 fatal registry (stable public contract).
-export { WARNING_CODES } from "./parser/warnings.js";
+export { WARNING_CODES, profileQuirkApplied } from "./parser/warnings.js";
 export type { WarningCode, CcdaWarning } from "./parser/warnings.js";
-export { FATAL_CODES, CcdaParseError } from "./parser/errors.js";
+export { FATAL_CODES, CcdaParseError, CcdaProfileDefinitionError } from "./parser/errors.js";
 export type { FatalCode } from "./parser/errors.js";
 
 // Document model + convenience accessors.
 export { CcdaDocument, buildDocument } from "./model/document.js";
-export type { CcdaDocumentInit } from "./model/document.js";
+export type { CcdaDocumentInit, ProfileAttribution } from "./model/document.js";
 
 // Spec-clean serializer (Postel's-Law emit side; symmetric with parseCcda).
 export { serializeCcda } from "./serialize/index.js";
@@ -164,3 +164,28 @@ export { attr, child, children, childElements, text, xsiType, positionOf } from 
 
 // MRN selection helper (overridable by a later profile-aware variant).
 export { pickMrn } from "./helpers/pick-mrn.js";
+
+// Vendor/conformance profile system: the engine (`defineCcdaProfile`), the
+// built-in registry with provenance (`ccdaProfiles`, `getCcdaProfile`,
+// `listCcdaProfiles`), the process-scoped default (`set/getDefaultCcdaProfile`),
+// the runtime tolerance transform (`applyProfile`, `wrapEmitterWithProfile`),
+// and the safety gate (`SAFETY_CRITICAL_CODES`, `isSafetyCriticalCode`).
+export {
+  defineCcdaProfile,
+  ccdaProfiles,
+  getCcdaProfile,
+  listCcdaProfiles,
+  setDefaultCcdaProfile,
+  getDefaultCcdaProfile,
+  applyProfile,
+  wrapEmitterWithProfile,
+  SAFETY_CRITICAL_CODES,
+  isSafetyCriticalCode,
+} from "./profiles/index.js";
+export type {
+  CcdaProfile,
+  DefineCcdaProfileOptions,
+  QuirkTolerance,
+  QuirkMatch,
+  ProfileProvenance,
+} from "./profiles/index.js";

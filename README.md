@@ -215,8 +215,12 @@ checks.
 - **Serializer is round-trip emit, not a builder** — `serializeCcda` / `toString()` faithfully re-emit
   a _parsed_ document (the spec-clean emit half of Postel's Law); constructing or editing a document
   from scratch needs the builder API, which is a later phase.
-- **No vendor profile system yet** — `getMrn()` selects the first `patientRole/id` extension; a
-  profile-aware override is planned.
+- **Vendor profiles tolerate, they never relax safety** — a `CcdaProfile` only downgrades the
+  **non-safety-critical** deviations it expects (re-badged `PROFILE_QUIRK_APPLIED`, flagged
+  `expected`); it can never tolerate a dose/allergen/unit/identity/code-system warning (refused at
+  `defineCcdaProfile()` time) and never changes an extracted value. Two built-ins ship
+  (`ccdaProfiles.smartScorecard`, `ccdaProfiles.legacyR11`), each grounded in a cited public source;
+  named per-vendor profiles await a real vendor-attributed grounding document (ADR 0018).
 
 ## The cosyte parser archetype
 
@@ -232,8 +236,9 @@ checks.
   (element names, OIDs, coded tokens, line/column); clinical values never reach a diagnostic.
 - **Dual ESM + CJS** — built with `tsup`, validated with `attw`.
 - **Immutability** — parsed models are immutable; mutation is via explicit methods.
-- **Profile system** — a `defineProfile()` API for vendor quirks (to be added), with built-in
-  profiles authored through the same public API.
+- **Profile system** — a `defineCcdaProfile()` API for vendor/conformance quirks, with a
+  provenance-backed registry (`ccdaProfiles`) of built-ins authored through the same public API. A
+  safety gate refuses any profile that tries to tolerate a safety-critical warning code.
 
 ## License
 

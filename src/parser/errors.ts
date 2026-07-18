@@ -113,3 +113,40 @@ export class CcdaParseError extends Error {
     this.position = position;
   }
 }
+
+/**
+ * Thrown by `defineCcdaProfile` when a profile definition is structurally
+ * invalid — a missing/empty `name`, an unknown option key, a `tolerate` entry
+ * whose `code` is not a real {@link WarningCode}, a missing `rationale`, or —
+ * the load-bearing safety rule — an attempt to tolerate a **safety-critical**
+ * warning code. Distinct from {@link CcdaParseError} (which is about a
+ * *document*): this is about a malformed *profile*, so it is never part of the
+ * lenient parse path and carries no `CcdaPosition`.
+ *
+ * @example
+ * ```ts
+ * import { defineCcdaProfile, CcdaProfileDefinitionError } from "@cosyte/ccda";
+ * try {
+ *   defineCcdaProfile({ name: "bad", tolerate: [{ code: "MISSING_DOSE_QUANTITY", rationale: "x" }] });
+ * } catch (err) {
+ *   if (err instanceof CcdaProfileDefinitionError) {
+ *     // a profile may never tolerate a safety-critical code
+ *   }
+ * }
+ * ```
+ */
+export class CcdaProfileDefinitionError extends Error {
+  /** The offending profile's name, when known at throw time. */
+  public readonly profileName: string | undefined;
+
+  /**
+   * Construct a new `CcdaProfileDefinitionError`.
+   *
+   * @internal
+   */
+  public constructor(message: string, profileName?: string) {
+    super(message);
+    this.name = "CcdaProfileDefinitionError";
+    this.profileName = profileName;
+  }
+}
