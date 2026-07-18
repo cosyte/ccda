@@ -1,15 +1,18 @@
 /**
- * Tests for the `buildCcda` document builder (CCDA-P7, first slice). The builder
- * emits a spec-clean C-CDA R2.1 CCD through the *same DOM the parser reads*, so
- * the central guarantees are:
+ * Tests for the `buildCcda` document builder (CCDA-P7). The builder emits a
+ * spec-clean C-CDA R2.1 CCD through the *same DOM the parser reads*, so the
+ * central guarantees are:
  *
  *   - **round-trip fidelity** — a document `buildCcda` emits parses back to the
- *     same structured content, and serialization is a fixed point;
+ *     same structured content across every populated section (Problems,
+ *     Allergies, Medications, Results, Vital Signs), and serialization is a
+ *     fixed point;
  *   - **spec-clean emit** — a clean build produces zero warnings (correct
- *     templateIds, LOINC section codes, structured + narrative agreement, the
- *     four CCD SHALL sections present); and
- *   - **the `negationInd` vs `nullFlavor` safety rule** — "No Known Allergies"
- *     is emitted as a negation, never collapsed into an unknown.
+ *     templateIds, LOINC section codes, RxNorm/LOINC/UCUM coding, structured +
+ *     narrative agreement, empty sections as `nullFlavor="NI"`); and
+ *   - **the safety-critical fail-safes** — "No Known Allergies" is a negation
+ *     never collapsed into an unknown, and a missing dose/route or a bad UCUM
+ *     unit is surfaced, never silently defaulted to a confident-wrong value.
  */
 
 import { describe, expect, it } from "vitest";
@@ -41,6 +44,57 @@ const RICH_INIT: BuildCcdaInit = {
       criticality: { code: "CRITH", displayName: "High criticality" },
     },
     { noKnownAllergy: true },
+  ],
+  medications: [
+    {
+      drug: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" },
+      dose: { value: 1, unit: "{tablet}" },
+      route: { code: "C38288", displayName: "Oral" },
+      frequency: { value: 24, unit: "h" },
+      duration: { low: "20210101", high: "20211231" },
+    },
+    {
+      drug: { code: "860975", displayName: "Metformin 500 MG Oral Tablet" },
+      dose: { value: 1, unit: "{tablet}" },
+      route: { code: "C38288", displayName: "Oral" },
+      status: "resolved",
+    },
+  ],
+  results: [
+    {
+      code: { code: "24323-8", displayName: "Comprehensive metabolic panel" },
+      results: [
+        {
+          test: { code: "2345-7", displayName: "Glucose" },
+          quantity: { value: 95, unit: "mg/dL" },
+          referenceRange: {
+            low: { value: 70, unit: "mg/dL" },
+            high: { value: 100, unit: "mg/dL" },
+          },
+          interpretation: { code: "N", displayName: "Normal" },
+          effectiveTime: "20240102",
+        },
+        {
+          test: { code: "2951-2", displayName: "Sodium" },
+          quantity: { value: 140, unit: "mmol/L" },
+        },
+      ],
+    },
+  ],
+  vitalSigns: [
+    {
+      vitals: [
+        {
+          code: { code: "8480-6", displayName: "Systolic blood pressure" },
+          quantity: { value: 120, unit: "mm[Hg]" },
+          effectiveTime: "20240102",
+        },
+        {
+          code: { code: "8462-4", displayName: "Diastolic blood pressure" },
+          quantity: { value: 80, unit: "mm[Hg]" },
+        },
+      ],
+    },
   ],
 };
 
@@ -250,6 +304,169 @@ describe("buildCcda — emit conformance (header + section cardinality)", () => 
       }),
     );
     expect(xml).toContain("2.16.840.1.113883.10.20.22.2.5.1");
+  });
+});
+
+describe("buildCcda — medications round-trip", () => {
+  it("re-parses the RxNorm drug, dose, route, frequency, and duration", () => {
+    const [lisinopril] = buildCcda(RICH_INIT).getMedications();
+    expect(lisinopril?.drug?.code).toBe("314076");
+    expect(lisinopril?.drug?.codeSystem).toBe("2.16.840.1.113883.6.88"); // RxNorm
+    expect(lisinopril?.dose?.value).toBe(1);
+    expect(lisinopril?.dose?.unit).toBe("{tablet}");
+    expect(lisinopril?.route?.code).toBe("C38288");
+    expect(lisinopril?.route?.codeSystem).toBe("2.16.840.1.113883.3.26.1.1"); // NCI Thesaurus
+    expect(lisinopril?.frequency?.period?.value).toBe(24);
+    expect(lisinopril?.frequency?.period?.unit).toBe("h");
+    expect(lisinopril?.duration?.low?.raw).toBe("20210101");
+    expect(lisinopril?.duration?.high?.raw).toBe("20211231");
+    expect(lisinopril?.narrative).toBe("Lisinopril 10 MG Oral Tablet");
+  });
+
+  it("emits the Medications section with entries-required templateId + LOINC", () => {
+    const doc = buildCcda(RICH_INIT);
+    expect(doc.findSection("medications")?.code?.code).toBe("10160-0");
+    const xml = serializeCcda(doc);
+    expect(xml).toContain("2.16.840.1.113883.10.20.22.2.1.1");
+  });
+
+  it("emits duration and frequency as distinct effectiveTime siblings (no unresolved timing)", () => {
+    const med = buildCcda(RICH_INIT).getMedications()[0];
+    // Both axes recovered separately ⇒ the parser never flagged them ambiguous.
+    expect(med?.duration).toBeDefined();
+    expect(med?.frequency).toBeDefined();
+    expect(buildCcda(RICH_INIT).warnings).toEqual([]);
+  });
+
+  it("does NOT default a missing dose/route — it flags them, never invents a value", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      medications: [{ drug: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" } }],
+    });
+    const codes = doc.warnings.map((w) => w.code).sort();
+    expect(codes).toContain("MISSING_DOSE_QUANTITY");
+    expect(codes).toContain("MISSING_ROUTE_CODE");
+    const med = doc.getMedications()[0];
+    expect(med?.dose).toBeUndefined();
+    expect(med?.route).toBeUndefined();
+    expect(med?.drug?.code).toBe("314076");
+  });
+});
+
+describe("buildCcda — results round-trip", () => {
+  it("re-parses the panel and its member observations with values intact", () => {
+    const [panel] = buildCcda(RICH_INIT).getResults();
+    expect(panel?.code?.code).toBe("24323-8");
+    expect(panel?.results).toHaveLength(2);
+    const glucose = panel?.results[0];
+    expect(glucose?.code?.code).toBe("2345-7");
+    expect(glucose?.value?.kind).toBe("physicalQuantity");
+    if (glucose?.value?.kind === "physicalQuantity") {
+      expect(glucose.value.quantity.value).toBe(95);
+      expect(glucose.value.quantity.unit).toBe("mg/dL");
+    }
+    expect(glucose?.referenceRange?.low?.value).toBe(70);
+    expect(glucose?.referenceRange?.high?.value).toBe(100);
+    expect(glucose?.interpretation?.code).toBe("N");
+  });
+
+  it("keeps a valid UCUM unit clean (no NON_UCUM_UNIT warning)", () => {
+    expect(buildCcda(RICH_INIT).warnings).toEqual([]);
+  });
+
+  it("supports a coded and a string result value form", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      results: [
+        {
+          code: { code: "600-7", displayName: "Culture" },
+          results: [
+            {
+              test: { code: "630-4", displayName: "Bacteria identified" },
+              codedValue: { code: "3092008", displayName: "Staphylococcus aureus" },
+            },
+            {
+              test: { code: "664-3", displayName: "Specimen description" },
+              stringValue: "Clear, straw-colored",
+            },
+          ],
+        },
+      ],
+    });
+    expect(doc.warnings).toEqual([]);
+    const [coded, str] = doc.getResults()[0]?.results ?? [];
+    expect(coded?.value?.kind).toBe("coded");
+    if (coded?.value?.kind === "coded") expect(coded.value.code.code).toBe("3092008");
+    expect(str?.value?.kind).toBe("string");
+    if (str?.value?.kind === "string") expect(str.value.value).toBe("Clear, straw-colored");
+  });
+
+  it("rejects a result that does not carry exactly one value form", () => {
+    expect(() =>
+      buildCcda({
+        patient: { mrn: "M" },
+        results: [
+          {
+            code: { code: "P", displayName: "Panel" },
+            results: [{ test: { code: "T", displayName: "Test" } }],
+          },
+        ],
+      }),
+    ).toThrow(TypeError);
+    expect(() =>
+      buildCcda({
+        patient: { mrn: "M" },
+        results: [
+          {
+            code: { code: "P", displayName: "Panel" },
+            results: [
+              {
+                test: { code: "T", displayName: "Test" },
+                quantity: { value: 1, unit: "mg/dL" },
+                stringValue: "also this",
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(TypeError);
+  });
+});
+
+describe("buildCcda — vital signs round-trip", () => {
+  it("re-parses the vital signs cluster with LOINC + UCUM readings", () => {
+    const [cluster] = buildCcda(RICH_INIT).getVitals();
+    expect(cluster?.vitals).toHaveLength(2);
+    const systolic = cluster?.vitals[0];
+    expect(systolic?.code?.code).toBe("8480-6");
+    expect(systolic?.value?.kind).toBe("physicalQuantity");
+    if (systolic?.value?.kind === "physicalQuantity") {
+      expect(systolic.value.quantity.value).toBe(120);
+      expect(systolic.value.quantity.unit).toBe("mm[Hg]");
+    }
+    expect(buildCcda(RICH_INIT).warnings).toEqual([]);
+  });
+
+  it("emits the Vital Signs section by LOINC 8716-3", () => {
+    expect(buildCcda(RICH_INIT).findSection("vitalSigns")?.code?.code).toBe("8716-3");
+  });
+
+  it("flags a case-slipped (non-canonical) UCUM unit rather than trusting it", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      vitalSigns: [
+        {
+          vitals: [
+            {
+              code: { code: "29463-7", displayName: "Body weight" },
+              quantity: { value: 70, unit: "Kg" },
+            },
+          ],
+        },
+      ],
+    });
+    // "Kg" is a case slip of "kg" — surfaced, never silently accepted.
+    expect(doc.warnings.map((w) => w.code)).toContain("UCUM_CASE_SUSPECT");
   });
 });
 

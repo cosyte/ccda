@@ -78,6 +78,38 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (second slice) — richer builder section emitters (Medications, Results, Vital Signs).**
+  Extends `buildCcda` from the header + Problems + Allergies of the first slice to emit **populated,
+  discrete-data** clinical sections that were previously empty `nullFlavor="NI"` placeholders. Each new
+  section round-trips through `parseCcda` to the same structured content by construction, and a clean
+  build still carries **zero warnings**.
+  - **Medications** — Medication Activity `…22.4.16` `substanceAdministration` → Medication Information
+    `…22.4.23`, the drug at `consumable/manufacturedProduct/manufacturedMaterial/code` (**RxNorm** by
+    default), the periodic frequency (`PIVL_TS` period) and therapy window (`IVL_TS` low/high) emitted
+    as **two distinct `effectiveTime` siblings** (never conflated). `dose` (`doseQuantity`) and `route`
+    (`routeCode`, **NCI Thesaurus** by default) are **never defaulted** — an omitted one is left absent
+    so the parser flags it (`MISSING_DOSE_QUANTITY` / `MISSING_ROUTE_CODE`), exactly the fail-safe the
+    allergy `type` default established.
+  - **Results** — Result Organizer `…22.4.1` → Result Observation `…22.4.2`, the LOINC test code, a
+    typed `value` in **exactly one** form (a UCUM-checked `PQ` quantity, a `CD` coded value, or a `ST`
+    string — the builder throws if none or more than one is set, so a result value is never dropped or
+    invented), an optional structured `IVL_PQ` reference range, and an `interpretationCode`.
+  - **Vital Signs** — Vital Signs Organizer `…22.4.26` → Vital Sign Observation `…22.4.27`, the LOINC
+    vital code and a **UCUM** `PQ` reading; the organizer carries the SNOMED `46680005` "Vital signs"
+    cluster code.
+  - **Units are safety-critical.** Result/Vital `PQ` units are emitted verbatim and checked by the
+    computable UCUM grammar on re-parse — a non-UCUM or case-slipped unit (`Kg` for `kg`) surfaces
+    `NON_UCUM_UNIT` / `UCUM_CASE_SUSPECT` rather than being silently "corrected" to a confident-wrong
+    value. Each populated section declares the entries-required `.1` templateId; a section with no
+    supplied content stays a spec-clean empty `nullFlavor="NI"` section (entries-optional templateId
+    only).
+  - New public surface: the input types `BuildCcdaMedication`, `BuildCcdaResultPanel`, `BuildCcdaResult`,
+    `BuildCcdaVitalsPanel`, `BuildCcdaVital`, and `BuildQuantity`. No parser change, no warning-code
+    change. Synthetic-only fixtures throughout.
+  - **Deferred to a later CCDA-P7 increment:** the remaining sections (Immunizations, Procedures,
+    Encounters, Plan of Treatment, Social History, …), the other eleven document types, C-CDA document
+    _editing_, and the bring-your-own-credentials semantic-terminology adapter.
+
 - **Phase 7 (first slice) — document builder `buildCcda`.** The conservative _emit_ factory, symmetric
   with `parseCcda` and mirroring the sibling `@cosyte/hl7`'s `buildMessage`: from a semantic
   `BuildCcdaInit` it assembles a **spec-clean C-CDA R2.1 CCD** and returns a real `CcdaDocument`.
