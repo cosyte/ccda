@@ -52,7 +52,7 @@ non-UCUM unit — is a warning you triage, not an exception you catch.
 | A procedure's `disposition` is `undefined` | The entry had no `moodCode`, or an unrecognized one | `PLANNED_VS_PERFORMED_AMBIGUOUS` / `PROCEDURE_MOOD_UNEXPECTED` was raised; performed and planned are never conflated. |
 | A `CODE_NARRATIVE_MISMATCH` warning | A coded value and its referenced narrative disagree | Both are preserved and no winner is chosen; route the record to human review. |
 | A `NON_UCUM_UNIT` / `UCUM_CASE_SUSPECT` warning | The `PQ` `@unit` is not well-formed UCUM (or a case slip) | The raw unit is preserved, never normalized; a case slip is usually a single-character fix. |
-| `doc.toString()` throws | The document was hand-constructed, not produced by `parseCcda` | Only parsed documents retain source XML to serialize; the builder API is a later phase. |
+| `doc.toString()` throws | The document was hand-constructed, not produced by `parseCcda` or `buildCcda` | Only parsed/built documents retain source XML to serialize; construct from scratch with `buildCcda`. |
 
 ## Keeping PHI out of logs
 
@@ -68,10 +68,12 @@ and any snippet would risk leaking PHI.
 Depth tracks the parser, and never leads it. As of **Phase 5b**, these are the deliberate boundaries —
 authored here so a reader never relies on something absent. They grow as the parser ships more phases.
 
-- **No document builder — parse + round-trip serialize only.** `serializeCcda` / `toString()` faithfully
-  re-emit a **parsed** document (the spec-clean emit half of Postel's Law). Constructing or editing a
-  document from scratch needs the builder API, which is a later phase; a hand-constructed `CcdaDocument`
-  cannot be serialized (`toString()` throws).
+- **Document builder is a first slice — CCD with Problems + Allergies.** `buildCcda(init)` constructs a
+  spec-clean CCD (US Realm header + Problems + Allergies; the other CCD SHALL sections emitted empty,
+  `nullFlavor="NI"`) and round-trips through the parse model. Richer section builders, the other document
+  types, editing an existing document, and a bring-your-own-credentials terminology adapter are a later
+  increment. `serializeCcda` / `toString()` re-emit a **parsed or built** document; a hand-constructed
+  `CcdaDocument` (neither parsed nor built) cannot be serialized (`toString()` throws).
 - **Fourteen entry families are extracted; other sections carry identity + narrative only.** Problems,
   Medications, Allergies, Results, Vital Signs, Immunizations, Procedures, Encounters, Social-History
   smoking status, Plan of Treatment, Functional Status, Mental Status, Family History, and Past Medical

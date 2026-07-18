@@ -97,4 +97,5 @@ decision the caller owns).
 A `CcdaDocument` is frozen at the model boundary — accessors return the parsed data by reference and
 callers cannot mutate parser output. The one sanctioned copy-with is `doc.withWarnings(extra)`, which
 returns a **new** document with extra warnings appended, sharing every parsed field by reference and
-leaving the original untouched (the foundation a later builder phase extends to content edits).
+leaving the original untouched (the foundation the builder — `buildCcda` — and later content-edit
+increments extend).

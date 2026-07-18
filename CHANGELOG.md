@@ -78,6 +78,34 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (first slice) — document builder `buildCcda`.** The conservative _emit_ factory, symmetric
+  with `parseCcda` and mirroring the sibling `@cosyte/hl7`'s `buildMessage`: from a semantic
+  `BuildCcdaInit` it assembles a **spec-clean C-CDA R2.1 CCD** and returns a real `CcdaDocument`.
+  - **Round-trip by construction.** The builder emits through the _same DOM the parser reads_ — it
+    builds an `@xmldom/xmldom` document with `createElementNS` (the serializer does all XML escaping),
+    serializes it with the shared `serializeDocument`, then parses that text with `parseCcda`. The
+    returned document is the parse of the emitted XML, so a document `buildCcda` emits always parses
+    back to the same structured content and `parseCcda(doc.toString()).toString() === doc.toString()`
+    holds automatically. A clean build carries **zero warnings**.
+  - **Emits** the full US Realm Header (US Realm Header `…22.1.1@2015-08-01` + CCD `…22.1.2@2015-08-01`
+    templateIds, LOINC document code `34133-9`, `recordTarget` with the SHALL `addr`/`telecom`, a device
+    `author`, and a `custodian` — no invented person, no PHI) plus the two safety-critical
+    reconciliation sections: **Problems** (Problem Concern Act `…22.4.3` → Problem Observation `…22.4.4`,
+    active/resolved/inactive → concern `statusCode`, code↔narrative agreement) and **Allergies** (Allergy
+    Concern Act `…22.4.30` → Allergy-Intolerance Observation `…22.4.7`, allergen at
+    `participant/…/playingEntity/code`, optional Reaction/Severity/Criticality kept as distinct axes, the
+    propensity `type` defaulting to the neutral SNOMED `419199007` "Allergy to substance" — never a
+    guessed "Drug allergy" — and the **`negationInd` "No Known Allergies"** form emitted as a negation
+    with no `nullFlavor`). The other CCD SHALL sections (Medications, Results) are emitted as spec-clean
+    **empty, entries-optional** `nullFlavor="NI"` sections (never the entries-required `.1` with zero
+    entries), so the document is conformant with no `REQUIRED_SECTION_MISSING`.
+  - New public surface: `buildCcda` and the input types `BuildCcdaInit`, `BuildCcdaPatient`,
+    `BuildCcdaProblem`, `BuildCcdaAllergy`, `BuildCode`. No parser change, no warning-code change.
+    Synthetic-only fixtures; omitted demographics emit `nullFlavor="UNK"` rather than invented values.
+  - **Deferred to a later CCDA-P7 increment:** richer section builders (Medications, Results, Vital
+    Signs, Immunizations, Procedures, …), the other eleven document types, and the
+    bring-your-own-credentials semantic-terminology adapter + optional bundled redistributable data.
+
 - **Phase 6 — vendor / conformance profile system (registry with provenance).** A `defineCcdaProfile()`
   engine mirroring the sibling `@cosyte/hl7` profile shape (`name` / `lineage` / `describe()` /
   `extends`-merge), a provenance-backed built-in registry (`ccdaProfiles`, `getCcdaProfile`,

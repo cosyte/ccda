@@ -55,6 +55,18 @@ export type { CcdaDocumentInit, ProfileAttribution } from "./model/document.js";
 // Spec-clean serializer (Postel's-Law emit side; symmetric with parseCcda).
 export { serializeCcda } from "./serialize/index.js";
 
+// Document builder (the emit *factory*, symmetric with parseCcda): construct a
+// spec-clean C-CDA R2.1 CCD from structured input, round-tripping through the
+// same parse model.
+export { buildCcda } from "./builder/index.js";
+export type {
+  BuildCcdaInit,
+  BuildCcdaPatient,
+  BuildCcdaProblem,
+  BuildCcdaAllergy,
+  BuildCode,
+} from "./builder/index.js";
+
 // Header + patient + section models.
 export { buildHeader } from "./model/header.js";
 export type { CcdaHeader, CcdaPatient, HumanName } from "./model/header.js";
