@@ -78,13 +78,31 @@ export function textEl(doc: Document, name: string, value: string, attrs?: Attrs
 }
 
 /**
+ * Create a named element carrying an `xsi:type` (set in the XSI namespace, so it
+ * serializes as the `xsi:` prefix declared on the root), with optional attributes
+ * and child elements. Used for typed `<value>`s and the `IVL_TS`/`PIVL_TS`
+ * `<effectiveTime>` siblings.
+ *
+ * @internal
+ */
+export function typedEl(
+  doc: Document,
+  name: string,
+  xsiType: string,
+  attrs?: Attrs,
+  ...children: readonly Element[]
+): Element {
+  const e = el(doc, name, attrs, ...children);
+  e.setAttributeNS(XSI_NS, "xsi:type", xsiType);
+  return e;
+}
+
+/**
  * Create a `<value xsi:type="…">` element and set its `xsi:type` in the XSI
  * namespace (so it serializes as the `xsi:` prefix declared on the root).
  *
  * @internal
  */
 export function typedValue(doc: Document, xsiType: string, attrs?: Attrs): Element {
-  const e = el(doc, "value", attrs);
-  e.setAttributeNS(XSI_NS, "xsi:type", xsiType);
-  return e;
+  return typedEl(doc, "value", xsiType, attrs);
 }

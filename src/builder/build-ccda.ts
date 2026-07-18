@@ -14,34 +14,45 @@
  * `parseCcda(doc.toString()).toString() === doc.toString()` (the serializer
  * fixed-point) holds automatically. A clean build produces **zero warnings**.
  *
- * **Scope (first builder slice).** This slice emits a **Continuity of Care
- * Document (CCD)** with the full US Realm Header and the two safety-critical
- * reconciliation sections — **Problems** and **Allergies** (including the
- * `negationInd` "No Known Allergies" form, the single most safety-critical emit
- * rule) — populated from structured input. The other CCD `SHALL` sections
- * (Medications, Results) are emitted as spec-clean, empty `nullFlavor="NI"`
- * sections so the document is conformant. Richer section builders, the other
- * eleven document types, and the bring-your-own-credentials terminology adapter
- * are deferred to a later CCDA-P7 increment.
+ * **Scope (builder, second slice).** This slice emits a **Continuity of Care
+ * Document (CCD)** with the full US Realm Header and populated **discrete-data**
+ * sections: the reconciliation triad **Problems** and **Allergies** (including
+ * the `negationInd` "No Known Allergies" form, the single most safety-critical
+ * emit rule), plus **Medications** (RxNorm drug, dose, route, and the two
+ * `effectiveTime` timing siblings), **Results** (Result Organizer → Result
+ * Observation with a UCUM-checked `PQ`, coded, or string value, reference range,
+ * and interpretation), and **Vital Signs** (Vital Signs Organizer → Vital Sign
+ * Observation, LOINC + UCUM). Every section carries the entries-required
+ * templateId only when it has entries; a section for which no content is supplied
+ * is emitted as a spec-clean empty `nullFlavor="NI"` section so the document
+ * stays conformant. The other eleven document types, C-CDA document *editing*,
+ * and the bring-your-own-credentials terminology adapter are deferred to a later
+ * CCDA-P7 increment.
  *
  * @packageDocumentation
  */
 
-import { LOINC, RXNORM, SNOMED_CT } from "../model/code-systems.js";
+import { INTERPRETATION, LOINC, NCI_ROUTE, RXNORM, SNOMED_CT } from "../model/code-systems.js";
 import type { CcdaDocument } from "../model/document.js";
 import { parseCcda } from "../parser/index.js";
 import {
   ALLERGY_CONCERN_ACT,
   ALLERGY_OBSERVATION,
   CRITICALITY_OBSERVATION,
+  MEDICATION_ACTIVITY,
+  MEDICATION_INFORMATION,
   PROBLEM_CONCERN_ACT,
   PROBLEM_OBSERVATION,
   REACTION_OBSERVATION,
+  RESULT_OBSERVATION,
+  RESULT_ORGANIZER,
   SEVERITY_OBSERVATION,
+  VITAL_SIGN_OBSERVATION,
+  VITAL_SIGNS_ORGANIZER,
 } from "../model/entries/shared.js";
 import { serializeDocument } from "../serialize/serialize-dom.js";
 
-import { el, newCdaDocument, textEl, typedValue, type Attrs } from "./dom.js";
+import { el, newCdaDocument, textEl, typedEl, typedValue, type Attrs } from "./dom.js";
 import type { Document, Element } from "@xmldom/xmldom";
 
 /** The US Realm Header template OID (root); the R2.1 stamp lives in `@extension`. @internal */
@@ -56,6 +67,10 @@ const SYNTH_ROOT = "2.16.840.1.113883.19.5.99999";
 const ACT_CODE = "2.16.840.1.113883.5.4";
 /** The LOINC document-type code + title for a CCD. @internal */
 const CCD_DOC_CODE = { code: "34133-9", displayName: "Summarization of Episode Note" } as const;
+/** The R2.1 `@extension` stamp the Medication Activity/Information templates carry. @internal */
+const MED_EXT = "2014-06-09";
+/** The R2.1 `@extension` stamp the Vital Sign *Observation* template carries. @internal */
+const VITAL_OBS_EXT = "2014-06-09";
 
 /**
  * A coded value for the builder — the tuple the parser reads back as a `CD`.
@@ -180,9 +195,176 @@ export interface BuildCcdaAllergy {
 }
 
 /**
- * Input to {@link buildCcda}. `patient` is required; `problems` and `allergies`
- * default to empty (their sections are then emitted as spec-clean empty
- * `nullFlavor="NI"` sections). `documentType` is `"ccd"` in this slice.
+ * A dimensioned quantity for the builder — a numeric `value` and a **UCUM** unit
+ * (the parser round-trips it as a `PQ`). The unit is emitted verbatim: it is the
+ * caller's responsibility that it be valid, case-correct UCUM (`"mg/dL"`,
+ * `"mm[Hg]"`, `"10*3/uL"`), because a non-UCUM or case-slipped unit is a real
+ * defect the parser is designed to flag (`NON_UCUM_UNIT` / `UCUM_CASE_SUSPECT`) —
+ * the builder never silently "corrects" a unit to a confident-wrong value.
+ *
+ * @example
+ * ```ts
+ * import type { BuildQuantity } from "@cosyte/ccda";
+ * const glucose: BuildQuantity = { value: 95, unit: "mg/dL" };
+ * ```
+ */
+export interface BuildQuantity {
+  /** The numeric magnitude. */
+  readonly value: number;
+  /** The UCUM unit (emitted verbatim — must be valid, case-correct UCUM). */
+  readonly unit: string;
+}
+
+/**
+ * A Medication Activity for the Medications section. `drug` is the RxNorm coded
+ * product (RxNorm by default). `dose`, `route`, `frequency`, and `duration` are
+ * all optional and **never guessed**: an omitted `dose`/`route` is emitted as
+ * absent, which the parser then flags (`MISSING_DOSE_QUANTITY` /
+ * `MISSING_ROUTE_CODE`) rather than being defaulted to a confident-wrong value.
+ * `frequency` is the periodic timing (a `PIVL_TS` period, e.g. every 8 hours);
+ * `duration` is the therapy window (an `IVL_TS` low/high) — the two are emitted
+ * as distinct `effectiveTime` siblings, never conflated.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaMedication } from "@cosyte/ccda";
+ * const lisinopril: BuildCcdaMedication = {
+ *   drug: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" },
+ *   dose: { value: 1, unit: "{tablet}" },
+ *   route: { code: "C38288", displayName: "Oral" },
+ *   frequency: { value: 24, unit: "h" },
+ * };
+ * ```
+ */
+export interface BuildCcdaMedication {
+  /** The coded drug product (RxNorm by default, or NDC). */
+  readonly drug: BuildCode;
+  /** The dose per administration (`doseQuantity`); absent → parser flags it. */
+  readonly dose?: BuildQuantity;
+  /** The administration route (`routeCode`); NCI Thesaurus by default. */
+  readonly route?: BuildCode;
+  /** The periodic dosing frequency — a `PIVL_TS` period (e.g. `{ value: 8, unit: "h" }`). */
+  readonly frequency?: BuildQuantity;
+  /** The therapy window (`IVL_TS`) as HL7 date strings; either bound optional. */
+  readonly duration?: { readonly low?: string; readonly high?: string };
+  /** Active / resolved / inactive; maps to the `statusCode`. Defaults to `"active"`. */
+  readonly status?: "active" | "resolved" | "inactive";
+}
+
+/**
+ * One member observation of a Results panel — a Result Observation. `test` is the
+ * LOINC test code. **Exactly one** value form is required: a UCUM `quantity`
+ * (`xsi:type="PQ"`), a `codedValue` (`xsi:type="CD"`), or a `stringValue`
+ * (`xsi:type="ST"`) — the builder throws if none (or more than one) is set, so a
+ * result value is never silently dropped or invented. `referenceRange` (when
+ * given) is emitted as a structured `IVL_PQ` so it round-trips numerically.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaResult } from "@cosyte/ccda";
+ * const glucose: BuildCcdaResult = {
+ *   test: { code: "2345-7", displayName: "Glucose" },
+ *   quantity: { value: 95, unit: "mg/dL" },
+ *   referenceRange: { low: { value: 70, unit: "mg/dL" }, high: { value: 100, unit: "mg/dL" } },
+ *   interpretation: { code: "N", displayName: "Normal" },
+ * };
+ * ```
+ */
+export interface BuildCcdaResult {
+  /** The LOINC test code. */
+  readonly test: BuildCode;
+  /** A `PQ` value (UCUM). Exactly one of `quantity`/`codedValue`/`stringValue`. */
+  readonly quantity?: BuildQuantity;
+  /** A `CD` value. Exactly one of `quantity`/`codedValue`/`stringValue`. */
+  readonly codedValue?: BuildCode;
+  /** A free-text (`ST`) value. Exactly one of `quantity`/`codedValue`/`stringValue`. */
+  readonly stringValue?: string;
+  /** The normal interval, emitted as a structured `IVL_PQ`; either bound optional. */
+  readonly referenceRange?: { readonly low?: BuildQuantity; readonly high?: BuildQuantity };
+  /** The H/L/N interpretation (HL7 ObservationInterpretation by default), optional. */
+  readonly interpretation?: BuildCode;
+  /** The observation time as an HL7 date string, optional. */
+  readonly effectiveTime?: string;
+}
+
+/**
+ * A Results panel — a Result Organizer (the battery/panel wrapper, e.g. a CBC)
+ * around one or more {@link BuildCcdaResult} member observations. `code` is the
+ * panel LOINC; `status` maps to the organizer `statusCode` (default
+ * `"completed"`).
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaResultPanel } from "@cosyte/ccda";
+ * const cmp: BuildCcdaResultPanel = {
+ *   code: { code: "24323-8", displayName: "Comprehensive metabolic panel" },
+ *   results: [{ test: { code: "2345-7", displayName: "Glucose" }, quantity: { value: 95, unit: "mg/dL" } }],
+ * };
+ * ```
+ */
+export interface BuildCcdaResultPanel {
+  /** The panel/battery LOINC code. */
+  readonly code: BuildCode;
+  /** The organizer `statusCode`; defaults to `"completed"`. */
+  readonly status?: string;
+  /** The member Result Observations (at least one for a populated panel). */
+  readonly results: readonly BuildCcdaResult[];
+}
+
+/**
+ * One member reading of a Vital Signs panel — a Vital Sign Observation. `code` is
+ * the LOINC vital (e.g. `8480-6` systolic BP); `quantity` is the UCUM-checked
+ * `PQ` reading (required — a vital sign without a value is not emitted).
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaVital } from "@cosyte/ccda";
+ * const systolic: BuildCcdaVital = {
+ *   code: { code: "8480-6", displayName: "Systolic blood pressure" },
+ *   quantity: { value: 120, unit: "mm[Hg]" },
+ * };
+ * ```
+ */
+export interface BuildCcdaVital {
+  /** The LOINC vital-sign code. */
+  readonly code: BuildCode;
+  /** The reading as a UCUM `PQ` (required). */
+  readonly quantity: BuildQuantity;
+  /** The H/L/N interpretation (HL7 ObservationInterpretation by default), optional. */
+  readonly interpretation?: BuildCode;
+  /** The reading time as an HL7 date string, optional. */
+  readonly effectiveTime?: string;
+}
+
+/**
+ * A Vital Signs panel — a Vital Signs Organizer clustering the readings taken in
+ * one event (e.g. a set of vitals at a single visit). `status` maps to the
+ * organizer `statusCode` (default `"completed"`); `vitals` are the member
+ * readings.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaVitalsPanel } from "@cosyte/ccda";
+ * const panel: BuildCcdaVitalsPanel = {
+ *   vitals: [
+ *     { code: { code: "8480-6", displayName: "Systolic blood pressure" }, quantity: { value: 120, unit: "mm[Hg]" } },
+ *     { code: { code: "8462-4", displayName: "Diastolic blood pressure" }, quantity: { value: 80, unit: "mm[Hg]" } },
+ *   ],
+ * };
+ * ```
+ */
+export interface BuildCcdaVitalsPanel {
+  /** The organizer `statusCode`; defaults to `"completed"`. */
+  readonly status?: string;
+  /** The member Vital Sign Observations (at least one for a populated panel). */
+  readonly vitals: readonly BuildCcdaVital[];
+}
+
+/**
+ * Input to {@link buildCcda}. `patient` is required; each clinical collection
+ * (`problems`, `allergies`, `medications`, `results`, `vitalSigns`) defaults to
+ * empty, in which case its section is emitted as a spec-clean empty
+ * `nullFlavor="NI"` section. `documentType` is `"ccd"` in this slice.
  *
  * @example
  * ```ts
@@ -215,6 +397,12 @@ export interface BuildCcdaInit {
   readonly problems?: readonly BuildCcdaProblem[];
   /** Allergy Concerns for the Allergies section; empty section when omitted. */
   readonly allergies?: readonly BuildCcdaAllergy[];
+  /** Medication Activities for the Medications section; empty section when omitted. */
+  readonly medications?: readonly BuildCcdaMedication[];
+  /** Result panels for the Results section; empty section when omitted. */
+  readonly results?: readonly BuildCcdaResultPanel[];
+  /** Vital Signs panels for the Vital Signs section; empty section when omitted. */
+  readonly vitalSigns?: readonly BuildCcdaVitalsPanel[];
 }
 
 /** A monotonic id generator scoped to one build, for stable act/content ids. @internal */
@@ -242,8 +430,9 @@ function formatEffectiveTime(input: Date | string | undefined): string {
  * @param init - The document content; see {@link BuildCcdaInit}. `patient` is required.
  * @returns The parsed document — the parse of the spec-clean XML just emitted.
  * @throws {TypeError} When `documentType` is anything other than `"ccd"` (the
- *   only type this slice supports), or when an allergy is neither an `allergen`
- *   nor `noKnownAllergy`.
+ *   only type this slice supports), when an allergy is neither an `allergen` nor
+ *   `noKnownAllergy`, or when a result does not carry exactly one value form
+ *   (`quantity` / `codedValue` / `stringValue`).
  * @example
  * ```ts
  * import { buildCcda, serializeCcda } from "@cosyte/ccda";
@@ -277,8 +466,9 @@ export function buildCcda(init: BuildCcdaInit): CcdaDocument {
   const structuredBody = el(doc, "structuredBody");
   structuredBody.appendChild(problemsSection(doc, init.problems ?? [], id));
   structuredBody.appendChild(allergiesSection(doc, init.allergies ?? [], id));
-  structuredBody.appendChild(emptySection(doc, MEDICATIONS_SECTION_BASE, "10160-0", "Medications"));
-  structuredBody.appendChild(emptySection(doc, RESULTS_SECTION_BASE, "30954-2", "Results"));
+  structuredBody.appendChild(medicationsSection(doc, init.medications ?? [], id));
+  structuredBody.appendChild(resultsSection(doc, init.results ?? [], id));
+  structuredBody.appendChild(vitalsSection(doc, init.vitalSigns ?? [], id));
   root.appendChild(el(doc, "component", undefined, structuredBody));
 
   return parseCcda(serializeDocument(doc));
@@ -522,6 +712,8 @@ const ALLERGIES_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.6";
 const MEDICATIONS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.1";
 /** @internal */
 const RESULTS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.3";
+/** @internal */
+const VITALS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.4";
 
 /** Build the Problems section — populated, or empty when there are none. @internal */
 function problemsSection(
@@ -727,4 +919,340 @@ function concernStatusCode(status: "active" | "resolved" | "inactive" | undefine
     default:
       return "active";
   }
+}
+
+/** A `PQ`-shaped element (`<name value unit>`) from a {@link BuildQuantity}. @internal */
+function pqEl(doc: Document, name: string, q: BuildQuantity): Element {
+  return el(doc, name, { value: q.value.toString(), unit: q.unit });
+}
+
+/** Build the Medications section — populated, or empty when there are none. @internal */
+function medicationsSection(
+  doc: Document,
+  meds: readonly BuildCcdaMedication[],
+  id: (prefix: string) => string,
+): Element {
+  if (meds.length === 0) {
+    return emptySection(doc, MEDICATIONS_SECTION_BASE, "10160-0", "Medications");
+  }
+  const text = el(doc, "text");
+  const entries: Element[] = [];
+  for (const m of meds) {
+    const contentId = id("med-txt");
+    // The narrative must carry the drug label so it agrees with the coded product
+    // (the parser reconciles medication code ↔ narrative).
+    text.appendChild(textEl(doc, "content", m.drug.displayName, { ID: contentId }));
+    entries.push(medicationEntry(doc, m, contentId, id));
+  }
+  const section = sectionElement(
+    doc,
+    MEDICATIONS_SECTION_BASE,
+    "10160-0",
+    "Medications",
+    text,
+    true,
+  );
+  for (const entry of entries) section.appendChild(entry);
+  return el(doc, "component", undefined, section);
+}
+
+/** Build one Medication Activity `<entry>`. @internal */
+function medicationEntry(
+  doc: Document,
+  m: BuildCcdaMedication,
+  contentId: string,
+  id: (prefix: string) => string,
+): Element {
+  const sbadm = el(
+    doc,
+    "substanceAdministration",
+    { classCode: "SBADM", moodCode: "EVN" },
+    el(doc, "templateId", { root: MEDICATION_ACTIVITY, extension: MED_EXT }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("med") }),
+    el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
+    el(doc, "statusCode", { code: concernStatusCode(m.status) }),
+  );
+  // Timing is two distinct effectiveTime siblings — an IVL_TS therapy window and
+  // a PIVL_TS periodic frequency — never conflated (mirrors how the parser reads
+  // them back). Only what the caller supplied is emitted.
+  if (m.duration !== undefined) {
+    const ivl = typedEl(doc, "effectiveTime", "IVL_TS");
+    if (m.duration.low !== undefined) ivl.appendChild(el(doc, "low", { value: m.duration.low }));
+    if (m.duration.high !== undefined) ivl.appendChild(el(doc, "high", { value: m.duration.high }));
+    sbadm.appendChild(ivl);
+  }
+  if (m.frequency !== undefined) {
+    sbadm.appendChild(
+      typedEl(
+        doc,
+        "effectiveTime",
+        "PIVL_TS",
+        { institutionSpecified: "false" },
+        pqEl(doc, "period", m.frequency),
+      ),
+    );
+  }
+  // Route + dose are safety-critical and never defaulted: an omitted one is left
+  // absent so the parser flags it (MISSING_ROUTE_CODE / MISSING_DOSE_QUANTITY),
+  // rather than being invented into a confident-wrong value.
+  if (m.route !== undefined) {
+    sbadm.appendChild(
+      codeEl(doc, "routeCode", { ...m.route, codeSystem: m.route.codeSystem ?? NCI_ROUTE }),
+    );
+  }
+  if (m.dose !== undefined) sbadm.appendChild(pqEl(doc, "doseQuantity", m.dose));
+  sbadm.appendChild(medicationConsumable(doc, m.drug));
+
+  return el(doc, "entry", undefined, sbadm);
+}
+
+/** Build the `consumable/manufacturedProduct` carrying the RxNorm drug code. @internal */
+function medicationConsumable(doc: Document, drug: BuildCode): Element {
+  const material = el(
+    doc,
+    "manufacturedMaterial",
+    undefined,
+    codeEl(doc, "code", { ...drug, codeSystem: drug.codeSystem ?? RXNORM }),
+  );
+  const product = el(
+    doc,
+    "manufacturedProduct",
+    { classCode: "MANU" },
+    el(doc, "templateId", { root: MEDICATION_INFORMATION, extension: MED_EXT }),
+    material,
+  );
+  return el(doc, "consumable", undefined, product);
+}
+
+/** Build the Results section — populated, or empty when there are none. @internal */
+function resultsSection(
+  doc: Document,
+  panels: readonly BuildCcdaResultPanel[],
+  id: (prefix: string) => string,
+): Element {
+  if (panels.length === 0) {
+    return emptySection(doc, RESULTS_SECTION_BASE, "30954-2", "Results");
+  }
+  const text = el(doc, "text");
+  const entries = panels.map((panel) => resultOrganizerEntry(doc, panel, text, id));
+  const section = sectionElement(doc, RESULTS_SECTION_BASE, "30954-2", "Results", text, true);
+  for (const entry of entries) section.appendChild(entry);
+  return el(doc, "component", undefined, section);
+}
+
+/** Build one Result Organizer `<entry>` (the panel/battery). @internal */
+function resultOrganizerEntry(
+  doc: Document,
+  panel: BuildCcdaResultPanel,
+  text: Element,
+  id: (prefix: string) => string,
+): Element {
+  const organizer = el(
+    doc,
+    "organizer",
+    { classCode: "BATTERY", moodCode: "EVN" },
+    el(doc, "templateId", { root: RESULT_ORGANIZER, extension: R21 }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("res-org") }),
+    codeEl(doc, "code", {
+      ...panel.code,
+      codeSystem: panel.code.codeSystem ?? LOINC,
+      codeSystemName: panel.code.codeSystemName ?? "LOINC",
+    }),
+    el(doc, "statusCode", { code: panel.status ?? "completed" }),
+  );
+  for (const result of panel.results) {
+    organizer.appendChild(
+      el(doc, "component", undefined, resultObservation(doc, result, text, id)),
+    );
+  }
+  return el(doc, "entry", undefined, organizer);
+}
+
+/** Build one Result Observation, appending its narrative content. @internal */
+function resultObservation(
+  doc: Document,
+  result: BuildCcdaResult,
+  text: Element,
+  id: (prefix: string) => string,
+): Element {
+  const value = observationValue(doc, result.test, result);
+  const contentId = id("res-txt");
+  text.appendChild(
+    textEl(doc, "content", observationNarrative(result.test, result), { ID: contentId }),
+  );
+
+  const obs = el(
+    doc,
+    "observation",
+    { classCode: "OBS", moodCode: "EVN" },
+    el(doc, "templateId", { root: RESULT_OBSERVATION, extension: R21 }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("res-obs") }),
+    codeEl(doc, "code", {
+      ...result.test,
+      codeSystem: result.test.codeSystem ?? LOINC,
+      codeSystemName: result.test.codeSystemName ?? "LOINC",
+    }),
+    el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
+    el(doc, "statusCode", { code: "completed" }),
+  );
+  if (result.effectiveTime !== undefined) {
+    obs.appendChild(el(doc, "effectiveTime", { value: result.effectiveTime }));
+  }
+  obs.appendChild(value);
+  if (result.interpretation !== undefined) {
+    obs.appendChild(
+      codeEl(doc, "interpretationCode", {
+        ...result.interpretation,
+        codeSystem: result.interpretation.codeSystem ?? INTERPRETATION,
+      }),
+    );
+  }
+  if (result.referenceRange !== undefined) {
+    obs.appendChild(referenceRangeEl(doc, result.referenceRange));
+  }
+  return obs;
+}
+
+/**
+ * Build a result's typed `<value>`, enforcing **exactly one** value form. A UCUM
+ * `quantity` → `xsi:type="PQ"`; a `codedValue` → `xsi:type="CD"` (SNOMED CT by
+ * default); a `stringValue` → `xsi:type="ST"`. Throws when none (or more than
+ * one) is set — a result value is never dropped or invented.
+ * @internal
+ */
+function observationValue(doc: Document, testCode: BuildCode, r: BuildCcdaResult): Element {
+  const forms = [r.quantity, r.codedValue, r.stringValue].filter((v) => v !== undefined).length;
+  if (forms !== 1) {
+    throw new TypeError(
+      `buildCcda: result "${testCode.displayName}" must set exactly one of ` +
+        "`quantity`, `codedValue`, or `stringValue`.",
+    );
+  }
+  if (r.quantity !== undefined) {
+    return typedValue(doc, "PQ", { value: r.quantity.value.toString(), unit: r.quantity.unit });
+  }
+  if (r.codedValue !== undefined) {
+    return typedValue(doc, "CD", {
+      code: r.codedValue.code,
+      codeSystem: r.codedValue.codeSystem ?? SNOMED_CT,
+      displayName: r.codedValue.displayName,
+      codeSystemName: r.codedValue.codeSystemName,
+    });
+  }
+  const st = typedValue(doc, "ST");
+  st.appendChild(doc.createTextNode(r.stringValue ?? ""));
+  return st;
+}
+
+/** A human-readable narrative line for a result/vital observation. @internal */
+function observationNarrative(code: BuildCode, r: BuildCcdaResult): string {
+  if (r.quantity !== undefined) {
+    return `${code.displayName}: ${r.quantity.value.toString()} ${r.quantity.unit}`;
+  }
+  if (r.codedValue !== undefined) return `${code.displayName}: ${r.codedValue.displayName}`;
+  return `${code.displayName}: ${r.stringValue ?? ""}`;
+}
+
+/** Build a structured `<referenceRange>` (`observationRange/value xsi:type="IVL_PQ"`). @internal */
+function referenceRangeEl(
+  doc: Document,
+  range: { readonly low?: BuildQuantity; readonly high?: BuildQuantity },
+): Element {
+  const ivl = typedEl(doc, "value", "IVL_PQ");
+  if (range.low !== undefined) ivl.appendChild(pqEl(doc, "low", range.low));
+  if (range.high !== undefined) ivl.appendChild(pqEl(doc, "high", range.high));
+  return el(doc, "referenceRange", undefined, el(doc, "observationRange", undefined, ivl));
+}
+
+/** The SNOMED CT "Vital signs" cluster code the Vital Signs Organizer carries. @internal */
+const VITAL_SIGNS_CLUSTER = {
+  code: "46680005",
+  codeSystem: SNOMED_CT,
+  displayName: "Vital signs",
+  codeSystemName: "SNOMED CT",
+} as const;
+
+/** Build the Vital Signs section — populated, or empty when there are none. @internal */
+function vitalsSection(
+  doc: Document,
+  panels: readonly BuildCcdaVitalsPanel[],
+  id: (prefix: string) => string,
+): Element {
+  if (panels.length === 0) {
+    return emptySection(doc, VITALS_SECTION_BASE, "8716-3", "Vital Signs");
+  }
+  const text = el(doc, "text");
+  const entries = panels.map((panel) => vitalsOrganizerEntry(doc, panel, text, id));
+  const section = sectionElement(doc, VITALS_SECTION_BASE, "8716-3", "Vital Signs", text, true);
+  for (const entry of entries) section.appendChild(entry);
+  return el(doc, "component", undefined, section);
+}
+
+/** Build one Vital Signs Organizer `<entry>` (a reading cluster). @internal */
+function vitalsOrganizerEntry(
+  doc: Document,
+  panel: BuildCcdaVitalsPanel,
+  text: Element,
+  id: (prefix: string) => string,
+): Element {
+  const organizer = el(
+    doc,
+    "organizer",
+    { classCode: "CLUSTER", moodCode: "EVN" },
+    el(doc, "templateId", { root: VITAL_SIGNS_ORGANIZER, extension: R21 }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("vit-org") }),
+    codeEl(doc, "code", VITAL_SIGNS_CLUSTER),
+    el(doc, "statusCode", { code: panel.status ?? "completed" }),
+  );
+  for (const vital of panel.vitals) {
+    organizer.appendChild(el(doc, "component", undefined, vitalObservation(doc, vital, text, id)));
+  }
+  return el(doc, "entry", undefined, organizer);
+}
+
+/** Build one Vital Sign Observation, appending its narrative content. @internal */
+function vitalObservation(
+  doc: Document,
+  vital: BuildCcdaVital,
+  text: Element,
+  id: (prefix: string) => string,
+): Element {
+  const contentId = id("vit-txt");
+  text.appendChild(
+    textEl(
+      doc,
+      "content",
+      `${vital.code.displayName}: ${vital.quantity.value.toString()} ${vital.quantity.unit}`,
+      { ID: contentId },
+    ),
+  );
+  const obs = el(
+    doc,
+    "observation",
+    { classCode: "OBS", moodCode: "EVN" },
+    el(doc, "templateId", { root: VITAL_SIGN_OBSERVATION, extension: VITAL_OBS_EXT }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("vit-obs") }),
+    codeEl(doc, "code", {
+      ...vital.code,
+      codeSystem: vital.code.codeSystem ?? LOINC,
+      codeSystemName: vital.code.codeSystemName ?? "LOINC",
+    }),
+    el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
+    el(doc, "statusCode", { code: "completed" }),
+  );
+  if (vital.effectiveTime !== undefined) {
+    obs.appendChild(el(doc, "effectiveTime", { value: vital.effectiveTime }));
+  }
+  obs.appendChild(
+    typedValue(doc, "PQ", { value: vital.quantity.value.toString(), unit: vital.quantity.unit }),
+  );
+  if (vital.interpretation !== undefined) {
+    obs.appendChild(
+      codeEl(doc, "interpretationCode", {
+        ...vital.interpretation,
+        codeSystem: vital.interpretation.codeSystem ?? INTERPRETATION,
+      }),
+    );
+  }
+  return obs;
 }

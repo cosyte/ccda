@@ -23,9 +23,10 @@ substrate for C-CDA's XML.
 > the deferred clinical sections (Plan of Treatment / Functional Status / Mental Status / Family
 > History / Past Medical History), and per-document-type required-section (SHALL) validation — plus a
 > **spec-clean, round-trip serializer** (`serializeCcda` / `toString()`) and immutable copy-with
-> (`withWarnings`). A document **builder** (`buildCcda`) ships its first slice — it emits a spec-clean
-> CCD with the US Realm header and the Problems + Allergies sections; broader section and document-type
-> coverage lands in a later increment.
+> (`withWarnings`). A document **builder** (`buildCcda`) emits a spec-clean CCD with the US Realm header
+> and populated **Problems, Allergies, Medications, Results, and Vital Signs** sections (each
+> round-tripping through `parseCcda`); the other document types and remaining sections land in a later
+> increment.
 
 ## Install
 
@@ -135,7 +136,7 @@ const out = serializeCcda(doc); // === doc.toString()
 > A hand-constructed `CcdaDocument` (not produced by `parseCcda` or `buildCcda`) retains no source XML,
 > so `toString()` throws. To construct a document from scratch, use the builder below.
 
-## Build a document (Phase 7, first slice)
+## Build a document (Phase 7)
 
 `buildCcda(init)` is the emit _factory_ symmetric with `parseCcda`: from structured input it assembles
 a **spec-clean C-CDA R2.1 CCD** and returns a real `CcdaDocument`. It emits through the same DOM the
@@ -156,16 +157,58 @@ const doc = buildCcda({
     },
     { noKnownAllergy: true }, // emitted as a negation, never as an "unknown"
   ],
+  medications: [
+    {
+      drug: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" }, // RxNorm
+      dose: { value: 1, unit: "{tablet}" },
+      route: { code: "C38288", displayName: "Oral" }, // NCI Thesaurus
+      frequency: { value: 24, unit: "h" }, // PIVL_TS period
+    },
+  ],
+  results: [
+    {
+      code: { code: "24323-8", displayName: "Comprehensive metabolic panel" },
+      results: [
+        {
+          test: { code: "2345-7", displayName: "Glucose" }, // LOINC
+          quantity: { value: 95, unit: "mg/dL" }, // UCUM
+          referenceRange: {
+            low: { value: 70, unit: "mg/dL" },
+            high: { value: 100, unit: "mg/dL" },
+          },
+          interpretation: { code: "N", displayName: "Normal" },
+        },
+      ],
+    },
+  ],
+  vitalSigns: [
+    {
+      vitals: [
+        {
+          code: { code: "8480-6", displayName: "Systolic blood pressure" },
+          quantity: { value: 120, unit: "mm[Hg]" },
+        },
+        {
+          code: { code: "8462-4", displayName: "Diastolic blood pressure" },
+          quantity: { value: 80, unit: "mm[Hg]" },
+        },
+      ],
+    },
+  ],
 });
 
 const xml = serializeCcda(doc); // spec-clean C-CDA R2.1
 ```
 
-This first slice emits the US Realm header (with a device author + custodian) and the two
-safety-critical reconciliation sections — **Problems** and **Allergies** (including the `negationInd`
-"No Known Allergies" form); the other CCD SHALL sections (Medications, Results) are emitted as
-spec-clean empty `nullFlavor="NI"` sections. Richer section builders, the other document types, and a
-bring-your-own-credentials terminology adapter land in a later increment.
+`buildCcda` emits the US Realm header (with a device author + custodian) and populated **Problems**,
+**Allergies** (including the `negationInd` "No Known Allergies" form), **Medications** (RxNorm drug,
+dose, `routeCode`, and the two `effectiveTime` timing siblings), **Results** (Result Organizer → Result
+Observation with a UCUM `PQ` / coded / string value, reference range, interpretation), and **Vital
+Signs** (LOINC + UCUM). Safety-critical values are never guessed: an omitted medication dose/route is
+left absent so the parser flags it (rather than being defaulted), and a `PQ` unit is emitted verbatim
+and re-checked against the computable UCUM grammar. A section for which no content is supplied is
+emitted as a spec-clean empty `nullFlavor="NI"` section. The other eleven document types, the remaining
+sections, and a bring-your-own-credentials terminology adapter land in a later increment.
 
 ## What it extracts (Phase 5) — Procedures, Encounters, Social History
 
@@ -248,9 +291,13 @@ checks.
   this is recognition only — membership validation needs a licensed terminology service.
 - **Serializer re-emits a parsed document; the builder constructs one** — `serializeCcda` / `toString()`
   faithfully re-emit a _parsed_ document (the spec-clean emit half of Postel's Law). To construct a
-  document from scratch, `buildCcda` emits a spec-clean CCD — **first slice: the US Realm header +
-  Problems + Allergies only**; other sections, the other document types, and editing an existing
-  document are a later increment.
+  document from scratch, `buildCcda` emits a spec-clean CCD with the US Realm header + **Problems,
+  Allergies, Medications, Results, and Vital Signs**; the remaining sections, the other eleven document
+  types, and editing an existing document are a later increment. "Spec-clean" here means well-formed,
+  correctly-templated, and **round-tripping** through `parseCcda` with zero warnings — not yet fully
+  Schematron-complete: some `SHALL`-cardinality slots the parser does not enforce (notably each
+  observation/act's `effectiveTime`) are emitted only when supplied, so a `buildCcda` document is not
+  guaranteed to pass an external IG validator until that gap is closed.
 - **Vendor profiles tolerate, they never relax safety** — a `CcdaProfile` only downgrades the
   **non-safety-critical** deviations it expects (re-badged `PROFILE_QUIRK_APPLIED`, flagged
   `expected`); it can never tolerate a dose/allergen/unit/identity/code-system warning (refused at

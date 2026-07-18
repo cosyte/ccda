@@ -64,6 +64,12 @@ export type {
   BuildCcdaPatient,
   BuildCcdaProblem,
   BuildCcdaAllergy,
+  BuildCcdaMedication,
+  BuildCcdaResultPanel,
+  BuildCcdaResult,
+  BuildCcdaVitalsPanel,
+  BuildCcdaVital,
+  BuildQuantity,
   BuildCode,
 } from "./builder/index.js";
 
