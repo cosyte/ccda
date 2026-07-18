@@ -237,6 +237,41 @@ out === doc.toString(); // => true
 serializeCcda(parseCcda(out)) === out; // => true
 ```
 
-> `serializeCcda` re-emits a **parsed** document. Constructing or editing a document from scratch needs
-> the document **builder** API, which is a later phase — see
-> [Troubleshooting](./troubleshooting#whats-not-yet-parsed) for the full not-yet list.
+> `serializeCcda` re-emits a **parsed** document. To construct one from scratch, use `buildCcda`
+> (below). Editing an existing document, and section/document-type coverage beyond the builder's first
+> slice, are a later increment — see [Troubleshooting](./troubleshooting#whats-not-yet-parsed).
+
+---
+
+## 5. Build a spec-clean CCD from scratch
+
+**The problem:** you have structured clinical data (a patient, some problems, some allergies) and need
+a valid C-CDA document to send — without hand-writing XML or memorizing templateIds.
+
+`buildCcda(init)` is the emit _factory_ symmetric with `parseCcda`. It emits through the same DOM the
+parser reads, so a built document round-trips by construction and a clean build carries zero warnings.
+
+```ts runnable
+import { buildCcda, serializeCcda, parseCcda } from "@cosyte/ccda";
+
+const doc = buildCcda({
+  patient: { mrn: "MRN-00042", given: ["Jane"], family: "Doe", gender: "F", birthTime: "19800101" },
+  problems: [{ problem: { code: "59621000", displayName: "Essential hypertension" }, status: "active" }],
+  allergies: [
+    { allergen: { code: "7980", displayName: "Penicillin G" }, reaction: { code: "247472004", displayName: "Hives" } },
+    { noKnownAllergy: true }, // a negation, never an "unknown"
+  ],
+});
+
+doc.getMrn(); // => "MRN-00042"
+doc.getProblems().length; // => 1
+doc.warnings.length; // => 0
+
+// Round-trips by construction: re-parsing the emitted XML is a fixed point.
+const out = serializeCcda(doc);
+parseCcda(out).toString() === out; // => true
+```
+
+> First slice: `buildCcda` emits a CCD with the US Realm header + Problems + Allergies (the other CCD
+> SHALL sections are emitted empty, `nullFlavor="NI"`). Richer sections, the other document types, and a
+> bring-your-own-credentials terminology adapter are a later increment.

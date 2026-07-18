@@ -20,8 +20,9 @@ configured XXE-safe.
 > Social-History smoking status, the deferred clinical sections (Plan of Treatment / Functional Status /
 > Mental Status / Family History / Past Medical History), per-document-type required-section (SHALL)
 > validation, and a **round-trip serializer** (`serializeCcda` / `toString()`). A document **builder**
-> API (constructing or editing a document from scratch) lands in a later phase — see
-> [Troubleshooting](./troubleshooting) for the exact "what's not yet parsed" list.
+> (`buildCcda`) ships its first slice — it emits a spec-clean CCD with the US Realm header + Problems +
+> Allergies; broader section/document-type coverage and editing an existing document land in a later
+> increment — see [Troubleshooting](./troubleshooting) for the exact "what's not yet parsed" list.
 
 ## Install
 
@@ -119,6 +120,8 @@ non-`ClinicalDocument` root) always throws.
   variable-precision v3 datetime parsing and null-flavor handling.
 - **Serialize** — `serializeCcda(doc)` / `doc.toString()` re-emits a **parsed** document as spec-clean
   XML (a fixed point), with no silent loss.
+- **Build** — `buildCcda(init)` constructs a spec-clean CCD (US Realm header + Problems + Allergies) from
+  structured input, round-tripping through the same parse model.
 
 ## Next
 

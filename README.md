@@ -23,7 +23,9 @@ substrate for C-CDA's XML.
 > the deferred clinical sections (Plan of Treatment / Functional Status / Mental Status / Family
 > History / Past Medical History), and per-document-type required-section (SHALL) validation — plus a
 > **spec-clean, round-trip serializer** (`serializeCcda` / `toString()`) and immutable copy-with
-> (`withWarnings`). A document **builder** API lands in a later phase.
+> (`withWarnings`). A document **builder** (`buildCcda`) ships its first slice — it emits a spec-clean
+> CCD with the US Realm header and the Problems + Allergies sections; broader section and document-type
+> coverage lands in a later increment.
 
 ## Install
 
@@ -130,8 +132,40 @@ const out = serializeCcda(doc); // === doc.toString()
   which returns a **new** document with extra warnings appended, sharing every parsed field by
   reference and leaving the original untouched.
 
-> A hand-constructed document (not produced by `parseCcda`) retains no source XML, so `toString()`
-> throws — a document builder API lands in a later phase.
+> A hand-constructed `CcdaDocument` (not produced by `parseCcda` or `buildCcda`) retains no source XML,
+> so `toString()` throws. To construct a document from scratch, use the builder below.
+
+## Build a document (Phase 7, first slice)
+
+`buildCcda(init)` is the emit _factory_ symmetric with `parseCcda`: from structured input it assembles
+a **spec-clean C-CDA R2.1 CCD** and returns a real `CcdaDocument`. It emits through the same DOM the
+parser reads, so a built document round-trips by construction — it parses back to the same structured
+content, and `parseCcda(doc.toString()).toString() === doc.toString()`. A clean build carries zero
+warnings.
+
+```ts
+import { buildCcda, serializeCcda } from "@cosyte/ccda";
+
+const doc = buildCcda({
+  patient: { mrn: "MRN001", given: ["Jane"], family: "Doe", gender: "F", birthTime: "19800101" },
+  problems: [{ problem: { code: "59621000", displayName: "Essential hypertension" } }],
+  allergies: [
+    {
+      allergen: { code: "7980", displayName: "Penicillin G" },
+      reaction: { code: "247472004", displayName: "Hives" },
+    },
+    { noKnownAllergy: true }, // emitted as a negation, never as an "unknown"
+  ],
+});
+
+const xml = serializeCcda(doc); // spec-clean C-CDA R2.1
+```
+
+This first slice emits the US Realm header (with a device author + custodian) and the two
+safety-critical reconciliation sections — **Problems** and **Allergies** (including the `negationInd`
+"No Known Allergies" form); the other CCD SHALL sections (Medications, Results) are emitted as
+spec-clean empty `nullFlavor="NI"` sections. Richer section builders, the other document types, and a
+bring-your-own-credentials terminology adapter land in a later increment.
 
 ## What it extracts (Phase 5) — Procedures, Encounters, Social History
 
@@ -212,9 +246,11 @@ checks.
 - **LOINC deprecation is a curated set** — `checkLoincDeprecation` flags a curated list of known
   deprecated LOINC codes, not every deprecation in the LOINC release. As with all code-system checks,
   this is recognition only — membership validation needs a licensed terminology service.
-- **Serializer is round-trip emit, not a builder** — `serializeCcda` / `toString()` faithfully re-emit
-  a _parsed_ document (the spec-clean emit half of Postel's Law); constructing or editing a document
-  from scratch needs the builder API, which is a later phase.
+- **Serializer re-emits a parsed document; the builder constructs one** — `serializeCcda` / `toString()`
+  faithfully re-emit a _parsed_ document (the spec-clean emit half of Postel's Law). To construct a
+  document from scratch, `buildCcda` emits a spec-clean CCD — **first slice: the US Realm header +
+  Problems + Allergies only**; other sections, the other document types, and editing an existing
+  document are a later increment.
 - **Vendor profiles tolerate, they never relax safety** — a `CcdaProfile` only downgrades the
   **non-safety-critical** deviations it expects (re-badged `PROFILE_QUIRK_APPLIED`, flagged
   `expected`); it can never tolerate a dose/allergen/unit/identity/code-system warning (refused at

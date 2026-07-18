@@ -88,6 +88,7 @@ out.startsWith("<?xml"); // => true
 serializeCcda(parseCcda(out)) === out; // => true
 ```
 
-> A hand-constructed document (not produced by `parseCcda`) retains no source XML, so `toString()`
-> throws — a document **builder** API (constructing / editing from scratch) lands in a later phase. See
+> A hand-constructed `CcdaDocument` (not produced by `parseCcda` or `buildCcda`) retains no source XML,
+> so `toString()` throws. To construct a document from scratch, use `buildCcda` — its first slice emits a
+> spec-clean CCD (US Realm header + Problems + Allergies). See
 > [Troubleshooting](./troubleshooting) for the full list of what is not yet parsed or built.
