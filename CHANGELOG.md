@@ -12,6 +12,28 @@ this file is maintained by hand (Changesets handles the version bump and publish
 The first pre-alpha release (`0.0.1`) will ship the initial public API surface. The package begins
 its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until first alpha).
 
+### Tooling
+
+- **PHI commit-scanner (`scripts/phi-scan.ts`, `pnpm phi-scan`).** A zero-dependency, C-CDA-shape-aware
+  scanner refuses fixtures (and any `src/` file that embeds a document in a JSDoc `@example`) that
+  carry real-looking PHI, so a real clinical document can never be committed by accident. It does NOT
+  import the package's `@xmldom/xmldom` runtime dep — a commit gate must run without a build and must
+  tolerate the malformed / fragmentary XML a real leaked document arrives as. Detection is
+  element-scoped, not a blind text regex, so a coded value (`<code code="55607006"/>`) or a template
+  OID (`<templateId root="2.16.840…"/>`) never trips it: it reads person-name parts (`given` / `family`
+  wherever they appear — patient, `guardian`, `assignedPerson`, `informant`, `relatedSubject`,
+  providers — plus a bare `name`), the `birthTime@value` DOB, `id@root` / `@extension` identifiers
+  (SSN under the US SSN OID `2.16.840.1.113883.4.1`, bare-numeric MRN / account, dashed SSN anywhere),
+  addresses (`streetAddressLine` / `city` / `postalCode`), `telecom@value` phones (the `555`
+  fake-exchange convention passes), and non-test-domain emails. The detectors are namespace-prefix
+  tolerant (`<given>` == `<v3:given>`), case tolerant, and decode XML character references +
+  `<![CDATA[…]]>` before matching, so a `<family>&#x53;mith</family>` or CDATA-wrapped name is still
+  caught. Synthetic fixtures are positively declared in `scripts/phi-allow-list.txt` (the same
+  allow-list model the byte-strict siblings use); a whole-file bypass requires `--allow-fixture` plus
+  an audit entry in `phi-scan-overrides.md`. Runs at pre-commit (`simple-git-hooks --staged`) and in
+  CI (`run-phi-scan: true`). Dev-tooling only — no change to the published package surface or warning
+  codes.
+
 ### Documentation
 
 - **`docs-content/` now ships the full canonical Diátaxis spine (DOCS-CONTENT-P5), gated hard to the
