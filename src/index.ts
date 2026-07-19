@@ -74,6 +74,7 @@ export type {
   BuildCcdaEncounter,
   BuildCcdaSmokingStatus,
   BuildCcdaFunctionalStatus,
+  BuildCcdaMentalStatus,
   BuildQuantity,
   BuildCode,
 } from "./builder/index.js";

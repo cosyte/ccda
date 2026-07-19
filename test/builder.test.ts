@@ -876,6 +876,120 @@ describe("buildCcda — functional status round-trip", () => {
   });
 });
 
+describe("buildCcda — mental status round-trip", () => {
+  /** A build carrying BOTH a functional and a mental finding, to prove the two
+   * domains are kept separate (they key off distinct observation template roots). */
+  const MENTAL_INIT: BuildCcdaInit = {
+    patient: { mrn: "M" },
+    functionalStatus: [{ value: { code: "165245003", displayName: "Able to walk" } }],
+    mentalStatus: [
+      {
+        value: { code: "386807006", displayName: "Memory impairment" },
+        effectiveTime: "20240101",
+      },
+    ],
+  };
+
+  it("re-parses a known Mental Status finding tagged domain=mental, warning-free", () => {
+    const doc = buildCcda(MENTAL_INIT);
+    const findings = doc.getMentalStatus();
+    expect(findings).toHaveLength(1);
+    const [finding] = findings;
+    expect(finding?.domain).toBe("mental");
+    // The specific finding lives in the coded value (SNOMED CT), not the fixed code.
+    expect(finding?.value?.kind).toBe("coded");
+    expect(finding?.value?.kind === "coded" ? finding.value.code.code : undefined).toBe(
+      "386807006",
+    );
+    expect(finding?.value?.kind === "coded" ? finding.value.code.codeSystem : undefined).toBe(
+      "2.16.840.1.113883.6.96",
+    );
+    // The template-fixed observation code is SNOMED CT "Cognitive function finding".
+    expect(finding?.code?.code).toBe("373930000");
+    expect(finding?.code?.codeSystem).toBe("2.16.840.1.113883.6.96");
+    expect(finding?.assessmentScale).toBeUndefined();
+    expect(finding?.statusCode).toBe("completed");
+    expect(finding?.effectiveTime?.value?.raw).toBe("20240101");
+    expect(doc.warnings).toEqual([]);
+  });
+
+  it("emits the Mental Status section (LOINC 10190-7, …4.74 obs, 2015-08-01, fixed code 373930000)", () => {
+    const doc = buildCcda(MENTAL_INIT);
+    expect(doc.findSection("mentalStatus")?.code?.code).toBe("10190-7");
+    const xml = serializeCcda(doc);
+    // The Mental Status Section (V2) carries the R2.1 2015-08-01 stamp and has no
+    // entries-required variant (…2.56.1).
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.56" extension="2015-08-01"');
+    expect(xml).not.toContain('root="2.16.840.1.113883.10.20.22.2.56.1"');
+    // The Mental Status Observation carries the 2015-08-01 stamp and the R2.1
+    // template-fixed SNOMED CT "Cognitive function finding" code (373930000).
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.4.74" extension="2015-08-01"');
+    expect(xml).toContain('code="373930000"');
+  });
+
+  it("emits an EXPLICIT nullFlavor=UNK value for an unrecorded finding — never a fabricated one", () => {
+    const doc = buildCcda({ patient: { mrn: "M" }, mentalStatus: [{}] });
+    expect(doc.warnings).toEqual([]);
+    const [finding] = doc.getMentalStatus();
+    // The SHALL value [1..1] is satisfied by an explicit unknown, not an invented finding.
+    expect(finding?.value?.kind).toBe("coded");
+    expect(finding?.value?.kind === "coded" ? finding.value.code.nullFlavor : undefined).toBe(
+      "UNK",
+    );
+    expect(finding?.value?.kind === "coded" ? finding.value.code.code : undefined).toBeUndefined();
+    const xml = serializeCcda(doc);
+    expect(xml).toContain('xsi:type="CD"');
+    expect(xml).toContain('nullFlavor="UNK"');
+  });
+
+  it("fills the SHALL effectiveTime with nullFlavor=UNK when no assessed time is supplied", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      mentalStatus: [{ value: { code: "281900007", displayName: "No abnormality detected" } }],
+    });
+    expect(doc.warnings).toEqual([]);
+    const [finding] = doc.getMentalStatus();
+    expect(finding?.value?.kind === "coded" ? finding.value.code.code : undefined).toBe(
+      "281900007",
+    );
+    expect(finding?.effectiveTime?.nullFlavor).toBe("UNK");
+  });
+
+  it("never conflates mental findings with functional status (each domain stays distinct)", () => {
+    const doc = buildCcda(MENTAL_INIT);
+    const mental = doc.getMentalStatus();
+    const functional = doc.getFunctionalStatus();
+    expect(mental).toHaveLength(1);
+    expect(functional).toHaveLength(1);
+    expect(mental[0]?.domain).toBe("mental");
+    expect(functional[0]?.domain).toBe("functional");
+    // The mental finding is memory impairment; the functional finding is able to walk.
+    expect(mental[0]?.value?.kind === "coded" ? mental[0].value.code.code : undefined).toBe(
+      "386807006",
+    );
+    expect(functional[0]?.value?.kind === "coded" ? functional[0].value.code.code : undefined).toBe(
+      "165245003",
+    );
+  });
+
+  it("does NOT emit a Mental Status section when none is supplied", () => {
+    const doc = buildCcda({ patient: { mrn: "M" } });
+    expect(doc.findSection("mentalStatus")).toBeUndefined();
+    expect(doc.getMentalStatus()).toEqual([]);
+    expect(serializeCcda(doc)).not.toContain('code="10190-7"');
+  });
+
+  it("does not flag the mental-status entry as misplaced (it homes to Mental Status)", () => {
+    const doc = buildCcda(MENTAL_INIT);
+    expect(doc.warnings.map((w) => w.code)).not.toContain("SECTION_PLACEMENT_SUSPECT");
+  });
+
+  it("is a serialization fixed point with a Mental Status section present", () => {
+    const xml = serializeCcda(buildCcda(MENTAL_INIT));
+    expect(parseCcda(xml).toString()).toBe(xml);
+  });
+});
+
 describe("buildCcda — defaults, escaping, and input validation", () => {
   it("emits nullFlavor for omitted demographics and no MRN", () => {
     const doc = buildCcda({ patient: {} });
