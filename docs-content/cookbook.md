@@ -272,6 +272,35 @@ const out = serializeCcda(doc);
 parseCcda(out).toString() === out; // => true
 ```
 
-> First slice: `buildCcda` emits a CCD with the US Realm header + Problems + Allergies (the other CCD
-> SHALL sections are emitted empty, `nullFlavor="NI"`). Richer sections, the other document types, and a
-> bring-your-own-credentials terminology adapter are a later increment.
+`buildCcda` populates the reconciliation triad (Problems, Allergies, Medications) plus the
+discrete-data families — Results, Vital Signs, and **Immunizations**. A vaccine is coded with CVX;
+its dose and route are emitted only when supplied (never guessed), and a **refused** shot is a
+`negationInd` record the parser reads back distinctly — never confused with an "unknown":
+
+```ts runnable
+import { buildCcda } from "@cosyte/ccda";
+
+const doc = buildCcda({
+  patient: { mrn: "MRN-00042" },
+  immunizations: [
+    {
+      vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" }, // CVX
+      dose: { value: 0.5, unit: "mL" }, // UCUM
+      route: { code: "C28161", displayName: "Intramuscular" }, // NCI Thesaurus
+      effectiveTime: "20240101",
+    },
+    // A refused shot: emitted as negationInd="true", flagged IMMUNIZATION_REFUSED — never an "unknown".
+    { vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" }, refused: true },
+  ],
+});
+
+doc.getImmunizations()[0]?.vaccine?.code; // => "140"
+doc.getImmunizations()[1]?.refused; // => true
+doc.warnings.map((w) => w.code).includes("IMMUNIZATION_REFUSED"); // => true
+```
+
+> Current builder scope: `buildCcda` emits a CCD with the US Realm header, the CCD SHALL sections
+> (Problems, Allergies, Medications, Results, Vital Signs — emitted empty as `nullFlavor="NI"` when no
+> content is supplied), and an **Immunizations** section when populated. The remaining sections, the
+> other eleven document types, C-CDA document _editing_, and a bring-your-own-credentials terminology
+> adapter are a later increment.

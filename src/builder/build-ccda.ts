@@ -22,10 +22,16 @@
  * `effectiveTime` timing siblings), **Results** (Result Organizer → Result
  * Observation with a UCUM-checked `PQ`, coded, or string value, reference range,
  * and interpretation), and **Vital Signs** (Vital Signs Organizer → Vital Sign
- * Observation, LOINC + UCUM). Every section carries the entries-required
- * templateId only when it has entries; a section for which no content is supplied
- * is emitted as a spec-clean empty `nullFlavor="NI"` section so the document
- * stays conformant.
+ * Observation, LOINC + UCUM). It also emits an **Immunizations** section (an
+ * Immunization Activity → Immunization Medication Information with a CVX vaccine,
+ * dose, route, and the SHALL administration `effectiveTime`) when the caller
+ * supplies immunizations — a `refused` shot is emitted as `negationInd="true"`,
+ * never conflated with a `nullFlavor` "unknown", exactly as the parser reads it
+ * back. Every section carries the entries-required templateId only when it has
+ * entries; a CCD SHALL section (Problems, Allergies, Medications, Results, Vital
+ * Signs) for which no content is supplied is emitted as a spec-clean empty
+ * `nullFlavor="NI"` section so the document stays conformant. The Immunizations
+ * section — not a CCD SHALL section — is emitted only when populated.
  *
  * **SHALL `effectiveTime` on every entry.** Each act/observation the builder
  * emits carries the `effectiveTime` its C-CDA R2.1 template requires — the
@@ -42,13 +48,15 @@
  * @packageDocumentation
  */
 
-import { INTERPRETATION, LOINC, NCI_ROUTE, RXNORM, SNOMED_CT } from "../model/code-systems.js";
+import { CVX, INTERPRETATION, LOINC, NCI_ROUTE, RXNORM, SNOMED_CT } from "../model/code-systems.js";
 import type { CcdaDocument } from "../model/document.js";
 import { parseCcda } from "../parser/index.js";
 import {
   ALLERGY_CONCERN_ACT,
   ALLERGY_OBSERVATION,
   CRITICALITY_OBSERVATION,
+  IMMUNIZATION_ACTIVITY,
+  IMMUNIZATION_MEDICATION_INFORMATION,
   MEDICATION_ACTIVITY,
   MEDICATION_INFORMATION,
   PROBLEM_CONCERN_ACT,
@@ -81,6 +89,8 @@ const CCD_DOC_CODE = { code: "34133-9", displayName: "Summarization of Episode N
 const MED_EXT = "2014-06-09";
 /** The R2.1 `@extension` stamp the Vital Sign *Observation* template carries. @internal */
 const VITAL_OBS_EXT = "2014-06-09";
+/** The `@extension` stamp the Immunization Medication Information template carries. @internal */
+const IMMUNIZATION_MED_INFO_EXT = "2014-06-09";
 
 /**
  * A coded value for the builder — the tuple the parser reads back as a `CD`.
@@ -382,10 +392,52 @@ export interface BuildCcdaVitalsPanel {
 }
 
 /**
+ * An Immunization Activity for the Immunizations section. `vaccine` is the CVX
+ * coded product (CVX by default). `dose` and `route` are optional and **never
+ * guessed** — an omitted one is simply left absent. `refused: true` emits the
+ * administration with `negationInd="true"` (a *not-administered* / refused
+ * record), which the parser reads back as `refused` and flags
+ * `IMMUNIZATION_REFUSED` — the clinically load-bearing refusal is surfaced, never
+ * conflated with a `nullFlavor` "unknown". `effectiveTime` is the administration
+ * date; when omitted the SHALL slot is filled with `nullFlavor="UNK"`.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaImmunization } from "@cosyte/ccda";
+ * const flu: BuildCcdaImmunization = {
+ *   vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" }, // CVX
+ *   dose: { value: 0.5, unit: "mL" },
+ *   route: { code: "C28161", displayName: "Intramuscular" }, // NCI Thesaurus
+ *   effectiveTime: "20240101",
+ * };
+ * const refused: BuildCcdaImmunization = {
+ *   vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" },
+ *   refused: true,
+ * };
+ * ```
+ */
+export interface BuildCcdaImmunization {
+  /** The CVX-coded vaccine product (CVX by default). */
+  readonly vaccine: BuildCode;
+  /** The amount administered (`doseQuantity`), optional — never defaulted. */
+  readonly dose?: BuildQuantity;
+  /** The administration route (`routeCode`); NCI Thesaurus by default. */
+  readonly route?: BuildCode;
+  /** The administration date as an HL7 date string; `nullFlavor="UNK"` when omitted. */
+  readonly effectiveTime?: string;
+  /** Emit a refused / not-administered record (`negationInd="true"`); parser flags `IMMUNIZATION_REFUSED`. */
+  readonly refused?: boolean;
+  /** The `statusCode`; defaults to `"completed"`. */
+  readonly status?: string;
+}
+
+/**
  * Input to {@link buildCcda}. `patient` is required; each clinical collection
  * (`problems`, `allergies`, `medications`, `results`, `vitalSigns`) defaults to
  * empty, in which case its section is emitted as a spec-clean empty
- * `nullFlavor="NI"` section. `documentType` is `"ccd"` in this slice.
+ * `nullFlavor="NI"` section. `immunizations` is optional — its section is emitted
+ * only when populated (Immunizations is not a CCD SHALL section). `documentType`
+ * is `"ccd"` in this slice.
  *
  * @example
  * ```ts
@@ -424,6 +476,8 @@ export interface BuildCcdaInit {
   readonly results?: readonly BuildCcdaResultPanel[];
   /** Vital Signs panels for the Vital Signs section; empty section when omitted. */
   readonly vitalSigns?: readonly BuildCcdaVitalsPanel[];
+  /** Immunization Activities; the Immunizations section is emitted only when non-empty. */
+  readonly immunizations?: readonly BuildCcdaImmunization[];
 }
 
 /** A monotonic id generator scoped to one build, for stable act/content ids. @internal */
@@ -558,6 +612,11 @@ export function buildCcda(init: BuildCcdaInit): CcdaDocument {
   structuredBody.appendChild(medicationsSection(doc, init.medications ?? [], id));
   structuredBody.appendChild(resultsSection(doc, init.results ?? [], id));
   structuredBody.appendChild(vitalsSection(doc, init.vitalSigns ?? [], id));
+  // Immunizations is not a CCD SHALL section — emit it only when populated, rather
+  // than fabricating an empty section the caller did not ask for.
+  if ((init.immunizations?.length ?? 0) > 0) {
+    structuredBody.appendChild(immunizationsSection(doc, init.immunizations ?? [], id));
+  }
   root.appendChild(el(doc, "component", undefined, structuredBody));
 
   return parseCcda(serializeDocument(doc));
@@ -803,6 +862,8 @@ const MEDICATIONS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.1";
 const RESULTS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.3";
 /** @internal */
 const VITALS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.4";
+/** @internal */
+const IMMUNIZATIONS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.2";
 
 /** Build the Problems section — populated, or empty when there are none. @internal */
 function problemsSection(
@@ -1359,4 +1420,103 @@ function vitalObservation(
     );
   }
   return obs;
+}
+
+/**
+ * Build the Immunizations section from one or more Immunization Activities. This
+ * section is only ever called with a non-empty list (see {@link buildCcda}) — it
+ * is not a CCD SHALL section, so an unpopulated Immunizations section is not
+ * emitted rather than fabricated as an empty `nullFlavor="NI"` shell.
+ * @internal
+ */
+function immunizationsSection(
+  doc: Document,
+  imms: readonly BuildCcdaImmunization[],
+  id: (prefix: string) => string,
+): Element {
+  const text = el(doc, "text");
+  const entries: Element[] = [];
+  for (const imm of imms) {
+    const contentId = id("imm-txt");
+    // The narrative carries the vaccine label so it agrees with the coded product
+    // (the parser reconciles the immunization vaccine code ↔ narrative).
+    text.appendChild(textEl(doc, "content", imm.vaccine.displayName, { ID: contentId }));
+    entries.push(immunizationEntry(doc, imm, contentId, id));
+  }
+  const section = sectionElement(
+    doc,
+    IMMUNIZATIONS_SECTION_BASE,
+    "11369-6",
+    "Immunizations",
+    text,
+    true,
+  );
+  for (const entry of entries) section.appendChild(entry);
+  return el(doc, "component", undefined, section);
+}
+
+/** Build one Immunization Activity `<entry>`. @internal */
+function immunizationEntry(
+  doc: Document,
+  imm: BuildCcdaImmunization,
+  contentId: string,
+  id: (prefix: string) => string,
+): Element {
+  // A refused / not-administered shot is `negationInd="true"` — the parser reads
+  // it back as `refused` and flags IMMUNIZATION_REFUSED; it is NEVER conflated
+  // with a `nullFlavor` "unknown" (opposite clinical meaning).
+  const attrs: Attrs =
+    imm.refused === true
+      ? { classCode: "SBADM", moodCode: "EVN", negationInd: "true" }
+      : { classCode: "SBADM", moodCode: "EVN" };
+  const sbadm = el(
+    doc,
+    "substanceAdministration",
+    attrs,
+    el(doc, "templateId", { root: IMMUNIZATION_ACTIVITY, extension: R21 }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("imm") }),
+    el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
+    el(doc, "statusCode", { code: imm.status ?? "completed" }),
+  );
+  // Immunization Activity (…22.4.52) SHALL contain effectiveTime [1..1] — the
+  // administration time (the exact CONF id is not re-verified here; the substantive
+  // SHALL-[1..1] cardinality is grounded against the R2.1 IG's Immunization Activity
+  // constraint). Emitted as an @value when supplied, else nullFlavor="UNK" (the SHALL
+  // satisfied without inventing a date), consistent with the every-entry effectiveTime rule.
+  sbadm.appendChild(pointEffectiveTime(doc, imm.effectiveTime));
+  // Route + dose are never guessed: an omitted one is left absent (the parser does
+  // not require either on an immunization), never defaulted to a confident-wrong value.
+  if (imm.route !== undefined) {
+    sbadm.appendChild(
+      codeEl(doc, "routeCode", { ...imm.route, codeSystem: imm.route.codeSystem ?? NCI_ROUTE }),
+    );
+  }
+  if (imm.dose !== undefined) sbadm.appendChild(pqEl(doc, "doseQuantity", imm.dose));
+  sbadm.appendChild(immunizationConsumable(doc, imm.vaccine));
+  return el(doc, "entry", undefined, sbadm);
+}
+
+/**
+ * Build the `consumable/manufacturedProduct` carrying the CVX vaccine code (the
+ * Immunization Medication Information template `…22.4.54`).
+ * @internal
+ */
+function immunizationConsumable(doc: Document, vaccine: BuildCode): Element {
+  const material = el(
+    doc,
+    "manufacturedMaterial",
+    undefined,
+    codeEl(doc, "code", { ...vaccine, codeSystem: vaccine.codeSystem ?? CVX }),
+  );
+  const product = el(
+    doc,
+    "manufacturedProduct",
+    { classCode: "MANU" },
+    el(doc, "templateId", {
+      root: IMMUNIZATION_MEDICATION_INFORMATION,
+      extension: IMMUNIZATION_MED_INFO_EXT,
+    }),
+    material,
+  );
+  return el(doc, "consumable", undefined, product);
 }

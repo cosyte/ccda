@@ -24,9 +24,9 @@ substrate for C-CDA's XML.
 > History / Past Medical History), and per-document-type required-section (SHALL) validation — plus a
 > **spec-clean, round-trip serializer** (`serializeCcda` / `toString()`) and immutable copy-with
 > (`withWarnings`). A document **builder** (`buildCcda`) emits a spec-clean CCD with the US Realm header
-> and populated **Problems, Allergies, Medications, Results, and Vital Signs** sections (each
-> round-tripping through `parseCcda`); the other document types and remaining sections land in a later
-> increment.
+> and populated **Problems, Allergies, Medications, Results, Vital Signs, and Immunizations** sections
+> (each round-tripping through `parseCcda`); the other document types and remaining sections land in a
+> later increment.
 
 ## Install
 
@@ -203,12 +203,16 @@ const xml = serializeCcda(doc); // spec-clean C-CDA R2.1
 `buildCcda` emits the US Realm header (with a device author + custodian) and populated **Problems**,
 **Allergies** (including the `negationInd` "No Known Allergies" form), **Medications** (RxNorm drug,
 dose, `routeCode`, and the two `effectiveTime` timing siblings), **Results** (Result Organizer → Result
-Observation with a UCUM `PQ` / coded / string value, reference range, interpretation), and **Vital
-Signs** (LOINC + UCUM). Safety-critical values are never guessed: an omitted medication dose/route is
-left absent so the parser flags it (rather than being defaulted), and a `PQ` unit is emitted verbatim
-and re-checked against the computable UCUM grammar. A section for which no content is supplied is
-emitted as a spec-clean empty `nullFlavor="NI"` section. The other eleven document types, the remaining
-sections, and a bring-your-own-credentials terminology adapter land in a later increment.
+Observation with a UCUM `PQ` / coded / string value, reference range, interpretation), **Vital
+Signs** (LOINC + UCUM), and **Immunizations** (Immunization Activity → Immunization Medication
+Information with a CVX vaccine, dose, route, and the SHALL administration `effectiveTime`). Safety-critical
+values are never guessed: an omitted medication dose/route is left absent so the parser flags it (rather
+than being defaulted), a `PQ` unit is emitted verbatim and re-checked against the computable UCUM grammar,
+and a **refused** immunization is emitted as `negationInd="true"` (flagged `IMMUNIZATION_REFUSED` on
+re-parse), never conflated with a `nullFlavor` "unknown". Each CCD SHALL section for which no content is
+supplied is emitted as a spec-clean empty `nullFlavor="NI"` section; the non-required Immunizations
+section is emitted only when populated. The other eleven document types, the remaining sections, and a
+bring-your-own-credentials terminology adapter land in a later increment.
 
 ## What it extracts (Phase 5) — Procedures, Encounters, Social History
 
@@ -292,7 +296,8 @@ checks.
 - **Serializer re-emits a parsed document; the builder constructs one** — `serializeCcda` / `toString()`
   faithfully re-emit a _parsed_ document (the spec-clean emit half of Postel's Law). To construct a
   document from scratch, `buildCcda` emits a spec-clean CCD with the US Realm header + **Problems,
-  Allergies, Medications, Results, and Vital Signs**; the remaining sections, the other eleven document
+  Allergies, Medications, Results, Vital Signs, and Immunizations** (the last emitted only when
+  populated, since it is not a CCD SHALL section); the remaining sections, the other eleven document
   types, and editing an existing document are a later increment. "Spec-clean" here means well-formed,
   correctly-templated, and **round-tripping** through `parseCcda` with zero warnings. Every entry now
   emits the `SHALL`-cardinality `effectiveTime` its C-CDA R2.1 template requires — the Problems/Allergies

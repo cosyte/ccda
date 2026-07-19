@@ -96,6 +96,14 @@ const RICH_INIT: BuildCcdaInit = {
       ],
     },
   ],
+  immunizations: [
+    {
+      vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" },
+      dose: { value: 0.5, unit: "mL" },
+      route: { code: "C28161", displayName: "Intramuscular" },
+      effectiveTime: "20240101",
+    },
+  ],
 };
 
 describe("buildCcda — document identity + header", () => {
@@ -467,6 +475,74 @@ describe("buildCcda — vital signs round-trip", () => {
     });
     // "Kg" is a case slip of "kg" — surfaced, never silently accepted.
     expect(doc.warnings.map((w) => w.code)).toContain("UCUM_CASE_SUSPECT");
+  });
+});
+
+describe("buildCcda — immunizations round-trip", () => {
+  it("re-parses the CVX vaccine, dose, route, and administration date", () => {
+    const [flu] = buildCcda(RICH_INIT).getImmunizations();
+    expect(flu?.vaccine?.code).toBe("140");
+    expect(flu?.vaccine?.codeSystem).toBe("2.16.840.1.113883.12.292"); // CVX
+    expect(flu?.dose?.value).toBe(0.5);
+    expect(flu?.dose?.unit).toBe("mL");
+    expect(flu?.route?.code).toBe("C28161");
+    expect(flu?.route?.codeSystem).toBe("2.16.840.1.113883.3.26.1.1"); // NCI Thesaurus
+    expect(flu?.effectiveTime?.value?.raw).toBe("20240101");
+    expect(flu?.narrative).toBe("Influenza, seasonal, injectable");
+    // An administered shot carries no negationInd, so `refused` is absent (not false).
+    expect(flu?.refused).toBeUndefined();
+  });
+
+  it("emits the Immunizations section with entries-required templateId + LOINC", () => {
+    const doc = buildCcda(RICH_INIT);
+    expect(doc.findSection("immunizations")?.code?.code).toBe("11369-6");
+    const xml = serializeCcda(doc);
+    expect(xml).toContain("2.16.840.1.113883.10.20.22.2.2.1");
+    expect(xml).toContain("2.16.840.1.113883.10.20.22.4.52"); // Immunization Activity
+    expect(xml).toContain("2.16.840.1.113883.10.20.22.4.54"); // Med Information
+  });
+
+  it("keeps a clean administered immunization warning-free", () => {
+    expect(buildCcda(RICH_INIT).warnings).toEqual([]);
+  });
+
+  it("emits a refused shot as a negation and flags it, never a nullFlavor unknown", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      immunizations: [
+        { vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" }, refused: true },
+      ],
+    });
+    const shot = doc.getImmunizations()[0];
+    expect(shot?.refused).toBe(true);
+    expect(shot?.nullFlavor).toBeUndefined();
+    // The refusal is clinically load-bearing — surfaced, never silently dropped.
+    expect(doc.warnings.map((w) => w.code)).toContain("IMMUNIZATION_REFUSED");
+  });
+
+  it("does NOT emit an Immunizations section when none are supplied", () => {
+    const xml = serializeCcda(buildCcda({ patient: { mrn: "M" } }));
+    // Immunizations is not a CCD SHALL section — an empty one is not fabricated.
+    expect(xml).not.toContain('code="11369-6"');
+    expect(buildCcda({ patient: { mrn: "M" } }).findSection("immunizations")).toBeUndefined();
+  });
+
+  it("fills the SHALL administration effectiveTime with nullFlavor when omitted, read back as absent", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      immunizations: [{ vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" } }],
+    });
+    // A clean administered shot with no date is warning-free (dose/route optional here).
+    expect(doc.warnings).toEqual([]);
+    const shot = doc.getImmunizations()[0];
+    expect(shot?.effectiveTime?.nullFlavor).toBe("UNK");
+    expect(shot?.effectiveTime?.value?.date).toBeUndefined();
+    expect(serializeCcda(doc)).toContain('<effectiveTime nullFlavor="UNK"');
+  });
+
+  it("is a serialization fixed point with an immunization present", () => {
+    const xml = serializeCcda(buildCcda(RICH_INIT));
+    expect(parseCcda(xml).toString()).toBe(xml);
   });
 });
 
