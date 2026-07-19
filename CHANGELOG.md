@@ -78,6 +78,33 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (seventh slice) — builder emits a Functional Status section.** Extends `buildCcda` with
+  one new optional input — `BuildCcdaInit.functionalStatus` (`BuildCcdaFunctionalStatus[]`) — that
+  round-trips through `getFunctionalStatus()` to the same structured content by construction; a clean
+  build still carries **zero warnings**.
+  - **Functional Status section + Functional Status Observation.** A Functional Status section
+    **`…22.2.14`** (LOINC `47420-5`, the V2 **`2014-06-09`** stamp, which has **no** entries-required
+    `.1` variant, so only the base `templateId` is emitted) carries one or more standalone Functional
+    Status Observations **`…22.4.67`** (the **`2014-06-09`** stamp). Each observation emits the
+    template-**fixed** LOINC `code` (`54522-8` "Functional status"), a SHALL `statusCode` (fixed
+    `completed`), a SHALL `effectiveTime` [1..1] (the assessed time; `nullFlavor="UNK"` when unknown),
+    and the SHALL **SNOMED CT** `value` [1..1] carrying the specific finding.
+  - **Functional and mental status are never conflated (the safety rule).** Only Functional Status
+    templates are emitted, so the parser reads every finding back tagged **`domain: "functional"`** — a
+    functional finding is never filed under Mental Status (`getMentalStatus()` stays empty).
+  - **Unknown is never defaulted to a finding.** When the caller supplies no `value`, the SHALL `value`
+    is emitted as an **explicit `nullFlavor="UNK"`** — never invented as a real finding; the SHALL
+    effectiveTime is likewise `nullFlavor="UNK"` when no assessed time is given, never a fabricated date.
+  - **Emitted only when populated.** Functional Status is not a CCD `SHALL` section (the CCD required set
+    is Allergies / Medications / Problems / Results), so — like Immunizations / Procedures / Encounters /
+    Social History — an unpopulated section is **not** fabricated. The empty-build output is unchanged.
+  - New public type `BuildCcdaFunctionalStatus`. No parser change and no warning-code change; the
+    round-trip-by-construction invariant and the serializer fixed point still hold.
+  - **Deferred:** Mental Status, the Functional/Mental Status Organizer + Assessment Scale forms, and the
+    remaining sections (Plan of Treatment / Family History / Past Medical History / …) in the builder,
+    the other eleven document types, C-CDA document _editing_, the bring-your-own-credentials
+    terminology adapter, and the external-validator/Schematron differential-testing gate.
+
 - **Phase 7 (sixth slice) — builder emits a Social History (Smoking Status) section.** Extends
   `buildCcda` with one new optional input — `BuildCcdaInit.smokingStatus` (`BuildCcdaSmokingStatus[]`)
   — that round-trips through `getSmokingStatus()` to the same structured content by construction; a
