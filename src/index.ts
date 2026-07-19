@@ -70,6 +70,8 @@ export type {
   BuildCcdaVitalsPanel,
   BuildCcdaVital,
   BuildCcdaImmunization,
+  BuildCcdaProcedure,
+  BuildCcdaEncounter,
   BuildQuantity,
   BuildCode,
 } from "./builder/index.js";

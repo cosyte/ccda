@@ -104,6 +104,24 @@ const RICH_INIT: BuildCcdaInit = {
       effectiveTime: "20240101",
     },
   ],
+  procedures: [
+    {
+      code: { code: "80146002", displayName: "Appendectomy" },
+      disposition: "performed",
+      effectiveTime: "20230615",
+    },
+    {
+      kind: "act",
+      code: { code: "34896006", displayName: "Wound dressing change" },
+    },
+  ],
+  encounters: [
+    {
+      type: { code: "99213", displayName: "Office outpatient visit 15 minutes" },
+      status: "completed",
+      period: { low: "20230615", high: "20230615" },
+    },
+  ],
 };
 
 describe("buildCcda — document identity + header", () => {
@@ -541,6 +559,148 @@ describe("buildCcda — immunizations round-trip", () => {
   });
 
   it("is a serialization fixed point with an immunization present", () => {
+    const xml = serializeCcda(buildCcda(RICH_INIT));
+    expect(parseCcda(xml).toString()).toBe(xml);
+  });
+});
+
+describe("buildCcda — procedures round-trip", () => {
+  it("re-parses an operative procedure with code, performed disposition, status, and time", () => {
+    const [appendectomy] = buildCcda(RICH_INIT).getProcedures();
+    expect(appendectomy?.kind).toBe("procedure");
+    expect(appendectomy?.code?.code).toBe("80146002");
+    expect(appendectomy?.code?.codeSystem).toBe("2.16.840.1.113883.6.96"); // SNOMED CT
+    expect(appendectomy?.disposition).toBe("performed");
+    expect(appendectomy?.moodCode).toBe("EVN");
+    expect(appendectomy?.statusCode).toBe("completed");
+    expect(appendectomy?.effectiveTime?.value?.raw).toBe("20230615");
+    expect(appendectomy?.narrative).toBe("Appendectomy");
+    expect(buildCcda(RICH_INIT).warnings).toEqual([]);
+  });
+
+  it("emits the Procedures section with the 2014-06-09 templateId + LOINC 47519-4", () => {
+    const doc = buildCcda(RICH_INIT);
+    expect(doc.findSection("procedures")?.code?.code).toBe("47519-4");
+    const xml = serializeCcda(doc);
+    // Procedures Section (entries required) V2 carries the 2014-06-09 stamp.
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.7.1" extension="2014-06-09"');
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.4.14" extension="2014-06-09"');
+  });
+
+  it("emits the non-altering act variant (…22.4.12) as kind 'act'", () => {
+    const proc = buildCcda(RICH_INIT).getProcedures()[1];
+    expect(proc?.kind).toBe("act");
+    expect(proc?.code?.code).toBe("34896006");
+    expect(proc?.disposition).toBe("performed");
+  });
+
+  it("classifies a planned procedure (INT) as planned, never performed, with active status", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      procedures: [
+        {
+          code: { code: "73761001", displayName: "Colonoscopy" },
+          disposition: "planned",
+        },
+      ],
+    });
+    expect(doc.warnings).toEqual([]);
+    const proc = doc.getProcedures()[0];
+    expect(proc?.disposition).toBe("planned");
+    expect(proc?.moodCode).toBe("INT");
+    expect(proc?.statusCode).toBe("active");
+  });
+
+  it("round-trips the assessment observation variant with a coded value", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      procedures: [
+        {
+          kind: "observation",
+          code: { code: "36228007", displayName: "Ophthalmic examination" },
+          value: { code: "260388006", displayName: "Normal" },
+        },
+      ],
+    });
+    expect(doc.warnings).toEqual([]);
+    const proc = doc.getProcedures()[0];
+    expect(proc?.kind).toBe("observation");
+    expect(proc?.value?.kind).toBe("coded");
+    if (proc?.value?.kind === "coded") expect(proc.value.code.code).toBe("260388006");
+  });
+
+  it("omits the SHOULD effectiveTime when none is supplied (never fabricated)", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      procedures: [{ code: { code: "80146002", displayName: "Appendectomy" } }],
+    });
+    expect(doc.warnings).toEqual([]);
+    expect(doc.getProcedures()[0]?.effectiveTime).toBeUndefined();
+  });
+
+  it("does NOT emit a Procedures section when none are supplied", () => {
+    const doc = buildCcda({ patient: { mrn: "M" } });
+    expect(doc.findSection("procedures")).toBeUndefined();
+    expect(serializeCcda(doc)).not.toContain('code="47519-4"');
+  });
+
+  it("rejects an observation-variant procedure that omits its SHALL value", () => {
+    // Procedure Activity Observation (…22.4.13) SHALL carry a value [1..1] — the
+    // builder refuses to emit a non-conformant value-less observation.
+    expect(() =>
+      buildCcda({
+        patient: { mrn: "M" },
+        procedures: [
+          {
+            kind: "observation",
+            code: { code: "36228007", displayName: "Ophthalmic examination" },
+          },
+        ],
+      }),
+    ).toThrow(TypeError);
+  });
+});
+
+describe("buildCcda — encounters round-trip", () => {
+  it("re-parses the Encounter Activity with type code, status, and visit period", () => {
+    const [visit] = buildCcda(RICH_INIT).getEncounters();
+    expect(visit?.code?.code).toBe("99213");
+    expect(visit?.code?.codeSystem).toBe("2.16.840.1.113883.6.12"); // CPT
+    expect(visit?.moodCode).toBe("EVN");
+    expect(visit?.statusCode).toBe("completed");
+    expect(visit?.effectiveTime?.low?.raw).toBe("20230615");
+    expect(visit?.effectiveTime?.high?.raw).toBe("20230615");
+    expect(visit?.narrative).toBe("Office outpatient visit 15 minutes");
+    expect(buildCcda(RICH_INIT).warnings).toEqual([]);
+  });
+
+  it("emits the Encounters section with the 2015-08-01 templateId + LOINC 46240-8", () => {
+    const doc = buildCcda(RICH_INIT);
+    expect(doc.findSection("encounters")?.code?.code).toBe("46240-8");
+    const xml = serializeCcda(doc);
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.22.1" extension="2015-08-01"');
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.4.49" extension="2015-08-01"');
+  });
+
+  it("fills the SHALL effectiveTime with a nullFlavor low when no period is supplied, warning-free", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      encounters: [{ type: { code: "99213", displayName: "Office outpatient visit 15 minutes" } }],
+    });
+    expect(doc.warnings).toEqual([]);
+    const enc = doc.getEncounters()[0];
+    expect(enc?.effectiveTime?.low?.nullFlavor).toBe("UNK");
+    expect(enc?.effectiveTime?.low?.date).toBeUndefined();
+    expect(serializeCcda(doc)).toContain('<low nullFlavor="UNK"');
+  });
+
+  it("does NOT emit an Encounters section when none are supplied", () => {
+    const doc = buildCcda({ patient: { mrn: "M" } });
+    expect(doc.findSection("encounters")).toBeUndefined();
+    expect(serializeCcda(doc)).not.toContain('code="46240-8"');
+  });
+
+  it("is a serialization fixed point with procedures + encounters present", () => {
     const xml = serializeCcda(buildCcda(RICH_INIT));
     expect(parseCcda(xml).toString()).toBe(xml);
   });
