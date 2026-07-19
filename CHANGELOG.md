@@ -78,6 +78,45 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (fifth slice) — builder emits Procedures and Encounters sections.** Extends `buildCcda`
+  beyond the header + reconciliation triad + Results/Vital Signs/Immunizations to emit the next two
+  roadmap sections, added together because they share plumbing (a coded act with `statusCode` +
+  `effectiveTime` + structured/narrative agreement). Two new optional inputs — `BuildCcdaInit.procedures`
+  (`BuildCcdaProcedure[]`) and `BuildCcdaInit.encounters` (`BuildCcdaEncounter[]`) — each round-trip
+  through `getProcedures()` / `getEncounters()` to the same structured content by construction, and a
+  clean build still carries **zero warnings**.
+  - **Procedures.** One of the three Procedure Activity variants per entry — operative `<procedure>`
+    **`…22.4.14`**, non-altering `<act>` **`…22.4.12`**, or assessment `<observation>` **`…22.4.13`**
+    (`kind`, default `"procedure"`) — inside a Procedures section **`…22.2.7.1`** (LOINC `47519-4`). The
+    section and all three entry templates carry the R2.1 **`2014-06-09`** stamp (not the `2015-08-01`
+    stamp the other sections use); a new per-section `extension` is threaded through the section-template
+    helper for this. The coded procedure (**SNOMED CT** by default) is the SHALL `code`; the SHALL
+    `statusCode` is always emitted.
+  - **`moodCode` is the safety-critical axis.** `disposition: "performed"` → `moodCode="EVN"`,
+    `"planned"` → `"INT"`; the parser reads it back as its performed-vs-planned disposition and the two
+    are **never conflated**. `statusCode` defaults per disposition (performed → `completed`, planned →
+    `active`). The Procedure `effectiveTime` is **SHOULD [0..1]** (CONF:1098-7662), so it is emitted
+    **only when supplied** — never fabricated with a `nullFlavor` when unknown. An
+    `"observation"`-variant procedure that omits its **SHALL `value` [1..1]** (`…22.4.13`) **throws** a
+    `TypeError` rather than emit a non-conformant, value-less observation.
+  - **Encounters.** An Encounter Activity **`…22.4.49`** (`@2015-08-01`) inside an Encounters section
+    **`…22.2.22.1`** (LOINC `46240-8`). The encounter type is the **SHALL `code` [1..1]** (**CPT** by
+    default) and is required on the input; the **SHALL `effectiveTime` [1..1]** visit period is always
+    emitted as an `IVL_TS` — real `low`/`high` bounds when a `period` is supplied, else a
+    `nullFlavor="UNK"` `low` that satisfies the cardinality without inventing a date (read back as
+    absent). `statusCode` defaults to `completed`.
+  - **Emitted only when populated.** Neither Procedures nor Encounters is a CCD `SHALL` section (the CCD
+    required set is Allergies / Medications / Problems / Results), so — like Immunizations — an
+    unpopulated section is **not** fabricated as an empty `nullFlavor="NI"` shell. The empty-build output
+    is unchanged.
+  - New public types `BuildCcdaProcedure` and `BuildCcdaEncounter`. No parser change and no warning-code
+    change; the round-trip-by-construction invariant and the serializer fixed point still hold.
+  - **Deferred:** the remaining sections (Plan of Treatment / Social History / Functional Status / Family
+    History / …) in the builder, the other eleven document types, C-CDA document _editing_, the
+    bring-your-own terminology adapter, and the external Schematron/XSD differential-validation gate (the
+    roadmap's still-unproven pure-JS-engine-capacity question, §10 Q10) — a `buildCcda` document remains
+    expected-but-not-proven against an external IG validator.
+
 - **Phase 7 (fourth slice) — builder emits an Immunizations section.** Extends `buildCcda` beyond the
   header + the reconciliation triad + Results/Vital Signs to emit **Immunizations** — the natural
   continuation that completes the Phase-3 discrete-data trio (Results / Vital Signs / Immunizations) in

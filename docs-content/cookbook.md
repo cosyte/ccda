@@ -256,9 +256,14 @@ import { buildCcda, serializeCcda, parseCcda } from "@cosyte/ccda";
 
 const doc = buildCcda({
   patient: { mrn: "MRN-00042", given: ["Jane"], family: "Doe", gender: "F", birthTime: "19800101" },
-  problems: [{ problem: { code: "59621000", displayName: "Essential hypertension" }, status: "active" }],
+  problems: [
+    { problem: { code: "59621000", displayName: "Essential hypertension" }, status: "active" },
+  ],
   allergies: [
-    { allergen: { code: "7980", displayName: "Penicillin G" }, reaction: { code: "247472004", displayName: "Hives" } },
+    {
+      allergen: { code: "7980", displayName: "Penicillin G" },
+      reaction: { code: "247472004", displayName: "Hives" },
+    },
     { noKnownAllergy: true }, // a negation, never an "unknown"
   ],
 });
@@ -299,8 +304,43 @@ doc.getImmunizations()[1]?.refused; // => true
 doc.warnings.map((w) => w.code).includes("IMMUNIZATION_REFUSED"); // => true
 ```
 
+`buildCcda` also emits **Procedures** and **Encounters** when supplied. A procedure's
+`disposition` sets the performed-vs-planned `moodCode` (`performed` → `EVN`, `planned` → `INT`) — the
+parser reads it back distinctly, so a _planned_ procedure is never reported as performed. An
+encounter carries its coded type (CPT by default) and a visit period:
+
+```ts runnable
+import { buildCcda } from "@cosyte/ccda";
+
+const doc = buildCcda({
+  patient: { mrn: "MRN-00042" },
+  procedures: [
+    {
+      code: { code: "80146002", displayName: "Appendectomy" }, // SNOMED CT
+      disposition: "performed",
+      effectiveTime: "20230615",
+    },
+    // A planned colonoscopy: moodCode="INT", read back as disposition "planned".
+    { code: { code: "73761001", displayName: "Colonoscopy" }, disposition: "planned" },
+  ],
+  encounters: [
+    {
+      type: { code: "99213", displayName: "Office outpatient visit 15 minutes" }, // CPT
+      period: { low: "20230615", high: "20230615" },
+    },
+  ],
+});
+
+doc.getProcedures()[0]?.disposition; // => "performed"
+// A planned procedure is never read as performed:
+doc.getProcedures()[1]?.disposition; // => "planned"
+doc.getEncounters()[0]?.code?.code; // => "99213"
+doc.warnings.length; // => 0
+```
+
 > Current builder scope: `buildCcda` emits a CCD with the US Realm header, the CCD SHALL sections
 > (Problems, Allergies, Medications, Results, Vital Signs — emitted empty as `nullFlavor="NI"` when no
-> content is supplied), and an **Immunizations** section when populated. The remaining sections, the
-> other eleven document types, C-CDA document _editing_, and a bring-your-own-credentials terminology
-> adapter are a later increment.
+> content is supplied), and **Immunizations**, **Procedures**, and **Encounters** sections when
+> populated. The remaining sections (Plan of Treatment, Social History, …), the other eleven document
+> types, C-CDA document _editing_, and a bring-your-own-credentials terminology adapter are a later
+> increment.

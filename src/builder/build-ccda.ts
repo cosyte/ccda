@@ -33,6 +33,21 @@
  * `nullFlavor="NI"` section so the document stays conformant. The Immunizations
  * section — not a CCD SHALL section — is emitted only when populated.
  *
+ * **This slice adds Procedures and Encounters.** A **Procedures** section emits
+ * one of the three Procedure Activity variants — an operative `<procedure>`
+ * (`…22.4.14`), a non-altering `<act>` service (`…22.4.12`), or an assessment
+ * `<observation>` (`…22.4.13`) — each with its coded procedure, the
+ * performed-vs-planned `moodCode` (`EVN`/`INT`, read back as the parser's
+ * disposition and never conflated), a SHALL `statusCode`, and the SHOULD [0..1]
+ * `effectiveTime` emitted only when supplied. An **Encounters** section emits an
+ * Encounter Activity (`…22.4.49`) with its SHALL `code` [1..1] (the encounter
+ * type, CPT by default) and SHALL `effectiveTime` [1..1] visit period (an
+ * `IVL_TS`; a `nullFlavor="UNK"` low when no period is known). Both — like
+ * Immunizations, and unlike the four CCD SHALL sections — are emitted only when
+ * populated; neither is a CCD SHALL section, so an empty one is never fabricated.
+ * The Procedures section and its entry templates carry the R2.1 `2014-06-09`
+ * stamp (not the `2015-08-01` stamp the other sections use).
+ *
  * **SHALL `effectiveTime` on every entry.** Each act/observation the builder
  * emits carries the `effectiveTime` its C-CDA R2.1 template requires — the
  * Problem/Allergy Concern Acts and their observations, the Medication Activity
@@ -50,17 +65,22 @@
 
 import { CVX, INTERPRETATION, LOINC, NCI_ROUTE, RXNORM, SNOMED_CT } from "../model/code-systems.js";
 import type { CcdaDocument } from "../model/document.js";
+import type { ProcedureKind } from "../model/entries/procedure.js";
 import { parseCcda } from "../parser/index.js";
 import {
   ALLERGY_CONCERN_ACT,
   ALLERGY_OBSERVATION,
   CRITICALITY_OBSERVATION,
+  ENCOUNTER_ACTIVITY,
   IMMUNIZATION_ACTIVITY,
   IMMUNIZATION_MEDICATION_INFORMATION,
   MEDICATION_ACTIVITY,
   MEDICATION_INFORMATION,
   PROBLEM_CONCERN_ACT,
   PROBLEM_OBSERVATION,
+  PROCEDURE_ACTIVITY_ACT,
+  PROCEDURE_ACTIVITY_OBSERVATION,
+  PROCEDURE_ACTIVITY_PROCEDURE,
   REACTION_OBSERVATION,
   RESULT_OBSERVATION,
   RESULT_ORGANIZER,
@@ -91,6 +111,15 @@ const MED_EXT = "2014-06-09";
 const VITAL_OBS_EXT = "2014-06-09";
 /** The `@extension` stamp the Immunization Medication Information template carries. @internal */
 const IMMUNIZATION_MED_INFO_EXT = "2014-06-09";
+/**
+ * The `@extension` stamp carried by the Procedures Section (V2) and all three
+ * Procedure Activity templates (Procedure `…4.14`, Act `…4.12`, Observation
+ * `…4.13`) — these are R2.1's `2014-06-09` versions, not the `2015-08-01` stamp
+ * the other sections use. @internal
+ */
+const PROCEDURE_EXT = "2014-06-09";
+/** The CPT-4 code system OID — the default terminology for an encounter type code. @internal */
+const CPT = "2.16.840.1.113883.6.12";
 
 /**
  * A coded value for the builder — the tuple the parser reads back as a `CD`.
@@ -432,6 +461,86 @@ export interface BuildCcdaImmunization {
 }
 
 /**
+ * A Procedure for the Procedures section. `kind` selects the C-CDA Procedure
+ * Activity variant — an altering/operative `"procedure"` (default, `<procedure>`
+ * `…22.4.14`), a non-altering `"act"` service (`<act>` `…22.4.12`), or an
+ * assessment `"observation"` (`<observation>` `…22.4.13`). `code` is the coded
+ * procedure (SNOMED CT by default, or CPT / ICD-10-PCS / LOINC) and is required
+ * (the template SHALL contain a `code`). `disposition` maps to the act's
+ * `moodCode` — **performed** (`EVN`) vs **planned** (`INT`) — which the parser
+ * reads back as its performed-vs-planned disposition; the two are never
+ * conflated. `effectiveTime` is emitted only when supplied (the template's
+ * effectiveTime is SHOULD [0..1], CONF:1098-7662 — not fabricated when unknown).
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaProcedure } from "@cosyte/ccda";
+ * const appendectomy: BuildCcdaProcedure = {
+ *   code: { code: "80146002", displayName: "Appendectomy" },
+ *   disposition: "performed",
+ *   effectiveTime: "20230615",
+ * };
+ * const plannedColonoscopy: BuildCcdaProcedure = {
+ *   code: { code: "73761001", displayName: "Colonoscopy" },
+ *   disposition: "planned",
+ * };
+ * ```
+ */
+export interface BuildCcdaProcedure {
+  /** The Procedure Activity variant; defaults to `"procedure"` (operative). */
+  readonly kind?: ProcedureKind;
+  /** The coded procedure (SNOMED CT by default, or CPT / ICD-10-PCS / LOINC). */
+  readonly code: BuildCode;
+  /** Performed (`EVN`) or planned (`INT`); defaults to `"performed"`. Never conflated. */
+  readonly disposition?: "performed" | "planned";
+  /**
+   * The `statusCode`; defaults per disposition (performed → `"completed"`,
+   * planned → `"active"`). SHALL [1..1] on the template, so always emitted.
+   */
+  readonly status?: string;
+  /** The procedure date as an HL7 date string; emitted only when supplied (SHOULD [0..1]). */
+  readonly effectiveTime?: string;
+  /**
+   * The coded result `value` (`xsi:type="CD"`, SNOMED CT default). **Required for
+   * the `"observation"` variant** — Procedure Activity Observation (`…22.4.13`)
+   * SHALL contain a `value` [1..1] — and ignored for the other two variants;
+   * {@link buildCcda} throws if a `"observation"` procedure omits it.
+   */
+  readonly value?: BuildCode;
+}
+
+/**
+ * An Encounter Activity for the Encounters section (`…22.4.49`). `type` is the
+ * coded encounter type (CPT by default, or SNOMED CT / HL7 ActEncounterCode) and
+ * is required — the template SHALL contain a `code` [1..1]. `period` is the
+ * visit/admission window emitted as the SHALL `effectiveTime` [1..1] (an
+ * `IVL_TS`); when omitted the SHALL slot is filled with a `nullFlavor="UNK"`
+ * `low` rather than a fabricated date. `status` maps to the optional `statusCode`.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaEncounter } from "@cosyte/ccda";
+ * const visit: BuildCcdaEncounter = {
+ *   type: { code: "99213", displayName: "Office outpatient visit 15 minutes" }, // CPT
+ *   status: "completed",
+ *   period: { low: "20230615", high: "20230615" },
+ * };
+ * ```
+ */
+export interface BuildCcdaEncounter {
+  /** The coded encounter type (CPT by default, or SNOMED CT / HL7 ActEncounterCode). */
+  readonly type: BuildCode;
+  /** The encounter `statusCode`; defaults to `"completed"`. */
+  readonly status?: string;
+  /**
+   * The visit/admission period as HL7 date strings (an `IVL_TS` low/high); either
+   * bound optional. Emitted as the SHALL `effectiveTime`; `nullFlavor="UNK"` low
+   * when omitted.
+   */
+  readonly period?: { readonly low?: string; readonly high?: string };
+}
+
+/**
  * Input to {@link buildCcda}. `patient` is required; each clinical collection
  * (`problems`, `allergies`, `medications`, `results`, `vitalSigns`) defaults to
  * empty, in which case its section is emitted as a spec-clean empty
@@ -478,6 +587,10 @@ export interface BuildCcdaInit {
   readonly vitalSigns?: readonly BuildCcdaVitalsPanel[];
   /** Immunization Activities; the Immunizations section is emitted only when non-empty. */
   readonly immunizations?: readonly BuildCcdaImmunization[];
+  /** Procedures; the Procedures section is emitted only when non-empty (a CCD SHOULD section). */
+  readonly procedures?: readonly BuildCcdaProcedure[];
+  /** Encounter Activities; the Encounters section is emitted only when non-empty (a CCD SHOULD section). */
+  readonly encounters?: readonly BuildCcdaEncounter[];
 }
 
 /** A monotonic id generator scoped to one build, for stable act/content ids. @internal */
@@ -574,8 +687,9 @@ function medicationDuration(
  * @returns The parsed document — the parse of the spec-clean XML just emitted.
  * @throws {TypeError} When `documentType` is anything other than `"ccd"` (the
  *   only type this slice supports), when an allergy is neither an `allergen` nor
- *   `noKnownAllergy`, or when a result does not carry exactly one value form
- *   (`quantity` / `codedValue` / `stringValue`).
+ *   `noKnownAllergy`, when a result does not carry exactly one value form
+ *   (`quantity` / `codedValue` / `stringValue`), or when a `"observation"`-variant
+ *   procedure omits its SHALL `value`.
  * @example
  * ```ts
  * import { buildCcda, serializeCcda } from "@cosyte/ccda";
@@ -612,10 +726,17 @@ export function buildCcda(init: BuildCcdaInit): CcdaDocument {
   structuredBody.appendChild(medicationsSection(doc, init.medications ?? [], id));
   structuredBody.appendChild(resultsSection(doc, init.results ?? [], id));
   structuredBody.appendChild(vitalsSection(doc, init.vitalSigns ?? [], id));
-  // Immunizations is not a CCD SHALL section — emit it only when populated, rather
-  // than fabricating an empty section the caller did not ask for.
+  // Immunizations, Procedures, and Encounters are not CCD SHALL sections — each is
+  // emitted only when populated, rather than fabricating an empty section the
+  // caller did not ask for.
   if ((init.immunizations?.length ?? 0) > 0) {
     structuredBody.appendChild(immunizationsSection(doc, init.immunizations ?? [], id));
+  }
+  if ((init.procedures?.length ?? 0) > 0) {
+    structuredBody.appendChild(proceduresSection(doc, init.procedures ?? [], id));
+  }
+  if ((init.encounters?.length ?? 0) > 0) {
+    structuredBody.appendChild(encountersSection(doc, init.encounters ?? [], id));
   }
   root.appendChild(el(doc, "component", undefined, structuredBody));
 
@@ -802,9 +923,10 @@ function sectionTemplateIds(
   doc: Document,
   base: string,
   entriesRequired: boolean,
+  extension: string = R21,
 ): readonly Element[] {
-  const ids = [el(doc, "templateId", { root: base, extension: R21 })];
-  if (entriesRequired) ids.push(el(doc, "templateId", { root: `${base}.1`, extension: R21 }));
+  const ids = [el(doc, "templateId", { root: base, extension })];
+  if (entriesRequired) ids.push(el(doc, "templateId", { root: `${base}.1`, extension }));
   return ids;
 }
 
@@ -822,9 +944,12 @@ function sectionElement(
   textNode: Element,
   entriesRequired: boolean,
   attrs?: Attrs,
+  extension: string = R21,
 ): Element {
   const section = el(doc, "section", attrs);
-  for (const tid of sectionTemplateIds(doc, base, entriesRequired)) section.appendChild(tid);
+  for (const tid of sectionTemplateIds(doc, base, entriesRequired, extension)) {
+    section.appendChild(tid);
+  }
   section.appendChild(
     el(doc, "code", {
       code: loinc,
@@ -864,6 +989,10 @@ const RESULTS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.3";
 const VITALS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.4";
 /** @internal */
 const IMMUNIZATIONS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.2";
+/** @internal */
+const PROCEDURES_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.7";
+/** @internal */
+const ENCOUNTERS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.22";
 
 /** Build the Problems section — populated, or empty when there are none. @internal */
 function problemsSection(
@@ -1519,4 +1648,170 @@ function immunizationConsumable(doc: Document, vaccine: BuildCode): Element {
     material,
   );
   return el(doc, "consumable", undefined, product);
+}
+
+/** The element name, `@classCode`, and template root for each Procedure variant. @internal */
+const PROCEDURE_VARIANTS: Readonly<
+  Record<
+    ProcedureKind,
+    { readonly element: string; readonly classCode: string; readonly root: string }
+  >
+> = {
+  procedure: { element: "procedure", classCode: "PROC", root: PROCEDURE_ACTIVITY_PROCEDURE },
+  act: { element: "act", classCode: "ACT", root: PROCEDURE_ACTIVITY_ACT },
+  observation: { element: "observation", classCode: "OBS", root: PROCEDURE_ACTIVITY_OBSERVATION },
+};
+
+/**
+ * Build the Procedures section from one or more {@link BuildCcdaProcedure}s. Only
+ * called with a non-empty list (see {@link buildCcda}) — Procedures is a CCD
+ * SHOULD (not SHALL) section, so an unpopulated one is not fabricated. The
+ * section and its entry templates carry the R2.1 `2014-06-09` stamp.
+ * @internal
+ */
+function proceduresSection(
+  doc: Document,
+  procedures: readonly BuildCcdaProcedure[],
+  id: (prefix: string) => string,
+): Element {
+  const text = el(doc, "text");
+  const entries: Element[] = [];
+  for (const p of procedures) {
+    const contentId = id("proc-txt");
+    // The narrative carries the procedure label so it agrees with the coded value
+    // (the parser reconciles the procedure code ↔ narrative).
+    text.appendChild(textEl(doc, "content", p.code.displayName, { ID: contentId }));
+    entries.push(procedureEntry(doc, p, contentId, id));
+  }
+  const section = sectionElement(
+    doc,
+    PROCEDURES_SECTION_BASE,
+    "47519-4",
+    "Procedures",
+    text,
+    true,
+    undefined,
+    PROCEDURE_EXT,
+  );
+  for (const entry of entries) section.appendChild(entry);
+  return el(doc, "component", undefined, section);
+}
+
+/** Build one Procedure Activity `<entry>` (procedure / act / observation variant). @internal */
+function procedureEntry(
+  doc: Document,
+  p: BuildCcdaProcedure,
+  contentId: string,
+  id: (prefix: string) => string,
+): Element {
+  const kind = p.kind ?? "procedure";
+  // Procedure Activity Observation (…22.4.13) SHALL contain a value [1..1] (the
+  // assessment result — "if nothing is appropriate, use a nullFlavor"). Refuse to
+  // emit a value-less observation-variant procedure rather than ship a document
+  // that violates the SHALL — a caller with an unknown result passes an explicit
+  // `nullFlavor`-bearing value form in a later slice; today it is required.
+  if (kind === "observation" && p.value === undefined) {
+    throw new TypeError(
+      `buildCcda: procedure "${p.code.displayName}" uses kind "observation", which SHALL ` +
+        "carry a `value` (Procedure Activity Observation …22.4.13) — supply `value`.",
+    );
+  }
+  const variant = PROCEDURE_VARIANTS[kind];
+  // `moodCode` is the performed-vs-planned axis: performed → EVN, planned → INT.
+  // The parser classifies it back into a disposition; the two are never conflated.
+  const moodCode = p.disposition === "planned" ? "INT" : "EVN";
+  const statusCode = p.status ?? (p.disposition === "planned" ? "active" : "completed");
+  const act = el(
+    doc,
+    variant.element,
+    { classCode: variant.classCode, moodCode },
+    el(doc, "templateId", { root: variant.root, extension: PROCEDURE_EXT }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("proc") }),
+    codeEl(doc, "code", { ...p.code, codeSystem: p.code.codeSystem ?? SNOMED_CT }),
+    el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
+    el(doc, "statusCode", { code: statusCode }),
+  );
+  // Procedure Activity effectiveTime is SHOULD [0..1] (CONF:1098-7662): emitted
+  // only when supplied — never fabricated with a nullFlavor when unknown.
+  if (p.effectiveTime !== undefined) {
+    act.appendChild(el(doc, "effectiveTime", { value: p.effectiveTime }));
+  }
+  // The assessment `observation` variant carries its SHALL coded result `value`
+  // (guaranteed present by the guard above; the parser reads it back).
+  if (kind === "observation" && p.value !== undefined) {
+    act.appendChild(cdValue(doc, p.value, SNOMED_CT));
+  }
+  return el(doc, "entry", undefined, act);
+}
+
+/**
+ * Build the Encounters section from one or more {@link BuildCcdaEncounter}s. Only
+ * called with a non-empty list (see {@link buildCcda}) — Encounters is a CCD
+ * SHOULD (not SHALL) section, so an unpopulated one is not fabricated.
+ * @internal
+ */
+function encountersSection(
+  doc: Document,
+  encounters: readonly BuildCcdaEncounter[],
+  id: (prefix: string) => string,
+): Element {
+  const text = el(doc, "text");
+  const entries: Element[] = [];
+  for (const e of encounters) {
+    const contentId = id("enc-txt");
+    // The narrative carries the encounter-type label so it agrees with the coded
+    // value (the parser reconciles the encounter code ↔ narrative).
+    text.appendChild(textEl(doc, "content", e.type.displayName, { ID: contentId }));
+    entries.push(encounterEntry(doc, e, contentId, id));
+  }
+  const section = sectionElement(doc, ENCOUNTERS_SECTION_BASE, "46240-8", "Encounters", text, true);
+  for (const entry of entries) section.appendChild(entry);
+  return el(doc, "component", undefined, section);
+}
+
+/** Build one Encounter Activity `<entry>` (`…22.4.49`). @internal */
+function encounterEntry(
+  doc: Document,
+  e: BuildCcdaEncounter,
+  contentId: string,
+  id: (prefix: string) => string,
+): Element {
+  const enc = el(
+    doc,
+    "encounter",
+    { classCode: "ENC", moodCode: "EVN" },
+    el(doc, "templateId", { root: ENCOUNTER_ACTIVITY, extension: R21 }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("enc") }),
+    // Encounter Activity SHALL contain a code [1..1] (the encounter type; CPT by
+    // default). `type` is required on the builder input, so it is always emitted.
+    codeEl(doc, "code", { ...e.type, codeSystem: e.type.codeSystem ?? CPT }),
+    el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
+    el(doc, "statusCode", { code: e.status ?? "completed" }),
+  );
+  // Encounter Activity SHALL contain effectiveTime [1..1] — the visit/admission
+  // period. Always emitted as an IVL_TS; a nullFlavor="UNK" low satisfies the
+  // SHALL without inventing a date when the caller supplied no period.
+  enc.appendChild(encounterPeriod(doc, e.period));
+  return el(doc, "entry", undefined, enc);
+}
+
+/**
+ * The Encounter Activity SHALL `<effectiveTime>` (an `IVL_TS` visit period). The
+ * `low` carries the start when supplied, else `nullFlavor="UNK"`; a `high` is
+ * added only when an end was supplied — the builder never invents a discharge
+ * date it was not given.
+ * @internal
+ */
+function encounterPeriod(
+  doc: Document,
+  period: { readonly low?: string; readonly high?: string } | undefined,
+): Element {
+  const et = el(doc, "effectiveTime");
+  et.appendChild(
+    period?.low === undefined
+      ? el(doc, "low", { nullFlavor: "UNK" })
+      : el(doc, "low", { value: period.low }),
+  );
+  if (period?.high !== undefined) et.appendChild(el(doc, "high", { value: period.high }));
+  return et;
 }
