@@ -25,8 +25,9 @@ substrate for C-CDA's XML.
 > **spec-clean, round-trip serializer** (`serializeCcda` / `toString()`) and immutable copy-with
 > (`withWarnings`). A document **builder** (`buildCcda`) emits a spec-clean CCD with the US Realm header
 > and populated **Problems, Allergies, Medications, Results, Vital Signs, Immunizations, Procedures,
-> Encounters, Social-History smoking status, and Functional Status** sections (each round-tripping through
-> `parseCcda`); the other document types and remaining sections land in a later increment.
+> Encounters, Social-History smoking status, Functional Status, and Mental Status** sections (each
+> round-tripping through `parseCcda`); the other document types and remaining sections land in a later
+> increment.
 
 ## Install
 
@@ -210,9 +211,11 @@ Information with a CVX vaccine, dose, route, and the SHALL administration `effec
 `<act>` / assessment `<observation>` — with the performed-vs-planned `moodCode` split),
 **Encounters** (Encounter Activity with a coded type and the SHALL `effectiveTime` visit period),
 **Social History** (a Smoking Status — Meaningful Use observation with the fixed LOINC `code` and a
-SNOMED CT `value`), and **Functional Status** (a Functional Status Observation with the template-fixed
-LOINC `code` `54522-8` and a SNOMED CT finding `value`, tagged `domain: "functional"` and never
-conflated with Mental Status). Safety-critical values are never guessed: an omitted medication dose/route
+SNOMED CT `value`), **Functional Status** (a Functional Status Observation with the template-fixed
+LOINC `code` `54522-8` and a SNOMED CT finding `value`, tagged `domain: "functional"`), and **Mental
+Status** (a Mental Status Observation with the R2.1 template-fixed SNOMED CT `code` `373930000` and a
+SNOMED CT finding `value`, tagged `domain: "mental"` — keyed off a distinct observation template root so
+it is never conflated with Functional Status). Safety-critical values are never guessed: an omitted medication dose/route
 is left absent so the parser flags it (rather than being defaulted), a `PQ` unit is emitted verbatim and
 re-checked against the computable UCUM grammar, a **refused** immunization is emitted as
 `negationInd="true"` (flagged `IMMUNIZATION_REFUSED` on re-parse) never conflated with a `nullFlavor`

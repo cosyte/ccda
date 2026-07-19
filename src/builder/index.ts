@@ -20,6 +20,7 @@ export type {
   BuildCcdaEncounter,
   BuildCcdaSmokingStatus,
   BuildCcdaFunctionalStatus,
+  BuildCcdaMentalStatus,
   BuildQuantity,
   BuildCode,
 } from "./build-ccda.js";

@@ -76,9 +76,24 @@
  * `domain: "functional"` — never conflated with Mental Status. Like the other
  * non-SHALL sections, Functional Status is emitted only when populated. The
  * Functional Status Section has no entries-required variant, so only the base
- * `templateId` is emitted even when it carries entries. Mental Status, the
- * Functional/Mental Status Organizer + Assessment Scale forms, Family History, Past
- * Medical History, and Plan of Treatment are deferred to later CCDA-P7 increments.
+ * `templateId` is emitted even when it carries entries.
+ *
+ * **This slice adds Mental Status.** A **Mental Status** section (`…22.2.56`,
+ * LOINC `10190-7`, the R2.1 `2015-08-01` stamp) emits one or more standalone
+ * Mental Status Observations (`…22.4.74`) — each with the R2.1 template-**fixed**
+ * SNOMED CT `code` (`373930000` "Cognitive function finding"), a SHALL `statusCode`
+ * (fixed `completed`), a SHALL `effectiveTime` [1..1] (the assessed time,
+ * `nullFlavor="UNK"` when unknown), and the SHALL SNOMED CT `value` [1..1] carrying
+ * the specific cognition/mood finding. **Unknown is never defaulted to a finding:**
+ * an absent `value` is emitted as `nullFlavor="UNK"`, never invented. The Mental
+ * Status templates are new in the R2.1 August 2015 errata (split out of Functional
+ * Status, hence the `2015-08-01` — not `2014-06-09` — stamp) and the two extractors
+ * key off their distinct observation roots (`…22.4.67` vs `…22.4.74`), so a mental
+ * finding reads back tagged `domain: "mental"` — **never conflated** with functional
+ * status. Like the other non-SHALL sections it is emitted only when populated, and
+ * its section has no entries-required variant. The Functional/Mental Status
+ * Organizer + Assessment Scale forms, Family History, Past Medical History, and Plan
+ * of Treatment are deferred to later CCDA-P7 increments.
  *
  * **SHALL `effectiveTime` on every entry.** Each act/observation the builder
  * emits carries the `effectiveTime` its C-CDA R2.1 template requires — the
@@ -109,6 +124,7 @@ import {
   IMMUNIZATION_MEDICATION_INFORMATION,
   MEDICATION_ACTIVITY,
   MEDICATION_INFORMATION,
+  MENTAL_STATUS_OBSERVATION,
   PROBLEM_CONCERN_ACT,
   PROBLEM_OBSERVATION,
   PROCEDURE_ACTIVITY_ACT,
@@ -184,6 +200,28 @@ const FUNCTIONAL_STATUS_EXT = "2014-06-09";
 const FUNCTIONAL_STATUS_CODE = {
   code: "54522-8",
   displayName: "Functional status",
+} as const;
+/**
+ * The `@extension` stamp carried by both the Mental Status Section (V2,
+ * `…22.2.56`) and the Mental Status Observation (`…22.4.74`). Unlike Functional
+ * Status (which keeps the `2014-06-09` version), the Mental Status Section and its
+ * observation were **introduced in the R2.1 August 2015 errata** — split out of
+ * Functional Status, "not backwards compatible with prior `…22.2.14`" — so they
+ * carry the `2015-08-01` stamp. Verified against the HL7 C-CDA R2.1 examples
+ * (`Mental Status/*(C-CDAR2.1).xml`). @internal
+ */
+const MENTAL_STATUS_EXT = "2015-08-01";
+/**
+ * The SNOMED CT `code` every Mental Status Observation carries — `373930000`
+ * "Cognitive function finding", **fixed** by the R2.1 template (the IG notes "In
+ * C-CDA R2.1 August 2015 this is a fixed code"; both R2.1 examples emit it). The
+ * specific finding lives in the coded `value`, never in this `code` — exactly as
+ * Functional Status fixes LOINC `54522-8`. (A later C-CDA version re-binds this
+ * code to LOINC `8693-4`; that is out of scope for this R2.1 builder.) @internal
+ */
+const MENTAL_STATUS_CODE = {
+  code: "373930000",
+  displayName: "Cognitive function finding",
 } as const;
 
 /**
@@ -684,6 +722,46 @@ export interface BuildCcdaFunctionalStatus {
 }
 
 /**
+ * A Mental Status finding for the Mental Status section — a Mental Status
+ * Observation (`…22.4.74`, the R2.1 `2015-08-01` stamp). The observation's `code`
+ * is **fixed** to SNOMED CT `373930000` "Cognitive function finding" by the R2.1
+ * template; the specific cognition/mood finding is the coded `value` (e.g. memory
+ * impairment `386807006`, no abnormality detected `281900007` — SNOMED CT).
+ *
+ * **Mental and functional status are never conflated.** This builds only the
+ * Mental Status templates (section `…22.2.56`, observation `…22.4.74`), so the
+ * parser reads every finding back tagged `domain: "mental"` — a mental finding is
+ * never filed under functional status (or vice versa); the two extractors key off
+ * their distinct observation template roots.
+ *
+ * **Unknown is never defaulted to a finding.** When `value` is omitted the
+ * observation's SHALL `value` is emitted as `nullFlavor="UNK"` — an *explicit*
+ * unknown, never invented as a real finding. `effectiveTime` is when the status
+ * was assessed; the template's SHALL effectiveTime is filled with
+ * `nullFlavor="UNK"` when the caller supplies none, never a fabricated date.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaMentalStatus } from "@cosyte/ccda";
+ * const memory: BuildCcdaMentalStatus = {
+ *   value: { code: "386807006", displayName: "Memory impairment" }, // SNOMED CT
+ *   effectiveTime: "20240101",
+ * };
+ * const unrecorded: BuildCcdaMentalStatus = {}; // → value nullFlavor="UNK"
+ * ```
+ */
+export interface BuildCcdaMentalStatus {
+  /**
+   * The SNOMED CT mental-status finding (the observation `value`). Omit for an
+   * explicit unknown (`value nullFlavor="UNK"`) — never defaulted to a real
+   * finding.
+   */
+  readonly value?: BuildCode;
+  /** The date the status was assessed (HL7 date string); `nullFlavor="UNK"` when omitted. */
+  readonly effectiveTime?: string;
+}
+
+/**
  * Input to {@link buildCcda}. `patient` is required; each clinical collection
  * (`problems`, `allergies`, `medications`, `results`, `vitalSigns`) defaults to
  * empty, in which case its section is emitted as a spec-clean empty
@@ -738,6 +816,8 @@ export interface BuildCcdaInit {
   readonly smokingStatus?: readonly BuildCcdaSmokingStatus[];
   /** Functional Status findings; the Functional Status section is emitted only when non-empty (a CCD SHOULD section). */
   readonly functionalStatus?: readonly BuildCcdaFunctionalStatus[];
+  /** Mental Status findings; the Mental Status section is emitted only when non-empty (a CCD SHOULD section). */
+  readonly mentalStatus?: readonly BuildCcdaMentalStatus[];
 }
 
 /** A monotonic id generator scoped to one build, for stable act/content ids. @internal */
@@ -890,6 +970,9 @@ export function buildCcda(init: BuildCcdaInit): CcdaDocument {
   }
   if ((init.functionalStatus?.length ?? 0) > 0) {
     structuredBody.appendChild(functionalStatusSection(doc, init.functionalStatus ?? [], id));
+  }
+  if ((init.mentalStatus?.length ?? 0) > 0) {
+    structuredBody.appendChild(mentalStatusSection(doc, init.mentalStatus ?? [], id));
   }
   root.appendChild(el(doc, "component", undefined, structuredBody));
 
@@ -1150,6 +1233,8 @@ const ENCOUNTERS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.22";
 const SOCIAL_HISTORY_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.17";
 /** @internal */
 const FUNCTIONAL_STATUS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.14";
+/** @internal */
+const MENTAL_STATUS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.56";
 
 /** Build the Problems section — populated, or empty when there are none. @internal */
 function problemsSection(
@@ -2131,6 +2216,98 @@ function functionalStatusEntry(
   obs.appendChild(pointEffectiveTime(doc, s.effectiveTime));
   // SHALL value [1..1] (CONF:1098-13932; SHOULD be SNOMED CT for a CD). An omitted
   // finding is an EXPLICIT nullFlavor="UNK" — never defaulted to a real finding.
+  obs.appendChild(
+    s.value === undefined
+      ? typedValue(doc, "CD", { nullFlavor: "UNK" })
+      : cdValue(doc, s.value, SNOMED_CT),
+  );
+  return el(doc, "entry", undefined, obs);
+}
+
+/**
+ * The narrative line for a Mental Status finding — the fixed `code` label
+ * ("Cognitive function finding") plus the specific finding, so it agrees with the
+ * observation's `code` (which the parser reconciles against the narrative). An
+ * omitted finding reads "Cognitive function finding: unknown", never a fabricated
+ * finding. @internal
+ */
+function mentalStatusLabel(s: BuildCcdaMentalStatus): string {
+  return `${MENTAL_STATUS_CODE.displayName}: ${s.value?.displayName ?? "unknown"}`;
+}
+
+/**
+ * Build the Mental Status section from one or more {@link BuildCcdaMentalStatus}
+ * findings. Only called with a non-empty list (see {@link buildCcda}) — Mental
+ * Status is a CCD SHOULD (not SHALL) section, so an unpopulated one is not
+ * fabricated. The Mental Status Section (V2, `…22.2.56`, the R2.1 `2015-08-01`
+ * stamp) has no entries-required variant, so only the base `templateId` is emitted
+ * even though the section carries entries. Only Mental Status templates are emitted
+ * here, so every finding reads back tagged `domain: "mental"` — never conflated
+ * with functional status. @internal
+ */
+function mentalStatusSection(
+  doc: Document,
+  findings: readonly BuildCcdaMentalStatus[],
+  id: (prefix: string) => string,
+): Element {
+  const text = el(doc, "text");
+  const entries: Element[] = [];
+  for (const s of findings) {
+    const contentId = id("ment-txt");
+    text.appendChild(textEl(doc, "content", mentalStatusLabel(s), { ID: contentId }));
+    entries.push(mentalStatusEntry(doc, s, contentId, id));
+  }
+  const section = sectionElement(
+    doc,
+    MENTAL_STATUS_SECTION_BASE,
+    "10190-7",
+    "Mental Status",
+    text,
+    false,
+    undefined,
+    MENTAL_STATUS_EXT,
+  );
+  for (const entry of entries) section.appendChild(entry);
+  return el(doc, "component", undefined, section);
+}
+
+/**
+ * Build one standalone Mental Status Observation `<entry>` (`…22.4.74`). The
+ * `code` is the R2.1 template-fixed SNOMED CT `373930000` "Cognitive function
+ * finding"; the specific finding is the coded `value`. @internal
+ */
+function mentalStatusEntry(
+  doc: Document,
+  s: BuildCcdaMentalStatus,
+  contentId: string,
+  id: (prefix: string) => string,
+): Element {
+  const obs = el(
+    doc,
+    "observation",
+    { classCode: "OBS", moodCode: "EVN" },
+    el(doc, "templateId", {
+      root: MENTAL_STATUS_OBSERVATION,
+      extension: MENTAL_STATUS_EXT,
+    }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("ment") }),
+    // SHALL code [1..1] — the R2.1 template-fixed SNOMED CT "Cognitive function
+    // finding"; the specific finding lives in `value`, not here.
+    codeEl(doc, "code", {
+      ...MENTAL_STATUS_CODE,
+      codeSystem: SNOMED_CT,
+      codeSystemName: "SNOMED CT",
+    }),
+    el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
+    // SHALL statusCode [1..1], fixed "completed".
+    el(doc, "statusCode", { code: "completed" }),
+  );
+  // Mental Status Observation (…22.4.74) SHALL contain effectiveTime [1..1] — the
+  // time the status was assessed. Emitted as an @value when supplied, else
+  // nullFlavor="UNK" (the SHALL satisfied without inventing a date).
+  obs.appendChild(pointEffectiveTime(doc, s.effectiveTime));
+  // SHALL value [1..1] (SHOULD be SNOMED CT for a CD). An omitted finding is an
+  // EXPLICIT nullFlavor="UNK" — never defaulted to a real finding.
   obs.appendChild(
     s.value === undefined
       ? typedValue(doc, "CD", { nullFlavor: "UNK" })
