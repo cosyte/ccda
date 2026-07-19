@@ -78,6 +78,37 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (fourth slice) — builder emits an Immunizations section.** Extends `buildCcda` beyond the
+  header + the reconciliation triad + Results/Vital Signs to emit **Immunizations** — the natural
+  continuation that completes the Phase-3 discrete-data trio (Results / Vital Signs / Immunizations) in
+  the emit path. A new optional `BuildCcdaInit.immunizations` (`BuildCcdaImmunization[]`) drives one
+  **Immunization Activity `…22.4.52`** `substanceAdministration` per shot → **Immunization Medication
+  Information `…22.4.54`**, the vaccine at `consumable/manufacturedProduct/manufacturedMaterial/code`
+  (**CVX** by default). Each entry round-trips through `getImmunizations()` to the same structured
+  content by construction, and a clean administered build still carries **zero warnings**.
+  - **Safety-critical fail-safes, mirroring the existing sections.** `dose` (`doseQuantity`) and `route`
+    (`routeCode`, **NCI Thesaurus** by default) are **never guessed** — an omitted one is simply left
+    absent. A **refused / not-administered** shot (`refused: true`) is emitted as `negationInd="true"`,
+    which the parser reads back as `refused` and flags `IMMUNIZATION_REFUSED` — the clinically
+    load-bearing refusal is surfaced, **never conflated** with a `nullFlavor` "unknown" (opposite
+    clinical meaning).
+  - **SHALL `effectiveTime` [1..1]** on the Immunization Activity (the substantive cardinality grounded
+    against the C-CDA R2.1 IG; the exact `CONF:` id is not re-verified and is intentionally not asserted):
+    the administration date is emitted as an `@value` when supplied, else `nullFlavor="UNK"` — satisfying
+    the cardinality without fabricating a clinical timestamp, read back as absent (never a real `Date`),
+    consistent with the third slice's every-entry `effectiveTime` rule.
+  - **Emitted only when populated.** Immunizations is **not** a CCD `SHALL` section (the CCD required set
+    is Allergies / Medications / Problems / Results), so an unpopulated Immunizations section is **not**
+    fabricated as an empty `nullFlavor="NI"` shell — unlike the five CCD sections the builder always
+    emits. The empty-build output is therefore unchanged.
+  - New public type `BuildCcdaImmunization`. No new required fields, no parser change, no warning-code
+    change; the round-trip-by-construction invariant and the serializer fixed point still hold.
+  - **Deferred:** the remaining sections (Procedures / Encounters / Plan of Treatment / Social History /
+    …) in the builder, the other eleven document types, C-CDA document _editing_, the bring-your-own
+    terminology adapter, and the external Schematron/XSD differential-validation gate (the roadmap's
+    still-unproven pure-JS-engine-capacity question, §10 Q10) — a `buildCcda` document remains
+    expected-but-not-proven against an external IG validator.
+
 - **Phase 7 (third slice) — builder emits the `SHALL` `effectiveTime` on every entry.** Closes the
   conformance gap the previous slice flagged in the README known-limitations: `buildCcda` emitted each
   act/observation's `effectiveTime` **only when the caller supplied a time**, so a built document

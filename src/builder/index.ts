@@ -15,6 +15,7 @@ export type {
   BuildCcdaResult,
   BuildCcdaVitalsPanel,
   BuildCcdaVital,
+  BuildCcdaImmunization,
   BuildQuantity,
   BuildCode,
 } from "./build-ccda.js";
