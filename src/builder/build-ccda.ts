@@ -48,6 +48,21 @@
  * The Procedures section and its entry templates carry the R2.1 `2014-06-09`
  * stamp (not the `2015-08-01` stamp the other sections use).
  *
+ * **This slice adds Social History (Smoking Status).** A **Social History**
+ * section (`…22.2.17`, LOINC `29762-2`) emits one or more Smoking Status —
+ * Meaningful Use observations (`…22.4.78`, the `2014-06-09` stamp) — each with
+ * the fixed LOINC `code` (`72166-2` "Tobacco smoking status"), a SHALL
+ * `statusCode`, a SHALL `effectiveTime` (the recorded time, `nullFlavor="UNK"`
+ * when unknown), and the SHALL SNOMED CT `value` from the Current Smoking Status
+ * value set. **Unknown is never defaulted to a status:** when the caller supplies
+ * no `value` the SHALL `value` is emitted as `nullFlavor="UNK"` — an explicit
+ * unknown the parser reads back as `unknown: true` and flags
+ * `SMOKING_STATUS_UNKNOWN` — never invented as a "never smoker" (absent status ≠
+ * non-smoker, the single safety rule this section turns on). Like Immunizations,
+ * Procedures, and Encounters — and unlike the four CCD SHALL sections — Social
+ * History is emitted only when populated; it is a CCD SHOULD section, so an empty
+ * one is never fabricated.
+ *
  * **SHALL `effectiveTime` on every entry.** Each act/observation the builder
  * emits carries the `effectiveTime` its C-CDA R2.1 template requires — the
  * Problem/Allergy Concern Acts and their observations, the Medication Activity
@@ -85,6 +100,7 @@ import {
   RESULT_OBSERVATION,
   RESULT_ORGANIZER,
   SEVERITY_OBSERVATION,
+  SMOKING_STATUS_OBSERVATION,
   VITAL_SIGN_OBSERVATION,
   VITAL_SIGNS_ORGANIZER,
 } from "../model/entries/shared.js";
@@ -120,6 +136,20 @@ const IMMUNIZATION_MED_INFO_EXT = "2014-06-09";
 const PROCEDURE_EXT = "2014-06-09";
 /** The CPT-4 code system OID — the default terminology for an encounter type code. @internal */
 const CPT = "2.16.840.1.113883.6.12";
+/**
+ * The `@extension` stamp carried by the Smoking Status — Meaningful Use (V2)
+ * observation template (`…22.4.78`) — R2.1's `2014-06-09` version. @internal
+ */
+const SMOKING_STATUS_EXT = "2014-06-09";
+/**
+ * The LOINC `code` every Smoking Status observation carries — `72166-2`
+ * "Tobacco smoking status" (fixed by the Smoking Status — Meaningful Use
+ * template, independent of the coded `value`). @internal
+ */
+const SMOKING_STATUS_CODE = {
+  code: "72166-2",
+  displayName: "Tobacco smoking status",
+} as const;
 
 /**
  * A coded value for the builder — the tuple the parser reads back as a `CD`.
@@ -541,6 +571,44 @@ export interface BuildCcdaEncounter {
 }
 
 /**
+ * A Smoking Status observation for the Social History section — the Smoking
+ * Status — Meaningful Use observation (`…22.4.78`), the safety-relevant
+ * social-history fact most consumers ask for. `value` is the SNOMED CT concept
+ * from the Current Smoking Status value set (`2.16.840.1.113883.11.20.9.38`,
+ * e.g. former smoker `8517006`, never smoker `266919005`, current every-day
+ * smoker `449868002`).
+ *
+ * **Unknown is never defaulted to a status.** When `value` is omitted the
+ * observation's SHALL `value` is emitted as `nullFlavor="UNK"` — an *explicit*
+ * unknown that the parser reads back as `unknown: true` (and flags
+ * `SMOKING_STATUS_UNKNOWN`). The builder will **never** invent a "never smoker"
+ * (or any other) reading the caller did not supply: absent status ≠ non-smoker.
+ * `effectiveTime` is when the status was recorded; `nullFlavor="UNK"` when omitted.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaSmokingStatus } from "@cosyte/ccda";
+ * const former: BuildCcdaSmokingStatus = {
+ *   value: { code: "8517006", displayName: "Former smoker" }, // SNOMED CT
+ *   effectiveTime: "20240101",
+ * };
+ * const unrecorded: BuildCcdaSmokingStatus = {}; // → value nullFlavor="UNK"
+ * ```
+ */
+export interface BuildCcdaSmokingStatus {
+  /**
+   * The SNOMED CT smoking-status concept (Current Smoking Status value set).
+   * Omit for an explicit unknown (`value nullFlavor="UNK"`) — never defaulted to
+   * a real status.
+   */
+  readonly value?: BuildCode;
+  /** The date the status was recorded (HL7 date string); `nullFlavor="UNK"` when omitted. */
+  readonly effectiveTime?: string;
+  /** The observation `statusCode`; defaults to `"completed"`. */
+  readonly status?: string;
+}
+
+/**
  * Input to {@link buildCcda}. `patient` is required; each clinical collection
  * (`problems`, `allergies`, `medications`, `results`, `vitalSigns`) defaults to
  * empty, in which case its section is emitted as a spec-clean empty
@@ -591,6 +659,8 @@ export interface BuildCcdaInit {
   readonly procedures?: readonly BuildCcdaProcedure[];
   /** Encounter Activities; the Encounters section is emitted only when non-empty (a CCD SHOULD section). */
   readonly encounters?: readonly BuildCcdaEncounter[];
+  /** Smoking Status observations for the Social History section; emitted only when non-empty (a CCD SHOULD section). */
+  readonly smokingStatus?: readonly BuildCcdaSmokingStatus[];
 }
 
 /** A monotonic id generator scoped to one build, for stable act/content ids. @internal */
@@ -737,6 +807,9 @@ export function buildCcda(init: BuildCcdaInit): CcdaDocument {
   }
   if ((init.encounters?.length ?? 0) > 0) {
     structuredBody.appendChild(encountersSection(doc, init.encounters ?? [], id));
+  }
+  if ((init.smokingStatus?.length ?? 0) > 0) {
+    structuredBody.appendChild(socialHistorySection(doc, init.smokingStatus ?? [], id));
   }
   root.appendChild(el(doc, "component", undefined, structuredBody));
 
@@ -993,6 +1066,8 @@ const IMMUNIZATIONS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.2";
 const PROCEDURES_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.7";
 /** @internal */
 const ENCOUNTERS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.22";
+/** @internal */
+const SOCIAL_HISTORY_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.17";
 
 /** Build the Problems section — populated, or empty when there are none. @internal */
 function problemsSection(
@@ -1814,4 +1889,80 @@ function encounterPeriod(
   );
   if (period?.high !== undefined) et.appendChild(el(doc, "high", { value: period.high }));
   return et;
+}
+
+/** The narrative line for a Smoking Status — the status label, or an explicit "unknown". @internal */
+function smokingStatusLabel(s: BuildCcdaSmokingStatus): string {
+  return s.value?.displayName ?? "Smoking status unknown";
+}
+
+/**
+ * Build the Social History section from one or more {@link BuildCcdaSmokingStatus}
+ * observations. Only called with a non-empty list (see {@link buildCcda}) —
+ * Social History is a CCD SHOULD (not SHALL) section, so an unpopulated one is not
+ * fabricated. The Social History Section template (`…22.2.17`) has no
+ * entries-required variant, so only the base `templateId` is emitted even though
+ * the section carries entries.
+ * @internal
+ */
+function socialHistorySection(
+  doc: Document,
+  statuses: readonly BuildCcdaSmokingStatus[],
+  id: (prefix: string) => string,
+): Element {
+  const text = el(doc, "text");
+  const entries: Element[] = [];
+  for (const s of statuses) {
+    const contentId = id("smk-txt");
+    // The narrative carries the smoking-status label so it agrees with the coded
+    // value (an unknown status reads "Smoking status unknown", never a fabricated
+    // reading).
+    text.appendChild(textEl(doc, "content", smokingStatusLabel(s), { ID: contentId }));
+    entries.push(smokingStatusEntry(doc, s, contentId, id));
+  }
+  const section = sectionElement(
+    doc,
+    SOCIAL_HISTORY_SECTION_BASE,
+    "29762-2",
+    "Social History",
+    text,
+    false,
+  );
+  for (const entry of entries) section.appendChild(entry);
+  return el(doc, "component", undefined, section);
+}
+
+/** Build one Smoking Status observation `<entry>` (`…22.4.78`). @internal */
+function smokingStatusEntry(
+  doc: Document,
+  s: BuildCcdaSmokingStatus,
+  contentId: string,
+  id: (prefix: string) => string,
+): Element {
+  const obs = el(
+    doc,
+    "observation",
+    { classCode: "OBS", moodCode: "EVN" },
+    el(doc, "templateId", { root: SMOKING_STATUS_OBSERVATION, extension: SMOKING_STATUS_EXT }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("smk") }),
+    // SHALL code [1..1] — the fixed LOINC "Tobacco smoking status"; the specific
+    // reading lives in `value`, not here.
+    codeEl(doc, "code", { ...SMOKING_STATUS_CODE, codeSystem: LOINC, codeSystemName: "LOINC" }),
+    el(doc, "statusCode", { code: s.status ?? "completed" }),
+  );
+  // Smoking Status Observation (…22.4.78) SHALL contain effectiveTime [1..1] — the
+  // time the status was recorded. Emitted as an @value when supplied, else
+  // nullFlavor="UNK" (the SHALL satisfied without inventing a date).
+  obs.appendChild(pointEffectiveTime(doc, s.effectiveTime));
+  // SHALL value [1..1] (SNOMED CT, Current Smoking Status value set). An omitted
+  // status is an EXPLICIT nullFlavor="UNK" — read back as `unknown: true` and
+  // flagged SMOKING_STATUS_UNKNOWN — NEVER defaulted to a real reading such as
+  // "never smoker" (absent status ≠ non-smoker; the single safety rule here).
+  obs.appendChild(
+    s.value === undefined
+      ? typedValue(doc, "CD", { nullFlavor: "UNK" })
+      : cdValue(doc, s.value, SNOMED_CT),
+  );
+  obs.appendChild(el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })));
+  return el(doc, "entry", undefined, obs);
 }

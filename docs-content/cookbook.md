@@ -338,9 +338,31 @@ doc.getEncounters()[0]?.code?.code; // => "99213"
 doc.warnings.length; // => 0
 ```
 
+`buildCcda` also emits a **Social History** section carrying **Smoking Status** observations when
+supplied. A known status is a SNOMED CT concept from the Current Smoking Status value set. An
+*unknown* status is never guessed: omit `value` and the builder emits an explicit `nullFlavor="UNK"`,
+which the parser reads back as `unknown` — absent status is never read as "never smoker":
+
+```ts runnable
+import { buildCcda } from "@cosyte/ccda";
+
+const doc = buildCcda({
+  patient: { mrn: "MRN-00042" },
+  smokingStatus: [
+    { value: { code: "8517006", displayName: "Former smoker" }, effectiveTime: "20240101" }, // SNOMED CT
+    {}, // status not recorded → an EXPLICIT nullFlavor="UNK", never invented as a reading
+  ],
+});
+
+doc.getSmokingStatus()[0]?.value?.code; // => "8517006"
+doc.getSmokingStatus()[0]?.unknown; // => false
+// A missing status is surfaced as unknown, not defaulted to a value:
+doc.getSmokingStatus()[1]?.unknown; // => true
+```
+
 > Current builder scope: `buildCcda` emits a CCD with the US Realm header, the CCD SHALL sections
 > (Problems, Allergies, Medications, Results, Vital Signs — emitted empty as `nullFlavor="NI"` when no
-> content is supplied), and **Immunizations**, **Procedures**, and **Encounters** sections when
-> populated. The remaining sections (Plan of Treatment, Social History, …), the other eleven document
-> types, C-CDA document _editing_, and a bring-your-own-credentials terminology adapter are a later
-> increment.
+> content is supplied), and **Immunizations**, **Procedures**, **Encounters**, and **Social History**
+> (Smoking Status) sections when populated. The remaining sections (Plan of Treatment, Functional
+> Status, Family History, …), the other eleven document types, C-CDA document _editing_, and a
+> bring-your-own-credentials terminology adapter are a later increment.

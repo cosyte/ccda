@@ -78,6 +78,30 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (sixth slice) — builder emits a Social History (Smoking Status) section.** Extends
+  `buildCcda` with one new optional input — `BuildCcdaInit.smokingStatus` (`BuildCcdaSmokingStatus[]`)
+  — that round-trips through `getSmokingStatus()` to the same structured content by construction; a
+  clean build still carries **zero warnings**.
+  - **Social History section + Smoking Status observation.** A Social History section **`…22.2.17`**
+    (LOINC `29762-2`, the V3 **`2015-08-01`** stamp, which has **no** entries-required `.1` variant, so
+    only the base `templateId` is emitted) carries one or more Smoking Status — Meaningful Use
+    observations **`…22.4.78`** (the **`2014-06-09`** stamp). Each observation emits the fixed LOINC
+    `code` (`72166-2` "Tobacco smoking status"), a SHALL `statusCode`, a SHALL `effectiveTime` (the
+    recorded time; `nullFlavor="UNK"` when unknown), and the SHALL **SNOMED CT** `value` from the
+    Current Smoking Status value set.
+  - **Unknown is never defaulted to a status (the safety rule).** When the caller supplies no `value`,
+    the SHALL `value` is emitted as an **explicit `nullFlavor="UNK"`** — read back by the parser as
+    `unknown: true` and flagged `SMOKING_STATUS_UNKNOWN` — **never** invented as a "never smoker" (or any
+    other) reading. Absent status ≠ non-smoker; `nullFlavor` and a real coded value are never conflated.
+  - **Emitted only when populated.** Social History is not a CCD `SHALL` section (the CCD required set is
+    Allergies / Medications / Problems / Results), so — like Immunizations / Procedures / Encounters — an
+    unpopulated section is **not** fabricated. The empty-build output is unchanged.
+  - New public type `BuildCcdaSmokingStatus`. No parser change and no warning-code change; the
+    round-trip-by-construction invariant and the serializer fixed point still hold.
+  - **Deferred:** the remaining sections (Plan of Treatment / Functional Status / Family History / Past
+    Medical History / …) in the builder, the other eleven document types, C-CDA document _editing_, the
+    bring-your-own terminology adapter, and the external Schematron/XSD differential-validation gate.
+
 - **Phase 7 (fifth slice) — builder emits Procedures and Encounters sections.** Extends `buildCcda`
   beyond the header + reconciliation triad + Results/Vital Signs/Immunizations to emit the next two
   roadmap sections, added together because they share plumbing (a coded act with `statusCode` +
