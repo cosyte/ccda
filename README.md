@@ -24,9 +24,9 @@ substrate for C-CDA's XML.
 > History / Past Medical History), and per-document-type required-section (SHALL) validation — plus a
 > **spec-clean, round-trip serializer** (`serializeCcda` / `toString()`) and immutable copy-with
 > (`withWarnings`). A document **builder** (`buildCcda`) emits a spec-clean CCD with the US Realm header
-> and populated **Problems, Allergies, Medications, Results, Vital Signs, Immunizations, Procedures, and
-> Encounters** sections (each round-tripping through `parseCcda`); the other document types and remaining
-> sections land in a later increment.
+> and populated **Problems, Allergies, Medications, Results, Vital Signs, Immunizations, Procedures,
+> Encounters, and Social-History smoking status** sections (each round-tripping through `parseCcda`); the
+> other document types and remaining sections land in a later increment.
 
 ## Install
 

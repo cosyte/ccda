@@ -72,6 +72,7 @@ export type {
   BuildCcdaImmunization,
   BuildCcdaProcedure,
   BuildCcdaEncounter,
+  BuildCcdaSmokingStatus,
   BuildQuantity,
   BuildCode,
 } from "./builder/index.js";

@@ -122,6 +122,12 @@ const RICH_INIT: BuildCcdaInit = {
       period: { low: "20230615", high: "20230615" },
     },
   ],
+  smokingStatus: [
+    {
+      value: { code: "8517006", displayName: "Former smoker" },
+      effectiveTime: "20240101",
+    },
+  ],
 };
 
 describe("buildCcda — document identity + header", () => {
@@ -701,6 +707,76 @@ describe("buildCcda — encounters round-trip", () => {
   });
 
   it("is a serialization fixed point with procedures + encounters present", () => {
+    const xml = serializeCcda(buildCcda(RICH_INIT));
+    expect(parseCcda(xml).toString()).toBe(xml);
+  });
+});
+
+describe("buildCcda — social history (smoking status) round-trip", () => {
+  it("re-parses a known Smoking Status with its SNOMED value, recorded time, and no unknown flag", () => {
+    const doc = buildCcda(RICH_INIT);
+    const [status] = doc.getSmokingStatus();
+    expect(status?.value?.code).toBe("8517006");
+    expect(status?.value?.codeSystem).toBe("2.16.840.1.113883.6.96"); // SNOMED CT
+    expect(status?.unknown).toBe(false);
+    expect(status?.statusCode).toBe("completed");
+    expect(status?.effectiveTime?.value?.raw).toBe("20240101");
+    expect(status?.narrative).toBe("Former smoker");
+    expect(doc.warnings).toEqual([]);
+  });
+
+  it("emits the Social History section with LOINC 29762-2 and the …4.78 observation (2014-06-09)", () => {
+    const doc = buildCcda(RICH_INIT);
+    expect(doc.findSection("socialHistory")?.code?.code).toBe("29762-2");
+    const xml = serializeCcda(doc);
+    // Social History Section (V3) is 2015-08-01; it has no entries-required variant.
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.17" extension="2015-08-01"');
+    expect(xml).not.toContain('root="2.16.840.1.113883.10.20.22.2.17.1"');
+    // The Smoking Status — Meaningful Use observation carries the 2014-06-09 stamp
+    // and the fixed LOINC "Tobacco smoking status" code.
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.4.78" extension="2014-06-09"');
+    expect(xml).toContain('code="72166-2"');
+  });
+
+  it("emits an EXPLICIT nullFlavor=UNK value for an unrecorded status — never a fabricated reading", () => {
+    const doc = buildCcda({ patient: { mrn: "M" }, smokingStatus: [{}] });
+    const [status] = doc.getSmokingStatus();
+    expect(status?.unknown).toBe(true);
+    expect(status?.value?.nullFlavor).toBe("UNK");
+    expect(status?.value?.code).toBeUndefined();
+    // The explicit-unknown is surfaced, not silently dropped or read as "never smoker".
+    expect(doc.warnings.map((w) => w.code)).toContain("SMOKING_STATUS_UNKNOWN");
+    const xml = serializeCcda(doc);
+    expect(xml).toContain('xsi:type="CD"');
+    expect(xml).toContain('nullFlavor="UNK"');
+  });
+
+  it("fills the SHALL effectiveTime with nullFlavor=UNK when no recorded time is supplied", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      smokingStatus: [{ value: { code: "266919005", displayName: "Never smoked tobacco" } }],
+    });
+    // A recognized value-set code with no recorded time is still warning-free.
+    expect(doc.warnings).toEqual([]);
+    const [status] = doc.getSmokingStatus();
+    expect(status?.value?.code).toBe("266919005");
+    expect(status?.unknown).toBe(false);
+    expect(status?.effectiveTime?.nullFlavor).toBe("UNK");
+  });
+
+  it("does NOT emit a Social History section when none is supplied", () => {
+    const doc = buildCcda({ patient: { mrn: "M" } });
+    expect(doc.findSection("socialHistory")).toBeUndefined();
+    expect(doc.getSmokingStatus()).toEqual([]);
+    expect(serializeCcda(doc)).not.toContain('code="29762-2"');
+  });
+
+  it("does not flag the smoking-status entry as misplaced (it homes to Social History)", () => {
+    const doc = buildCcda(RICH_INIT);
+    expect(doc.warnings.map((w) => w.code)).not.toContain("SECTION_PLACEMENT_SUSPECT");
+  });
+
+  it("is a serialization fixed point with a Social History section present", () => {
     const xml = serializeCcda(buildCcda(RICH_INIT));
     expect(parseCcda(xml).toString()).toBe(xml);
   });
