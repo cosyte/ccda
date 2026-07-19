@@ -63,6 +63,23 @@
  * History is emitted only when populated; it is a CCD SHOULD section, so an empty
  * one is never fabricated.
  *
+ * **This slice adds Functional Status.** A **Functional Status** section
+ * (`…22.2.14`, LOINC `47420-5`, the `2014-06-09` stamp) emits one or more
+ * standalone Functional Status Observations (`…22.4.67`) — each with the
+ * template-**fixed** LOINC `code` (`54522-8` "Functional status"), a SHALL
+ * `statusCode` (fixed `completed`), a SHALL `effectiveTime` [1..1] (the assessed
+ * time, `nullFlavor="UNK"` when unknown), and the SHALL SNOMED CT `value` [1..1]
+ * carrying the specific finding. **Unknown is never defaulted to a finding:** when
+ * the caller supplies no `value` the SHALL `value` is emitted as
+ * `nullFlavor="UNK"` — an explicit unknown, never invented. Only Functional Status
+ * templates are emitted, so the parser reads every finding back tagged
+ * `domain: "functional"` — never conflated with Mental Status. Like the other
+ * non-SHALL sections, Functional Status is emitted only when populated. The
+ * Functional Status Section has no entries-required variant, so only the base
+ * `templateId` is emitted even when it carries entries. Mental Status, the
+ * Functional/Mental Status Organizer + Assessment Scale forms, Family History, Past
+ * Medical History, and Plan of Treatment are deferred to later CCDA-P7 increments.
+ *
  * **SHALL `effectiveTime` on every entry.** Each act/observation the builder
  * emits carries the `effectiveTime` its C-CDA R2.1 template requires — the
  * Problem/Allergy Concern Acts and their observations, the Medication Activity
@@ -87,6 +104,7 @@ import {
   ALLERGY_OBSERVATION,
   CRITICALITY_OBSERVATION,
   ENCOUNTER_ACTIVITY,
+  FUNCTIONAL_STATUS_OBSERVATION,
   IMMUNIZATION_ACTIVITY,
   IMMUNIZATION_MEDICATION_INFORMATION,
   MEDICATION_ACTIVITY,
@@ -149,6 +167,23 @@ const SMOKING_STATUS_EXT = "2014-06-09";
 const SMOKING_STATUS_CODE = {
   code: "72166-2",
   displayName: "Tobacco smoking status",
+} as const;
+/**
+ * The `@extension` stamp carried by both the Functional Status Section (V2,
+ * `…22.2.14`) and the Functional Status Observation (`…22.4.67`) — R2.1's
+ * `2014-06-09` version, not the `2015-08-01` stamp the CCD SHALL sections use.
+ * @internal
+ */
+const FUNCTIONAL_STATUS_EXT = "2014-06-09";
+/**
+ * The LOINC `code` every Functional Status Observation carries — `54522-8`
+ * "Functional status", **fixed** by the template (CONF: `patternCode`,
+ * independent of the specific finding). The finding itself lives in the coded
+ * `value`, never in this `code`. @internal
+ */
+const FUNCTIONAL_STATUS_CODE = {
+  code: "54522-8",
+  displayName: "Functional status",
 } as const;
 
 /**
@@ -609,6 +644,46 @@ export interface BuildCcdaSmokingStatus {
 }
 
 /**
+ * A Functional Status finding for the Functional Status section — a Functional
+ * Status Observation (`…22.4.67`, the `2014-06-09` stamp). The observation's
+ * `code` is **fixed** to LOINC `54522-8` "Functional status" by the template;
+ * the specific finding is the coded `value`. `value` is the SNOMED CT finding
+ * (e.g. able to walk `165245003`, dependent on wheelchair `105503008`,
+ * self-care `129019007`).
+ *
+ * **Functional and mental status are never conflated.** This builds only the
+ * Functional Status templates (section `…22.2.14`, observation `…22.4.67`), so
+ * the parser reads every finding back tagged `domain: "functional"` — a
+ * functional finding is never filed under mental status (or vice versa).
+ *
+ * **Unknown is never defaulted to a finding.** When `value` is omitted the
+ * observation's SHALL `value` is emitted as `nullFlavor="UNK"` — an *explicit*
+ * unknown, never invented as a real finding. `effectiveTime` is when the status
+ * was assessed; the template's SHALL effectiveTime is filled with
+ * `nullFlavor="UNK"` when the caller supplies none, never a fabricated date.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaFunctionalStatus } from "@cosyte/ccda";
+ * const ambulation: BuildCcdaFunctionalStatus = {
+ *   value: { code: "165245003", displayName: "Able to walk" }, // SNOMED CT
+ *   effectiveTime: "20240101",
+ * };
+ * const unrecorded: BuildCcdaFunctionalStatus = {}; // → value nullFlavor="UNK"
+ * ```
+ */
+export interface BuildCcdaFunctionalStatus {
+  /**
+   * The SNOMED CT functional-status finding (the observation `value`). Omit for
+   * an explicit unknown (`value nullFlavor="UNK"`) — never defaulted to a real
+   * finding.
+   */
+  readonly value?: BuildCode;
+  /** The date the status was assessed (HL7 date string); `nullFlavor="UNK"` when omitted. */
+  readonly effectiveTime?: string;
+}
+
+/**
  * Input to {@link buildCcda}. `patient` is required; each clinical collection
  * (`problems`, `allergies`, `medications`, `results`, `vitalSigns`) defaults to
  * empty, in which case its section is emitted as a spec-clean empty
@@ -661,6 +736,8 @@ export interface BuildCcdaInit {
   readonly encounters?: readonly BuildCcdaEncounter[];
   /** Smoking Status observations for the Social History section; emitted only when non-empty (a CCD SHOULD section). */
   readonly smokingStatus?: readonly BuildCcdaSmokingStatus[];
+  /** Functional Status findings; the Functional Status section is emitted only when non-empty (a CCD SHOULD section). */
+  readonly functionalStatus?: readonly BuildCcdaFunctionalStatus[];
 }
 
 /** A monotonic id generator scoped to one build, for stable act/content ids. @internal */
@@ -810,6 +887,9 @@ export function buildCcda(init: BuildCcdaInit): CcdaDocument {
   }
   if ((init.smokingStatus?.length ?? 0) > 0) {
     structuredBody.appendChild(socialHistorySection(doc, init.smokingStatus ?? [], id));
+  }
+  if ((init.functionalStatus?.length ?? 0) > 0) {
+    structuredBody.appendChild(functionalStatusSection(doc, init.functionalStatus ?? [], id));
   }
   root.appendChild(el(doc, "component", undefined, structuredBody));
 
@@ -1068,6 +1148,8 @@ const PROCEDURES_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.7";
 const ENCOUNTERS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.22";
 /** @internal */
 const SOCIAL_HISTORY_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.17";
+/** @internal */
+const FUNCTIONAL_STATUS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.14";
 
 /** Build the Problems section — populated, or empty when there are none. @internal */
 function problemsSection(
@@ -1964,5 +2046,95 @@ function smokingStatusEntry(
       : cdValue(doc, s.value, SNOMED_CT),
   );
   obs.appendChild(el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })));
+  return el(doc, "entry", undefined, obs);
+}
+
+/**
+ * The narrative line for a Functional Status finding — the fixed `code` label
+ * ("Functional status") plus the specific finding, so it agrees with the
+ * observation's `code` (which the parser reconciles against the narrative). An
+ * omitted finding reads "Functional status: unknown", never a fabricated
+ * finding. @internal
+ */
+function functionalStatusLabel(s: BuildCcdaFunctionalStatus): string {
+  return `${FUNCTIONAL_STATUS_CODE.displayName}: ${s.value?.displayName ?? "unknown"}`;
+}
+
+/**
+ * Build the Functional Status section from one or more
+ * {@link BuildCcdaFunctionalStatus} findings. Only called with a non-empty list
+ * (see {@link buildCcda}) — Functional Status is a CCD SHOULD (not SHALL)
+ * section, so an unpopulated one is not fabricated. The Functional Status
+ * Section (V2, `…22.2.14`) has no entries-required variant, so only the base
+ * `templateId` (the `2014-06-09` stamp) is emitted even though the section
+ * carries entries. Only Functional Status templates are emitted here, so every
+ * finding reads back tagged `domain: "functional"` — never conflated with mental
+ * status. @internal
+ */
+function functionalStatusSection(
+  doc: Document,
+  findings: readonly BuildCcdaFunctionalStatus[],
+  id: (prefix: string) => string,
+): Element {
+  const text = el(doc, "text");
+  const entries: Element[] = [];
+  for (const s of findings) {
+    const contentId = id("func-txt");
+    text.appendChild(textEl(doc, "content", functionalStatusLabel(s), { ID: contentId }));
+    entries.push(functionalStatusEntry(doc, s, contentId, id));
+  }
+  const section = sectionElement(
+    doc,
+    FUNCTIONAL_STATUS_SECTION_BASE,
+    "47420-5",
+    "Functional Status",
+    text,
+    false,
+    undefined,
+    FUNCTIONAL_STATUS_EXT,
+  );
+  for (const entry of entries) section.appendChild(entry);
+  return el(doc, "component", undefined, section);
+}
+
+/**
+ * Build one standalone Functional Status Observation `<entry>` (`…22.4.67`). The
+ * `code` is the template-fixed LOINC `54522-8`; the finding is the coded
+ * `value`. @internal
+ */
+function functionalStatusEntry(
+  doc: Document,
+  s: BuildCcdaFunctionalStatus,
+  contentId: string,
+  id: (prefix: string) => string,
+): Element {
+  const obs = el(
+    doc,
+    "observation",
+    { classCode: "OBS", moodCode: "EVN" },
+    el(doc, "templateId", {
+      root: FUNCTIONAL_STATUS_OBSERVATION,
+      extension: FUNCTIONAL_STATUS_EXT,
+    }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("func") }),
+    // SHALL code [1..1] — the template-fixed LOINC "Functional status"; the
+    // specific finding lives in `value`, not here.
+    codeEl(doc, "code", { ...FUNCTIONAL_STATUS_CODE, codeSystem: LOINC, codeSystemName: "LOINC" }),
+    el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
+    // SHALL statusCode [1..1], fixed "completed".
+    el(doc, "statusCode", { code: "completed" }),
+  );
+  // Functional Status Observation (…22.4.67) SHALL contain effectiveTime [1..1]
+  // (CONF:1098-13930) — the time the status was assessed. Emitted as an @value
+  // when supplied, else nullFlavor="UNK" (the SHALL satisfied without inventing a
+  // date).
+  obs.appendChild(pointEffectiveTime(doc, s.effectiveTime));
+  // SHALL value [1..1] (CONF:1098-13932; SHOULD be SNOMED CT for a CD). An omitted
+  // finding is an EXPLICIT nullFlavor="UNK" — never defaulted to a real finding.
+  obs.appendChild(
+    s.value === undefined
+      ? typedValue(doc, "CD", { nullFlavor: "UNK" })
+      : cdValue(doc, s.value, SNOMED_CT),
+  );
   return el(doc, "entry", undefined, obs);
 }

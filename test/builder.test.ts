@@ -128,6 +128,12 @@ const RICH_INIT: BuildCcdaInit = {
       effectiveTime: "20240101",
     },
   ],
+  functionalStatus: [
+    {
+      value: { code: "165245003", displayName: "Able to walk" },
+      effectiveTime: "20240101",
+    },
+  ],
 };
 
 describe("buildCcda — document identity + header", () => {
@@ -777,6 +783,94 @@ describe("buildCcda — social history (smoking status) round-trip", () => {
   });
 
   it("is a serialization fixed point with a Social History section present", () => {
+    const xml = serializeCcda(buildCcda(RICH_INIT));
+    expect(parseCcda(xml).toString()).toBe(xml);
+  });
+});
+
+describe("buildCcda — functional status round-trip", () => {
+  it("re-parses a known Functional Status finding tagged domain=functional, warning-free", () => {
+    const doc = buildCcda(RICH_INIT);
+    const findings = doc.getFunctionalStatus();
+    expect(findings).toHaveLength(1);
+    const [finding] = findings;
+    expect(finding?.domain).toBe("functional");
+    // The specific finding lives in the coded value (SNOMED CT), not the fixed code.
+    expect(finding?.value?.kind).toBe("coded");
+    expect(finding?.value?.kind === "coded" ? finding.value.code.code : undefined).toBe(
+      "165245003",
+    );
+    expect(finding?.value?.kind === "coded" ? finding.value.code.codeSystem : undefined).toBe(
+      "2.16.840.1.113883.6.96",
+    );
+    expect(finding?.code?.code).toBe("54522-8");
+    expect(finding?.assessmentScale).toBeUndefined();
+    expect(finding?.statusCode).toBe("completed");
+    expect(finding?.effectiveTime?.value?.raw).toBe("20240101");
+    expect(doc.warnings).toEqual([]);
+  });
+
+  it("emits the Functional Status section (LOINC 47420-5, …4.67 obs, 2014-06-09, fixed code 54522-8)", () => {
+    const doc = buildCcda(RICH_INIT);
+    expect(doc.findSection("functionalStatus")?.code?.code).toBe("47420-5");
+    const xml = serializeCcda(doc);
+    // The Functional Status Section (V2) carries the 2014-06-09 stamp and has no
+    // entries-required variant (…2.14.1).
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.14" extension="2014-06-09"');
+    expect(xml).not.toContain('root="2.16.840.1.113883.10.20.22.2.14.1"');
+    // The Functional Status Observation carries the 2014-06-09 stamp and the
+    // template-fixed LOINC "Functional status" code (54522-8).
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.4.67" extension="2014-06-09"');
+    expect(xml).toContain('code="54522-8"');
+  });
+
+  it("emits an EXPLICIT nullFlavor=UNK value for an unrecorded finding — never a fabricated one", () => {
+    const doc = buildCcda({ patient: { mrn: "M" }, functionalStatus: [{}] });
+    expect(doc.warnings).toEqual([]);
+    const [finding] = doc.getFunctionalStatus();
+    // The SHALL value [1..1] is satisfied by an explicit unknown, not an invented finding.
+    expect(finding?.value?.kind).toBe("coded");
+    expect(finding?.value?.kind === "coded" ? finding.value.code.nullFlavor : undefined).toBe(
+      "UNK",
+    );
+    expect(finding?.value?.kind === "coded" ? finding.value.code.code : undefined).toBeUndefined();
+    const xml = serializeCcda(doc);
+    expect(xml).toContain('xsi:type="CD"');
+    expect(xml).toContain('nullFlavor="UNK"');
+  });
+
+  it("fills the SHALL effectiveTime with nullFlavor=UNK when no assessed time is supplied", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      functionalStatus: [{ value: { code: "129019007", displayName: "Self-care" } }],
+    });
+    expect(doc.warnings).toEqual([]);
+    const [finding] = doc.getFunctionalStatus();
+    expect(finding?.value?.kind === "coded" ? finding.value.code.code : undefined).toBe(
+      "129019007",
+    );
+    expect(finding?.effectiveTime?.nullFlavor).toBe("UNK");
+  });
+
+  it("never conflates functional findings with mental status (mental stays empty)", () => {
+    const doc = buildCcda(RICH_INIT);
+    expect(doc.getFunctionalStatus()).toHaveLength(1);
+    expect(doc.getMentalStatus()).toEqual([]);
+  });
+
+  it("does NOT emit a Functional Status section when none is supplied", () => {
+    const doc = buildCcda({ patient: { mrn: "M" } });
+    expect(doc.findSection("functionalStatus")).toBeUndefined();
+    expect(doc.getFunctionalStatus()).toEqual([]);
+    expect(serializeCcda(doc)).not.toContain('code="47420-5"');
+  });
+
+  it("does not flag the functional-status entry as misplaced (it homes to Functional Status)", () => {
+    const doc = buildCcda(RICH_INIT);
+    expect(doc.warnings.map((w) => w.code)).not.toContain("SECTION_PLACEMENT_SUSPECT");
+  });
+
+  it("is a serialization fixed point with a Functional Status section present", () => {
     const xml = serializeCcda(buildCcda(RICH_INIT));
     expect(parseCcda(xml).toString()).toBe(xml);
   });

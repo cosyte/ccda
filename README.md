@@ -25,8 +25,8 @@ substrate for C-CDA's XML.
 > **spec-clean, round-trip serializer** (`serializeCcda` / `toString()`) and immutable copy-with
 > (`withWarnings`). A document **builder** (`buildCcda`) emits a spec-clean CCD with the US Realm header
 > and populated **Problems, Allergies, Medications, Results, Vital Signs, Immunizations, Procedures,
-> Encounters, and Social-History smoking status** sections (each round-tripping through `parseCcda`); the
-> other document types and remaining sections land in a later increment.
+> Encounters, Social-History smoking status, and Functional Status** sections (each round-tripping through
+> `parseCcda`); the other document types and remaining sections land in a later increment.
 
 ## Install
 
@@ -207,17 +207,22 @@ Observation with a UCUM `PQ` / coded / string value, reference range, interpreta
 Signs** (LOINC + UCUM), **Immunizations** (Immunization Activity → Immunization Medication
 Information with a CVX vaccine, dose, route, and the SHALL administration `effectiveTime`),
 **Procedures** (one of the three Procedure Activity variants — operative `<procedure>` / non-altering
-`<act>` / assessment `<observation>` — with the performed-vs-planned `moodCode` split), and
-**Encounters** (Encounter Activity with a coded type and the SHALL `effectiveTime` visit period).
-Safety-critical values are never guessed: an omitted medication dose/route is left absent so the parser
-flags it (rather than being defaulted), a `PQ` unit is emitted verbatim and re-checked against the
-computable UCUM grammar, a **refused** immunization is emitted as `negationInd="true"` (flagged
-`IMMUNIZATION_REFUSED` on re-parse) never conflated with a `nullFlavor` "unknown", and a **planned**
-procedure is emitted as `moodCode="INT"` so the parser never reads it as performed. Each CCD SHALL
-section for which no content is supplied is emitted as a spec-clean empty `nullFlavor="NI"` section; the
-non-required Immunizations / Procedures / Encounters sections are emitted only when populated. The other
-eleven document types, the remaining sections, and a bring-your-own-credentials terminology adapter land
-in a later increment.
+`<act>` / assessment `<observation>` — with the performed-vs-planned `moodCode` split),
+**Encounters** (Encounter Activity with a coded type and the SHALL `effectiveTime` visit period),
+**Social History** (a Smoking Status — Meaningful Use observation with the fixed LOINC `code` and a
+SNOMED CT `value`), and **Functional Status** (a Functional Status Observation with the template-fixed
+LOINC `code` `54522-8` and a SNOMED CT finding `value`, tagged `domain: "functional"` and never
+conflated with Mental Status). Safety-critical values are never guessed: an omitted medication dose/route
+is left absent so the parser flags it (rather than being defaulted), a `PQ` unit is emitted verbatim and
+re-checked against the computable UCUM grammar, a **refused** immunization is emitted as
+`negationInd="true"` (flagged `IMMUNIZATION_REFUSED` on re-parse) never conflated with a `nullFlavor`
+"unknown", a **planned** procedure is emitted as `moodCode="INT"` so the parser never reads it as
+performed, and an unrecorded smoking-status / functional-status `value` is emitted as an explicit
+`nullFlavor="UNK"` rather than defaulted to a real finding. Each CCD SHALL section for which no content
+is supplied is emitted as a spec-clean empty `nullFlavor="NI"` section; the non-required Immunizations /
+Procedures / Encounters / Social History / Functional Status sections are emitted only when populated.
+The other eleven document types, the remaining sections, and a bring-your-own-credentials terminology
+adapter land in a later increment.
 
 ## What it extracts (Phase 5) — Procedures, Encounters, Social History
 
