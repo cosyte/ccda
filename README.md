@@ -25,9 +25,10 @@ substrate for C-CDA's XML.
 > **spec-clean, round-trip serializer** (`serializeCcda` / `toString()`) and immutable copy-with
 > (`withWarnings`). A document **builder** (`buildCcda`) emits a spec-clean CCD with the US Realm header
 > and populated **Problems, Allergies, Medications, Results, Vital Signs, Immunizations, Procedures,
-> Encounters, Social-History smoking status, Functional Status, Mental Status, and Past Medical
-> History** sections (each round-tripping through `parseCcda`); the other document types and remaining
-> sections land in a later increment.
+> Encounters, Social-History smoking status, Functional Status, Mental Status, Past Medical History,
+> and Plan of Treatment** (planned entries, never conflated with performed) sections (each
+> round-tripping through `parseCcda`); the other document types and remaining sections land in a later
+> increment.
 
 ## Install
 

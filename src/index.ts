@@ -75,6 +75,12 @@ export type {
   BuildCcdaSmokingStatus,
   BuildCcdaFunctionalStatus,
   BuildCcdaMentalStatus,
+  BuildCcdaPlannedItem,
+  BuildCcdaPlannedAct,
+  BuildCcdaPlannedOrder,
+  BuildCcdaPlannedObservation,
+  PlannedActMood,
+  PlannedOrderMood,
   BuildQuantity,
   BuildCode,
 } from "./builder/index.js";

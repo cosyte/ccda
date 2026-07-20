@@ -362,7 +362,9 @@ doc.getSmokingStatus()[1]?.unknown; // => true
 
 > Current builder scope: `buildCcda` emits a CCD with the US Realm header, the CCD SHALL sections
 > (Problems, Allergies, Medications, Results, Vital Signs — emitted empty as `nullFlavor="NI"` when no
-> content is supplied), and **Immunizations**, **Procedures**, **Encounters**, and **Social History**
-> (Smoking Status) sections when populated. The remaining sections (Plan of Treatment, Functional
-> Status, Family History, …), the other eleven document types, C-CDA document _editing_, and a
-> bring-your-own-credentials terminology adapter are a later increment.
+> content is supplied), and **Immunizations**, **Procedures**, **Encounters**, **Social History**
+> (Smoking Status), **Functional Status**, **Mental Status**, **Past Medical History**, and **Plan of
+> Treatment** (planned entries, never conflated with performed) sections when populated. The remaining
+> sections (the Functional/Mental Status Organizer + Assessment Scale forms, Family History), the other
+> eleven document types, C-CDA document _editing_, and a bring-your-own-credentials terminology adapter
+> are a later increment.

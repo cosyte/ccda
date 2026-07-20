@@ -106,9 +106,32 @@
  * `nullFlavor="UNK"` `high` for a resolved problem — never a guessed date), and the
  * coded condition in `value`; an absent onset/resolution is `nullFlavor="UNK"`,
  * never invented. The section has no entries-required variant and, like the other
- * non-SHALL sections, is emitted only when populated. The Functional/Mental Status
- * Organizer + Assessment Scale forms, Family History, and Plan of Treatment are
- * deferred to later CCDA-P7 increments.
+ * non-SHALL sections, is emitted only when populated.
+ *
+ * **This slice adds Plan of Treatment.** A **Plan of Treatment** section (V2,
+ * `…22.2.10`, LOINC `18776-5`, the R2.1 `2014-06-09` stamp) emits one or more of
+ * the six planned-entry templates — a Planned Act (`…4.39`), Encounter (`…4.40`),
+ * Procedure (`…4.41`), Medication Activity (`…4.42`), Supply (`…4.43`), or
+ * Observation (`…4.44`) — each with its coded order (its default code system
+ * varies by kind: SNOMED CT for an act/procedure/supply, CPT for an encounter,
+ * LOINC for an observation, RxNorm — via the `consumable` — for a medication), a
+ * planned `@moodCode`, and the SHALL `statusCode` fixed to `active`. **Planned is
+ * never conflated with performed.** The builder input admits *only* planned
+ * `@moodCode`s (default `INT`) — `EVN` is not representable — and, correct by
+ * construction, splits the mood type by kind so the appointment moods
+ * (`APT`/`ARQ`) are representable **only** on act/encounter/procedure (whose CDA
+ * mood domains permit them) and never on a medication/supply/observation (whose
+ * `x_DocumentSubstanceMood` / `x_ActMoodDocumentObservation` domains exclude
+ * them). `statusCode` is fixed to `active` (never a performed `completed`), so
+ * every entry reads back through the parser as `disposition: "planned"`, never
+ * mistaken for a performed Procedure or Encounter.
+ * The planned `effectiveTime` is SHOULD [0..1], emitted only when supplied (a plan
+ * may be undated — never a fabricated date), and the Planned Observation's
+ * expected coded result `value` [0..1] is emitted only when supplied, never
+ * invented. Like the other non-SHALL sections it is emitted only when populated,
+ * and its section has no entries-required variant. The Functional/Mental Status
+ * Organizer + Assessment Scale forms and Family History are deferred to later
+ * CCDA-P7 increments.
  *
  * **SHALL `effectiveTime` on every entry.** Each act/observation the builder
  * emits carries the `effectiveTime` its C-CDA R2.1 template requires — the
@@ -127,6 +150,7 @@
 
 import { CVX, INTERPRETATION, LOINC, NCI_ROUTE, RXNORM, SNOMED_CT } from "../model/code-systems.js";
 import type { CcdaDocument } from "../model/document.js";
+import type { PlannedItemKind } from "../model/entries/plan-of-treatment.js";
 import type { ProcedureKind } from "../model/entries/procedure.js";
 import { parseCcda } from "../parser/index.js";
 import {
@@ -140,6 +164,12 @@ import {
   MEDICATION_ACTIVITY,
   MEDICATION_INFORMATION,
   MENTAL_STATUS_OBSERVATION,
+  PLANNED_ACT,
+  PLANNED_ENCOUNTER,
+  PLANNED_MEDICATION_ACTIVITY,
+  PLANNED_OBSERVATION,
+  PLANNED_PROCEDURE,
+  PLANNED_SUPPLY,
   PROBLEM_CONCERN_ACT,
   PROBLEM_OBSERVATION,
   PROCEDURE_ACTIVITY_ACT,
@@ -238,6 +268,14 @@ const MENTAL_STATUS_CODE = {
   code: "373930000",
   displayName: "Cognitive function finding",
 } as const;
+/**
+ * The `@extension` stamp carried by the Plan of Treatment Section (V2,
+ * `…22.2.10`) and all six planned-entry templates it can carry (Planned Act
+ * `…4.39`, Encounter `…4.40`, Procedure `…4.41`, Medication Activity `…4.42`,
+ * Supply `…4.43`, Observation `…4.44`) — R2.1's `2014-06-09` version, not the
+ * `2015-08-01` stamp the CCD SHALL sections use. @internal
+ */
+const PLAN_OF_TREATMENT_EXT = "2014-06-09";
 
 /**
  * A coded value for the builder — the tuple the parser reads back as a `CD`.
@@ -777,6 +815,152 @@ export interface BuildCcdaMentalStatus {
 }
 
 /**
+ * The planned `@moodCode` for the **act / encounter / procedure** kinds — the
+ * Planned moodCode value set (`2.16.840.1.113883.11.20.9.23`): `INT` intent
+ * (default), `RQO` request/order, `PRMS` promise, `PRP` proposal, `APT`
+ * appointment, `ARQ` appointment request. The appointment moods (`APT`/`ARQ`)
+ * are valid **only** on these three element domains (`x_DocumentActMood` /
+ * `x_DocumentEncounterMood` / `x_DocumentProcedureMood`). `EVN` (a performed
+ * event) is deliberately not a member — the plan carries only future/ordered
+ * items, so a performed act can never be emitted into it.
+ *
+ * @example
+ * ```ts
+ * import type { PlannedActMood } from "@cosyte/ccda";
+ * const appointment: PlannedActMood = "APT";
+ * ```
+ */
+export type PlannedActMood = "INT" | "RQO" | "PRMS" | "PRP" | "APT" | "ARQ";
+
+/**
+ * The planned `@moodCode` for the **medication / supply / observation** kinds.
+ * The base CDA R2 mood domains for these elements — `x_DocumentSubstanceMood`
+ * (`substanceAdministration`/`supply`) and `x_ActMoodDocumentObservation`
+ * (`observation`) — **exclude the appointment moods** (`APT`/`ARQ`), so those are
+ * not representable here (you cannot "appoint" a drug order or a lab). `EVN` is
+ * likewise excluded — the plan is future/ordered, never performed.
+ *
+ * @example
+ * ```ts
+ * import type { PlannedOrderMood } from "@cosyte/ccda";
+ * const order: PlannedOrderMood = "RQO";
+ * ```
+ */
+export type PlannedOrderMood = "INT" | "RQO" | "PRMS" | "PRP";
+
+/** Fields shared by every {@link BuildCcdaPlannedItem} variant. @internal */
+interface BuildCcdaPlannedItemBase {
+  /** The planned act/observation/drug code; default code system varies by `kind`. */
+  readonly code: BuildCode;
+  /** The planned time as an HL7 date string; emitted only when supplied (SHOULD [0..1]). */
+  readonly effectiveTime?: string;
+}
+
+/**
+ * A planned Act / Encounter / Procedure (`…4.39` / `…4.40` / `…4.41`). `mood`
+ * accepts the full Planned moodCode value set including the appointment moods
+ * (`APT`/`ARQ`), which are valid on these element domains. Default code system:
+ * SNOMED CT for an act/procedure, CPT for an encounter.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaPlannedAct } from "@cosyte/ccda";
+ * const visit: BuildCcdaPlannedAct = {
+ *   kind: "encounter",
+ *   code: { code: "99213", displayName: "Office outpatient visit 15 minutes" },
+ *   mood: "APT",
+ * };
+ * ```
+ */
+export interface BuildCcdaPlannedAct extends BuildCcdaPlannedItemBase {
+  readonly kind: "act" | "encounter" | "procedure";
+  /** The planned `@moodCode`; defaults to `"INT"`. Appointment moods allowed here. */
+  readonly mood?: PlannedActMood;
+}
+
+/**
+ * A planned Medication Activity or Supply (`…4.42` / `…4.43`). `mood` excludes
+ * the appointment moods (not in these elements' base mood domain). The drug/supply
+ * code defaults to RxNorm (medication, emitted in the `consumable`) / SNOMED CT
+ * (supply).
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaPlannedOrder } from "@cosyte/ccda";
+ * const order: BuildCcdaPlannedOrder = {
+ *   kind: "medicationActivity",
+ *   code: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" },
+ *   mood: "RQO",
+ * };
+ * ```
+ */
+export interface BuildCcdaPlannedOrder extends BuildCcdaPlannedItemBase {
+  readonly kind: "medicationActivity" | "supply";
+  /** The planned `@moodCode`; defaults to `"INT"`. Appointment moods not representable. */
+  readonly mood?: PlannedOrderMood;
+}
+
+/**
+ * A planned Observation (`…4.44`). `mood` excludes the appointment moods (not in
+ * `x_ActMoodDocumentObservation`). `value` is the expected coded result (a
+ * goal/target, SNOMED CT by default), emitted only when supplied. Default code
+ * system for the observation `code`: LOINC.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaPlannedObservation } from "@cosyte/ccda";
+ * const cbc: BuildCcdaPlannedObservation = {
+ *   kind: "observation",
+ *   code: { code: "58410-2", displayName: "CBC panel" }, // LOINC
+ *   mood: "RQO",
+ *   effectiveTime: "20240801",
+ * };
+ * ```
+ */
+export interface BuildCcdaPlannedObservation extends BuildCcdaPlannedItemBase {
+  readonly kind: "observation";
+  /** The planned `@moodCode`; defaults to `"INT"`. Appointment moods not representable. */
+  readonly mood?: PlannedOrderMood;
+  /**
+   * The expected coded result `value` (`xsi:type="CD"`, SNOMED CT default) — the
+   * plan's goal/target. Emitted only when supplied; never fabricated.
+   */
+  readonly value?: BuildCode;
+}
+
+/**
+ * A planned item for the Plan of Treatment section (`…22.2.10`) — a discriminated
+ * union over the six planned-entry templates, split by which `@moodCode` domain
+ * each element admits: {@link BuildCcdaPlannedAct} (act/encounter/procedure, which
+ * accept the appointment moods `APT`/`ARQ`), {@link BuildCcdaPlannedOrder}
+ * (medication/supply), and {@link BuildCcdaPlannedObservation} (observation, which
+ * also carries an expected `value`). **The mood split is correct by
+ * construction:** the base CDA R2 mood domains for `substanceAdministration`,
+ * `supply`, and `observation` exclude `APT`/`ARQ`, so those appointment moods are
+ * simply not representable on those kinds — the type prevents emitting a
+ * schema-invalid `@moodCode`, not merely a discouraged one.
+ *
+ * **Everything here is future/ordered, never performed.** No variant admits the
+ * performed `EVN`; each entry's `statusCode` is fixed to `"active"` (the SHALL the
+ * planned templates require) — never a performed `"completed"` — and the planned
+ * `@moodCode` reads back through the parser's `disposition` as `"planned"`; the
+ * two dispositions are never conflated.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaPlannedItem } from "@cosyte/ccda";
+ * const plannedColonoscopy: BuildCcdaPlannedItem = {
+ *   kind: "procedure",
+ *   code: { code: "73761001", displayName: "Colonoscopy" }, // SNOMED CT
+ * };
+ * ```
+ */
+export type BuildCcdaPlannedItem =
+  | BuildCcdaPlannedAct
+  | BuildCcdaPlannedOrder
+  | BuildCcdaPlannedObservation;
+
+/**
  * Input to {@link buildCcda}. `patient` is required; each clinical collection
  * (`problems`, `allergies`, `medications`, `results`, `vitalSigns`) defaults to
  * empty, in which case its section is emitted as a spec-clean empty
@@ -840,6 +1024,13 @@ export interface BuildCcdaInit {
    * conflated with the active Problems returned by `getProblems`.
    */
   readonly pastMedicalHistory?: readonly BuildCcdaProblem[];
+  /**
+   * Planned items for the Plan of Treatment section; the section is emitted only
+   * when non-empty (a CCD SHOULD section). Every item is future/ordered — read
+   * back via `getPlannedItems` with `disposition: "planned"`, never conflated
+   * with the performed Procedures/Encounters.
+   */
+  readonly planOfTreatment?: readonly BuildCcdaPlannedItem[];
 }
 
 /** A monotonic id generator scoped to one build, for stable act/content ids. @internal */
@@ -998,6 +1189,9 @@ export function buildCcda(init: BuildCcdaInit): CcdaDocument {
   }
   if ((init.pastMedicalHistory?.length ?? 0) > 0) {
     structuredBody.appendChild(pastMedicalHistorySection(doc, init.pastMedicalHistory ?? [], id));
+  }
+  if ((init.planOfTreatment?.length ?? 0) > 0) {
+    structuredBody.appendChild(planOfTreatmentSection(doc, init.planOfTreatment ?? [], id));
   }
   root.appendChild(el(doc, "component", undefined, structuredBody));
 
@@ -1262,6 +1456,8 @@ const FUNCTIONAL_STATUS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.14";
 const MENTAL_STATUS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.56";
 /** @internal */
 const PAST_MEDICAL_HISTORY_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.20";
+/** @internal */
+const PLAN_OF_TREATMENT_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.10";
 
 /** Build the Problems section — populated, or empty when there are none. @internal */
 function problemsSection(
@@ -2397,4 +2593,128 @@ function pastMedicalHistorySection(
   );
   for (const entry of entries) section.appendChild(entry);
   return el(doc, "component", undefined, section);
+}
+
+/**
+ * The element name, `@classCode`, template root, and default code system for each
+ * of the six planned-entry variants. The drug of a Planned Medication Activity
+ * lives in its `consumable` (no direct `<code>`); the other five carry a direct
+ * `<code>`. @internal
+ */
+const PLANNED_VARIANTS: Record<
+  PlannedItemKind,
+  {
+    readonly element: string;
+    readonly classCode: string;
+    readonly root: string;
+    readonly system: string;
+  }
+> = {
+  act: { element: "act", classCode: "ACT", root: PLANNED_ACT, system: SNOMED_CT },
+  encounter: { element: "encounter", classCode: "ENC", root: PLANNED_ENCOUNTER, system: CPT },
+  procedure: {
+    element: "procedure",
+    classCode: "PROC",
+    root: PLANNED_PROCEDURE,
+    system: SNOMED_CT,
+  },
+  medicationActivity: {
+    element: "substanceAdministration",
+    classCode: "SBADM",
+    root: PLANNED_MEDICATION_ACTIVITY,
+    system: RXNORM,
+  },
+  supply: { element: "supply", classCode: "SPLY", root: PLANNED_SUPPLY, system: SNOMED_CT },
+  observation: {
+    element: "observation",
+    classCode: "OBS",
+    root: PLANNED_OBSERVATION,
+    system: LOINC,
+  },
+};
+
+/**
+ * Build the Plan of Treatment section from one or more {@link BuildCcdaPlannedItem}s.
+ * Only called with a non-empty list (see {@link buildCcda}) — Plan of Treatment is
+ * a CCD SHOULD (not SHALL) section, so an unpopulated one is not fabricated. The
+ * Plan of Treatment Section (V2, `…22.2.10`, LOINC `18776-5`, the R2.1
+ * `2014-06-09` stamp) carries the six planned-entry templates, each future/ordered
+ * — never a performed act. The section has no entries-required variant (`…2.10.1`),
+ * so only the base `templateId` is emitted even when it carries entries. @internal
+ */
+function planOfTreatmentSection(
+  doc: Document,
+  items: readonly BuildCcdaPlannedItem[],
+  id: (prefix: string) => string,
+): Element {
+  const text = el(doc, "text");
+  const entries: Element[] = [];
+  for (const p of items) {
+    const contentId = id("plan-txt");
+    // The narrative carries the planned item's label so it agrees with the coded
+    // value (the parser reconciles the planned code ↔ narrative).
+    text.appendChild(textEl(doc, "content", p.code.displayName, { ID: contentId }));
+    entries.push(plannedItemEntry(doc, p, contentId, id));
+  }
+  const section = sectionElement(
+    doc,
+    PLAN_OF_TREATMENT_SECTION_BASE,
+    "18776-5",
+    "Plan of Treatment",
+    text,
+    false,
+    undefined,
+    PLAN_OF_TREATMENT_EXT,
+  );
+  for (const entry of entries) section.appendChild(entry);
+  return el(doc, "component", undefined, section);
+}
+
+/** Build one planned `<entry>` (one of the six planned-entry variants). @internal */
+function plannedItemEntry(
+  doc: Document,
+  p: BuildCcdaPlannedItem,
+  contentId: string,
+  id: (prefix: string) => string,
+): Element {
+  const variant = PLANNED_VARIANTS[p.kind];
+  // `@moodCode` is the planned axis. The per-kind mood types admit only planned
+  // moods (never `EVN`), and appointment moods (`APT`/`ARQ`) only on the
+  // act/encounter/procedure kinds whose element domains permit them — so a plan
+  // item can never be emitted with a schema-invalid or performed mood. The parser
+  // classifies the mood into `disposition: "planned"`.
+  const mood: PlannedActMood | PlannedOrderMood = p.mood ?? "INT";
+  const act = el(
+    doc,
+    variant.element,
+    { classCode: variant.classCode, moodCode: mood },
+    el(doc, "templateId", { root: variant.root, extension: PLAN_OF_TREATMENT_EXT }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("plan") }),
+  );
+  // Every variant but the Planned Medication Activity carries a direct <code>;
+  // the medication's drug lives in its <consumable> (appended after statusCode,
+  // in CDA schema order), exactly where the parser reads it back from.
+  if (p.kind !== "medicationActivity") {
+    act.appendChild(
+      codeEl(doc, "code", { ...p.code, codeSystem: p.code.codeSystem ?? variant.system }),
+    );
+  }
+  act.appendChild(el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })));
+  // Planned entries fix statusCode to "active" (SHALL) — the plan is future/ordered,
+  // never a performed "completed" act; the builder never emits a performed status here.
+  act.appendChild(el(doc, "statusCode", { code: "active" }));
+  // Planned effectiveTime is SHOULD [0..1]: emitted only when supplied — never
+  // fabricated with a nullFlavor when a plan carries no date.
+  if (p.effectiveTime !== undefined) {
+    act.appendChild(el(doc, "effectiveTime", { value: p.effectiveTime }));
+  }
+  if (p.kind === "medicationActivity") {
+    act.appendChild(medicationConsumable(doc, p.code));
+  }
+  // The Planned Observation MAY carry the expected coded result (value [0..1]);
+  // emitted only when supplied — never invented for the caller.
+  if (p.kind === "observation" && p.value !== undefined) {
+    act.appendChild(cdValue(doc, p.value, SNOMED_CT));
+  }
+  return el(doc, "entry", undefined, act);
 }

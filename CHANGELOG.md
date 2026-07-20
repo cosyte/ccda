@@ -78,6 +78,45 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (tenth slice) — builder emits a Plan of Treatment section.** Extends `buildCcda` with one new
+  optional input — `BuildCcdaInit.planOfTreatment` (`BuildCcdaPlannedItem[]`) — that round-trips through
+  `getPlannedItems()` to the same structured content by construction; a clean build still carries **zero
+  warnings**.
+  - **Plan of Treatment section + the six planned-entry templates.** A Plan of Treatment Section (V2)
+    **`…22.2.10`** (LOINC `18776-5`, the **`2014-06-09`** stamp, which has **no** entries-required `.1`
+    variant, so only the base `templateId` is emitted) carries one or more of the six planned templates,
+    each the **`2014-06-09`** stamp: Planned Act **`…22.4.39`** (`<act>`), Planned Encounter **`…22.4.40`**
+    (`<encounter>`), Planned Procedure **`…22.4.41`** (`<procedure>`), Planned Medication Activity
+    **`…22.4.42`** (`<substanceAdministration>`, drug in the `consumable`, no direct `<code>`), Planned
+    Supply **`…22.4.43`** (`<supply>`), and Planned Observation **`…22.4.44`** (`<observation>`, carrying an
+    optional expected `value`). Each emits a SHALL `id`, its coded order (default code system by kind —
+    SNOMED CT for act/procedure/supply, CPT for encounter, LOINC for observation, RxNorm for medication), a
+    planned `@moodCode`, and the SHALL `statusCode` fixed to `active`.
+  - **Planned is never conflated with performed (the safety rule).** No variant admits the performed `EVN`
+    mood, and `statusCode` is fixed to `active` (never a performed `completed`), so every entry reads back
+    as `disposition: "planned"` — never mistaken for a performed Procedure/Encounter; a build carrying both
+    a performed and a planned procedure keeps them in `getProcedures()` vs `getPlannedItems()`.
+  - **The planned `@moodCode` domain is correct by construction.** `BuildCcdaPlannedItem` is a per-kind
+    discriminated union: act/encounter/procedure accept the appointment moods `APT`/`ARQ`
+    (`PlannedActMood`), while medication/supply/observation accept only `INT`/`RQO`/`PRMS`/`PRP`
+    (`PlannedOrderMood`) — because the base CDA R2 domains `x_DocumentSubstanceMood` /
+    `x_ActMoodDocumentObservation` exclude `APT`/`ARQ`. A schema-invalid appointment mood on a drug order or
+    a lab is not representable — the type prevents it, not merely discourages it.
+  - **Optional data is never fabricated.** The planned `effectiveTime` (SHOULD [0..1]) and the Planned
+    Observation's expected `value` [0..1] are emitted only when supplied — an undated plan carries no
+    fabricated date and no invented result. The section narrative agrees with each item's reconciled `code`
+    (`#id`-referenced), so no `CODE_NARRATIVE_MISMATCH` fires.
+  - **Emitted only when populated.** Plan of Treatment is a CCD `SHOULD` (not `SHALL`) section, so — like
+    the other optional sections — an unpopulated section is **not** fabricated. The empty-build output is
+    unchanged.
+  - New public types: `BuildCcdaPlannedItem` and its members `BuildCcdaPlannedAct` / `BuildCcdaPlannedOrder`
+    / `BuildCcdaPlannedObservation`, plus `PlannedActMood` / `PlannedOrderMood`. No parser change and no
+    warning-code change; the round-trip-by-construction invariant and the serializer fixed point still hold.
+  - **Deferred:** the Functional/Mental Status Organizer + Assessment Scale forms and the Family History
+    section in the builder, the other eleven document types, C-CDA document _editing_, the
+    bring-your-own-credentials terminology adapter, and the external-validator/Schematron
+    differential-testing gate.
+
 - **Phase 7 (ninth slice) — builder emits a Past Medical History section.** Extends `buildCcda` with one
   new optional input — `BuildCcdaInit.pastMedicalHistory` (`BuildCcdaProblem[]`, reusing the Problems
   input shape) — that round-trips through `getPastMedicalHistory()` to the same structured content by
