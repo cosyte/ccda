@@ -757,6 +757,21 @@ statusCode, effectiveTime, component+`).
 
 ### Fixed
 
+- **Phase 7 (sixteenth slice) — the builder emits `<text>` in CDA R2 element-sequence order for
+  Problem, Allergy, and Smoking Status observations.** The base CDA R2 schema
+  (`POCD_MT000040.Observation`) is an `xs:sequence` — `code`, `text`, `statusCode`, `effectiveTime`, …,
+  `value`, … — so the narrative `<text><reference>` slot MUST precede `statusCode`/`effectiveTime`/`value`.
+  Three builders emitted it out of order: `problemObservation` (`…22.4.4`) and `smokingStatusEntry`
+  (`…22.4.78`) appended `<text>` **after** the `value`, and `allergyEntry` (`…22.4.7`) appended it **after
+  every `entryRelationship`** — each an XSD-invalid document that would fail the core-CDA-R2 XSD stage
+  before the R2.1 Schematron even runs. All three now emit `<text>` immediately after `<code>`, matching
+  the position every other observation/act builder in the file already used (e.g. `resultObservation`,
+  `plannedItemEntry`). Grounded firsthand against `POCD_MT000040.xsd` (`HL7/CDA-core-2.0`): `text` sits
+  after `code`, before `statusCode`, in `Observation`/`Act`/`Procedure`/`SubstanceAdministration`/
+  `Encounter`/`Supply` alike. Byte-order-only within each element's children — the lenient parser reads
+  `<text>` regardless of position, so the round-trip model is unchanged and no warning code or public API
+  moves. A new `test/builder.test.ts` block asserts the `text < statusCode`/`value` ordering per emitted
+  observation (a genuine regression guard: it fails against the pre-fix emit).
 - **The release can actually bump the version.** `package.json` had no `version` script, so the
   shared pipeline's `pnpm run version` failed with `Command "version" not found` and the release
   aborted before opening a "Version Packages" PR. Adds `scripts/sync-version.mjs` (the `hl7`

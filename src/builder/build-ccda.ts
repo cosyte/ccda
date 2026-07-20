@@ -2128,6 +2128,11 @@ function problemObservation(
       displayName: "Problem",
       codeSystemName: "SNOMED CT",
     }),
+    // `<text>` slots directly after `<code>`, before statusCode/effectiveTime/value,
+    // per the CDA R2 Observation element sequence (POCD_MT000040.Observation:
+    // code, text, statusCode, effectiveTime, …, value) — emitting it later is
+    // XSD-invalid.
+    el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     el(doc, "statusCode", { code: "completed" }),
   );
   // Problem Observation (…22.4.4) SHALL carry an effectiveTime — always emitted,
@@ -2135,7 +2140,6 @@ function problemObservation(
   // high for a resolved problem (resolved-but-date-unknown), never a guessed date.
   obs.appendChild(concernEffectiveTime(doc, p.onset, p.status));
   obs.appendChild(cdValue(doc, p.problem, SNOMED_CT));
-  obs.appendChild(el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })));
   return obs;
 }
 
@@ -2208,6 +2212,10 @@ function allergyEntry(
     el(doc, "templateId", { root: ALLERGY_OBSERVATION, extension: "2014-06-09" }),
     el(doc, "id", { root: SYNTH_ROOT, extension: id("alg-obs") }),
     el(doc, "code", { code: "ASSERTION", codeSystem: ACT_CODE }),
+    // `<text>` slots directly after `<code>`, before statusCode/effectiveTime/value,
+    // per the CDA R2 Observation element sequence — emitting it after the value or
+    // the entryRelationships (as this builder previously did) is XSD-invalid.
+    el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     el(doc, "statusCode", { code: "completed" }),
   );
   // Allergy-Intolerance Observation (…22.4.7) SHALL carry an effectiveTime whose
@@ -2227,7 +2235,6 @@ function allergyEntry(
   }
   if (a.reaction !== undefined) obs.appendChild(reactionRelationship(doc, a.reaction, a.severity));
   if (a.criticality !== undefined) obs.appendChild(criticalityRelationship(doc, a.criticality));
-  obs.appendChild(el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })));
 
   const act = el(
     doc,
@@ -2978,6 +2985,10 @@ function smokingStatusEntry(
     // SHALL code [1..1] — the fixed LOINC "Tobacco smoking status"; the specific
     // reading lives in `value`, not here.
     codeEl(doc, "code", { ...SMOKING_STATUS_CODE, codeSystem: LOINC, codeSystemName: "LOINC" }),
+    // `<text>` slots directly after `<code>`, before statusCode/effectiveTime/value,
+    // per the CDA R2 Observation element sequence — emitting it after the value is
+    // XSD-invalid.
+    el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     el(doc, "statusCode", { code: s.status ?? "completed" }),
   );
   // Smoking Status Observation (…22.4.78) SHALL contain effectiveTime [1..1] — the
@@ -2993,7 +3004,6 @@ function smokingStatusEntry(
       ? typedValue(doc, "CD", { nullFlavor: "UNK" })
       : cdValue(doc, s.value, SNOMED_CT),
   );
-  obs.appendChild(el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })));
   return el(doc, "entry", undefined, obs);
 }
 
