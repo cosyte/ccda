@@ -996,6 +996,125 @@ describe("buildCcda — mental status round-trip", () => {
   });
 });
 
+describe("buildCcda — functional/mental status organizers", () => {
+  /** A functional organizer (ICF-coded self-care cluster) grouping two findings,
+   * plus a mental organizer (uncoded) grouping two, and one standalone functional
+   * finding — to prove grouping, domain separation, and mixed grouped/standalone. */
+  const ORG_INIT: BuildCcdaInit = {
+    patient: { mrn: "M" },
+    functionalStatusOrganizers: [
+      {
+        code: {
+          code: "d5",
+          displayName: "Self-care",
+          codeSystem: "2.16.840.1.113883.6.254",
+          codeSystemName: "ICF",
+        },
+        effectiveTime: "20240101",
+        findings: [
+          { value: { code: "129019007", displayName: "Self-care" } },
+          { value: { code: "165245003", displayName: "Able to walk" } },
+        ],
+      },
+    ],
+    functionalStatus: [{ value: { code: "105503008", displayName: "Dependent on wheelchair" } }],
+    mentalStatusOrganizers: [
+      {
+        findings: [
+          { value: { code: "386807006", displayName: "Memory impairment" } },
+          { value: { code: "247663003", displayName: "Orientation finding" } },
+        ],
+      },
+    ],
+  };
+
+  it("round-trips organizer members as flat, domain-tagged findings, warning-free", () => {
+    const doc = buildCcda(ORG_INIT);
+    const functional = doc.getFunctionalStatus();
+    const mental = doc.getMentalStatus();
+    // Two grouped + one standalone functional finding; two grouped mental findings.
+    expect(functional).toHaveLength(3);
+    expect(mental).toHaveLength(2);
+    expect(functional.every((f) => f.domain === "functional")).toBe(true);
+    expect(mental.every((f) => f.domain === "mental")).toBe(true);
+    // Grouped members read back with their coded finding value + the fixed obs code.
+    const codes = functional.map((f) =>
+      f.value?.kind === "coded" ? f.value.code.code : undefined,
+    );
+    expect(codes).toContain("129019007");
+    expect(codes).toContain("165245003");
+    expect(codes).toContain("105503008");
+    expect(functional.every((f) => f.code?.code === "54522-8")).toBe(true);
+    expect(mental.every((f) => f.code?.code === "373930000")).toBe(true);
+    // Nothing is flagged as an assessment scale (none emitted this slice).
+    expect(functional.every((f) => f.assessmentScale === undefined)).toBe(true);
+    expect(doc.warnings).toEqual([]);
+  });
+
+  it("emits the organizer as a CLUSTER with the correct template stamps + ICF code", () => {
+    const xml = serializeCcda(buildCcda(ORG_INIT));
+    // Functional Status Organizer (…4.66, 2014-06-09); Mental Status Organizer (…4.75, 2015-08-01).
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.4.66" extension="2014-06-09"');
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.4.75" extension="2015-08-01"');
+    expect(xml).toContain('<organizer classCode="CLUSTER" moodCode="EVN">');
+    // The organizer categorization code is the caller's ICF code (SHOULD ICF/LOINC).
+    expect(xml).toContain('code="d5"');
+    expect(xml).toContain('codeSystem="2.16.840.1.113883.6.254"');
+    // The organizer carries its optional effectiveTime when supplied.
+    expect(xml).toContain('<effectiveTime value="20240101"/>');
+  });
+
+  it("emits an EXPLICIT nullFlavor=UNK organizer code when no categorization is supplied", () => {
+    // The mental organizer in ORG_INIT has no code → nullFlavor UNK, never fabricated.
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      mentalStatusOrganizers: [
+        { findings: [{ value: { code: "386807006", displayName: "Memory impairment" } }] },
+      ],
+    });
+    expect(doc.warnings).toEqual([]);
+    const xml = serializeCcda(doc);
+    // The organizer's SHALL code [1..1] is an explicit unknown category.
+    expect(xml).toMatch(/<organizer[^>]*>[\s\S]*?<code nullFlavor="UNK"\/>/);
+    expect(doc.getMentalStatus()).toHaveLength(1);
+  });
+
+  it("omits the organizer effectiveTime when none is supplied — never a fabricated date", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      functionalStatusOrganizers: [
+        { findings: [{ value: { code: "129019007", displayName: "Self-care" } }] },
+      ],
+    });
+    const xml = serializeCcda(doc);
+    // The organizer wrapper (not its member observation) carries no effectiveTime.
+    const orgFragment = xml.slice(
+      xml.indexOf("<organizer"),
+      xml.indexOf("<component>", xml.indexOf("<organizer")),
+    );
+    expect(orgFragment).not.toContain("effectiveTime");
+  });
+
+  it("throws on an empty organizer — the template SHALL contain at least one member", () => {
+    expect(() =>
+      buildCcda({ patient: { mrn: "M" }, functionalStatusOrganizers: [{ findings: [] }] }),
+    ).toThrow(/at least one finding/);
+    expect(() =>
+      buildCcda({ patient: { mrn: "M" }, mentalStatusOrganizers: [{ findings: [] }] }),
+    ).toThrow(/at least one finding/);
+  });
+
+  it("is a serialization fixed point with grouped status organizers present", () => {
+    const xml = serializeCcda(buildCcda(ORG_INIT));
+    expect(parseCcda(xml).toString()).toBe(xml);
+  });
+
+  it("does not flag organizer members as misplaced (they home to their status section)", () => {
+    const doc = buildCcda(ORG_INIT);
+    expect(doc.warnings.map((w) => w.code)).not.toContain("SECTION_PLACEMENT_SUSPECT");
+  });
+});
+
 describe("buildCcda — past medical history round-trip", () => {
   /** A build carrying BOTH an active problem concern and a historical (past) one,
    * to prove the two never conflate — the past problem is a bare observation

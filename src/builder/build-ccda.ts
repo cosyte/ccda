@@ -180,11 +180,13 @@ import {
   FAMILY_HISTORY_OBSERVATION,
   FAMILY_HISTORY_ORGANIZER,
   FUNCTIONAL_STATUS_OBSERVATION,
+  FUNCTIONAL_STATUS_ORGANIZER,
   IMMUNIZATION_ACTIVITY,
   IMMUNIZATION_MEDICATION_INFORMATION,
   MEDICATION_ACTIVITY,
   MEDICATION_INFORMATION,
   MENTAL_STATUS_OBSERVATION,
+  MENTAL_STATUS_ORGANIZER,
   PLANNED_ACT,
   PLANNED_ENCOUNTER,
   PLANNED_MEDICATION_ACTIVITY,
@@ -866,6 +868,107 @@ export interface BuildCcdaMentalStatus {
 }
 
 /**
+ * A Functional Status Organizer for the Functional Status section — a Functional
+ * Status Organizer (`…22.4.66`, the `2014-06-09` stamp, `@classCode="CLUSTER"`)
+ * that **groups** two or more related Functional Status Observations (`…22.4.67`)
+ * under one categorization. Use it instead of standalone findings when the
+ * assessment is a cluster (e.g. all self-care ADLs recorded together); each
+ * grouped observation is otherwise identical to a standalone
+ * {@link BuildCcdaFunctionalStatus} and reads back tagged `domain: "functional"`.
+ *
+ * **`code` is the organizer's categorization, not a finding.** It SHALL be present
+ * [1..1] and SHOULD be drawn from ICF (`2.16.840.1.113883.6.254`) or LOINC — pass
+ * the ICF chapter/category (e.g. `d5` "Self-care") via `code` with its
+ * `codeSystem`. When omitted the SHALL `code` is emitted as `nullFlavor="UNK"` — an
+ * *explicit* unknown category, never a fabricated one. `codeSystem` defaults to
+ * LOINC when a `code` is supplied without one.
+ *
+ * **`findings` must be non-empty.** The organizer SHALL contain at least one
+ * [1..\*] Functional Status Observation; an empty organizer is a `TypeError`
+ * (never an organizer emitted with zero members). The Assessment Scale Observation
+ * (`…22.4.69`) — a scored scale such as a Barthel index — is a *direct section
+ * entry* in C-CDA R2.1, **not** an organizer component, and is deferred to a later
+ * increment; only status observations are grouped here.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaFunctionalStatusOrganizer } from "@cosyte/ccda";
+ * const selfCare: BuildCcdaFunctionalStatusOrganizer = {
+ *   code: { code: "d5", displayName: "Self-care", codeSystem: "2.16.840.1.113883.6.254" }, // ICF
+ *   effectiveTime: "20240101",
+ *   findings: [
+ *     { value: { code: "129019007", displayName: "Self-care" } }, // SNOMED CT
+ *     { value: { code: "165245003", displayName: "Able to walk" } },
+ *   ],
+ * };
+ * ```
+ */
+export interface BuildCcdaFunctionalStatusOrganizer {
+  /**
+   * The organizer's categorization `code` (SHOULD be ICF or LOINC). Omit for an
+   * explicit unknown (`code nullFlavor="UNK"`) — never a fabricated category.
+   * `codeSystem` defaults to LOINC when a `code` is supplied without one.
+   */
+  readonly code?: BuildCode;
+  /** When the grouped assessment was performed (HL7 date string); omitted (not fabricated) when absent. */
+  readonly effectiveTime?: string;
+  /**
+   * The Functional Status Observations grouped by this organizer. **Must be
+   * non-empty** — the organizer SHALL contain at least one member.
+   */
+  readonly findings: readonly BuildCcdaFunctionalStatus[];
+}
+
+/**
+ * A Mental Status Organizer for the Mental Status section — a Mental Status
+ * Organizer (`…22.4.75`, the R2.1 `2015-08-01` stamp, `@classCode="CLUSTER"`) that
+ * **groups** two or more related Mental Status Observations (`…22.4.74`) under one
+ * categorization. Use it instead of standalone findings when the assessment is a
+ * cluster (e.g. an orientation battery); each grouped observation is otherwise
+ * identical to a standalone {@link BuildCcdaMentalStatus} and reads back tagged
+ * `domain: "mental"` — **never conflated** with functional status (the two key off
+ * distinct organizer/observation roots).
+ *
+ * **`code` is the organizer's categorization, not a finding.** It SHALL be present
+ * [1..1] and SHOULD be drawn from ICF (`2.16.840.1.113883.6.254`) or LOINC. When
+ * omitted the SHALL `code` is emitted as `nullFlavor="UNK"` — an *explicit* unknown
+ * category, never fabricated. `codeSystem` defaults to LOINC when a `code` is
+ * supplied without one.
+ *
+ * **`findings` must be non-empty.** The organizer SHALL contain at least one
+ * [1..\*] Mental Status Observation; an empty organizer is a `TypeError`. The
+ * Assessment Scale Observation (`…22.4.69`) is a *direct section entry* in R2.1,
+ * **not** an organizer component, and is deferred to a later increment.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaMentalStatusOrganizer } from "@cosyte/ccda";
+ * const cognition: BuildCcdaMentalStatusOrganizer = {
+ *   effectiveTime: "20240101",
+ *   findings: [
+ *     { value: { code: "386807006", displayName: "Memory impairment" } }, // SNOMED CT
+ *     { value: { code: "247663003", displayName: "Orientation finding" } },
+ *   ],
+ * };
+ * ```
+ */
+export interface BuildCcdaMentalStatusOrganizer {
+  /**
+   * The organizer's categorization `code` (SHOULD be ICF or LOINC). Omit for an
+   * explicit unknown (`code nullFlavor="UNK"`) — never a fabricated category.
+   * `codeSystem` defaults to LOINC when a `code` is supplied without one.
+   */
+  readonly code?: BuildCode;
+  /** When the grouped assessment was performed (HL7 date string); omitted (not fabricated) when absent. */
+  readonly effectiveTime?: string;
+  /**
+   * The Mental Status Observations grouped by this organizer. **Must be
+   * non-empty** — the organizer SHALL contain at least one member.
+   */
+  readonly findings: readonly BuildCcdaMentalStatus[];
+}
+
+/**
  * The relative a {@link BuildCcdaFamilyHistory} organizer describes — the family
  * member whose conditions the organizer records. Emitted as the organizer's
  * `subject/relatedSubject` (a `@classCode="PRS"` personal relationship).
@@ -1170,10 +1273,24 @@ export interface BuildCcdaInit {
   readonly encounters?: readonly BuildCcdaEncounter[];
   /** Smoking Status observations for the Social History section; emitted only when non-empty (a CCD SHOULD section). */
   readonly smokingStatus?: readonly BuildCcdaSmokingStatus[];
-  /** Functional Status findings; the Functional Status section is emitted only when non-empty (a CCD SHOULD section). */
+  /** Standalone Functional Status findings; the Functional Status section is emitted when this or {@link functionalStatusOrganizers} is non-empty (a CCD SHOULD section). */
   readonly functionalStatus?: readonly BuildCcdaFunctionalStatus[];
-  /** Mental Status findings; the Mental Status section is emitted only when non-empty (a CCD SHOULD section). */
+  /**
+   * Functional Status Organizers (each grouping ≥1 Functional Status Observation
+   * under one categorization); emitted into the Functional Status section
+   * alongside any standalone {@link functionalStatus} findings. The section is
+   * emitted when either is non-empty.
+   */
+  readonly functionalStatusOrganizers?: readonly BuildCcdaFunctionalStatusOrganizer[];
+  /** Standalone Mental Status findings; the Mental Status section is emitted when this or {@link mentalStatusOrganizers} is non-empty (a CCD SHOULD section). */
   readonly mentalStatus?: readonly BuildCcdaMentalStatus[];
+  /**
+   * Mental Status Organizers (each grouping ≥1 Mental Status Observation under one
+   * categorization); emitted into the Mental Status section alongside any
+   * standalone {@link mentalStatus} findings. The section is emitted when either is
+   * non-empty.
+   */
+  readonly mentalStatusOrganizers?: readonly BuildCcdaMentalStatusOrganizer[];
   /**
    * Historical problems for the Past Medical History section; the section is
    * emitted only when non-empty (a CCD MAY section). Each is a bare Problem
@@ -1346,11 +1463,23 @@ export function buildCcda(init: BuildCcdaInit): CcdaDocument {
   if ((init.smokingStatus?.length ?? 0) > 0) {
     structuredBody.appendChild(socialHistorySection(doc, init.smokingStatus ?? [], id));
   }
-  if ((init.functionalStatus?.length ?? 0) > 0) {
-    structuredBody.appendChild(functionalStatusSection(doc, init.functionalStatus ?? [], id));
+  if (
+    (init.functionalStatus?.length ?? 0) > 0 ||
+    (init.functionalStatusOrganizers?.length ?? 0) > 0
+  ) {
+    structuredBody.appendChild(
+      functionalStatusSection(
+        doc,
+        init.functionalStatus ?? [],
+        init.functionalStatusOrganizers ?? [],
+        id,
+      ),
+    );
   }
-  if ((init.mentalStatus?.length ?? 0) > 0) {
-    structuredBody.appendChild(mentalStatusSection(doc, init.mentalStatus ?? [], id));
+  if ((init.mentalStatus?.length ?? 0) > 0 || (init.mentalStatusOrganizers?.length ?? 0) > 0) {
+    structuredBody.appendChild(
+      mentalStatusSection(doc, init.mentalStatus ?? [], init.mentalStatusOrganizers ?? [], id),
+    );
   }
   if ((init.pastMedicalHistory?.length ?? 0) > 0) {
     structuredBody.appendChild(pastMedicalHistorySection(doc, init.pastMedicalHistory ?? [], id));
@@ -2557,27 +2686,29 @@ function functionalStatusLabel(s: BuildCcdaFunctionalStatus): string {
 }
 
 /**
- * Build the Functional Status section from one or more
- * {@link BuildCcdaFunctionalStatus} findings. Only called with a non-empty list
- * (see {@link buildCcda}) — Functional Status is a CCD SHOULD (not SHALL)
- * section, so an unpopulated one is not fabricated. The Functional Status
+ * Build the Functional Status section from standalone
+ * {@link BuildCcdaFunctionalStatus} findings and/or
+ * {@link BuildCcdaFunctionalStatusOrganizer}s. Only called when at least one is
+ * non-empty (see {@link buildCcda}) — Functional Status is a CCD SHOULD (not
+ * SHALL) section, so an unpopulated one is not fabricated. The Functional Status
  * Section (V2, `…22.2.14`) has no entries-required variant, so only the base
  * `templateId` (the `2014-06-09` stamp) is emitted even though the section
- * carries entries. Only Functional Status templates are emitted here, so every
- * finding reads back tagged `domain: "functional"` — never conflated with mental
- * status. @internal
+ * carries entries. Organizers are emitted first (a grouped assessment), then
+ * standalone findings. Only Functional Status templates are emitted here, so
+ * every finding reads back tagged `domain: "functional"` — never conflated with
+ * mental status. @internal
  */
 function functionalStatusSection(
   doc: Document,
   findings: readonly BuildCcdaFunctionalStatus[],
+  organizers: readonly BuildCcdaFunctionalStatusOrganizer[],
   id: (prefix: string) => string,
 ): Element {
   const text = el(doc, "text");
   const entries: Element[] = [];
+  for (const org of organizers) entries.push(functionalStatusOrganizerEntry(doc, org, text, id));
   for (const s of findings) {
-    const contentId = id("func-txt");
-    text.appendChild(textEl(doc, "content", functionalStatusLabel(s), { ID: contentId }));
-    entries.push(functionalStatusEntry(doc, s, contentId, id));
+    entries.push(el(doc, "entry", undefined, functionalStatusObservation(doc, s, text, id)));
   }
   const section = sectionElement(
     doc,
@@ -2594,16 +2725,20 @@ function functionalStatusSection(
 }
 
 /**
- * Build one standalone Functional Status Observation `<entry>` (`…22.4.67`). The
- * `code` is the template-fixed LOINC `54522-8`; the finding is the coded
- * `value`. @internal
+ * Build one Functional Status Observation `<observation>` (`…22.4.67`), appending
+ * its narrative content line to `text`. The `code` is the template-fixed LOINC
+ * `54522-8`; the finding is the coded `value`. Shared by the standalone entry and
+ * the organizer component so a grouped finding is byte-identical to a standalone
+ * one. @internal
  */
-function functionalStatusEntry(
+function functionalStatusObservation(
   doc: Document,
   s: BuildCcdaFunctionalStatus,
-  contentId: string,
+  text: Element,
   id: (prefix: string) => string,
 ): Element {
+  const contentId = id("func-txt");
+  text.appendChild(textEl(doc, "content", functionalStatusLabel(s), { ID: contentId }));
   const obs = el(
     doc,
     "observation",
@@ -2632,7 +2767,50 @@ function functionalStatusEntry(
       ? typedValue(doc, "CD", { nullFlavor: "UNK" })
       : cdValue(doc, s.value, SNOMED_CT),
   );
-  return el(doc, "entry", undefined, obs);
+  return obs;
+}
+
+/**
+ * Build one Functional Status Organizer `<entry>` (`…22.4.66`, `@classCode="CLUSTER"`,
+ * the `2014-06-09` stamp) grouping this organizer's Functional Status
+ * Observations. Element order follows the CDA organizer schema: templateId, id,
+ * code, statusCode, effectiveTime, component+. @internal
+ */
+function functionalStatusOrganizerEntry(
+  doc: Document,
+  org: BuildCcdaFunctionalStatusOrganizer,
+  text: Element,
+  id: (prefix: string) => string,
+): Element {
+  if (org.findings.length === 0) {
+    throw new TypeError(
+      "buildCcda: a Functional Status Organizer must contain at least one finding " +
+        "(the template SHALL contain [1..*] a Functional Status Observation).",
+    );
+  }
+  const organizer = el(
+    doc,
+    "organizer",
+    { classCode: "CLUSTER", moodCode: "EVN" },
+    el(doc, "templateId", { root: FUNCTIONAL_STATUS_ORGANIZER, extension: FUNCTIONAL_STATUS_EXT }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("func-org") }),
+    // SHALL code [1..1] (SHOULD be ICF or LOINC — CONF:1098-31417). An omitted
+    // categorization is an EXPLICIT nullFlavor="UNK", never a fabricated category.
+    organizerCode(doc, org.code),
+    // SHALL statusCode [1..1], fixed "completed".
+    el(doc, "statusCode", { code: "completed" }),
+  );
+  // effectiveTime [0..1] — the assessment time. Emitted only when supplied; an
+  // optional element is never filled with a fabricated date.
+  if (org.effectiveTime !== undefined) {
+    organizer.appendChild(el(doc, "effectiveTime", { value: org.effectiveTime }));
+  }
+  for (const s of org.findings) {
+    organizer.appendChild(
+      el(doc, "component", undefined, functionalStatusObservation(doc, s, text, id)),
+    );
+  }
+  return el(doc, "entry", undefined, organizer);
 }
 
 /**
@@ -2647,26 +2825,27 @@ function mentalStatusLabel(s: BuildCcdaMentalStatus): string {
 }
 
 /**
- * Build the Mental Status section from one or more {@link BuildCcdaMentalStatus}
- * findings. Only called with a non-empty list (see {@link buildCcda}) — Mental
- * Status is a CCD SHOULD (not SHALL) section, so an unpopulated one is not
- * fabricated. The Mental Status Section (V2, `…22.2.56`, the R2.1 `2015-08-01`
- * stamp) has no entries-required variant, so only the base `templateId` is emitted
- * even though the section carries entries. Only Mental Status templates are emitted
- * here, so every finding reads back tagged `domain: "mental"` — never conflated
- * with functional status. @internal
+ * Build the Mental Status section from standalone {@link BuildCcdaMentalStatus}
+ * findings and/or {@link BuildCcdaMentalStatusOrganizer}s. Only called when at
+ * least one is non-empty (see {@link buildCcda}) — Mental Status is a CCD SHOULD
+ * (not SHALL) section, so an unpopulated one is not fabricated. The Mental Status
+ * Section (V2, `…22.2.56`, the R2.1 `2015-08-01` stamp) has no entries-required
+ * variant, so only the base `templateId` is emitted even though the section
+ * carries entries. Organizers are emitted first, then standalone findings. Only
+ * Mental Status templates are emitted here, so every finding reads back tagged
+ * `domain: "mental"` — never conflated with functional status. @internal
  */
 function mentalStatusSection(
   doc: Document,
   findings: readonly BuildCcdaMentalStatus[],
+  organizers: readonly BuildCcdaMentalStatusOrganizer[],
   id: (prefix: string) => string,
 ): Element {
   const text = el(doc, "text");
   const entries: Element[] = [];
+  for (const org of organizers) entries.push(mentalStatusOrganizerEntry(doc, org, text, id));
   for (const s of findings) {
-    const contentId = id("ment-txt");
-    text.appendChild(textEl(doc, "content", mentalStatusLabel(s), { ID: contentId }));
-    entries.push(mentalStatusEntry(doc, s, contentId, id));
+    entries.push(el(doc, "entry", undefined, mentalStatusObservation(doc, s, text, id)));
   }
   const section = sectionElement(
     doc,
@@ -2683,16 +2862,19 @@ function mentalStatusSection(
 }
 
 /**
- * Build one standalone Mental Status Observation `<entry>` (`…22.4.74`). The
- * `code` is the R2.1 template-fixed SNOMED CT `373930000` "Cognitive function
- * finding"; the specific finding is the coded `value`. @internal
+ * Build one Mental Status Observation `<observation>` (`…22.4.74`), appending its
+ * narrative content line to `text`. The `code` is the R2.1 template-fixed SNOMED
+ * CT `373930000` "Cognitive function finding"; the specific finding is the coded
+ * `value`. Shared by the standalone entry and the organizer component. @internal
  */
-function mentalStatusEntry(
+function mentalStatusObservation(
   doc: Document,
   s: BuildCcdaMentalStatus,
-  contentId: string,
+  text: Element,
   id: (prefix: string) => string,
 ): Element {
+  const contentId = id("ment-txt");
+  text.appendChild(textEl(doc, "content", mentalStatusLabel(s), { ID: contentId }));
   const obs = el(
     doc,
     "observation",
@@ -2724,7 +2906,73 @@ function mentalStatusEntry(
       ? typedValue(doc, "CD", { nullFlavor: "UNK" })
       : cdValue(doc, s.value, SNOMED_CT),
   );
-  return el(doc, "entry", undefined, obs);
+  return obs;
+}
+
+/**
+ * Build one Mental Status Organizer `<entry>` (`…22.4.75`, `@classCode="CLUSTER"`,
+ * the R2.1 `2015-08-01` stamp) grouping this organizer's Mental Status
+ * Observations. Element order follows the CDA organizer schema: templateId, id,
+ * code, statusCode, effectiveTime, component+. @internal
+ */
+function mentalStatusOrganizerEntry(
+  doc: Document,
+  org: BuildCcdaMentalStatusOrganizer,
+  text: Element,
+  id: (prefix: string) => string,
+): Element {
+  if (org.findings.length === 0) {
+    throw new TypeError(
+      "buildCcda: a Mental Status Organizer must contain at least one finding " +
+        "(the template SHALL contain [1..*] a Mental Status Observation).",
+    );
+  }
+  const organizer = el(
+    doc,
+    "organizer",
+    { classCode: "CLUSTER", moodCode: "EVN" },
+    el(doc, "templateId", { root: MENTAL_STATUS_ORGANIZER, extension: MENTAL_STATUS_EXT }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("ment-org") }),
+    // code [0..1] (SHOULD be ICF or LOINC — CONF:1198-14698); the organizer SHALL
+    // have at least one of code or effectiveTime (CONF:1198-32426). We always emit
+    // a code element (an EXPLICIT nullFlavor="UNK" categorization when the caller
+    // supplies none — never fabricated), which satisfies the one-of floor.
+    organizerCode(doc, org.code),
+    // SHALL statusCode [1..1], fixed "completed".
+    el(doc, "statusCode", { code: "completed" }),
+  );
+  // effectiveTime [0..1] — emitted only when supplied; never a fabricated date.
+  if (org.effectiveTime !== undefined) {
+    organizer.appendChild(el(doc, "effectiveTime", { value: org.effectiveTime }));
+  }
+  for (const s of org.findings) {
+    organizer.appendChild(
+      el(doc, "component", undefined, mentalStatusObservation(doc, s, text, id)),
+    );
+  }
+  return el(doc, "entry", undefined, organizer);
+}
+
+/**
+ * The status-organizer categorization `<code>` — SHALL [1..1], SHOULD be ICF or
+ * LOINC. When the caller supplies a `code` it is emitted with its `codeSystem`
+ * (defaulting to LOINC); when omitted it is an EXPLICIT `nullFlavor="UNK"`, an
+ * unknown category that satisfies the SHALL without fabricating one. @internal
+ */
+function organizerCode(doc: Document, code: BuildCode | undefined): Element {
+  if (code === undefined) return el(doc, "code", { nullFlavor: "UNK" });
+  // Default the system to LOINC (an allowed SHOULD value) when the caller gave a
+  // code without one; only label it "LOINC" when we defaulted, so a caller-set
+  // codeSystem keeps the caller's (or an absent) system name.
+  const codeSystem = code.codeSystem ?? LOINC;
+  const codeSystemName =
+    code.codeSystemName ?? (code.codeSystem === undefined ? "LOINC" : undefined);
+  return el(doc, "code", {
+    code: code.code,
+    codeSystem,
+    displayName: code.displayName,
+    codeSystemName,
+  });
 }
 
 /**
