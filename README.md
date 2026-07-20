@@ -284,7 +284,11 @@ The table is **conservative**: it asserts only unconditional, in-catalog, high-c
 constraints and deliberately omits choice constraints (`SHALL contain A OR B`), SHOULD/MAY sections,
 and SHALL sections outside the recognized catalog (e.g. Hospital Course, Physical Exam). A document
 type with an empty table therefore means _"no unconditional in-catalog SHALL section is asserted yet"_ —
-not _"this type has no requirements"_. Broadening a table is additive and safe.
+not _"this type has no requirements"_. Broadening a table is additive and safe. The **Referral Note**
+now asserts **Reason for Referral** alongside Problems, Allergies, and Medications (traced to the
+normative R2.1 Schematron, CONF:1198-30925) — that section became a recognized catalog key, so the
+SHALL check no longer stays silent when a Referral Note omits it. Its Assessment/Plan requirement
+stays out (a choice constraint), as do its Results and Plan of Treatment sections (SHOULD, not SHALL).
 
 ## What it extracts (Phase 5b) — the deferred clinical sections
 

@@ -28,6 +28,7 @@ import {
   MEDICATIONS_SECTION,
   ALLERGY_ENTRY_SECTION,
   RESULTS_SECTION,
+  REASON_FOR_REFERRAL_SECTION,
 } from "./__fixtures__/ccda.js";
 
 function codes(warnings: readonly CcdaWarning[]): string[] {
@@ -339,6 +340,39 @@ describe("required-section (SHALL) validation", () => {
   it("exposes the SHALL table via requiredSectionKeys", () => {
     expect(requiredSectionKeys("ccd")).toEqual(["allergies", "medications", "problems", "results"]);
     expect(requiredSectionKeys("progressNote")).toEqual([]);
+  });
+
+  it("asserts Reason for Referral in the Referral Note SHALL set (CONF:1198-30925)", () => {
+    // Slice 14 made the Reason for Referral Section a recognized catalog key;
+    // the Referral Note document (…22.1.14) SHALL contain it per the normative
+    // R2.1 Schematron — so the table now asserts it alongside the triad.
+    expect(requiredSectionKeys("referralNote")).toEqual([
+      "allergies",
+      "medications",
+      "problems",
+      "reasonForReferral",
+    ]);
+  });
+
+  it("flags a Referral Note that omits its SHALL Reason for Referral section", () => {
+    // A Referral Note carrying the triad (problems + medications + allergies)
+    // but no Reason for Referral is now non-conformant and warns for exactly
+    // that section — not the triad, which is present.
+    const triad = `${PROBLEMS_SECTION}${MEDICATIONS_SECTION}${ALLERGY_ENTRY_SECTION}`;
+    const doc = parseCcda(buildCcda({ docTypeOid: oidFor("referralNote"), sections: triad }));
+    const missing = doc.warnings
+      .filter((w) => w.code === WARNING_CODES.REQUIRED_SECTION_MISSING)
+      .map((w) => w.message);
+    expect(missing.some((m) => m.includes("reasonForReferral"))).toBe(true);
+    expect(missing.some((m) => m.includes('"allergies"'))).toBe(false);
+    expect(missing.some((m) => m.includes('"medications"'))).toBe(false);
+    expect(missing.some((m) => m.includes('"problems"'))).toBe(false);
+  });
+
+  it("emits no Reason for Referral warning when the Referral Note carries it", () => {
+    const full = `${PROBLEMS_SECTION}${MEDICATIONS_SECTION}${ALLERGY_ENTRY_SECTION}${REASON_FOR_REFERRAL_SECTION}`;
+    const doc = parseCcda(buildCcda({ docTypeOid: oidFor("referralNote"), sections: full }));
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.REQUIRED_SECTION_MISSING);
   });
 
   it("computes the absent subset via missingRequiredSections", () => {

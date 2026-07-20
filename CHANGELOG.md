@@ -78,6 +78,23 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (fifteenth slice) — the Referral Note SHALL set now asserts Reason for Referral.**
+  Reconciles the parser's per-document-type required-section (SHALL) table with the section catalog the
+  fourteenth slice expanded. That slice made the **Reason for Referral** Section a recognized catalog key
+  but explicitly left the required-section table untouched; the Referral Note document
+  (`2.16.840.1.113883.10.20.22.1.14`) SHALL contain a Reason for Referral Section, so a Referral Note that
+  omits it is non-conformant. The `referralNote` SHALL set becomes
+  `["allergies", "medications", "problems", "reasonForReferral"]` — a Referral Note missing that section now
+  raises a `REQUIRED_SECTION_MISSING` **warning** (never a fatal; a missing section still never blocks
+  reading the data that is present), while the builder's own Referral Note (which always emits the section)
+  stays warning-free. Traced firsthand to the **normative C-CDA R2.1 Schematron** (the 1,010,531-byte
+  `HL7/CDA-ccda-2.1` validation `.sch`): the Referral Note document pattern asserts Problem
+  (CONF:1198-29087), Allergies (-30912), Medications (-30923), and Reason for Referral (-30925) as SHALL.
+  Deliberately still omitted, per the table's conservative design: the **Assessment/Plan choice**
+  (CONF:1198-29102 — a choice constraint) and **Results** / **Plan of Treatment** (CONF:1198-29090 / -29066
+  — SHOULD, not SHALL; the build.fhir.org StructureDefinition's `payers`/`plan` `min=1` was confirmed to be
+  drift from the normative Schematron and is not encoded). No public-API or warning-code change; the
+  `requiredSectionKeys("referralNote")` / `missingRequiredSections(...)` accessors reflect the new entry.
 - **Phase 7 (fourteenth slice) — builder emits a second C-CDA document type, the Referral Note.**
   Establishes the **multi-document-type pattern** in `buildCcda`: it now emits either a **CCD** (default) or
   a **Referral Note** (`documentType: "referralNote"`), each with its own US Realm Header specialization and

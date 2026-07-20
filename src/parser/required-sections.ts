@@ -11,11 +11,16 @@
  * recognized catalog. It deliberately **omits**:
  *
  * - **Choice constraints** (`SHALL contain A OR B`) — asserting either half as
- *   unconditional would mis-flag conformant documents.
- * - **SHOULD / MAY** sections — only SHALL is enforced.
+ *   unconditional would mis-flag conformant documents. The Referral Note's
+ *   Assessment-and-Plan requirement (CONF:1198-29102 — an *Assessment and Plan*
+ *   Section, **or** an *Assessment* Section **and** a *Plan of Treatment* Section)
+ *   is one such choice, so neither half is asserted here.
+ * - **SHOULD / MAY** sections — only SHALL is enforced. (For the Referral Note
+ *   this is why *Results* and *Plan of Treatment* are absent: the normative R2.1
+ *   Schematron marks them SHOULD, CONF:1198-29090 / -29066, not SHALL.)
  * - **SHALL sections outside the recognized catalog** (e.g. Hospital Course,
- *   Physical Exam, Reason for Referral) — the parser cannot recognize them, so
- *   it does not pretend to validate them.
+ *   Physical Exam) — the parser cannot recognize them, so it does not pretend to
+ *   validate them.
  *
  * A document type with an **empty** list is therefore *"no unconditional,
  * in-catalog SHALL section is asserted yet"* — **not** *"this type has no
@@ -37,7 +42,12 @@ import type { DocumentType } from "./templates.js";
 const REQUIRED_SECTIONS: Readonly<Record<DocumentType, readonly string[]>> = {
   ccd: ["allergies", "medications", "problems", "results"],
   dischargeSummary: ["allergies", "hospitalDischargeDiagnosis", "dischargeMedications"],
-  referralNote: ["allergies", "medications", "problems"],
+  // Referral Note (…22.1.14) SHALL: Problem (CONF:1198-29087), Allergies
+  // (-30912), Medications (-30923), and Reason for Referral (-30925). The
+  // Reason for Referral Section became a recognized catalog key, so it is now
+  // asserted here; the Assessment/Plan choice (-29102) stays omitted per the
+  // module note. Traced to the normative R2.1 Schematron.
+  referralNote: ["allergies", "medications", "problems", "reasonForReferral"],
   consultationNote: [],
   historyAndPhysical: ["allergies"],
   progressNote: [],
