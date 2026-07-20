@@ -990,6 +990,94 @@ describe("buildCcda — mental status round-trip", () => {
   });
 });
 
+describe("buildCcda — past medical history round-trip", () => {
+  /** A build carrying BOTH an active problem concern and a historical (past) one,
+   * to prove the two never conflate — the past problem is a bare observation
+   * (…22.4.4) routed to getPastMedicalHistory, the active one a concern act
+   * (…22.4.3) routed to getProblems. */
+  const PMH_INIT: BuildCcdaInit = {
+    patient: { mrn: "M" },
+    problems: [
+      { problem: { code: "59621000", displayName: "Essential hypertension" }, status: "active" },
+    ],
+    pastMedicalHistory: [
+      {
+        problem: { code: "74400008", displayName: "Appendicitis" },
+        status: "resolved",
+        onset: "20050101",
+      },
+    ],
+  };
+
+  it("re-parses a known past problem via getPastMedicalHistory, warning-free", () => {
+    const doc = buildCcda(PMH_INIT);
+    const history = doc.getPastMedicalHistory();
+    expect(history).toHaveLength(1);
+    expect(history[0]?.value?.code).toBe("74400008");
+    expect(history[0]?.value?.codeSystem).toBe("2.16.840.1.113883.6.96");
+    // The onset survives as the observation effectiveTime low; the resolved-but-
+    // unknown resolution is a nullFlavor high, never a fabricated date.
+    expect(history[0]?.effectiveTime?.low?.raw).toBe("20050101");
+    expect(history[0]?.effectiveTime?.high?.nullFlavor).toBe("UNK");
+    expect(doc.warnings).toEqual([]);
+  });
+
+  it("never double-counts a past problem as an active problem concern", () => {
+    const doc = buildCcda(PMH_INIT);
+    // The active concern is the ONLY thing getProblems returns; the past illness
+    // is a bare observation and stays in getPastMedicalHistory.
+    const problems = doc.getProblems();
+    expect(problems).toHaveLength(1);
+    expect(problems[0]?.problems[0]?.value?.code).toBe("59621000");
+    expect(doc.getPastMedicalHistory()).toHaveLength(1);
+    expect(doc.getPastMedicalHistory()[0]?.value?.code).toBe("74400008");
+  });
+
+  it("emits the Past Medical History section (LOINC 11348-0, bare …4.4 obs, 2015-08-01, no concern act)", () => {
+    const doc = buildCcda(PMH_INIT);
+    expect(doc.findSection("pastMedicalHistory")?.code?.code).toBe("11348-0");
+    const xml = serializeCcda(doc);
+    // The Past Medical History Section (V3) carries the R2.1 2015-08-01 stamp and
+    // has no entries-required variant (…2.20.1).
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.20" extension="2015-08-01"');
+    expect(xml).not.toContain('root="2.16.840.1.113883.10.20.22.2.20.1"');
+    // The bare Problem Observation carries the 2015-08-01 stamp and the fixed
+    // SNOMED CT "Problem" (55607006) code.
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.4.4" extension="2015-08-01"');
+    expect(xml).toContain('code="55607006"');
+  });
+
+  it("emits nullFlavor=UNK onset when no onset is supplied — never a fabricated date", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      pastMedicalHistory: [{ problem: { code: "74400008", displayName: "Appendicitis" } }],
+    });
+    expect(doc.warnings).toEqual([]);
+    const [past] = doc.getPastMedicalHistory();
+    expect(past?.value?.code).toBe("74400008");
+    expect(past?.effectiveTime?.low?.nullFlavor).toBe("UNK");
+    const xml = serializeCcda(doc);
+    expect(xml).toContain('nullFlavor="UNK"');
+  });
+
+  it("does NOT emit a Past Medical History section when none is supplied", () => {
+    const doc = buildCcda({ patient: { mrn: "M" } });
+    expect(doc.findSection("pastMedicalHistory")).toBeUndefined();
+    expect(doc.getPastMedicalHistory()).toEqual([]);
+    expect(serializeCcda(doc)).not.toContain('code="11348-0"');
+  });
+
+  it("does not flag the bare past-problem observation as misplaced", () => {
+    const doc = buildCcda(PMH_INIT);
+    expect(doc.warnings.map((w) => w.code)).not.toContain("SECTION_PLACEMENT_SUSPECT");
+  });
+
+  it("is a serialization fixed point with a Past Medical History section present", () => {
+    const xml = serializeCcda(buildCcda(PMH_INIT));
+    expect(parseCcda(xml).toString()).toBe(xml);
+  });
+});
+
 describe("buildCcda — defaults, escaping, and input validation", () => {
   it("emits nullFlavor for omitted demographics and no MRN", () => {
     const doc = buildCcda({ patient: {} });

@@ -91,9 +91,24 @@
  * key off their distinct observation roots (`…22.4.67` vs `…22.4.74`), so a mental
  * finding reads back tagged `domain: "mental"` — **never conflated** with functional
  * status. Like the other non-SHALL sections it is emitted only when populated, and
- * its section has no entries-required variant. The Functional/Mental Status
- * Organizer + Assessment Scale forms, Family History, Past Medical History, and Plan
- * of Treatment are deferred to later CCDA-P7 increments.
+ * its section has no entries-required variant.
+ *
+ * **This slice adds Past Medical History.** A **Past Medical History** section
+ * (`…22.2.20`, LOINC `11348-0`, the R2.1 `2015-08-01` stamp) emits one or more
+ * historical problems as **bare** Problem Observations (`…22.4.4`) directly under
+ * each `<entry>` — reusing the exact observation the Problems section builds, but
+ * **without** the Problem Concern Act (`…22.4.3`) wrapper. That structural
+ * distinction is load-bearing: the parser routes a bare observation to
+ * `getPastMedicalHistory` and a concern-wrapped one to `getProblems`, so a resolved
+ * past illness is **never double-counted** as an active problem concern. Each
+ * observation carries the SHALL fixed `code` (SNOMED CT `55607006` "Problem"), a
+ * SHALL `statusCode` (`completed`), the SHALL `effectiveTime` (onset as `low`, a
+ * `nullFlavor="UNK"` `high` for a resolved problem — never a guessed date), and the
+ * coded condition in `value`; an absent onset/resolution is `nullFlavor="UNK"`,
+ * never invented. The section has no entries-required variant and, like the other
+ * non-SHALL sections, is emitted only when populated. The Functional/Mental Status
+ * Organizer + Assessment Scale forms, Family History, and Plan of Treatment are
+ * deferred to later CCDA-P7 increments.
  *
  * **SHALL `effectiveTime` on every entry.** Each act/observation the builder
  * emits carries the `effectiveTime` its C-CDA R2.1 template requires — the
@@ -818,6 +833,13 @@ export interface BuildCcdaInit {
   readonly functionalStatus?: readonly BuildCcdaFunctionalStatus[];
   /** Mental Status findings; the Mental Status section is emitted only when non-empty (a CCD SHOULD section). */
   readonly mentalStatus?: readonly BuildCcdaMentalStatus[];
+  /**
+   * Historical problems for the Past Medical History section; the section is
+   * emitted only when non-empty (a CCD MAY section). Each is a bare Problem
+   * Observation (not a concern act), read back via `getPastMedicalHistory` — never
+   * conflated with the active Problems returned by `getProblems`.
+   */
+  readonly pastMedicalHistory?: readonly BuildCcdaProblem[];
 }
 
 /** A monotonic id generator scoped to one build, for stable act/content ids. @internal */
@@ -973,6 +995,9 @@ export function buildCcda(init: BuildCcdaInit): CcdaDocument {
   }
   if ((init.mentalStatus?.length ?? 0) > 0) {
     structuredBody.appendChild(mentalStatusSection(doc, init.mentalStatus ?? [], id));
+  }
+  if ((init.pastMedicalHistory?.length ?? 0) > 0) {
+    structuredBody.appendChild(pastMedicalHistorySection(doc, init.pastMedicalHistory ?? [], id));
   }
   root.appendChild(el(doc, "component", undefined, structuredBody));
 
@@ -1235,6 +1260,8 @@ const SOCIAL_HISTORY_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.17";
 const FUNCTIONAL_STATUS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.14";
 /** @internal */
 const MENTAL_STATUS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.56";
+/** @internal */
+const PAST_MEDICAL_HISTORY_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.20";
 
 /** Build the Problems section — populated, or empty when there are none. @internal */
 function problemsSection(
@@ -1257,8 +1284,15 @@ function problemsSection(
   return el(doc, "component", undefined, section);
 }
 
-/** Build one Problem Concern Act `<entry>`. @internal */
-function problemEntry(
+/**
+ * Build one bare Problem Observation (`…22.4.4`, the R2.1 `2015-08-01` stamp).
+ * Shared by the Problems section (nested under a Problem Concern Act via
+ * {@link problemEntry}) and the Past Medical History section (bare, directly under
+ * `<entry>` — {@link pastMedicalHistorySection}); both carry the identical coded
+ * shape, so the same observation reuse mirrors the parser reusing `buildProblem`
+ * for both. @internal
+ */
+function problemObservation(
   doc: Document,
   p: BuildCcdaProblem,
   contentId: string,
@@ -1284,6 +1318,17 @@ function problemEntry(
   obs.appendChild(concernEffectiveTime(doc, p.onset, p.status));
   obs.appendChild(cdValue(doc, p.problem, SNOMED_CT));
   obs.appendChild(el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })));
+  return obs;
+}
+
+/** Build one Problem Concern Act `<entry>`. @internal */
+function problemEntry(
+  doc: Document,
+  p: BuildCcdaProblem,
+  contentId: string,
+  id: (prefix: string) => string,
+): Element {
+  const obs = problemObservation(doc, p, contentId, id);
 
   const act = el(
     doc,
@@ -2314,4 +2359,42 @@ function mentalStatusEntry(
       : cdValue(doc, s.value, SNOMED_CT),
   );
   return el(doc, "entry", undefined, obs);
+}
+
+/**
+ * Build the Past Medical History section from one or more historical
+ * {@link BuildCcdaProblem}s. Only called with a non-empty list (see
+ * {@link buildCcda}) — Past Medical History is a CCD MAY (not SHALL) section, so
+ * an unpopulated one is not fabricated. The Past Medical History Section (V3,
+ * `…22.2.20`, LOINC `11348-0`, the R2.1 `2015-08-01` stamp) carries **bare**
+ * Problem Observations (`…22.4.4`) directly under each `<entry>` — unlike the
+ * Problems section, which nests each Problem Observation inside a Problem Concern
+ * Act (`…22.4.3`). The two never double-count: the parser routes a bare
+ * observation to `getPastMedicalHistory` and a concern-wrapped one to
+ * `getProblems`, so a past illness never reads back as an active problem concern.
+ * The section has no entries-required variant (`…2.20.1`), so only the base
+ * `templateId` is emitted even when it carries entries. @internal
+ */
+function pastMedicalHistorySection(
+  doc: Document,
+  history: readonly BuildCcdaProblem[],
+  id: (prefix: string) => string,
+): Element {
+  const text = el(doc, "text");
+  const entries: Element[] = [];
+  for (const p of history) {
+    const contentId = id("pmh-txt");
+    text.appendChild(textEl(doc, "content", p.problem.displayName, { ID: contentId }));
+    entries.push(el(doc, "entry", undefined, problemObservation(doc, p, contentId, id)));
+  }
+  const section = sectionElement(
+    doc,
+    PAST_MEDICAL_HISTORY_SECTION_BASE,
+    "11348-0",
+    "Past Medical History",
+    text,
+    false,
+  );
+  for (const entry of entries) section.appendChild(entry);
+  return el(doc, "component", undefined, section);
 }
