@@ -23,7 +23,8 @@ substrate for C-CDA's XML.
 > the deferred clinical sections (Plan of Treatment / Functional Status / Mental Status / Family
 > History / Past Medical History), and per-document-type required-section (SHALL) validation — plus a
 > **spec-clean, round-trip serializer** (`serializeCcda` / `toString()`) and immutable copy-with
-> (`withWarnings`). A document **builder** (`buildCcda`) emits a spec-clean CCD with the US Realm header
+> (`withWarnings`). A document **builder** (`buildCcda`) emits a spec-clean **CCD** or **Referral Note**
+> with the US Realm header
 > and populated **Problems, Allergies, Medications, Results, Vital Signs, Immunizations, Procedures,
 > Encounters, Social-History smoking status, Functional Status, Mental Status, Past Medical History,
 > Plan of Treatment** (planned entries, never conflated with performed), **and Family History**
@@ -142,10 +143,21 @@ const out = serializeCcda(doc); // === doc.toString()
 ## Build a document (Phase 7)
 
 `buildCcda(init)` is the emit _factory_ symmetric with `parseCcda`: from structured input it assembles
-a **spec-clean C-CDA R2.1 CCD** and returns a real `CcdaDocument`. It emits through the same DOM the
-parser reads, so a built document round-trips by construction — it parses back to the same structured
-content, and `parseCcda(doc.toString()).toString() === doc.toString()`. A clean build carries zero
-warnings.
+a **spec-clean C-CDA R2.1** document and returns a real `CcdaDocument`. It emits either a **CCD**
+(default) or a **Referral Note** (`documentType: "referralNote"`) — each with its own US Realm Header
+specialization (document `templateId` + LOINC `code`) and document-type-specific SHALL section set. It
+emits through the same DOM the parser reads, so a built document round-trips by construction — it parses
+back to the same structured content, and `parseCcda(doc.toString()).toString() === doc.toString()`. A
+clean build carries zero warnings.
+
+A **Referral Note** carries the document `templateId` `2.16.840.1.113883.10.20.22.1.14` (R2.1
+`2015-08-01`) and LOINC document `code` `57133-1`, and always emits its SHALL section set: the
+entries-required **Problems**, **Allergies**, and **Medications** (empty `nullFlavor="NI"` when
+unpopulated), plus the narrative **Reason for Referral** (`1.3.6.1.4.1.19376.1.5.3.1.3.1`, LOINC
+`42349-1`, from the optional `reasonForReferral` string), **Assessment** (`…22.2.8`, LOINC `51848-0`,
+unversioned — a root-only `templateId` with no `@extension` — from the optional `assessment` string),
+and **Plan of Treatment** (`…22.2.10`, LOINC `18776-5`). Results and Vital Signs are not Referral Note
+SHALL sections, so — unlike in a CCD — they are emitted only when the caller supplies them.
 
 ```ts
 import { buildCcda, serializeCcda } from "@cosyte/ccda";
@@ -240,9 +252,9 @@ performed, and an unrecorded smoking-status / functional-status `value` is emitt
 `nullFlavor="UNK"` rather than defaulted to a real finding. Each CCD SHALL section for which no content
 is supplied is emitted as a spec-clean empty `nullFlavor="NI"` section; the non-required Immunizations /
 Procedures / Encounters / Social History / Functional Status / Mental Status / Past Medical History /
-Plan of Treatment / Family History sections are emitted only when populated. The other eleven document
-types, C-CDA document editing, and a bring-your-own-credentials terminology adapter land in a later
-increment.
+Plan of Treatment / Family History sections are emitted only when populated. The builder now emits two of
+the twelve document types (**CCD** and **Referral Note**); the remaining ten, C-CDA document editing, and
+a bring-your-own-credentials terminology adapter land in a later increment.
 
 ## What it extracts (Phase 5) — Procedures, Encounters, Social History
 
@@ -329,10 +341,12 @@ checks.
   this is recognition only — membership validation needs a licensed terminology service.
 - **Serializer re-emits a parsed document; the builder constructs one** — `serializeCcda` / `toString()`
   faithfully re-emit a _parsed_ document (the spec-clean emit half of Postel's Law). To construct a
-  document from scratch, `buildCcda` emits a spec-clean CCD with the US Realm header + **Problems,
+  document from scratch, `buildCcda` emits a spec-clean **CCD** or **Referral Note**
+  (`documentType: "referralNote"`) with the US Realm header + **Problems,
   Allergies, Medications, Results, Vital Signs, Immunizations, Procedures, and Encounters** (the last
-  three emitted only when populated, since none is a CCD SHALL section); the remaining sections, the
-  other eleven document types, and editing an existing document are a later increment. "Spec-clean" here means well-formed,
+  three emitted only when populated, since none is a CCD SHALL section) — a Referral Note additionally
+  specializes the header and emits its own SHALL set (Reason for Referral, Assessment, Plan of Treatment);
+  the remaining ten document types and editing an existing document are a later increment. "Spec-clean" here means well-formed,
   correctly-templated, and **round-tripping** through `parseCcda` with zero warnings. Every entry now
   emits the `SHALL`-cardinality `effectiveTime` its C-CDA R2.1 template requires — the Problems/Allergies
   concern acts + observations, the Medication Activity `IVL_TS` duration, and the Results/Vital Signs

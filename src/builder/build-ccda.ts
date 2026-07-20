@@ -176,9 +176,30 @@
  * time is known the slot is filled with `nullFlavor="UNK"` (satisfying the
  * cardinality without fabricating a clinical timestamp, and read back as absent),
  * mirroring how the header's SHALL `addr`/`telecom` and the never-guessed
- * dose/route are handled. The other eleven document types, C-CDA document
- * *editing*, and the bring-your-own-credentials terminology adapter are deferred
- * to a later CCDA-P7 increment.
+ * dose/route are handled.
+ *
+ * **This slice adds a second document type: the Referral Note.** `buildCcda`
+ * now emits either a **CCD** (default) or a **Referral Note**
+ * (`documentType: "referralNote"`), establishing the multi-document-type pattern
+ * in the builder. The Referral Note specializes the US Realm Header — its own
+ * document `templateId` root (`…22.1.14`, the R2.1 `2015-08-01` stamp), LOINC
+ * document `code` (`57133-1` "Referral Note"), and title — and its own SHALL
+ * section set: the entries-required **Problems**, **Allergies**, and
+ * **Medications** (each emitted empty as `nullFlavor="NI"` when the caller
+ * supplies none), plus the narrative-only **Reason for Referral** (V2,
+ * `1.3.6.1.4.1.19376.1.5.3.1.3.1`, LOINC `42349-1`), **Assessment** (`…22.2.8`,
+ * unversioned — a root-only `templateId` with no `@extension` — LOINC `51848-0`),
+ * and **Plan of Treatment** (`…22.2.10`, LOINC `18776-5`) — the last three
+ * satisfying the Referral Note's Assessment/Plan narrative requirements
+ * (confirmed against the C-CDA R2.1 IG StructureDefinition and the CC0
+ * onc-healthit ToC Referral Note certification sample). Results and Vital Signs
+ * are **not** Referral Note SHALL sections, so — unlike in a CCD, where they are
+ * always emitted — they appear only when the caller supplies content. Every
+ * emitted section is one the parser recognizes, so a clean Referral Note build
+ * round-trips through {@link parseCcda} with **zero warnings**, exactly like a
+ * CCD. The remaining ten document types, C-CDA document *editing*, and the
+ * bring-your-own-credentials terminology adapter are deferred to a later
+ * CCDA-P7 increment.
  *
  * @packageDocumentation
  */
@@ -243,6 +264,33 @@ const SYNTH_ROOT = "2.16.840.1.113883.19.5.99999";
 const ACT_CODE = "2.16.840.1.113883.5.4";
 /** The LOINC document-type code + title for a CCD. @internal */
 const CCD_DOC_CODE = { code: "34133-9", displayName: "Summarization of Episode Note" } as const;
+/** The Referral Note document template OID (root); the R2.1 stamp lives in `@extension`. @internal */
+const REFERRAL_NOTE_TEMPLATE = "2.16.840.1.113883.10.20.22.1.14";
+/**
+ * The LOINC document-type code + title for a Referral Note (`57133-1`,
+ * confirmed against the C-CDA R2.1 IG StructureDefinition and the CC0
+ * onc-healthit ToC certification sample). @internal
+ */
+const REFERRAL_NOTE_DOC_CODE = { code: "57133-1", displayName: "Referral Note" } as const;
+/**
+ * The Assessment Section (`…22.2.8`, LOINC `51848-0`). Narrative-only. Note it
+ * is **unversioned** in C-CDA R2.1 — there is no R2.0/R2.1 revision, so the
+ * section carries the base R1.1 `templateId` with **no `@extension`** (verified
+ * in the CC0 onc-healthit ToC Referral Note sample). @internal
+ */
+const ASSESSMENT_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.8";
+/** The LOINC `code` + title for the Assessment Section. @internal */
+const ASSESSMENT_CODE = { code: "51848-0", displayName: "Assessment" } as const;
+/**
+ * The Reason for Referral Section (V2). An IHE PCC template, so its OID is the
+ * IHE root (not a C-CDA `…22.2.*` OID); the R2.1 version stamp is the
+ * `@extension` `2014-06-09`. Narrative-only. @internal
+ */
+const REASON_FOR_REFERRAL_SECTION_BASE = "1.3.6.1.4.1.19376.1.5.3.1.3.1";
+/** The `@extension` stamp the Reason for Referral Section (V2) carries. @internal */
+const REASON_FOR_REFERRAL_EXT = "2014-06-09";
+/** The LOINC `code` + title for the Reason for Referral Section. @internal */
+const REASON_FOR_REFERRAL_CODE = { code: "42349-1", displayName: "Reason for Referral" } as const;
 /** The R2.1 `@extension` stamp the Medication Activity/Information templates carry. @internal */
 const MED_EXT = "2014-06-09";
 /** The R2.1 `@extension` stamp the Vital Sign *Observation* template carries. @internal */
@@ -1332,8 +1380,12 @@ export type BuildCcdaPlannedItem =
  * ```
  */
 export interface BuildCcdaInit {
-  /** The document type. Only `"ccd"` is supported in this builder slice. */
-  readonly documentType?: "ccd";
+  /**
+   * The document type — `"ccd"` (default) or `"referralNote"`. Each specializes
+   * the US Realm Header (its own document `templateId` + LOINC `code`) and its
+   * SHALL section set; the other ten C-CDA R2.1 document types are deferred.
+   */
+  readonly documentType?: "ccd" | "referralNote";
   /** The document `id`'s extension; a synthetic id is generated when omitted. */
   readonly documentId?: string;
   /** The document title; defaults to the CCD document-code display name. */
@@ -1423,7 +1475,86 @@ export interface BuildCcdaInit {
    * `getFamilyHistory`, grouped by relative.
    */
   readonly familyHistory?: readonly BuildCcdaFamilyHistory[];
+  /**
+   * The Assessment Section narrative (`documentType: "referralNote"` only — a
+   * Referral Note SHALL section). Narrative-only, so this is a free-text
+   * clinician summary; when omitted the SHALL section is emitted as a spec-clean
+   * empty `nullFlavor="NI"` section (never a fabricated assessment). Ignored for
+   * a CCD.
+   */
+  readonly assessment?: string;
+  /**
+   * The Reason for Referral Section narrative (`documentType: "referralNote"`
+   * only — a Referral Note SHALL section). Narrative-only free text; when omitted
+   * the SHALL section is emitted as an empty `nullFlavor="NI"` section (never a
+   * fabricated reason). Ignored for a CCD.
+   */
+  readonly reasonForReferral?: string;
 }
+
+/**
+ * A section the builder always emits for a given document type (its SHALL set).
+ * `"problems"`/`"allergies"`/`"medications"` are the entries-required clinical
+ * sections; `"results"`/`"vitalSigns"` are always-on for a CCD; `"assessment"`,
+ * `"reasonForReferral"`, and `"planOfTreatment"` are the Referral Note's
+ * narrative SHALL sections. @internal
+ */
+type ShallSectionKey =
+  | "problems"
+  | "allergies"
+  | "medications"
+  | "results"
+  | "vitalSigns"
+  | "reasonForReferral"
+  | "assessment"
+  | "planOfTreatment";
+
+/**
+ * The header + SHALL-section specialization for one supported document type. The
+ * `documentTemplateRoot` + `documentCode` drive the US Realm Header, and
+ * `shallSections` is the ordered set the builder always emits (an empty one as a
+ * spec-clean `nullFlavor="NI"` section) so the document is conformant for that
+ * type and the parser's required-section validation stays quiet. @internal
+ */
+interface DocTypeSpec {
+  /** The document-level `templateId` root (the R2.1 stamp is `@extension` `2015-08-01`). */
+  readonly documentTemplateRoot: string;
+  /** The LOINC document-type `code` + display/title. */
+  readonly documentCode: { readonly code: string; readonly displayName: string };
+  /** The ordered SHALL sections the builder always emits for this document type. */
+  readonly shallSections: readonly ShallSectionKey[];
+}
+
+/**
+ * The document types the builder can emit, each with its header + SHALL-section
+ * specialization. **CCD** SHALL: Allergies, Medications, Problems, Results (+ the
+ * builder always emits Vital Signs). **Referral Note** SHALL (confirmed against
+ * the C-CDA R2.1 IG StructureDefinition + the CC0 onc-healthit ToC sample):
+ * Problems, Allergies, Medications (entries-required), Reason for Referral,
+ * Assessment, and Plan of Treatment — the last three satisfying the document's
+ * "Assessment (and Plan) + Plan of Treatment" narrative requirements. Results and
+ * Vital Signs are not Referral Note SHALL sections, so they become optional
+ * (emitted only when populated). @internal
+ */
+const DOC_TYPE_SPECS: Readonly<Record<"ccd" | "referralNote", DocTypeSpec>> = {
+  ccd: {
+    documentTemplateRoot: CCD_TEMPLATE,
+    documentCode: CCD_DOC_CODE,
+    shallSections: ["problems", "allergies", "medications", "results", "vitalSigns"],
+  },
+  referralNote: {
+    documentTemplateRoot: REFERRAL_NOTE_TEMPLATE,
+    documentCode: REFERRAL_NOTE_DOC_CODE,
+    shallSections: [
+      "problems",
+      "allergies",
+      "medications",
+      "reasonForReferral",
+      "assessment",
+      "planOfTreatment",
+    ],
+  },
+};
 
 /** A monotonic id generator scoped to one build, for stable act/content ids. @internal */
 function makeIdGen(): (prefix: string) => string {
@@ -1511,18 +1642,21 @@ function medicationDuration(
 }
 
 /**
- * Build a spec-clean C-CDA R2.1 CCD from structured input and return the parsed
- * {@link CcdaDocument}. The emitted document round-trips through {@link parseCcda}
- * by construction (see the module doc); a clean build carries zero warnings.
+ * Build a spec-clean C-CDA R2.1 document from structured input and return the
+ * parsed {@link CcdaDocument}. Emits a **CCD** by default, or a **Referral Note**
+ * when `documentType: "referralNote"` — each with its own US Realm Header
+ * specialization (document `templateId` + LOINC `code`) and SHALL section set.
+ * The emitted document round-trips through {@link parseCcda} by construction (see
+ * the module doc); a clean build carries zero warnings.
  *
  * @param init - The document content; see {@link BuildCcdaInit}. `patient` is required.
  * @returns The parsed document — the parse of the spec-clean XML just emitted.
- * @throws {TypeError} When `documentType` is anything other than `"ccd"` (the
- *   only type this slice supports), when an allergy is neither an `allergen` nor
- *   `noKnownAllergy`, when a result does not carry exactly one value form
- *   (`quantity` / `codedValue` / `stringValue`), when a `"observation"`-variant
- *   procedure omits its SHALL `value`, or when a family-history entry carries an
- *   empty `observations` list.
+ * @throws {TypeError} When `documentType` is anything other than `"ccd"` or
+ *   `"referralNote"` (the only two types this builder supports), when an allergy
+ *   is neither an `allergen` nor `noKnownAllergy`, when a result does not carry
+ *   exactly one value form (`quantity` / `codedValue` / `stringValue`), when a
+ *   `"observation"`-variant procedure omits its SHALL `value`, or when a
+ *   family-history entry carries an empty `observations` list.
  * @example
  * ```ts
  * import { buildCcda, serializeCcda } from "@cosyte/ccda";
@@ -1537,28 +1671,44 @@ function medicationDuration(
  * ```
  */
 export function buildCcda(init: BuildCcdaInit): CcdaDocument {
-  // Typed as `"ccd"` so the compiler narrows an invalid value to `never`; widen
-  // to a string for the runtime guard that protects untyped (JS) callers.
-  const documentType: string | undefined = init.documentType;
-  if (documentType !== undefined && documentType !== "ccd") {
+  // Typed as a closed union so the compiler narrows an invalid value to `never`;
+  // widen to a string for the runtime guard that protects untyped (JS) callers.
+  const documentType: string = init.documentType ?? "ccd";
+  if (documentType !== "ccd" && documentType !== "referralNote") {
     throw new TypeError(
       `buildCcda: documentType "${documentType}" is not supported yet — this builder ` +
-        'slice emits a CCD only. Omit documentType or pass "ccd".',
+        'emits a CCD or a Referral Note. Pass "ccd" or "referralNote" (or omit for a CCD).',
     );
   }
+  const spec = DOC_TYPE_SPECS[documentType];
 
   const { doc, root } = newCdaDocument();
   const id = makeIdGen();
   const effectiveTime = formatEffectiveTime(init.effectiveTime);
 
-  appendHeader(doc, root, init, effectiveTime, id);
+  appendHeader(doc, root, init, effectiveTime, id, spec);
 
   const structuredBody = el(doc, "structuredBody");
-  structuredBody.appendChild(problemsSection(doc, init.problems ?? [], id));
-  structuredBody.appendChild(allergiesSection(doc, init.allergies ?? [], id));
-  structuredBody.appendChild(medicationsSection(doc, init.medications ?? [], id));
-  structuredBody.appendChild(resultsSection(doc, init.results ?? [], id));
-  structuredBody.appendChild(vitalsSection(doc, init.vitalSigns ?? [], id));
+
+  // This document type's SHALL sections, always emitted in its declared order —
+  // an empty one as a spec-clean nullFlavor="NI" section — so the document is
+  // conformant for its type and the parser's required-section validation stays
+  // quiet on a clean build.
+  const shall = new Set<ShallSectionKey>(spec.shallSections);
+  for (const key of spec.shallSections) {
+    structuredBody.appendChild(shallSection(key, doc, init, id));
+  }
+
+  // Results / Vital Signs are always-on SHALL sections for a CCD but *optional*
+  // for a Referral Note — emit them here only when they are not this type's SHALL
+  // section AND the caller supplied content (never a fabricated empty one).
+  if (!shall.has("results") && (init.results?.length ?? 0) > 0) {
+    structuredBody.appendChild(resultsSection(doc, init.results ?? [], id));
+  }
+  if (!shall.has("vitalSigns") && (init.vitalSigns?.length ?? 0) > 0) {
+    structuredBody.appendChild(vitalsSection(doc, init.vitalSigns ?? [], id));
+  }
+
   // Immunizations, Procedures, and Encounters are not CCD SHALL sections — each is
   // emitted only when populated, rather than fabricating an empty section the
   // caller did not ask for.
@@ -1607,7 +1757,9 @@ export function buildCcda(init: BuildCcdaInit): CcdaDocument {
   if ((init.pastMedicalHistory?.length ?? 0) > 0) {
     structuredBody.appendChild(pastMedicalHistorySection(doc, init.pastMedicalHistory ?? [], id));
   }
-  if ((init.planOfTreatment?.length ?? 0) > 0) {
+  // Plan of Treatment is a Referral Note SHALL section (emitted above); for a CCD
+  // it is optional, emitted here only when the caller supplied planned items.
+  if (!shall.has("planOfTreatment") && (init.planOfTreatment?.length ?? 0) > 0) {
     structuredBody.appendChild(planOfTreatmentSection(doc, init.planOfTreatment ?? [], id));
   }
   if ((init.familyHistory?.length ?? 0) > 0) {
@@ -1618,6 +1770,38 @@ export function buildCcda(init: BuildCcdaInit): CcdaDocument {
   return parseCcda(serializeDocument(doc));
 }
 
+/**
+ * Dispatch one SHALL section by key to its builder, defaulting the caller's
+ * (possibly absent) content to empty. Each builder emits a spec-clean empty
+ * (`nullFlavor="NI"`) section when it has no content, so a SHALL section is
+ * always present regardless of what the caller supplied. @internal
+ */
+function shallSection(
+  key: ShallSectionKey,
+  doc: Document,
+  init: BuildCcdaInit,
+  id: (prefix: string) => string,
+): Element {
+  switch (key) {
+    case "problems":
+      return problemsSection(doc, init.problems ?? [], id);
+    case "allergies":
+      return allergiesSection(doc, init.allergies ?? [], id);
+    case "medications":
+      return medicationsSection(doc, init.medications ?? [], id);
+    case "results":
+      return resultsSection(doc, init.results ?? [], id);
+    case "vitalSigns":
+      return vitalsSection(doc, init.vitalSigns ?? [], id);
+    case "reasonForReferral":
+      return reasonForReferralSection(doc, init.reasonForReferral);
+    case "assessment":
+      return assessmentSection(doc, init.assessment);
+    case "planOfTreatment":
+      return planOfTreatmentSection(doc, init.planOfTreatment ?? [], id);
+  }
+}
+
 /** Emit the US Realm Header, record target, author (device), and custodian. @internal */
 function appendHeader(
   doc: Document,
@@ -1625,16 +1809,17 @@ function appendHeader(
   init: BuildCcdaInit,
   effectiveTime: string,
   id: (prefix: string) => string,
+  spec: DocTypeSpec,
 ): void {
   root.appendChild(el(doc, "realmCode", { code: "US" }));
   root.appendChild(
     el(doc, "typeId", { root: "2.16.840.1.113883.1.3", extension: "POCD_HD000040" }),
   );
   root.appendChild(el(doc, "templateId", { root: US_REALM_HEADER, extension: R21 }));
-  root.appendChild(el(doc, "templateId", { root: CCD_TEMPLATE, extension: R21 }));
+  root.appendChild(el(doc, "templateId", { root: spec.documentTemplateRoot, extension: R21 }));
   root.appendChild(el(doc, "id", { root: SYNTH_ROOT, extension: init.documentId ?? id("doc") }));
-  root.appendChild(codeEl(doc, "code", { ...CCD_DOC_CODE, codeSystem: LOINC }));
-  root.appendChild(textEl(doc, "title", init.title ?? CCD_DOC_CODE.displayName));
+  root.appendChild(codeEl(doc, "code", { ...spec.documentCode, codeSystem: LOINC }));
+  root.appendChild(textEl(doc, "title", init.title ?? spec.documentCode.displayName));
   root.appendChild(el(doc, "effectiveTime", { value: effectiveTime }));
   root.appendChild(
     el(doc, "confidentialityCode", {
@@ -1798,10 +1983,18 @@ function sectionTemplateIds(
   doc: Document,
   base: string,
   entriesRequired: boolean,
-  extension: string = R21,
+  extension: string | null = R21,
 ): readonly Element[] {
-  const ids = [el(doc, "templateId", { root: base, extension })];
-  if (entriesRequired) ids.push(el(doc, "templateId", { root: `${base}.1`, extension }));
+  // A `null` extension emits a root-only `templateId` (no `@extension`) —
+  // required for unversioned templates such as the Assessment Section (…22.2.8),
+  // which has no R2.0/R2.1 revision. (`null`, not `undefined`, so the `= R21`
+  // default still applies when the parameter is simply omitted.)
+  const templateId = (root: string): Element =>
+    extension === null
+      ? el(doc, "templateId", { root })
+      : el(doc, "templateId", { root, extension });
+  const ids = [templateId(base)];
+  if (entriesRequired) ids.push(templateId(`${base}.1`));
   return ids;
 }
 
@@ -1819,7 +2012,7 @@ function sectionElement(
   textNode: Element,
   entriesRequired: boolean,
   attrs?: Attrs,
-  extension: string = R21,
+  extension: string | null = R21,
 ): Element {
   const section = el(doc, "section", attrs);
   for (const tid of sectionTemplateIds(doc, base, entriesRequired, extension)) {
@@ -1839,7 +2032,13 @@ function sectionElement(
 }
 
 /** Build a spec-clean empty required section (`nullFlavor="NI"`, no entries). @internal */
-function emptySection(doc: Document, base: string, loinc: string, title: string): Element {
+function emptySection(
+  doc: Document,
+  base: string,
+  loinc: string,
+  title: string,
+  extension: string | null = R21,
+): Element {
   const section = sectionElement(
     doc,
     base,
@@ -1848,6 +2047,7 @@ function emptySection(doc: Document, base: string, loinc: string, title: string)
     textEl(doc, "text", "No information"),
     false,
     { nullFlavor: "NI" },
+    extension,
   );
   return el(doc, "component", undefined, section);
 }
@@ -3295,11 +3495,85 @@ const PLANNED_VARIANTS: Record<
  * — never a performed act. The section has no entries-required variant (`…2.10.1`),
  * so only the base `templateId` is emitted even when it carries entries. @internal
  */
+/**
+ * Build the narrative-only Assessment Section (`…22.2.8`, LOINC `51848-0`) — a
+ * Referral Note SHALL section. The template is **unversioned** in C-CDA R2.1
+ * (no R2.0/R2.1 revision), so it carries a root-only `templateId` with **no
+ * `@extension`**. When the caller supplies no `assessment` text it is emitted as
+ * a spec-clean empty `nullFlavor="NI"` section — never a fabricated assessment.
+ * @internal
+ */
+function assessmentSection(doc: Document, narrative: string | undefined): Element {
+  if (narrative === undefined) {
+    return emptySection(
+      doc,
+      ASSESSMENT_SECTION_BASE,
+      ASSESSMENT_CODE.code,
+      ASSESSMENT_CODE.displayName,
+      null,
+    );
+  }
+  const section = sectionElement(
+    doc,
+    ASSESSMENT_SECTION_BASE,
+    ASSESSMENT_CODE.code,
+    ASSESSMENT_CODE.displayName,
+    textEl(doc, "text", narrative),
+    false,
+    undefined,
+    null,
+  );
+  return el(doc, "component", undefined, section);
+}
+
+/**
+ * Build the narrative-only Reason for Referral Section (V2,
+ * `1.3.6.1.4.1.19376.1.5.3.1.3.1`, LOINC `42349-1`) — a Referral Note SHALL
+ * section. An IHE PCC template whose version stamp is `@extension` `2014-06-09`.
+ * When the caller supplies no `reasonForReferral` text it is emitted as a
+ * spec-clean empty `nullFlavor="NI"` section — never a fabricated reason.
+ * @internal
+ */
+function reasonForReferralSection(doc: Document, narrative: string | undefined): Element {
+  if (narrative === undefined) {
+    return emptySection(
+      doc,
+      REASON_FOR_REFERRAL_SECTION_BASE,
+      REASON_FOR_REFERRAL_CODE.code,
+      REASON_FOR_REFERRAL_CODE.displayName,
+      REASON_FOR_REFERRAL_EXT,
+    );
+  }
+  const section = sectionElement(
+    doc,
+    REASON_FOR_REFERRAL_SECTION_BASE,
+    REASON_FOR_REFERRAL_CODE.code,
+    REASON_FOR_REFERRAL_CODE.displayName,
+    textEl(doc, "text", narrative),
+    false,
+    undefined,
+    REASON_FOR_REFERRAL_EXT,
+  );
+  return el(doc, "component", undefined, section);
+}
+
 function planOfTreatmentSection(
   doc: Document,
   items: readonly BuildCcdaPlannedItem[],
   id: (prefix: string) => string,
 ): Element {
+  // A Referral Note SHALL carry a Plan of Treatment; when no planned items are
+  // supplied it is emitted as a spec-clean empty nullFlavor="NI" section (the
+  // section has no entries-required variant, so this stays conformant).
+  if (items.length === 0) {
+    return emptySection(
+      doc,
+      PLAN_OF_TREATMENT_SECTION_BASE,
+      "18776-5",
+      "Plan of Treatment",
+      PLAN_OF_TREATMENT_EXT,
+    );
+  }
   const text = el(doc, "text");
   const entries: Element[] = [];
   for (const p of items) {
