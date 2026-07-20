@@ -22,7 +22,7 @@ Each family is reached in one call; every safety-critical distinction is **kept 
 | `getEncounters()` | Encounter Activities → visit type, status, period. |
 | `getSmokingStatus()` | Smoking Status observations → SNOMED value + an explicit `unknown` flag. |
 | `getPlannedItems()` | Plan of Treatment entries — all future/ordered, never performed. |
-| `getFunctionalStatus()` / `getMentalStatus()` | Functional / Mental Status findings, domain-tagged so the two never merge. |
+| `getFunctionalStatus()` / `getMentalStatus()` | Functional / Mental Status findings + direct-entry Assessment Scale Observations (`assessmentScale`, with an `INT` score + `supporting` items), domain-tagged so the two never merge. |
 | `getFamilyHistory()` | One entry per relative — structured identity + their conditions. |
 | `getPastMedicalHistory()` | Bare historical Problem Observations (never double-counted as active). |
 

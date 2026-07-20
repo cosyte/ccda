@@ -1115,6 +1115,93 @@ describe("buildCcda — functional/mental status organizers", () => {
   });
 });
 
+describe("buildCcda — direct-entry assessment scales", () => {
+  /** A PHQ-9 in Mental Status (score + interpretation + two supporting items) and a
+   * Glasgow Coma total in Functional Status — the two carrying sections for a
+   * direct-entry Assessment Scale Observation. */
+  const SCALE_INIT: BuildCcdaInit = {
+    patient: { mrn: "M" },
+    mentalStatusScales: [
+      {
+        code: { code: "44249-1", displayName: "PHQ-9 quick depression assessment panel" },
+        score: 12,
+        effectiveTime: "20240101",
+        interpretation: { code: "H", displayName: "High" },
+        supporting: [
+          { code: { code: "44250-9", displayName: "Little interest or pleasure" }, score: 0 },
+          { code: { code: "44255-8", displayName: "Feeling down or hopeless" }, score: 1 },
+        ],
+      },
+    ],
+    functionalStatusScales: [
+      { code: { code: "9269-2", displayName: "Glasgow coma score total" }, score: 9 },
+    ],
+  };
+
+  it("round-trips each scale into its section's domain, flagged, INT-scored, warning-free", () => {
+    const doc = buildCcda(SCALE_INIT);
+    const mental = doc.getMentalStatus();
+    const functional = doc.getFunctionalStatus();
+    expect(mental).toHaveLength(1);
+    expect(functional).toHaveLength(1);
+    expect(mental[0]?.domain).toBe("mental");
+    expect(functional[0]?.domain).toBe("functional");
+    expect(mental.every((s) => s.assessmentScale === true)).toBe(true);
+    expect(functional.every((s) => s.assessmentScale === true)).toBe(true);
+    // The score round-trips as an INT (not a PQ) — units are not allowed on an INT.
+    expect(mental[0]?.value?.kind === "integer" ? mental[0].value.value : undefined).toBe(12);
+    expect(functional[0]?.value?.kind === "integer" ? functional[0].value.value : undefined).toBe(
+      9,
+    );
+    // The two supporting items round-trip with their INT scores.
+    expect(mental[0]?.supporting).toHaveLength(2);
+    expect(
+      mental[0]?.supporting?.[0]?.value?.kind === "integer"
+        ? mental[0].supporting[0].value.value
+        : undefined,
+    ).toBe(0);
+    expect(doc.warnings).toEqual([]);
+  });
+
+  it("emits the bare-root templates (no @extension) the R2.1 IG requires + INT score", () => {
+    const xml = serializeCcda(buildCcda(SCALE_INIT));
+    // Assessment Scale Observation / Supporting Observation SHALL carry @root with NO @extension.
+    expect(xml).toContain('<templateId root="2.16.840.1.113883.10.20.22.4.69"/>');
+    expect(xml).toContain('<templateId root="2.16.840.1.113883.10.20.22.4.86"/>');
+    expect(xml).not.toMatch(/root="2\.16\.840\.1\.113883\.10\.20\.22\.4\.69" extension/);
+    expect(xml).not.toMatch(/root="2\.16\.840\.1\.113883\.10\.20\.22\.4\.86" extension/);
+    // The total score is an INT value carrying no unit.
+    expect(xml).toMatch(/<value value="12" xsi:type="INT"\/>/);
+  });
+
+  it("emits an EXPLICIT nullFlavor=UNK INT score when none is supplied — never fabricated", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      functionalStatusScales: [
+        { code: { code: "9269-2", displayName: "Glasgow coma score total" } },
+      ],
+    });
+    expect(doc.warnings).toEqual([]);
+    const scale = doc.getFunctionalStatus()[0];
+    // An unknown score reads back as an integer value with no number — never a guessed 0.
+    expect(scale?.value?.kind).toBe("integer");
+    expect(scale?.value?.kind === "integer" ? scale.value.value : "set").toBeUndefined();
+    expect(scale?.value?.kind === "integer" ? scale.value.nullFlavor : undefined).toBe("UNK");
+    const xml = serializeCcda(doc);
+    expect(xml).toMatch(/<value nullFlavor="UNK" xsi:type="INT"\/>/);
+  });
+
+  it("does not flag the direct-entry scale as misplaced in either section", () => {
+    const doc = buildCcda(SCALE_INIT);
+    expect(doc.warnings.map((w) => w.code)).not.toContain("SECTION_PLACEMENT_SUSPECT");
+  });
+
+  it("is a serialization fixed point with direct-entry scales present", () => {
+    const xml = serializeCcda(buildCcda(SCALE_INIT));
+    expect(parseCcda(xml).toString()).toBe(xml);
+  });
+});
+
 describe("buildCcda — past medical history round-trip", () => {
   /** A build carrying BOTH an active problem concern and a historical (past) one,
    * to prove the two never conflate — the past problem is a bare observation

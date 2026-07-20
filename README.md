@@ -217,7 +217,11 @@ SNOMED CT `value`), **Functional Status** (a Functional Status Observation with 
 LOINC `code` `54522-8` and a SNOMED CT finding `value`, tagged `domain: "functional"`), and **Mental
 Status** (a Mental Status Observation with the R2.1 template-fixed SNOMED CT `code` `373930000` and a
 SNOMED CT finding `value`, tagged `domain: "mental"` — keyed off a distinct observation template root so
-it is never conflated with Functional Status), and **Past Medical History** (historical problems as
+it is never conflated with Functional Status) — each status section can also carry **direct-entry
+Assessment Scale Observations** (`…22.4.69`, the bare-root R2.1 form: a scored instrument such as a PHQ-9
+or Glasgow Coma with a SHALL `INT` `value` score, an optional `interpretation`, and Assessment Scale
+Supporting Observations `…22.4.86` as scored components; read back `assessmentScale`-flagged and
+`domain`-tagged from its section, the score never fabricated) — and **Past Medical History** (historical problems as
 **bare** Problem Observations `…22.4.4` directly under `<entry>`, **not** wrapped in a Problem Concern
 Act — read back via `getPastMedicalHistory` and never double-counted as an active `getProblems`
 concern), **Plan of Treatment** (the six planned-entry templates — Planned Act / Encounter / Procedure /
@@ -281,10 +285,14 @@ not _"this type has no requirements"_. Broadening a table is additive and safe.
   `disposition` undefined rather than guessing.
 - **Functional Status** / **Mental Status** — via `getFunctionalStatus()` / `getMentalStatus()`: the
   Functional/Mental Status Observations (`…22.4.67` / `…22.4.74`), read whether standalone or clustered
-  in a status Organizer (`…22.4.66` / `…22.4.75`), plus any Assessment Scale Observation (`…22.4.69`,
-  flagged `assessmentScale`) inside such an organizer. Each finding is `domain`-tagged so the two are
-  **never conflated**; a standalone assessment scale (whose domain can't be determined from its template
-  alone) is deliberately not captured.
+  in a status Organizer (`…22.4.66` / `…22.4.75`), plus **direct-entry Assessment Scale Observations**
+  (`…22.4.69`, flagged `assessmentScale`) — the conformant C-CDA R2.1 placement — with their scored
+  Assessment Scale Supporting Observations (`…22.4.86`) on `supporting` and the total score read as an
+  `integer` (`xsi:type="INT"`) value. Each finding is `domain`-tagged **from its carrying section**, so
+  the two are **never conflated** (the same scale OID appears in both sections — the section, not the
+  template, fixes the domain); a scale in a section that is neither functional nor mental is not captured
+  (its domain is unknowable, never guessed). A scale mis-nested inside an organizer is still read
+  leniently.
 - **Family History** — via `getFamilyHistory()`: the Family History Organizer (`…22.4.45`) → Observation
   (`…22.4.46`) tree. The relative's identity (relationship, gender, birth time, `sdtc:deceasedInd`) is a
   structured `relative` (not flattened into each condition); each condition carries its coded `value`,

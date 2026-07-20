@@ -146,9 +146,27 @@
  * nullFlavor="UNK"` — an explicit unknown, never a guessed relation or illness;
  * the MAY demographics, age, death flag, and SHOULD `effectiveTime` are each
  * emitted only when supplied. Like the other non-SHALL sections it is emitted only
- * when populated, and its section has no entries-required variant. The
- * Functional/Mental Status Organizer + Assessment Scale forms are deferred to a
- * later CCDA-P7 increment.
+ * when populated, and its section has no entries-required variant.
+ *
+ * **This slice adds direct-entry Assessment Scale Observations.** The Functional
+ * Status and Mental Status sections can now carry **Assessment Scale
+ * Observations** (`…22.4.69`) — formal scored instruments such as a PHQ-9
+ * depression screen or a Glasgow Coma scale. C-CDA R2.1 places these as **direct
+ * section entries** (`entry/observation`), **not** as Functional/Mental Status
+ * Organizer members, so the builder emits each directly under its section with the
+ * **bare-root** templateId `…22.4.69` (R2.1 SHALL: `@root` with **no**
+ * `@extension`), the scale `code` (LOINC), a SHALL `statusCode` (`completed`), the
+ * SHALL `effectiveTime` [1..1], and the SHALL `value` [1..1] carrying the total
+ * score as an `xsi:type="INT"` (the type C-CDA prefers for a questionnaire — units
+ * are not allowed on an INT). The individual items are optional Assessment Scale
+ * Supporting Observations (`…22.4.86`, bare root) grouped by `entryRelationship`
+ * `typeCode="COMP"`, each with its own INT score. **The score is never
+ * fabricated:** an omitted score (total or item) is emitted as `value
+ * nullFlavor="UNK"`, an explicit unknown the parser reads back as an `integer`
+ * value with no number — never a guessed reading. Because only the carrying
+ * section's templates are emitted, the parser tags each scale `domain:
+ * "functional"` or `"mental"` from its section, never conflating the two — exactly
+ * the placement the slice-11 organizers deferred to here.
  *
  * **SHALL `effectiveTime` on every entry.** Each act/observation the builder
  * emits carries the `effectiveTime` its C-CDA R2.1 template requires — the
@@ -174,6 +192,8 @@ import {
   AGE_OBSERVATION,
   ALLERGY_CONCERN_ACT,
   ALLERGY_OBSERVATION,
+  ASSESSMENT_SCALE_OBSERVATION,
+  ASSESSMENT_SCALE_SUPPORTING_OBSERVATION,
   CRITICALITY_OBSERVATION,
   ENCOUNTER_ACTIVITY,
   FAMILY_HISTORY_DEATH_OBSERVATION,
@@ -969,6 +989,79 @@ export interface BuildCcdaMentalStatusOrganizer {
 }
 
 /**
+ * One scored component of an Assessment Scale — an Assessment Scale Supporting
+ * Observation (`…22.4.86`), e.g. a single PHQ-9 question or a Glasgow Coma
+ * sub-score. `code` is the item's LOINC/SNOMED code (SHALL, LOINC default);
+ * `score` its integer answer (the SHALL `value`, `xsi:type="INT"`).
+ *
+ * **The answer is never fabricated.** When `score` is omitted the SHALL `value`
+ * is emitted as `nullFlavor="UNK"` — an *explicit* unknown, never a guessed
+ * number. Units are not allowed on an `INT`, so a supporting item carries no unit.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaAssessmentScaleItem } from "@cosyte/ccda";
+ * const q1: BuildCcdaAssessmentScaleItem = {
+ *   code: { code: "44250-9", displayName: "Little interest or pleasure in doing things" },
+ *   score: 0,
+ * };
+ * ```
+ */
+export interface BuildCcdaAssessmentScaleItem {
+  /** The component's LOINC/SNOMED code (LOINC default). */
+  readonly code: BuildCode;
+  /** The integer answer/score (`xsi:type="INT"`). Omit → `value nullFlavor="UNK"`. */
+  readonly score?: number;
+}
+
+/**
+ * A direct-entry Assessment Scale Observation (`…22.4.69`) for the Functional
+ * Status or Mental Status section — a formal scored instrument (e.g. a PHQ-9
+ * depression screen or a Glasgow Coma scale). C-CDA R2.1 carries the Assessment
+ * Scale Observation as a **direct section entry** (`entry/observation`), *not* as
+ * a Functional/Mental Status Organizer member — so the builder emits it directly
+ * under the section, and the parser reads it back tagged `assessmentScale: true`
+ * with the section's `domain`. The template id is the **bare root** `…22.4.69`
+ * (R2.1 SHALL: `@root` with **no** `@extension`).
+ *
+ * **`code` is the scale panel code** (LOINC by default, e.g. PHQ-9 `44249-1`).
+ * `score` is the total score, emitted as the SHALL `value` [1..1] with
+ * `xsi:type="INT"` (the type C-CDA prefers for a questionnaire — units are not
+ * allowed on an `INT`). **The score is never fabricated:** when `score` is
+ * omitted the SHALL `value` is `nullFlavor="UNK"`, an explicit unknown. The SHALL
+ * `effectiveTime` [1..1] is the administration time (`nullFlavor="UNK"` when
+ * omitted). `interpretation` (e.g. High/Low/Normal) and the `supporting`
+ * components (the individual items) are optional — each emitted only when
+ * supplied, never invented.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaAssessmentScale } from "@cosyte/ccda";
+ * const phq9: BuildCcdaAssessmentScale = {
+ *   code: { code: "44249-1", displayName: "PHQ-9 quick depression assessment panel" }, // LOINC
+ *   score: 12,
+ *   effectiveTime: "20240101",
+ *   interpretation: { code: "H", displayName: "High" },
+ *   supporting: [
+ *     { code: { code: "44250-9", displayName: "Little interest or pleasure in doing things" }, score: 0 },
+ *   ],
+ * };
+ * ```
+ */
+export interface BuildCcdaAssessmentScale {
+  /** The scale/panel code (LOINC by default, e.g. PHQ-9 `44249-1`). */
+  readonly code: BuildCode;
+  /** The total score (`xsi:type="INT"`). Omit → SHALL `value nullFlavor="UNK"`. */
+  readonly score?: number;
+  /** When the scale was administered (HL7 date string); `nullFlavor="UNK"` when omitted. */
+  readonly effectiveTime?: string;
+  /** The score interpretation (HL7 ObservationInterpretation by default), optional. */
+  readonly interpretation?: BuildCode;
+  /** The individual scored components; each an Assessment Scale Supporting Observation. Optional. */
+  readonly supporting?: readonly BuildCcdaAssessmentScaleItem[];
+}
+
+/**
  * The relative a {@link BuildCcdaFamilyHistory} organizer describes — the family
  * member whose conditions the organizer records. Emitted as the organizer's
  * `subject/relatedSubject` (a `@classCode="PRS"` personal relationship).
@@ -1282,6 +1375,15 @@ export interface BuildCcdaInit {
    * emitted when either is non-empty.
    */
   readonly functionalStatusOrganizers?: readonly BuildCcdaFunctionalStatusOrganizer[];
+  /**
+   * Direct-entry Assessment Scale Observations (`…22.4.69`) for the Functional
+   * Status section — scored instruments (e.g. a Barthel index, a Glasgow Coma
+   * scale). Emitted as direct section entries (the conformant R2.1 placement),
+   * read back tagged `assessmentScale: true`, `domain: "functional"`. The
+   * Functional Status section is emitted when this, {@link functionalStatus}, or
+   * {@link functionalStatusOrganizers} is non-empty.
+   */
+  readonly functionalStatusScales?: readonly BuildCcdaAssessmentScale[];
   /** Standalone Mental Status findings; the Mental Status section is emitted when this or {@link mentalStatusOrganizers} is non-empty (a CCD SHOULD section). */
   readonly mentalStatus?: readonly BuildCcdaMentalStatus[];
   /**
@@ -1291,6 +1393,15 @@ export interface BuildCcdaInit {
    * non-empty.
    */
   readonly mentalStatusOrganizers?: readonly BuildCcdaMentalStatusOrganizer[];
+  /**
+   * Direct-entry Assessment Scale Observations (`…22.4.69`) for the Mental Status
+   * section — scored instruments (e.g. a PHQ-9 depression screen, a MoCA). Emitted
+   * as direct section entries (the conformant R2.1 placement), read back tagged
+   * `assessmentScale: true`, `domain: "mental"`. The Mental Status section is
+   * emitted when this, {@link mentalStatus}, or {@link mentalStatusOrganizers} is
+   * non-empty.
+   */
+  readonly mentalStatusScales?: readonly BuildCcdaAssessmentScale[];
   /**
    * Historical problems for the Past Medical History section; the section is
    * emitted only when non-empty (a CCD MAY section). Each is a bare Problem
@@ -1465,20 +1576,32 @@ export function buildCcda(init: BuildCcdaInit): CcdaDocument {
   }
   if (
     (init.functionalStatus?.length ?? 0) > 0 ||
-    (init.functionalStatusOrganizers?.length ?? 0) > 0
+    (init.functionalStatusOrganizers?.length ?? 0) > 0 ||
+    (init.functionalStatusScales?.length ?? 0) > 0
   ) {
     structuredBody.appendChild(
       functionalStatusSection(
         doc,
         init.functionalStatus ?? [],
         init.functionalStatusOrganizers ?? [],
+        init.functionalStatusScales ?? [],
         id,
       ),
     );
   }
-  if ((init.mentalStatus?.length ?? 0) > 0 || (init.mentalStatusOrganizers?.length ?? 0) > 0) {
+  if (
+    (init.mentalStatus?.length ?? 0) > 0 ||
+    (init.mentalStatusOrganizers?.length ?? 0) > 0 ||
+    (init.mentalStatusScales?.length ?? 0) > 0
+  ) {
     structuredBody.appendChild(
-      mentalStatusSection(doc, init.mentalStatus ?? [], init.mentalStatusOrganizers ?? [], id),
+      mentalStatusSection(
+        doc,
+        init.mentalStatus ?? [],
+        init.mentalStatusOrganizers ?? [],
+        init.mentalStatusScales ?? [],
+        id,
+      ),
     );
   }
   if ((init.pastMedicalHistory?.length ?? 0) > 0) {
@@ -2702,11 +2825,15 @@ function functionalStatusSection(
   doc: Document,
   findings: readonly BuildCcdaFunctionalStatus[],
   organizers: readonly BuildCcdaFunctionalStatusOrganizer[],
+  scales: readonly BuildCcdaAssessmentScale[],
   id: (prefix: string) => string,
 ): Element {
   const text = el(doc, "text");
   const entries: Element[] = [];
   for (const org of organizers) entries.push(functionalStatusOrganizerEntry(doc, org, text, id));
+  for (const scale of scales) {
+    entries.push(el(doc, "entry", undefined, assessmentScaleObservation(doc, scale, text, id)));
+  }
   for (const s of findings) {
     entries.push(el(doc, "entry", undefined, functionalStatusObservation(doc, s, text, id)));
   }
@@ -2839,11 +2966,15 @@ function mentalStatusSection(
   doc: Document,
   findings: readonly BuildCcdaMentalStatus[],
   organizers: readonly BuildCcdaMentalStatusOrganizer[],
+  scales: readonly BuildCcdaAssessmentScale[],
   id: (prefix: string) => string,
 ): Element {
   const text = el(doc, "text");
   const entries: Element[] = [];
   for (const org of organizers) entries.push(mentalStatusOrganizerEntry(doc, org, text, id));
+  for (const scale of scales) {
+    entries.push(el(doc, "entry", undefined, assessmentScaleObservation(doc, scale, text, id)));
+  }
   for (const s of findings) {
     entries.push(el(doc, "entry", undefined, mentalStatusObservation(doc, s, text, id)));
   }
@@ -2973,6 +3104,110 @@ function organizerCode(doc: Document, code: BuildCode | undefined): Element {
     displayName: code.displayName,
     codeSystemName,
   });
+}
+
+/**
+ * The narrative line for an Assessment Scale — the scale's `code` label plus its
+ * total score, so it agrees with the observation's `code` (which the parser
+ * reconciles against the narrative). An omitted score reads "…: unknown", never a
+ * fabricated number. @internal
+ */
+function assessmentScaleLabel(scale: BuildCcdaAssessmentScale): string {
+  return `${scale.code.displayName}: ${scale.score?.toString() ?? "unknown"}`;
+}
+
+/**
+ * An assessment-scale `<value xsi:type="INT">` — the SHALL score. Emitted as an
+ * `@value` when supplied, else an EXPLICIT `nullFlavor="UNK"` (the SHALL cardinality
+ * satisfied without inventing a number, read back as `{ kind: "integer" }` with no
+ * `value`). Units are not allowed on an INT, so none is emitted. @internal
+ */
+function scoreValue(doc: Document, score: number | undefined): Element {
+  return score === undefined
+    ? typedValue(doc, "INT", { nullFlavor: "UNK" })
+    : typedValue(doc, "INT", { value: score.toString() });
+}
+
+/**
+ * Build one direct-entry Assessment Scale Observation `<observation>` (`…22.4.69`,
+ * the **bare root** — R2.1 SHALL: `@root` with no `@extension`), appending its
+ * narrative line to `text`. Emits the SHALL slots in schema order: templateId, id,
+ * code (the scale panel LOINC), text/reference, statusCode (fixed `completed`),
+ * effectiveTime [1..1], value [1..1] (the INT score), then the optional
+ * interpretationCode and the Assessment Scale Supporting Observations. Shared by
+ * the Functional and Mental Status sections — the carrying section's domain is
+ * what the parser tags the scale with, so the same observation is correct in
+ * either. @internal
+ */
+function assessmentScaleObservation(
+  doc: Document,
+  scale: BuildCcdaAssessmentScale,
+  text: Element,
+  id: (prefix: string) => string,
+): Element {
+  const contentId = id("scale-txt");
+  text.appendChild(textEl(doc, "content", assessmentScaleLabel(scale), { ID: contentId }));
+  const obs = el(
+    doc,
+    "observation",
+    { classCode: "OBS", moodCode: "EVN" },
+    // SHALL templateId [1..1] @root="…4.69" with NO @extension (R2.1 CONF:81-14436/14437).
+    el(doc, "templateId", { root: ASSESSMENT_SCALE_OBSERVATION }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("scale") }),
+    // SHALL code [1..1] — the scale/panel code (LOINC default).
+    codeEl(doc, "code", { ...scale.code, codeSystem: scale.code.codeSystem ?? LOINC }),
+    el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
+    // SHALL statusCode [1..1], fixed "completed" (CONF:81-19088).
+    el(doc, "statusCode", { code: "completed" }),
+  );
+  // SHALL effectiveTime [1..1] (CONF:81-14445) — the administration time, else nullFlavor="UNK".
+  obs.appendChild(pointEffectiveTime(doc, scale.effectiveTime));
+  // SHALL value [1..1] (CONF:81-14450) — the INT score, else an EXPLICIT nullFlavor="UNK".
+  obs.appendChild(scoreValue(doc, scale.score));
+  // interpretationCode [0..1] — emitted only when supplied.
+  if (scale.interpretation !== undefined) {
+    obs.appendChild(
+      codeEl(doc, "interpretationCode", {
+        ...scale.interpretation,
+        codeSystem: scale.interpretation.codeSystem ?? INTERPRETATION,
+      }),
+    );
+  }
+  // The scored components [0..*] — each an Assessment Scale Supporting Observation.
+  for (const item of scale.supporting ?? []) {
+    obs.appendChild(
+      el(doc, "entryRelationship", { typeCode: "COMP" }, supportingObservation(doc, item, id)),
+    );
+  }
+  return obs;
+}
+
+/**
+ * Build one Assessment Scale Supporting Observation `<observation>` (`…22.4.86`,
+ * bare root) — a scored component of a scale. Emits its SHALL slots: templateId,
+ * id, code (LOINC/SNOMED), statusCode (fixed `completed`), and value [1..*] (the
+ * INT item score). effectiveTime is not required on this template, so none is
+ * fabricated. @internal
+ */
+function supportingObservation(
+  doc: Document,
+  item: BuildCcdaAssessmentScaleItem,
+  id: (prefix: string) => string,
+): Element {
+  const obs = el(
+    doc,
+    "observation",
+    { classCode: "OBS", moodCode: "EVN" },
+    el(doc, "templateId", { root: ASSESSMENT_SCALE_SUPPORTING_OBSERVATION }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("scale-item") }),
+    // SHALL code [1..1], @code from LOINC or SNOMED (LOINC default) (CONF:81-19178..80).
+    codeEl(doc, "code", { ...item.code, codeSystem: item.code.codeSystem ?? LOINC }),
+    // SHALL statusCode [1..1], fixed "completed" (CONF:81-19089).
+    el(doc, "statusCode", { code: "completed" }),
+  );
+  // SHALL value [1..*] (CONF:81-16754) — the INT item score, else nullFlavor="UNK".
+  obs.appendChild(scoreValue(doc, item.score));
+  return obs;
 }
 
 /**

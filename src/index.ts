@@ -143,6 +143,7 @@ export type {
   PlannedItemKind,
   StatusDomain,
   StatusObservation,
+  SupportingObservation,
   FamilyHistory,
   FamilyHistoryObservation,
   FamilyMember,
