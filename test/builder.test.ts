@@ -17,7 +17,13 @@
 
 import { describe, expect, it } from "vitest";
 
-import { buildCcda, parseCcda, serializeCcda, type BuildCcdaInit } from "../src/index.js";
+import {
+  buildCcda,
+  parseCcda,
+  serializeCcda,
+  type BuildCcdaInit,
+  type BuildCcdaPlannedItem,
+} from "../src/index.js";
 
 /** A minimal, fully-populated init used across the round-trip assertions. */
 const RICH_INIT: BuildCcdaInit = {
@@ -1074,6 +1080,192 @@ describe("buildCcda — past medical history round-trip", () => {
 
   it("is a serialization fixed point with a Past Medical History section present", () => {
     const xml = serializeCcda(buildCcda(PMH_INIT));
+    expect(parseCcda(xml).toString()).toBe(xml);
+  });
+});
+
+describe("buildCcda — plan of treatment round-trip", () => {
+  /** A build carrying all six planned-entry variants AND a *performed* procedure,
+   * to prove the planned items are never conflated with the performed acts — each
+   * reads back with disposition "planned", statusCode "active", and a planned mood,
+   * while the performed procedure stays disposition "performed". */
+  const PLAN_INIT: BuildCcdaInit = {
+    patient: { mrn: "M" },
+    procedures: [
+      { code: { code: "80146002", displayName: "Appendectomy" }, disposition: "performed" },
+    ],
+    planOfTreatment: [
+      {
+        kind: "observation",
+        code: { code: "58410-2", displayName: "CBC panel" },
+        mood: "RQO",
+        effectiveTime: "20240801",
+      },
+      { kind: "procedure", code: { code: "73761001", displayName: "Colonoscopy" } },
+      {
+        kind: "medicationActivity",
+        code: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" },
+        mood: "RQO",
+      },
+      {
+        kind: "encounter",
+        code: { code: "99213", displayName: "Office outpatient visit 15 minutes" },
+        mood: "APT",
+      },
+      { kind: "act", code: { code: "409073007", displayName: "Education" } },
+      { kind: "supply", code: { code: "58938008", displayName: "Wheelchair" } },
+    ],
+  };
+
+  it("re-parses one planned item per variant, each planned + active, warning-free", () => {
+    const doc = buildCcda(PLAN_INIT);
+    const planned = doc.getPlannedItems();
+    expect(planned.map((p) => p.kind)).toEqual([
+      "observation",
+      "procedure",
+      "medicationActivity",
+      "encounter",
+      "act",
+      "supply",
+    ]);
+    for (const item of planned) {
+      // Every plan item is future/ordered — never performed — and SHALL statusCode "active".
+      expect(item.disposition).toBe("planned");
+      expect(item.statusCode).toBe("active");
+    }
+    expect(doc.warnings).toEqual([]);
+  });
+
+  it("preserves each planned mood verbatim (RQO / INT / APT), never EVN", () => {
+    const byKind = new Map(
+      buildCcda(PLAN_INIT)
+        .getPlannedItems()
+        .map((p) => [p.kind, p.moodCode]),
+    );
+    expect(byKind.get("observation")).toBe("RQO");
+    expect(byKind.get("medicationActivity")).toBe("RQO");
+    expect(byKind.get("encounter")).toBe("APT");
+    // Omitted mood defaults to INT (a planned mood) — the performed EVN is not emitted.
+    expect(byKind.get("procedure")).toBe("INT");
+    expect(byKind.get("act")).toBe("INT");
+    expect(byKind.get("supply")).toBe("INT");
+    for (const mood of byKind.values()) expect(mood).not.toBe("EVN");
+  });
+
+  it("reads the planned observation's ordered LOINC code and its point effectiveTime", () => {
+    const obs = buildCcda(PLAN_INIT)
+      .getPlannedItems()
+      .find((p) => p.kind === "observation");
+    expect(obs?.code?.code).toBe("58410-2");
+    expect(obs?.code?.codeSystem).toBe("2.16.840.1.113883.6.1");
+    expect(obs?.effectiveTime?.value?.raw).toBe("20240801");
+  });
+
+  it("reads the planned medication's drug from the consumable (no direct code)", () => {
+    const med = buildCcda(PLAN_INIT)
+      .getPlannedItems()
+      .find((p) => p.kind === "medicationActivity");
+    expect(med?.code?.code).toBe("314076");
+    expect(med?.code?.codeSystem).toBe("2.16.840.1.113883.6.88");
+  });
+
+  it("round-trips a planned observation's expected coded result value", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      planOfTreatment: [
+        {
+          kind: "observation",
+          code: { code: "58410-2", displayName: "CBC panel" },
+          value: { code: "281900007", displayName: "No abnormality detected" },
+        },
+      ],
+    });
+    expect(doc.warnings).toEqual([]);
+    const [obs] = doc.getPlannedItems();
+    expect(obs?.value?.kind).toBe("coded");
+    expect(obs?.value?.kind === "coded" ? obs.value.code.code : undefined).toBe("281900007");
+  });
+
+  it("emits the Plan of Treatment section (LOINC 18776-5, 2014-06-09, six planned templates, no entries-required variant)", () => {
+    const doc = buildCcda(PLAN_INIT);
+    expect(doc.findSection("planOfTreatment")?.code?.code).toBe("18776-5");
+    const xml = serializeCcda(doc);
+    // The Plan of Treatment Section (V2) carries the R2.1 2014-06-09 stamp and has
+    // no entries-required variant (…2.10.1).
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.10" extension="2014-06-09"');
+    expect(xml).not.toContain('root="2.16.840.1.113883.10.20.22.2.10.1"');
+    // Each planned-entry template carries the 2014-06-09 stamp.
+    for (const root of [
+      "2.16.840.1.113883.10.20.22.4.39",
+      "2.16.840.1.113883.10.20.22.4.40",
+      "2.16.840.1.113883.10.20.22.4.41",
+      "2.16.840.1.113883.10.20.22.4.42",
+      "2.16.840.1.113883.10.20.22.4.43",
+      "2.16.840.1.113883.10.20.22.4.44",
+    ]) {
+      expect(xml).toContain(`root="${root}" extension="2014-06-09"`);
+    }
+  });
+
+  it("never conflates planned items with performed procedures", () => {
+    const doc = buildCcda(PLAN_INIT);
+    // The performed procedure stays in getProcedures with disposition "performed";
+    // it is never returned as a planned item.
+    const procedures = doc.getProcedures();
+    expect(procedures).toHaveLength(1);
+    expect(procedures[0]?.disposition).toBe("performed");
+    // The planned colonoscopy stays in getPlannedItems, planned — never a performed procedure.
+    const plannedProc = doc.getPlannedItems().find((p) => p.kind === "procedure");
+    expect(plannedProc?.code?.code).toBe("73761001");
+    expect(plannedProc?.disposition).toBe("planned");
+    expect(procedures.some((p) => p.code?.code === "73761001")).toBe(false);
+  });
+
+  it("does NOT emit a Plan of Treatment section when none is supplied", () => {
+    const doc = buildCcda({ patient: { mrn: "M" } });
+    expect(doc.findSection("planOfTreatment")).toBeUndefined();
+    expect(doc.getPlannedItems()).toEqual([]);
+    expect(serializeCcda(doc)).not.toContain('code="18776-5"');
+  });
+
+  it("does not flag the planned entries as misplaced (they home to Plan of Treatment)", () => {
+    const doc = buildCcda(PLAN_INIT);
+    expect(doc.warnings.map((w) => w.code)).not.toContain("SECTION_PLACEMENT_SUSPECT");
+  });
+
+  it("forbids appointment moods on medication/supply/observation at the type level", () => {
+    // APT/ARQ are outside the base CDA mood domains for substanceAdministration
+    // (x_DocumentSubstanceMood), supply (same), and observation
+    // (x_ActMoodDocumentObservation) — so the type must make them unrepresentable
+    // on those kinds. A schema-invalid @moodCode can never be emitted "by
+    // construction", not merely discouraged.
+    // @ts-expect-error — APT is not in a medication's mood domain.
+    const badMed: BuildCcdaPlannedItem = {
+      kind: "medicationActivity",
+      code: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" },
+      mood: "APT",
+    };
+    void badMed;
+    // @ts-expect-error — ARQ is not in an observation's mood domain.
+    const badObs: BuildCcdaPlannedItem = {
+      kind: "observation",
+      code: { code: "58410-2", displayName: "CBC panel" },
+      mood: "ARQ",
+    };
+    void badObs;
+    // The SAME appointment mood IS valid on an encounter — this must compile.
+    const okEnc: BuildCcdaPlannedItem = {
+      kind: "encounter",
+      code: { code: "99213", displayName: "Office outpatient visit 15 minutes" },
+      mood: "APT",
+    };
+    const enc = buildCcda({ patient: { mrn: "M" }, planOfTreatment: [okEnc] });
+    expect(enc.warnings).toEqual([]);
+    expect(enc.getPlannedItems()[0]?.moodCode).toBe("APT");
+  });
+
+  it("is a serialization fixed point with a Plan of Treatment section present", () => {
+    const xml = serializeCcda(buildCcda(PLAN_INIT));
     expect(parseCcda(xml).toString()).toBe(xml);
   });
 });
