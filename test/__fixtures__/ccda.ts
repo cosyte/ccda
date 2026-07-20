@@ -790,6 +790,23 @@ export const PAST_MEDICAL_HISTORY_SECTION = `
         </section>
       </component>`;
 
+/**
+ * A Reason for Referral Section (V2) — the IHE PCC template
+ * (`1.3.6.1.4.1.19376.1.5.3.1.3.1`, `@extension` `2014-06-09`), LOINC `42349-1`.
+ * A narrative-only section (no required entries), so it carries just the
+ * referral reason as text. The Referral Note document (`…22.1.14`) SHALL contain
+ * it (R2.1 Schematron CONF:1198-30925). Recognized by its stable IHE root.
+ */
+export const REASON_FOR_REFERRAL_SECTION = `
+      <component>
+        <section>
+          <templateId root="1.3.6.1.4.1.19376.1.5.3.1.3.1" extension="2014-06-09"/>
+          <code code="42349-1" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Reason for Referral</title>
+          <text>Referred to Cardiology for evaluation of suspected hypertension.</text>
+        </section>
+      </component>`;
+
 /** All three triad sections concatenated, for the end-to-end extraction test. */
 export const TRIAD_SECTIONS = `${PROBLEMS_SECTION}${MEDICATIONS_SECTION}${ALLERGY_ENTRY_SECTION}`;
 
