@@ -93,8 +93,10 @@ export const FUNCTIONAL_STATUS_OBSERVATION = "2.16.840.1.113883.10.20.22.4.67";
 export const MENTAL_STATUS_ORGANIZER = "2.16.840.1.113883.10.20.22.4.75";
 /** Mental Status Observation — a single coded mental-status finding + value. */
 export const MENTAL_STATUS_OBSERVATION = "2.16.840.1.113883.10.20.22.4.74";
-/** Assessment Scale Observation — a scored scale (e.g. PHQ-9) usable in either status section. */
+/** Assessment Scale Observation — a scored scale (e.g. PHQ-9, Glasgow Coma) carried as a direct section entry. */
 export const ASSESSMENT_SCALE_OBSERVATION = "2.16.840.1.113883.10.20.22.4.69";
+/** Assessment Scale Supporting Observation — a scored component (item/question) of an Assessment Scale. */
+export const ASSESSMENT_SCALE_SUPPORTING_OBSERVATION = "2.16.840.1.113883.10.20.22.4.86";
 /** Family History Organizer — one family member + their Family History Observations. */
 export const FAMILY_HISTORY_ORGANIZER = "2.16.840.1.113883.10.20.22.4.45";
 /** Family History Observation — a relative's condition (coded in `value`). */

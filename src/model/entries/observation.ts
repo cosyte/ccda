@@ -29,14 +29,19 @@ import type { Element } from "@xmldom/xmldom";
 /**
  * A parsed observation `value`, discriminated on `kind`. `physicalQuantity`
  * carries a UCUM-checked {@link PQ}; `coded` a {@link CD}; `string` a free-text
- * value; `range` an {@link IVL_PQ}. `unsupported` preserves an `xsi:type` the
- * model does not specialize (with any raw text) so nothing is ever discarded.
+ * value; `integer` a count/score (`xsi:type="INT"`, the type C-CDA prefers for
+ * an assessment-scale score — units are not allowed on an `INT`); `range` an
+ * {@link IVL_PQ}. `unsupported` preserves an `xsi:type` the model does not
+ * specialize (with any raw text) so nothing is ever discarded. `integer` keeps
+ * `value` and `nullFlavor` distinct — a scored `INT` never collapses into an
+ * unknown one, and vice versa.
  *
  * @example
  * ```ts
  * import type { ObservationValue } from "@cosyte/ccda";
  * function numeric(v: ObservationValue): number | undefined {
- *   return v.kind === "physicalQuantity" ? v.quantity.value : undefined;
+ *   if (v.kind === "physicalQuantity") return v.quantity.value;
+ *   return v.kind === "integer" ? v.value : undefined;
  * }
  * ```
  */
@@ -44,6 +49,7 @@ export type ObservationValue =
   | { readonly kind: "physicalQuantity"; readonly quantity: PQ }
   | { readonly kind: "coded"; readonly code: CD }
   | { readonly kind: "string"; readonly value: string }
+  | { readonly kind: "integer"; readonly value?: number; readonly nullFlavor?: string }
   | { readonly kind: "range"; readonly range: IVL_PQ }
   | { readonly kind: "unsupported"; readonly xsiType?: string; readonly raw?: string };
 
@@ -127,6 +133,35 @@ export function readObservationValue(
     case "ST": {
       const value = text(valueEl);
       return value === undefined ? undefined : { kind: "string", value };
+    }
+    case "INT": {
+      // A count/score (an assessment-scale score, a questionnaire answer). Units
+      // are not allowed on an INT, so there is no UCUM check. Value and nullFlavor
+      // are read as distinct fields — an explicit-unknown score (nullFlavor="UNK")
+      // is never collapsed into a real one, nor a real one dropped.
+      const raw = attr(valueEl, "value");
+      const nullFlavor = attr(valueEl, "nullFlavor");
+      if (raw !== undefined) {
+        // Strict numeric parse — reject whitespace-only / non-numeric so a malformed
+        // INT is never coerced into a fabricated score (e.g. Number(" ") === 0). An
+        // un-parseable @value is preserved + flagged (Postel: never a silent drop),
+        // exactly as any other unhandled typed value.
+        const trimmed = raw.trim();
+        const n = trimmed === "" ? Number.NaN : Number(trimmed);
+        if (!Number.isFinite(n)) return readUnsupported(valueEl, "INT", position, ctx);
+        const out: { kind: "integer"; value: number; nullFlavor?: string } = {
+          kind: "integer",
+          value: n,
+        };
+        if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
+        return out;
+      }
+      // No @value: an explicit-unknown score (nullFlavor="UNK") or a bare INT — read
+      // as an integer with no number, never a fabricated one, and never a warning
+      // (a nullFlavor score is a legitimate, spec-clean "unknown").
+      const out: { kind: "integer"; nullFlavor?: string } = { kind: "integer" };
+      if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
+      return out;
     }
     case "IVL_PQ": {
       const range = parseIvlPq(valueEl, ctx);

@@ -19,7 +19,9 @@ import {
   DOC_TYPES,
   PLAN_OF_TREATMENT_SECTION,
   FUNCTIONAL_STATUS_SECTION,
+  FUNCTIONAL_STATUS_ASSESSMENT_SCALE_SECTION,
   MENTAL_STATUS_SECTION,
+  MENTAL_STATUS_ASSESSMENT_SCALE_SECTION,
   FAMILY_HISTORY_SECTION,
   PAST_MEDICAL_HISTORY_SECTION,
 } from "./__fixtures__/ccda.js";
@@ -291,6 +293,98 @@ describe("mental status — domain never conflated with functional", () => {
 
   it("yields an empty mental-status array for a document with no mental status", () => {
     expect(parseCcda(buildCcda()).getMentalStatus()).toEqual([]);
+  });
+});
+
+describe("assessment scale observation — direct section entry, domain from section", () => {
+  it("reads a direct-entry PHQ-9 in Mental Status as a mental assessment scale with its INT score", () => {
+    const doc = parseSection(MENTAL_STATUS_ASSESSMENT_SCALE_SECTION);
+    const findings = doc.getMentalStatus();
+    expect(findings).toHaveLength(1);
+    const scale = findings[0];
+    expect(scale?.domain).toBe("mental");
+    expect(scale?.assessmentScale).toBe(true);
+    expect(scale?.code?.code).toBe("44249-1");
+    // The total score is an INT value (not a PQ) — units are not allowed on an INT.
+    expect(scale?.value?.kind).toBe("integer");
+    expect(scale?.value?.kind === "integer" ? scale.value.value : undefined).toBe(12);
+    // Reads the real-world structure (interpretationCode, IVL_INT reference range,
+    // and a second CO value on each item) without emitting any warning.
+    expect(doc.warnings).toEqual([]);
+  });
+
+  it("reads the scored supporting components (INT item scores) under the scale", () => {
+    const scale = parseSection(MENTAL_STATUS_ASSESSMENT_SCALE_SECTION).getMentalStatus()[0];
+    expect(scale?.supporting).toHaveLength(2);
+    const first = scale?.supporting?.[0];
+    expect(first?.code?.code).toBe("44250-9");
+    expect(first?.value?.kind === "integer" ? first.value.value : undefined).toBe(0);
+    const second = scale?.supporting?.[1];
+    expect(second?.value?.kind === "integer" ? second.value.value : undefined).toBe(1);
+  });
+
+  it("reads a direct-entry scale in Functional Status as functional — never conflated", () => {
+    const doc = parseSection(FUNCTIONAL_STATUS_ASSESSMENT_SCALE_SECTION);
+    const functional = doc.getFunctionalStatus();
+    expect(functional).toHaveLength(1);
+    expect(functional[0]?.domain).toBe("functional");
+    expect(functional[0]?.assessmentScale).toBe(true);
+    expect(functional[0]?.value?.kind === "integer" ? functional[0].value.value : undefined).toBe(
+      9,
+    );
+    // The functional-section scale must NOT leak into mental status (same template
+    // in both sections — the domain comes from the carrying section, not the OID).
+    expect(doc.getMentalStatus()).toEqual([]);
+  });
+
+  it("never fabricates a score from a malformed/whitespace INT — preserves + flags it", () => {
+    // A functional-status direct-entry scale whose INT @value is whitespace-only.
+    // Number(" ") === 0 must NOT be read as a real score of 0 (fail-safety); the
+    // value is preserved as unsupported and flagged, never a silent/confident 0.
+    const section = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.14" extension="2014-06-09"/>
+          <code code="47420-5" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Functional Status</title>
+          <text><content ID="s">Score</content></text>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.69"/>
+              <id root="2.16.840.1.113883.19.5.99999.21" extension="s-1"/>
+              <code code="9269-2" codeSystem="2.16.840.1.113883.6.1" displayName="Glasgow coma score total"/>
+              <text><reference value="#s"/></text>
+              <statusCode code="completed"/>
+              <effectiveTime value="20240101"/>
+              <value xsi:type="INT" value=" "/>
+            </observation>
+          </entry>
+        </section>
+      </component>`;
+    const doc = parseSection(section);
+    const scale = doc.getFunctionalStatus()[0];
+    expect(scale?.assessmentScale).toBe(true);
+    // Not a fabricated integer 0 — preserved as an unsupported INT value instead.
+    expect(scale?.value?.kind).not.toBe("integer");
+    expect(scale?.value?.kind).toBe("unsupported");
+    // And it is flagged, never dropped silently.
+    expect(doc.warnings.map((w) => w.code)).toContain("RESULT_VALUE_TYPE_UNHANDLED");
+  });
+
+  it("keeps the two domains separate when both scale sections are present", () => {
+    // Both sections in one document — the same Assessment Scale OID `…4.69` in each;
+    // each scale must be tagged by its own section's domain, never cross-counted.
+    const doc = parseSection(
+      MENTAL_STATUS_ASSESSMENT_SCALE_SECTION + FUNCTIONAL_STATUS_ASSESSMENT_SCALE_SECTION,
+    );
+    const mental = doc.getMentalStatus();
+    const functional = doc.getFunctionalStatus();
+    expect(mental).toHaveLength(1);
+    expect(functional).toHaveLength(1);
+    expect(mental[0]?.code?.code).toBe("44249-1");
+    expect(functional[0]?.code?.code).toBe("9269-2");
+    expect(mental.every((f) => f.domain === "mental")).toBe(true);
+    expect(functional.every((f) => f.domain === "functional")).toBe(true);
   });
 });
 

@@ -41,6 +41,7 @@ export {
   extractMentalStatus,
   type StatusDomain,
   type StatusObservation,
+  type SupportingObservation,
 } from "./functional-mental-status.js";
 export {
   extractFamilyHistory,

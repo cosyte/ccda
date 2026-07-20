@@ -612,6 +612,98 @@ export const MENTAL_STATUS_SECTION = `
       </component>`;
 
 /**
+ * A Mental Status section carrying a **direct-entry Assessment Scale Observation**
+ * (`…22.4.69`, the bare-root R2.1 form) — a PHQ-9 depression screen with its INT
+ * total score, an `interpretationCode`, an `IVL_INT` reference range, and two
+ * Assessment Scale Supporting Observations (`…22.4.86`) each with an INT item
+ * score plus a second `CO` coded answer. Mirrors the HL7 C-CDA R2.1 CC0 example
+ * (`Mental Status/Patient Health Questionnaire PHQ-9`) so the parser is exercised
+ * against real-world structure, not just builder output. All ids/OIDs synthetic.
+ */
+export const MENTAL_STATUS_ASSESSMENT_SCALE_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.56" extension="2015-08-01"/>
+          <code code="10190-7" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Mental Status</title>
+          <text>
+            <content ID="phq9">PHQ-9 quick depression assessment panel: 12</content>
+            <content ID="phq9range">0-4</content>
+            <content ID="phq9q1">Little interest or pleasure: 0 (Not at all)</content>
+            <content ID="phq9q2">Feeling down or hopeless: 1 (Several days)</content>
+          </text>
+          <entry typeCode="DRIV">
+            <observation classCode="OBS" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.69"/>
+              <id root="2.16.840.1.113883.19.5.99999.22" extension="scale-1"/>
+              <code code="44249-1" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="PHQ-9 quick depression assessment panel"/>
+              <text><reference value="#phq9"/></text>
+              <statusCode code="completed"/>
+              <effectiveTime value="20240622"/>
+              <value xsi:type="INT" value="12"/>
+              <interpretationCode code="H" codeSystem="2.16.840.1.113883.5.83" displayName="High"/>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.86"/>
+                  <id root="2.16.840.1.113883.19.5.99999.22" extension="scale-item-1"/>
+                  <code code="44250-9" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC"/>
+                  <text><reference value="#phq9q1"/></text>
+                  <statusCode code="completed"/>
+                  <value xsi:type="INT" value="0"/>
+                  <value xsi:type="CO" code="LA6568-5" displayName="Not at all" codeSystem="2.16.840.1.113883.6.1"/>
+                </observation>
+              </entryRelationship>
+              <entryRelationship typeCode="COMP">
+                <observation classCode="OBS" moodCode="EVN">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.86"/>
+                  <id root="2.16.840.1.113883.19.5.99999.22" extension="scale-item-2"/>
+                  <code code="44255-8" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC"/>
+                  <text><reference value="#phq9q2"/></text>
+                  <statusCode code="completed"/>
+                  <value xsi:type="INT" value="1"/>
+                  <value xsi:type="CO" code="LA6569-3" displayName="Several days" codeSystem="2.16.840.1.113883.6.1"/>
+                </observation>
+              </entryRelationship>
+              <referenceRange>
+                <observationRange>
+                  <text><reference value="#phq9range"/></text>
+                  <value xsi:type="IVL_INT"><low value="0"/><high value="4"/></value>
+                  <interpretationCode code="N" codeSystem="2.16.840.1.113883.5.83" displayName="Normal"/>
+                </observationRange>
+              </referenceRange>
+            </observation>
+          </entry>
+        </section>
+      </component>`;
+
+/**
+ * A Functional Status section carrying a **direct-entry Assessment Scale
+ * Observation** (`…22.4.69`, bare root) — a Glasgow Coma total with an INT score,
+ * no supporting components. Proves the direct-entry scale is read with
+ * `domain: "functional"`. All ids/OIDs synthetic.
+ */
+export const FUNCTIONAL_STATUS_ASSESSMENT_SCALE_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.14" extension="2014-06-09"/>
+          <code code="47420-5" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Functional Status</title>
+          <text><content ID="gcs">Glasgow Coma Score</content></text>
+          <entry>
+            <observation classCode="OBS" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.69"/>
+              <id root="2.16.840.1.113883.19.5.99999.21" extension="gcs-1"/>
+              <code code="9269-2" codeSystem="2.16.840.1.113883.6.1" codeSystemName="LOINC" displayName="Glasgow coma score total"/>
+              <text><reference value="#gcs"/></text>
+              <statusCode code="completed"/>
+              <effectiveTime value="20240622"/>
+              <value xsi:type="INT" value="9"/>
+            </observation>
+          </entry>
+        </section>
+      </component>`;
+
+/**
  * A Family History section (`…22.2.15`, LOINC `10157-6`) carrying one Family
  * History Organizer (`…4.45`): the relative (father, male, born 1950, deceased)
  * via `relatedSubject`, plus a Family History Observation (`…4.46`) whose
