@@ -78,6 +78,39 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (eleventh slice) — builder emits a Family History section.** Extends `buildCcda` with one new
+  optional input — `BuildCcdaInit.familyHistory` (`BuildCcdaFamilyHistory[]`) — that round-trips through
+  `getFamilyHistory()` to the same structured content by construction; a clean build still carries **zero
+  warnings**.
+  - **Family History section + organizer + observation.** A Family History Section (V3) **`…22.2.15`**
+    (LOINC `10157-6`, the **`2015-08-01`** stamp, which has **no** entries-required `.1` variant, so only
+    the base `templateId` is emitted) carries one or more Family History Organizers **`…22.4.45`** — one
+    per relative (`<organizer classCode="CLUSTER">`), each with a SHALL `id`, SHALL `statusCode`
+    (`completed`), and a SHALL `subject/relatedSubject` (`@classCode="PRS"`) naming the family member:
+    a coded `relationship` (SNOMED CT by default, e.g. `72705000` mother / `9947008` father — overridable
+    to HL7 RoleCode), plus the MAY `administrativeGenderCode`, `birthTime`, and `sdtc:deceasedInd` flag.
+    Under it, each condition is a Family History Observation **`…22.4.46`** with the SHALL fixed `code`
+    (SNOMED CT `64572001` "Condition"), a SHALL `statusCode`, the SHOULD [0..1] `effectiveTime`, and the
+    SHALL coded `value` (the illness); a condition MAY nest an Age Observation **`…22.4.31`** (age at onset,
+    a `PQ` in UCUM years) and a Family History Death Observation **`…22.4.47`** (cause of death).
+  - **No clinical value, date, or relation is ever fabricated (the safety rule).** An unknown relationship
+    is `relatedSubject/code nullFlavor="UNK"` and an unknown condition is `value nullFlavor="UNK"` — an
+    explicit unknown, never guessed. The MAY demographics, the Age/Death sub-observations, and the SHOULD
+    `effectiveTime` are each emitted only when supplied.
+  - **Conditions are grouped by relative, never flattened.** Each relative's identity rides once on its
+    organizer, so every condition reads back under its relative via `getFamilyHistory()`. The section
+    narrative reads each condition's `relative: illness` label (`#id`-referenced), agreeing with the
+    reconciled `value`, so no `CODE_NARRATIVE_MISMATCH` fires.
+  - **Emitted only when populated.** Family History is a CCD `SHOULD` (not `SHALL`) section, so — like the
+    other optional sections — an unpopulated section is **not** fabricated. The empty-build output is
+    unchanged.
+  - New public types: `BuildCcdaFamilyHistory` and its members `BuildCcdaFamilyMember` /
+    `BuildCcdaFamilyHistoryObservation`. No parser change and no warning-code change; the
+    round-trip-by-construction invariant and the serializer fixed point still hold.
+  - **Deferred:** the Functional/Mental Status Organizer + Assessment Scale forms in the builder, the other
+    eleven document types, C-CDA document _editing_, the bring-your-own-credentials terminology adapter, and
+    the external-validator/Schematron differential-testing gate.
+
 - **Phase 7 (tenth slice) — builder emits a Plan of Treatment section.** Extends `buildCcda` with one new
   optional input — `BuildCcdaInit.planOfTreatment` (`BuildCcdaPlannedItem[]`) — that round-trips through
   `getPlannedItems()` to the same structured content by construction; a clean build still carries **zero

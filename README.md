@@ -26,7 +26,8 @@ substrate for C-CDA's XML.
 > (`withWarnings`). A document **builder** (`buildCcda`) emits a spec-clean CCD with the US Realm header
 > and populated **Problems, Allergies, Medications, Results, Vital Signs, Immunizations, Procedures,
 > Encounters, Social-History smoking status, Functional Status, Mental Status, Past Medical History,
-> and Plan of Treatment** (planned entries, never conflated with performed) sections (each
+> Plan of Treatment** (planned entries, never conflated with performed), **and Family History**
+> (organizer per relative, conditions with optional age-at-onset + cause-of-death) sections (each
 > round-tripping through `parseCcda`); the other document types and remaining sections land in a later
 > increment.
 
@@ -219,7 +220,14 @@ SNOMED CT finding `value`, tagged `domain: "mental"` — keyed off a distinct ob
 it is never conflated with Functional Status), and **Past Medical History** (historical problems as
 **bare** Problem Observations `…22.4.4` directly under `<entry>`, **not** wrapped in a Problem Concern
 Act — read back via `getPastMedicalHistory` and never double-counted as an active `getProblems`
-concern). Safety-critical values are never guessed: an omitted medication dose/route
+concern), **Plan of Treatment** (the six planned-entry templates — Planned Act / Encounter / Procedure /
+Medication Activity / Supply / Observation — each future/ordered with `statusCode` fixed to `active`,
+read back via `getPlannedItems` as `disposition: "planned"` and never conflated with a performed
+Procedure/Encounter), and **Family History** (a Family History Organizer `…22.4.45` per relative —
+carrying the `relatedSubject` relationship (SNOMED CT), optional gender/birthTime/`sdtc:deceasedInd` —
+with Family History Observations `…22.4.46` for each condition, optionally nesting an Age Observation
+`…22.4.31` (age at onset) and a Family History Death Observation `…22.4.47` (cause of death); read back
+via `getFamilyHistory`, grouped by relative). Safety-critical values are never guessed: an omitted medication dose/route
 is left absent so the parser flags it (rather than being defaulted), a `PQ` unit is emitted verbatim and
 re-checked against the computable UCUM grammar, a **refused** immunization is emitted as
 `negationInd="true"` (flagged `IMMUNIZATION_REFUSED` on re-parse) never conflated with a `nullFlavor`
@@ -227,9 +235,10 @@ re-checked against the computable UCUM grammar, a **refused** immunization is em
 performed, and an unrecorded smoking-status / functional-status `value` is emitted as an explicit
 `nullFlavor="UNK"` rather than defaulted to a real finding. Each CCD SHALL section for which no content
 is supplied is emitted as a spec-clean empty `nullFlavor="NI"` section; the non-required Immunizations /
-Procedures / Encounters / Social History / Functional Status / Mental Status / Past Medical History
-sections are emitted only when populated. The other eleven document types, the remaining sections, and a
-bring-your-own-credentials terminology adapter land in a later increment.
+Procedures / Encounters / Social History / Functional Status / Mental Status / Past Medical History /
+Plan of Treatment / Family History sections are emitted only when populated. The other eleven document
+types, C-CDA document editing, and a bring-your-own-credentials terminology adapter land in a later
+increment.
 
 ## What it extracts (Phase 5) — Procedures, Encounters, Social History
 

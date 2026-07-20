@@ -129,9 +129,26 @@
  * may be undated — never a fabricated date), and the Planned Observation's
  * expected coded result `value` [0..1] is emitted only when supplied, never
  * invented. Like the other non-SHALL sections it is emitted only when populated,
- * and its section has no entries-required variant. The Functional/Mental Status
- * Organizer + Assessment Scale forms and Family History are deferred to later
- * CCDA-P7 increments.
+ * and its section has no entries-required variant.
+ *
+ * **This slice adds Family History.** A **Family History** section (V3,
+ * `…22.2.15`, LOINC `10157-6`, the R2.1 `2015-08-01` stamp) emits one or more
+ * Family History Organizers (`…22.4.45`) — one per relative. Each organizer names
+ * the relative through its `subject/relatedSubject` (`@classCode="PRS"`): a coded
+ * `relationship` (SNOMED CT by default, e.g. `72705000` mother, `9947008`
+ * father), and the MAY `gender`/`birthTime`/`sdtc:deceasedInd` demographics. Under
+ * it, each condition is a Family History Observation (`…22.4.46`) carrying the
+ * SHALL fixed `code` (SNOMED CT `64572001` "Condition"), the SHALL coded
+ * `value` (the illness), and optionally a nested Age Observation (`…22.4.31`, age
+ * at onset) and/or Family History Death Observation (`…22.4.47`, cause of death).
+ * **Nothing clinical is fabricated:** an unknown relationship is
+ * `relatedSubject/code nullFlavor="UNK"` and an unknown condition is `value
+ * nullFlavor="UNK"` — an explicit unknown, never a guessed relation or illness;
+ * the MAY demographics, age, death flag, and SHOULD `effectiveTime` are each
+ * emitted only when supplied. Like the other non-SHALL sections it is emitted only
+ * when populated, and its section has no entries-required variant. The
+ * Functional/Mental Status Organizer + Assessment Scale forms are deferred to a
+ * later CCDA-P7 increment.
  *
  * **SHALL `effectiveTime` on every entry.** Each act/observation the builder
  * emits carries the `effectiveTime` its C-CDA R2.1 template requires — the
@@ -154,10 +171,14 @@ import type { PlannedItemKind } from "../model/entries/plan-of-treatment.js";
 import type { ProcedureKind } from "../model/entries/procedure.js";
 import { parseCcda } from "../parser/index.js";
 import {
+  AGE_OBSERVATION,
   ALLERGY_CONCERN_ACT,
   ALLERGY_OBSERVATION,
   CRITICALITY_OBSERVATION,
   ENCOUNTER_ACTIVITY,
+  FAMILY_HISTORY_DEATH_OBSERVATION,
+  FAMILY_HISTORY_OBSERVATION,
+  FAMILY_HISTORY_ORGANIZER,
   FUNCTIONAL_STATUS_OBSERVATION,
   IMMUNIZATION_ACTIVITY,
   IMMUNIZATION_MEDICATION_INFORMATION,
@@ -185,7 +206,7 @@ import {
 } from "../model/entries/shared.js";
 import { serializeDocument } from "../serialize/serialize-dom.js";
 
-import { el, newCdaDocument, textEl, typedEl, typedValue, type Attrs } from "./dom.js";
+import { el, newCdaDocument, sdtcEl, textEl, typedEl, typedValue, type Attrs } from "./dom.js";
 import type { Document, Element } from "@xmldom/xmldom";
 
 /** The US Realm Header template OID (root); the R2.1 stamp lives in `@extension`. @internal */
@@ -276,6 +297,36 @@ const MENTAL_STATUS_CODE = {
  * `2015-08-01` stamp the CCD SHALL sections use. @internal
  */
 const PLAN_OF_TREATMENT_EXT = "2014-06-09";
+/**
+ * The HL7 AdministrativeGender code system OID — the terminology for a family
+ * member's `administrativeGenderCode` (the same system the patient's gender
+ * uses). @internal
+ */
+const ADMINISTRATIVE_GENDER = "2.16.840.1.113883.5.1";
+/**
+ * The fixed `code` every Family History Observation (`…22.4.46`) carries —
+ * SNOMED CT `64572001` "Condition". Like the Problem Observation's fixed
+ * "Problem" code, this names the *kind* of observation; the specific illness
+ * lives in the coded `value`. @internal
+ */
+const FAMILY_HISTORY_CONDITION_CODE = { code: "64572001", displayName: "Condition" } as const;
+/**
+ * The fixed `code` an Age Observation (`…22.4.31`) carries — SNOMED CT
+ * `397659008` "Age". The relative's age at onset is the observation's `PQ`
+ * `value` (in UCUM years). @internal
+ */
+const AGE_OBSERVATION_CODE = { code: "397659008", displayName: "Age" } as const;
+/**
+ * The UCUM unit for an age in years (`a`, annum) — the unit the Age Observation
+ * `value` carries. @internal
+ */
+const AGE_UNIT = "a";
+/**
+ * The fixed coded `value` a Family History Death Observation (`…22.4.47`)
+ * carries — SNOMED CT `419620001` "Death" — marking its parent condition as the
+ * relative's cause of death. @internal
+ */
+const DEATH_VALUE = { code: "419620001", displayName: "Death" } as const;
 
 /**
  * A coded value for the builder — the tuple the parser reads back as a `CD`.
@@ -815,6 +866,112 @@ export interface BuildCcdaMentalStatus {
 }
 
 /**
+ * The relative a {@link BuildCcdaFamilyHistory} organizer describes — the family
+ * member whose conditions the organizer records. Emitted as the organizer's
+ * `subject/relatedSubject` (a `@classCode="PRS"` personal relationship).
+ *
+ * **The relationship is never fabricated.** `relationship` is the coded relation
+ * of the relative to the patient — SNOMED CT by default (e.g. `72705000` mother,
+ * `9947008` father, `394859005`… ), overridable via `codeSystem` (e.g. the HL7
+ * RoleCode `FTH`/`MTH` on `2.16.840.1.113883.5.111`). When omitted, the SHALL
+ * `relatedSubject/code` is emitted as `nullFlavor="UNK"` — an *explicit* unknown
+ * relation, never guessed. `gender` (an HL7 AdministrativeGender code, e.g.
+ * `"M"`/`"F"`), `birthTime` (an HL7 date string), and `deceased` (the
+ * `sdtc:deceasedInd` flag) are all optional MAY elements — each emitted only when
+ * supplied, never fabricated.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaFamilyMember } from "@cosyte/ccda";
+ * const mother: BuildCcdaFamilyMember = {
+ *   relationship: { code: "72705000", displayName: "Mother" }, // SNOMED CT
+ *   gender: "F",
+ *   deceased: true,
+ * };
+ * ```
+ */
+export interface BuildCcdaFamilyMember {
+  /**
+   * The coded relationship of the relative to the patient (SNOMED CT default).
+   * Omit for an explicit unknown (`relatedSubject/code nullFlavor="UNK"`) — never
+   * guessed.
+   */
+  readonly relationship?: BuildCode;
+  /** The relative's HL7 AdministrativeGender code (e.g. `"M"`/`"F"`); emitted only when supplied. */
+  readonly gender?: string;
+  /** The relative's birth date (HL7 date string); emitted only when supplied. */
+  readonly birthTime?: string;
+  /** Whether the relative is deceased (`sdtc:deceasedInd`); emitted only when supplied. */
+  readonly deceased?: boolean;
+}
+
+/**
+ * A single condition recorded for a relative — one Family History Observation
+ * (`…22.4.46`). The illness is the coded `condition` (SNOMED CT by default);
+ * `ageAtOnset` (whole UCUM years) becomes a nested Age Observation (`…22.4.31`);
+ * `causeOfDeath` adds a Family History Death Observation (`…22.4.47`) marking this
+ * condition as the relative's cause of death; `effectiveTime` (an HL7 date
+ * string) is the SHOULD [0..1] time of the condition.
+ *
+ * **The condition is never fabricated.** When `condition` is omitted the SHALL
+ * `value` is emitted as `nullFlavor="UNK"` — an *explicit* unknown, never a
+ * guessed illness. `ageAtOnset`, `causeOfDeath`, and `effectiveTime` are optional
+ * — each emitted only when supplied, never invented.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaFamilyHistoryObservation } from "@cosyte/ccda";
+ * const mi: BuildCcdaFamilyHistoryObservation = {
+ *   condition: { code: "22298006", displayName: "Myocardial infarction" }, // SNOMED CT
+ *   ageAtOnset: 57,
+ *   causeOfDeath: true,
+ * };
+ * ```
+ */
+export interface BuildCcdaFamilyHistoryObservation {
+  /**
+   * The coded condition the relative had (SNOMED CT default). Omit for an explicit
+   * unknown (`value nullFlavor="UNK"`) — never guessed.
+   */
+  readonly condition?: BuildCode;
+  /** The relative's age at onset in whole years — a nested Age Observation, emitted only when supplied. */
+  readonly ageAtOnset?: number;
+  /** When `true`, marks this condition as the relative's cause of death (Family History Death Observation). */
+  readonly causeOfDeath?: boolean;
+  /** The time/date of the condition (HL7 date string); the SHOULD [0..1] effectiveTime, emitted only when supplied. */
+  readonly effectiveTime?: string;
+}
+
+/**
+ * One Family History Organizer (`…22.4.45`) for the Family History section — a
+ * single `relative` plus the `observations` (conditions) recorded for them. The
+ * relative's identity is carried once on the organizer (not flattened into each
+ * condition), so the parser reads every condition back grouped under its relative.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaFamilyHistory } from "@cosyte/ccda";
+ * const father: BuildCcdaFamilyHistory = {
+ *   relative: { relationship: { code: "9947008", displayName: "Father" }, deceased: true },
+ *   observations: [
+ *     { condition: { code: "22298006", displayName: "Myocardial infarction" }, causeOfDeath: true },
+ *   ],
+ * };
+ * ```
+ */
+export interface BuildCcdaFamilyHistory {
+  /** The family member this organizer describes. */
+  readonly relative: BuildCcdaFamilyMember;
+  /**
+   * The conditions recorded for the relative; each becomes a Family History
+   * Observation. **Must be non-empty** — the organizer SHALL carry at least one
+   * observation component; pass `[{}]` (an unknown condition) rather than an empty
+   * list, else {@link buildCcda} throws a `TypeError`.
+   */
+  readonly observations: readonly BuildCcdaFamilyHistoryObservation[];
+}
+
+/**
  * The planned `@moodCode` for the **act / encounter / procedure** kinds — the
  * Planned moodCode value set (`2.16.840.1.113883.11.20.9.23`): `INT` intent
  * (default), `RQO` request/order, `PRMS` promise, `PRP` proposal, `APT`
@@ -1031,6 +1188,13 @@ export interface BuildCcdaInit {
    * with the performed Procedures/Encounters.
    */
   readonly planOfTreatment?: readonly BuildCcdaPlannedItem[];
+  /**
+   * Family history for the Family History section; the section is emitted only
+   * when non-empty (a CCD SHOULD section). Each entry is one relative (a Family
+   * History Organizer) carrying that relative's conditions — read back via
+   * `getFamilyHistory`, grouped by relative.
+   */
+  readonly familyHistory?: readonly BuildCcdaFamilyHistory[];
 }
 
 /** A monotonic id generator scoped to one build, for stable act/content ids. @internal */
@@ -1128,8 +1292,9 @@ function medicationDuration(
  * @throws {TypeError} When `documentType` is anything other than `"ccd"` (the
  *   only type this slice supports), when an allergy is neither an `allergen` nor
  *   `noKnownAllergy`, when a result does not carry exactly one value form
- *   (`quantity` / `codedValue` / `stringValue`), or when a `"observation"`-variant
- *   procedure omits its SHALL `value`.
+ *   (`quantity` / `codedValue` / `stringValue`), when a `"observation"`-variant
+ *   procedure omits its SHALL `value`, or when a family-history entry carries an
+ *   empty `observations` list.
  * @example
  * ```ts
  * import { buildCcda, serializeCcda } from "@cosyte/ccda";
@@ -1192,6 +1357,9 @@ export function buildCcda(init: BuildCcdaInit): CcdaDocument {
   }
   if ((init.planOfTreatment?.length ?? 0) > 0) {
     structuredBody.appendChild(planOfTreatmentSection(doc, init.planOfTreatment ?? [], id));
+  }
+  if ((init.familyHistory?.length ?? 0) > 0) {
+    structuredBody.appendChild(familyHistorySection(doc, init.familyHistory ?? [], id));
   }
   root.appendChild(el(doc, "component", undefined, structuredBody));
 
@@ -1458,6 +1626,8 @@ const MENTAL_STATUS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.56";
 const PAST_MEDICAL_HISTORY_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.20";
 /** @internal */
 const PLAN_OF_TREATMENT_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.10";
+/** @internal */
+const FAMILY_HISTORY_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.15";
 
 /** Build the Problems section — populated, or empty when there are none. @internal */
 function problemsSection(
@@ -2717,4 +2887,265 @@ function plannedItemEntry(
     act.appendChild(cdValue(doc, p.value, SNOMED_CT));
   }
   return el(doc, "entry", undefined, act);
+}
+
+/**
+ * The narrative line for a Family History condition — the relative (their
+ * relationship label) plus the coded condition, so the narrative **contains** the
+ * observation `value`'s display label and the parser's code↔narrative
+ * reconciliation stays quiet. An omitted relationship reads "Relative"; an omitted
+ * condition reads "unknown condition" (and reconciliation is silent, since the
+ * coded value is a `nullFlavor`). @internal
+ */
+function familyHistoryLabel(
+  relative: BuildCcdaFamilyMember,
+  obs: BuildCcdaFamilyHistoryObservation,
+): string {
+  const who = relative.relationship?.displayName ?? "Relative";
+  const what = obs.condition?.displayName ?? "unknown condition";
+  return `${who}: ${what}`;
+}
+
+/**
+ * Build the Family History section from one or more {@link BuildCcdaFamilyHistory}
+ * organizers. Only called with a non-empty list (see {@link buildCcda}) — Family
+ * History is a CCD SHOULD (not SHALL) section, so an unpopulated one is not
+ * fabricated. The Family History Section (V3, `…22.2.15`, LOINC `10157-6`, the
+ * R2.1 `2015-08-01` stamp) has **no** entries-required variant (`…2.15.1`), so
+ * only the base `templateId` is emitted even though the section carries entries.
+ * Each `<entry>` is one Family History Organizer (`…22.4.45`) naming a single
+ * relative and their conditions. @internal
+ */
+function familyHistorySection(
+  doc: Document,
+  histories: readonly BuildCcdaFamilyHistory[],
+  id: (prefix: string) => string,
+): Element {
+  const text = el(doc, "text");
+  const entries: Element[] = [];
+  for (const h of histories) {
+    entries.push(familyHistoryEntry(doc, h, text, id));
+  }
+  const section = sectionElement(
+    doc,
+    FAMILY_HISTORY_SECTION_BASE,
+    "10157-6",
+    "Family History",
+    text,
+    false,
+  );
+  for (const entry of entries) section.appendChild(entry);
+  return el(doc, "component", undefined, section);
+}
+
+/**
+ * Build one Family History Organizer `<entry>` (`…22.4.45`) for a single relative.
+ * The organizer's `subject` carries the family-member identity (relationship,
+ * gender, birth time, deceased flag); each condition becomes a
+ * `component/observation` (a Family History Observation). Narrative `<content>`
+ * for each condition is appended to the section's shared `<text>`. @internal
+ */
+function familyHistoryEntry(
+  doc: Document,
+  h: BuildCcdaFamilyHistory,
+  text: Element,
+  id: (prefix: string) => string,
+): Element {
+  // The Family History Organizer SHALL contain at least one Family History
+  // Observation component — an organizer describing a relative with no recorded
+  // condition is degenerate, so reject it rather than emit a component-less
+  // organizer. A caller who means "a condition, but unknown" passes `[{}]` (which
+  // becomes value nullFlavor="UNK"); "no known family history" needs the negation
+  // form, which is a later slice.
+  if (h.observations.length === 0) {
+    throw new TypeError(
+      "buildCcda: each family-history entry must carry at least one observation " +
+        "(pass `[{}]` for an unknown condition rather than an empty list).",
+    );
+  }
+  const organizer = el(
+    doc,
+    "organizer",
+    { classCode: "CLUSTER", moodCode: "EVN" },
+    el(doc, "templateId", { root: FAMILY_HISTORY_ORGANIZER, extension: R21 }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("fhx-org") }),
+    // SHALL statusCode [1..1], fixed "completed".
+    el(doc, "statusCode", { code: "completed" }),
+    // SHALL subject [1..1] — the family member this organizer describes.
+    familyMemberSubject(doc, h.relative),
+  );
+  for (const obs of h.observations) {
+    const contentId = id("fhx-txt");
+    text.appendChild(
+      textEl(doc, "content", familyHistoryLabel(h.relative, obs), { ID: contentId }),
+    );
+    organizer.appendChild(
+      el(doc, "component", undefined, familyHistoryObservation(doc, obs, contentId, id)),
+    );
+  }
+  return el(doc, "entry", undefined, organizer);
+}
+
+/**
+ * Build the organizer's `subject/relatedSubject` — the family member. The
+ * `relatedSubject/@classCode` is fixed "PRS" (personal relationship). The
+ * relationship `code` is emitted from the caller's coded relation (SNOMED CT by
+ * default), or `nullFlavor="UNK"` when unknown — never guessed. Gender, birth
+ * time, and the `sdtc:deceasedInd` flag are MAY elements, each emitted only when
+ * supplied. @internal
+ */
+function familyMemberSubject(doc: Document, relative: BuildCcdaFamilyMember): Element {
+  const relatedSubject = el(doc, "relatedSubject", { classCode: "PRS" });
+  // SHALL code [1..1] — the coded relation. An omitted relationship is an
+  // EXPLICIT nullFlavor="UNK", never defaulted to a real relation.
+  relatedSubject.appendChild(
+    relative.relationship === undefined
+      ? el(doc, "code", { nullFlavor: "UNK" })
+      : codeEl(doc, "code", {
+          ...relative.relationship,
+          codeSystem: relative.relationship.codeSystem ?? SNOMED_CT,
+        }),
+  );
+  // The relative's demographics live in the nested person <subject>. Emitted only
+  // when at least one is supplied — the whole <subject> is MAY.
+  if (
+    relative.gender !== undefined ||
+    relative.birthTime !== undefined ||
+    relative.deceased !== undefined
+  ) {
+    const person = el(doc, "subject");
+    if (relative.gender !== undefined) {
+      person.appendChild(
+        el(doc, "administrativeGenderCode", {
+          code: relative.gender,
+          codeSystem: ADMINISTRATIVE_GENDER,
+        }),
+      );
+    }
+    if (relative.birthTime !== undefined) {
+      person.appendChild(el(doc, "birthTime", { value: relative.birthTime }));
+    }
+    if (relative.deceased !== undefined) {
+      // sdtc:deceasedInd is outside the v3 namespace (an HL7 SDO extension); the
+      // parser reads it by local name. Emitted only when the caller supplied the
+      // flag — never fabricated.
+      person.appendChild(sdtcEl(doc, "deceasedInd", { value: String(relative.deceased) }));
+    }
+    relatedSubject.appendChild(person);
+  }
+  return el(doc, "subject", undefined, relatedSubject);
+}
+
+/**
+ * Build one Family History Observation (`…22.4.46`). Carries the SHALL fixed
+ * `code` (SNOMED CT `64572001` "Condition"), a SHALL `statusCode` ("completed"),
+ * the SHOULD [0..1] `effectiveTime` (emitted only when supplied), and the SHALL
+ * coded `value` — the relative's condition, or `nullFlavor="UNK"` when unknown
+ * (never guessed). An `ageAtOnset` nests an Age Observation (`…22.4.31`);
+ * `causeOfDeath` nests a Family History Death Observation (`…22.4.47`). @internal
+ */
+function familyHistoryObservation(
+  doc: Document,
+  obs: BuildCcdaFamilyHistoryObservation,
+  contentId: string,
+  id: (prefix: string) => string,
+): Element {
+  const observation = el(
+    doc,
+    "observation",
+    { classCode: "OBS", moodCode: "EVN" },
+    el(doc, "templateId", { root: FAMILY_HISTORY_OBSERVATION, extension: R21 }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("fhx-obs") }),
+    // SHALL code [1..1] — the template-fixed SNOMED CT "Condition"; the specific
+    // illness lives in `value`, not here.
+    codeEl(doc, "code", {
+      ...FAMILY_HISTORY_CONDITION_CODE,
+      codeSystem: SNOMED_CT,
+      codeSystemName: "SNOMED CT",
+    }),
+    el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
+    // SHALL statusCode [1..1], fixed "completed".
+    el(doc, "statusCode", { code: "completed" }),
+  );
+  // SHOULD effectiveTime [0..1] — the time of the condition. Emitted only when
+  // supplied (never fabricated with a nullFlavor when the caller gave no date).
+  if (obs.effectiveTime !== undefined) {
+    observation.appendChild(
+      el(doc, "effectiveTime", undefined, el(doc, "low", { value: obs.effectiveTime })),
+    );
+  }
+  // SHALL value [1..1] — the coded condition. An omitted condition is an EXPLICIT
+  // nullFlavor="UNK", never defaulted to a real illness.
+  observation.appendChild(
+    obs.condition === undefined
+      ? typedValue(doc, "CD", { nullFlavor: "UNK" })
+      : cdValue(doc, obs.condition, SNOMED_CT),
+  );
+  // MAY Age Observation [0..1] — the relative's age at onset; emitted only when
+  // supplied. The relationship is SHALL `typeCode="SUBJ"` **and** SHALL
+  // `inversionInd="true"` (the age is the *subject* of the condition, inverted) —
+  // the same inverted pattern the Severity/Manifestation/Criticality sub-obs use;
+  // dropping the attribute defaults it to false and inverts the intended meaning.
+  if (obs.ageAtOnset !== undefined) {
+    observation.appendChild(
+      el(
+        doc,
+        "entryRelationship",
+        { typeCode: "SUBJ", inversionInd: "true" },
+        ageObservation(doc, obs.ageAtOnset),
+      ),
+    );
+  }
+  // MAY Family History Death Observation [0..1] — marks this condition as the
+  // relative's cause of death; emitted only when the caller flagged it.
+  if (obs.causeOfDeath === true) {
+    observation.appendChild(
+      el(doc, "entryRelationship", { typeCode: "CAUS" }, deathObservation(doc)),
+    );
+  }
+  return observation;
+}
+
+/**
+ * Build an Age Observation (`…22.4.31`) — the relative's age at onset as a `PQ`
+ * `value` in UCUM years (`a`). The template carries no version `@extension`.
+ * @internal
+ */
+function ageObservation(doc: Document, years: number): Element {
+  return el(
+    doc,
+    "observation",
+    { classCode: "OBS", moodCode: "EVN" },
+    el(doc, "templateId", { root: AGE_OBSERVATION }),
+    codeEl(doc, "code", {
+      ...AGE_OBSERVATION_CODE,
+      codeSystem: SNOMED_CT,
+      codeSystemName: "SNOMED CT",
+    }),
+    el(doc, "statusCode", { code: "completed" }),
+    typedValue(doc, "PQ", { value: years.toString(), unit: AGE_UNIT }),
+  );
+}
+
+/**
+ * Build a Family History Death Observation (`…22.4.47`) — a fixed `ASSERTION`
+ * `code` and the SNOMED CT `419620001` "Death" coded `value`, marking its parent
+ * condition as the relative's cause of death. The template carries no version
+ * `@extension`. @internal
+ */
+function deathObservation(doc: Document): Element {
+  return el(
+    doc,
+    "observation",
+    { classCode: "OBS", moodCode: "EVN" },
+    el(doc, "templateId", { root: FAMILY_HISTORY_DEATH_OBSERVATION }),
+    el(doc, "code", { code: "ASSERTION", codeSystem: ACT_CODE }),
+    el(doc, "statusCode", { code: "completed" }),
+    typedValue(doc, "CD", {
+      code: DEATH_VALUE.code,
+      codeSystem: SNOMED_CT,
+      displayName: DEATH_VALUE.displayName,
+      codeSystemName: "SNOMED CT",
+    }),
+  );
 }
