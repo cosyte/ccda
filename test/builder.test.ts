@@ -1818,3 +1818,158 @@ describe("buildCcda — SHALL effectiveTime conformance (all sections)", () => {
     ).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe("buildCcda — Referral Note document type", () => {
+  /**
+   * A Referral Note carrying the reconciliation triad plus its narrative SHALL
+   * sections. Grounded in the CC0 onc-healthit ToC Referral Note certification
+   * sample (`170.315_b1_toc_amb_rn_r21_sample1`): document code `57133-1`, and
+   * the Reason for Referral (V2) / Assessment / Plan of Treatment sections.
+   */
+  const RN_INIT: BuildCcdaInit = {
+    documentType: "referralNote",
+    patient: { mrn: "RN001", given: ["Jane"], family: "Doe", gender: "F", birthTime: "19600101" },
+    problems: [
+      {
+        problem: { code: "271737000", displayName: "Anemia" },
+        status: "active",
+        onset: "20240101",
+      },
+    ],
+    allergies: [{ noKnownAllergy: true }],
+    medications: [
+      {
+        drug: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" },
+        dose: { value: 1, unit: "{tablet}" },
+        route: { code: "C38288", displayName: "Oral" },
+      },
+    ],
+    reasonForReferral: "Referred to Community Health for suspected anemia and high fever.",
+    assessment: "Fever with suspected anemia; monitor temperature and blood pressure.",
+    planOfTreatment: [
+      { kind: "procedure", code: { code: "396550006", displayName: "Blood test" } },
+    ],
+  };
+
+  it("specializes the header with the Referral Note document code + templateId", () => {
+    const doc = buildCcda(RN_INIT);
+    expect(doc.documentType).toBe("referralNote");
+    expect(doc.header.code?.code).toBe("57133-1");
+    expect(doc.header.code?.codeSystem).toBe("2.16.840.1.113883.6.1");
+    expect(doc.header.title).toBe("Referral Note");
+    expect(serializeCcda(doc)).toContain(
+      'root="2.16.840.1.113883.10.20.22.1.14" extension="2015-08-01"',
+    );
+  });
+
+  it("honors a title override while keeping the Referral Note document code", () => {
+    const doc = buildCcda({ ...RN_INIT, title: "Cardiology referral" });
+    expect(doc.header.title).toBe("Cardiology referral");
+    expect(doc.header.code?.code).toBe("57133-1");
+  });
+
+  it("emits a zero-warning, fixed-point round-trip Referral Note", () => {
+    const doc = buildCcda(RN_INIT);
+    expect(doc.warnings).toEqual([]);
+    const xml = serializeCcda(doc);
+    expect(parseCcda(xml).toString()).toBe(xml);
+  });
+
+  it("emits the Referral Note SHALL section set, every section recognized", () => {
+    const doc = buildCcda(RN_INIT);
+    for (const key of [
+      "problems",
+      "allergies",
+      "medications",
+      "reasonForReferral",
+      "assessment",
+      "planOfTreatment",
+    ]) {
+      expect(doc.findSection(key), key).toBeDefined();
+    }
+  });
+
+  it("round-trips the reconciliation triad entries", () => {
+    const doc = buildCcda(RN_INIT);
+    expect(doc.getProblems()).toHaveLength(1);
+    expect(doc.getProblems()[0]?.problems[0]?.value?.code).toBe("271737000");
+    // "No known allergies" is a negation, never collapsed to unknown.
+    expect(doc.getAllergies()[0]?.allergies[0]?.noKnownAllergy).toBe(true);
+    expect(doc.getMedications()).toHaveLength(1);
+    expect(doc.getMedications()[0]?.drug?.code).toBe("314076");
+  });
+
+  it("round-trips the narrative Reason for Referral + Assessment text", () => {
+    const doc = buildCcda(RN_INIT);
+    expect(doc.findSection("reasonForReferral")?.narrativeText).toContain("suspected anemia");
+    expect(doc.findSection("assessment")?.narrativeText).toContain("monitor temperature");
+  });
+
+  it("emits the Assessment templateId root-only (unversioned in R2.1, no @extension)", () => {
+    const xml = serializeCcda(buildCcda(RN_INIT));
+    expect(xml).toContain('<templateId root="2.16.840.1.113883.10.20.22.2.8"/>');
+    expect(xml).not.toContain('root="2.16.840.1.113883.10.20.22.2.8" extension');
+    // The Reason for Referral (V2) carries its IHE root + the 2014-06-09 stamp.
+    expect(xml).toContain(
+      '<templateId root="1.3.6.1.4.1.19376.1.5.3.1.3.1" extension="2014-06-09"/>',
+    );
+  });
+
+  it("emits every Referral Note SHALL section even with no clinical content", () => {
+    const doc = buildCcda({ documentType: "referralNote", patient: { mrn: "RN002" } });
+    expect(doc.warnings).toEqual([]);
+    for (const key of [
+      "problems",
+      "allergies",
+      "medications",
+      "reasonForReferral",
+      "assessment",
+      "planOfTreatment",
+    ]) {
+      expect(doc.findSection(key), key).toBeDefined();
+    }
+    expect(doc.getProblems()).toEqual([]);
+    expect(doc.getMedications()).toEqual([]);
+    // Results / Vital Signs are not Referral Note SHALL sections — not fabricated.
+    expect(doc.findSection("results")).toBeUndefined();
+    expect(doc.findSection("vitalSigns")).toBeUndefined();
+  });
+
+  it("adds Results / Vital Signs to a Referral Note only when the caller supplies them", () => {
+    const doc = buildCcda({
+      documentType: "referralNote",
+      patient: { mrn: "RN003" },
+      results: [
+        {
+          code: { code: "24323-8", displayName: "CMP" },
+          results: [
+            {
+              test: { code: "2345-7", displayName: "Glucose" },
+              quantity: { value: 95, unit: "mg/dL" },
+            },
+          ],
+        },
+      ],
+      vitalSigns: [
+        {
+          vitals: [
+            {
+              code: { code: "8480-6", displayName: "Systolic BP" },
+              quantity: { value: 120, unit: "mm[Hg]" },
+            },
+          ],
+        },
+      ],
+    });
+    expect(doc.warnings).toEqual([]);
+    expect(doc.findSection("results")).toBeDefined();
+    expect(doc.findSection("vitalSigns")).toBeDefined();
+  });
+
+  it("rejects an unsupported document type with a TypeError", () => {
+    // @ts-expect-error — exercise the runtime guard for untyped (JS) callers.
+    expect(() => buildCcda({ documentType: "dischargeSummary", patient: { mrn: "X" } })).toThrow(
+      TypeError,
+    );
+  });
+});

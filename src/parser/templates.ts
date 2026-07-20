@@ -198,6 +198,16 @@ const SECTION_CATALOG: readonly SectionInfo[] = [
     templateRoots: ["2.16.840.1.113883.10.20.22.2.8"],
   },
   {
+    // Reason for Referral Section (V2). An IHE PCC template (no C-CDA `…22.2.*`
+    // OID); the R2.1 Referral Note document SHALL carry it. Recognized by its
+    // stable IHE root — the version stamp lives in the `@extension`
+    // (`2014-06-09`), tolerated per the roadmap's root-primary contract.
+    key: "reasonForReferral",
+    title: "Reason for Referral",
+    loinc: "42349-1",
+    templateRoots: ["1.3.6.1.4.1.19376.1.5.3.1.3.1"],
+  },
+  {
     key: "hospitalDischargeDiagnosis",
     title: "Hospital Discharge Diagnosis",
     loinc: "11535-2",

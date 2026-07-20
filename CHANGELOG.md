@@ -78,6 +78,40 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (fourteenth slice) — builder emits a second C-CDA document type, the Referral Note.**
+  Establishes the **multi-document-type pattern** in `buildCcda`: it now emits either a **CCD** (default) or
+  a **Referral Note** (`documentType: "referralNote"`), each with its own US Realm Header specialization and
+  document-type-specific SHALL section set. Previously the builder emitted only a CCD and threw for the
+  other eleven types while `parseCcda` already read all twelve — this closes the first of that asymmetry.
+  Confirmed firsthand against the C-CDA R2.1 IG document-level StructureDefinition
+  (`2.16.840.1.113883.10.20.22.1.14`) and the **CC0** `onc-healthit/2015-certification-ccda-testdata` ToC
+  Referral Note certification sample (`170.315_b1_toc_amb_rn_r21_sample1`). A clean Referral Note build
+  carries **zero warnings** and round-trips through `parseCcda` fixed-point, exactly like a CCD.
+  - **Header specialization.** The Referral Note carries the document `templateId` root
+    `2.16.840.1.113883.10.20.22.1.14` (R2.1 `2015-08-01` stamp) and LOINC document `code` `57133-1`
+    "Referral Note". A `DOC_TYPE_SPECS` table drives the header + SHALL section set per type, so the two
+    document types share one emit path.
+  - **Referral Note SHALL section set (always emitted).** The entries-required **Problems**, **Allergies**,
+    and **Medications** (each an empty `nullFlavor="NI"` section when unpopulated — the entries-required
+    `.X.1` templateId correctly dropped); the narrative **Reason for Referral** (V2,
+    `1.3.6.1.4.1.19376.1.5.3.1.3.1`, `@extension 2014-06-09`, LOINC `42349-1`); the narrative **Assessment**
+    (`…22.2.8`, LOINC `51848-0`) — **unversioned** in R2.1, so emitted **root-only with no `@extension`**;
+    and **Plan of Treatment** (`…22.2.10`, `@extension 2014-06-09`, LOINC `18776-5`). Assessment + Plan of
+    Treatment satisfy the document's "Assessment and Plan (V2) OR (Assessment + Plan of Treatment)" SHALL
+    choice via the two-section branch.
+  - **Results and Vital Signs are not Referral Note SHALL sections** (`0..1` in the IG) — unlike in a CCD,
+    where the builder always emits them, a Referral Note emits them only when populated, never a fabricated
+    empty one. Nothing clinical is fabricated: unpopulated SHALL sections are explicit empties, and the
+    narrative sections carry only caller-supplied text.
+  - **Parser (recognition).** The section catalog gains a `reasonForReferral` entry (LOINC `42349-1`,
+    template root `1.3.6.1.4.1.19376.1.5.3.1.3.1`) so the emitted section is recognized (no
+    `UNKNOWN_SECTION_CODE`) and the Referral Note round-trips warning-free. Purely additive — no change to
+    any document type's required-section table; **CCD emit is byte-unchanged** (same SHALL sections, order,
+    templateIds, codes).
+  - **Public surface.** `BuildCcdaInit.documentType` widens to `"ccd" | "referralNote"`, and `BuildCcdaInit`
+    gains optional `assessment` and `reasonForReferral` narrative strings (ignored for a CCD). No
+    warning-code change. **Deferred:** the remaining ten document types; C-CDA document editing; the
+    bring-your-own-credentials terminology adapter; the external-validator/Schematron differential gate.
 - **Phase 7 (thirteenth slice) — parser reads + builder emits direct-entry Assessment Scale Observations.**
   A **coordinated parser + builder increment** for the **Assessment Scale Observation** (`…22.4.69`) and its
   **Assessment Scale Supporting Observation** (`…22.4.86`) — formal scored instruments (a PHQ-9 depression
