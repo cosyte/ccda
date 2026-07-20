@@ -78,6 +78,36 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (ninth slice) — builder emits a Past Medical History section.** Extends `buildCcda` with one
+  new optional input — `BuildCcdaInit.pastMedicalHistory` (`BuildCcdaProblem[]`, reusing the Problems
+  input shape) — that round-trips through `getPastMedicalHistory()` to the same structured content by
+  construction; a clean build still carries **zero warnings**.
+  - **Past Medical History section + bare Problem Observation.** A Past Medical History section
+    **`…22.2.20`** (LOINC `11348-0`, the V3 **`2015-08-01`** stamp, which has **no** entries-required `.1`
+    variant, so only the base `templateId` is emitted) carries one or more historical problems as **bare**
+    Problem Observations **`…22.4.4`** (the **`2015-08-01`** stamp) directly under each `<entry>` — **not**
+    wrapped in a Problem Concern Act (`…22.4.3`) the way the Problems section nests them. The bare
+    observation build is now shared verbatim with the Problems section, mirroring the parser's own reuse
+    (`buildProblem` serves both `getProblems` and `getPastMedicalHistory`). Each observation emits the
+    fixed SNOMED CT `code` (`55607006` "Problem"), a SHALL `statusCode` (fixed `completed`), a SHALL
+    `effectiveTime` [1..1] (onset as `low`; a `nullFlavor="UNK"` `high` for a resolved problem), and the
+    SHALL `value` [1..1] carrying the coded condition (SNOMED CT / ICD-10-CM).
+  - **A past illness is never double-counted as an active problem concern (the safety rule).** The
+    extractors route on structure — a bare observation to `getPastMedicalHistory`, a concern-act-wrapped
+    one to `getProblems` — so a resolved past problem never reads back as an active concern (or vice
+    versa); a build carrying both keeps them in their respective accessors.
+  - **Onset/resolution are never fabricated.** A supplied onset is the `effectiveTime/low`; an absent
+    onset is an explicit `nullFlavor="UNK"` `low`; a resolved-but-date-unknown problem adds a
+    `nullFlavor="UNK"` `high` — never a guessed date.
+  - **Emitted only when populated.** Past Medical History is not a CCD `SHALL` section, so — like the other
+    optional sections — an unpopulated section is **not** fabricated. The empty-build output is unchanged.
+  - No new public type (reuses `BuildCcdaProblem`). No parser change and no warning-code change; the
+    round-trip-by-construction invariant and the serializer fixed point still hold.
+  - **Deferred:** the Functional/Mental Status Organizer + Assessment Scale forms, and the remaining
+    sections (Plan of Treatment / Family History) in the builder, the other eleven document types, C-CDA
+    document _editing_, the bring-your-own-credentials terminology adapter, and the
+    external-validator/Schematron differential-testing gate.
+
 - **Phase 7 (eighth slice) — builder emits a Mental Status section.** Extends `buildCcda` with one new
   optional input — `BuildCcdaInit.mentalStatus` (`BuildCcdaMentalStatus[]`) — that round-trips through
   `getMentalStatus()` to the same structured content by construction; a clean build still carries **zero
