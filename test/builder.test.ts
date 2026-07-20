@@ -16,6 +16,8 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { DOMParser } from "@xmldom/xmldom";
+import type { Element } from "@xmldom/xmldom";
 
 import {
   buildCcda,
@@ -24,6 +26,33 @@ import {
   type BuildCcdaInit,
   type BuildCcdaPlannedItem,
 } from "../src/index.js";
+
+const PROBLEM_OBSERVATION = "2.16.840.1.113883.10.20.22.4.4";
+const ALLERGY_OBSERVATION = "2.16.840.1.113883.10.20.22.4.7";
+const SMOKING_STATUS_OBSERVATION = "2.16.840.1.113883.10.20.22.4.78";
+
+/**
+ * The ordered direct-child element tag names of the first `<observation>` whose
+ * first `<templateId>` carries `templateRoot`. Used to assert the CDA R2
+ * `POCD_MT000040.Observation` element sequence (…code, text, statusCode,
+ * effectiveTime, …, value…) is honored on emit — an `xs:sequence`, so a `<text>`
+ * emitted after `<value>` is XSD-invalid, not a cosmetic reordering.
+ */
+function observationChildOrder(xml: string, templateRoot: string): string[] {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  const observations = Array.from(doc.getElementsByTagName("observation"));
+  for (const obs of observations) {
+    const templateId = Array.from(obs.childNodes).find(
+      (n): n is Element => (n as Element).nodeName === "templateId",
+    );
+    if (templateId?.getAttribute("root") === templateRoot) {
+      return Array.from(obs.childNodes)
+        .filter((n) => n.nodeType === 1)
+        .map((n) => (n as Element).nodeName);
+    }
+  }
+  throw new Error(`no <observation> with templateId root ${templateRoot} found`);
+}
 
 /** A minimal, fully-populated init used across the round-trip assertions. */
 const RICH_INIT: BuildCcdaInit = {
@@ -1971,5 +2000,68 @@ describe("buildCcda — Referral Note document type", () => {
     expect(() => buildCcda({ documentType: "dischargeSummary", patient: { mrn: "X" } })).toThrow(
       TypeError,
     );
+  });
+});
+
+describe("buildCcda — CDA R2 observation element ordering (text before statusCode/value)", () => {
+  // POCD_MT000040.Observation is an xs:sequence: realmCode, typeId, templateId,
+  // id, code, derivationExpr, text, statusCode, effectiveTime, …, value, … — so
+  // `<text>` MUST precede statusCode/effectiveTime/value. Emitting the narrative
+  // reference later is XSD-invalid (it fails the core-CDA-R2 XSD stage before the
+  // Schematron even runs), not a cosmetic nit. These three builders previously
+  // appended `<text>` after the value (and, for allergies, after every
+  // entryRelationship); this locks the schema order in.
+  const orderOf = (names: string[]) => ({
+    text: names.indexOf("text"),
+    statusCode: names.indexOf("statusCode"),
+    value: names.indexOf("value"),
+  });
+
+  it("Problem Observation (…22.4.4) emits text before statusCode and value", () => {
+    const xml = serializeCcda(
+      buildCcda({
+        patient: { mrn: "M" },
+        problems: [{ problem: { code: "59621000", displayName: "Essential hypertension" } }],
+      }),
+    );
+    const names = observationChildOrder(xml, PROBLEM_OBSERVATION);
+    const o = orderOf(names);
+    expect(o.text).toBeGreaterThanOrEqual(0);
+    expect(o.text).toBeLessThan(o.statusCode);
+    expect(o.text).toBeLessThan(o.value);
+  });
+
+  it("Allergy Observation (…22.4.7) emits text before statusCode, value, and entryRelationship", () => {
+    const xml = serializeCcda(
+      buildCcda({
+        patient: { mrn: "M" },
+        allergies: [
+          {
+            allergen: { code: "7980", displayName: "Penicillin" },
+            reaction: { code: "247472004", displayName: "Hives" },
+          },
+        ],
+      }),
+    );
+    const names = observationChildOrder(xml, ALLERGY_OBSERVATION);
+    const o = orderOf(names);
+    expect(o.text).toBeGreaterThanOrEqual(0);
+    expect(o.text).toBeLessThan(o.statusCode);
+    expect(o.text).toBeLessThan(o.value);
+    expect(o.text).toBeLessThan(names.indexOf("entryRelationship"));
+  });
+
+  it("Smoking Status Observation (…22.4.78) emits text before statusCode and value", () => {
+    const xml = serializeCcda(
+      buildCcda({
+        patient: { mrn: "M" },
+        smokingStatus: [{ value: { code: "266919005", displayName: "Never smoker" } }],
+      }),
+    );
+    const names = observationChildOrder(xml, SMOKING_STATUS_OBSERVATION);
+    const o = orderOf(names);
+    expect(o.text).toBeGreaterThanOrEqual(0);
+    expect(o.text).toBeLessThan(o.statusCode);
+    expect(o.text).toBeLessThan(o.value);
   });
 });
