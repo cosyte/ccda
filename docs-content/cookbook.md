@@ -340,7 +340,7 @@ doc.warnings.length; // => 0
 
 `buildCcda` also emits a **Social History** section carrying **Smoking Status** observations when
 supplied. A known status is a SNOMED CT concept from the Current Smoking Status value set. An
-*unknown* status is never guessed: omit `value` and the builder emits an explicit `nullFlavor="UNK"`,
+_unknown_ status is never guessed: omit `value` and the builder emits an explicit `nullFlavor="UNK"`,
 which the parser reads back as `unknown` — absent status is never read as "never smoker":
 
 ```ts runnable
@@ -363,8 +363,9 @@ doc.getSmokingStatus()[1]?.unknown; // => true
 > Current builder scope: `buildCcda` emits a CCD with the US Realm header, the CCD SHALL sections
 > (Problems, Allergies, Medications, Results, Vital Signs — emitted empty as `nullFlavor="NI"` when no
 > content is supplied), and **Immunizations**, **Procedures**, **Encounters**, **Social History**
-> (Smoking Status), **Functional Status**, **Mental Status**, **Past Medical History**, and **Plan of
-> Treatment** (planned entries, never conflated with performed) sections when populated. The remaining
-> sections (the Functional/Mental Status Organizer + Assessment Scale forms, Family History), the other
-> eleven document types, C-CDA document _editing_, and a bring-your-own-credentials terminology adapter
-> are a later increment.
+> (Smoking Status), **Functional Status**, **Mental Status**, **Past Medical History**, **Plan of
+> Treatment** (planned entries, never conflated with performed), and **Family History** (a Family
+> History Organizer per relative, with conditions carrying optional age-at-onset + cause-of-death)
+> sections when populated. The remaining builder work (the Functional/Mental Status Organizer +
+> Assessment Scale forms), the other eleven document types, C-CDA document _editing_, and a
+> bring-your-own-credentials terminology adapter are a later increment.

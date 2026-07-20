@@ -1270,6 +1270,152 @@ describe("buildCcda — plan of treatment round-trip", () => {
   });
 });
 
+describe("buildCcda — family history round-trip", () => {
+  /** A build carrying two relatives: a deceased father (male, born 1950) whose
+   * myocardial infarction (age 57) was his cause of death, and a mother with a
+   * living condition — proving the organizer groups conditions by relative and
+   * carries the age/death sub-observations. */
+  const FHX_INIT: BuildCcdaInit = {
+    patient: { mrn: "M" },
+    familyHistory: [
+      {
+        relative: {
+          relationship: { code: "9947008", displayName: "Father" },
+          gender: "M",
+          birthTime: "19500101",
+          deceased: true,
+        },
+        observations: [
+          {
+            condition: { code: "22298006", displayName: "Myocardial infarction" },
+            ageAtOnset: 57,
+            causeOfDeath: true,
+            effectiveTime: "20070101",
+          },
+        ],
+      },
+      {
+        relative: { relationship: { code: "72705000", displayName: "Mother" }, gender: "F" },
+        observations: [{ condition: { code: "73211009", displayName: "Diabetes mellitus" } }],
+      },
+    ],
+  };
+
+  it("re-parses both relatives and their conditions via getFamilyHistory, warning-free", () => {
+    const doc = buildCcda(FHX_INIT);
+    const fh = doc.getFamilyHistory();
+    expect(fh).toHaveLength(2);
+    // Father — relationship defaults to SNOMED CT, demographics preserved.
+    expect(fh[0]?.relative.relationship?.code).toBe("9947008");
+    expect(fh[0]?.relative.relationship?.codeSystem).toBe("2.16.840.1.113883.6.96");
+    expect(fh[0]?.relative.gender?.code).toBe("M");
+    expect(fh[0]?.relative.birthTime?.raw).toBe("19500101");
+    expect(fh[0]?.relative.deceased).toBe(true);
+    // His condition, age at onset, cause-of-death flag, and condition time.
+    const cond = fh[0]?.observations[0];
+    expect(cond?.condition?.code).toBe("22298006");
+    expect(cond?.ageAtOnset?.value).toBe(57);
+    expect(cond?.ageAtOnset?.unit).toBe("a");
+    expect(cond?.causeOfDeath).toBe(true);
+    expect(cond?.effectiveTime?.low?.raw).toBe("20070101");
+    // Mother — a distinct relative with her own condition.
+    expect(fh[1]?.relative.relationship?.code).toBe("72705000");
+    expect(fh[1]?.observations[0]?.condition?.code).toBe("73211009");
+    expect(fh[1]?.observations[0]?.causeOfDeath).toBeUndefined();
+    expect(doc.warnings).toEqual([]);
+  });
+
+  it("emits the Family History section (LOINC 10157-6, organizer …4.45, obs …4.46, 2015-08-01, no entries-required variant)", () => {
+    const doc = buildCcda(FHX_INIT);
+    expect(doc.findSection("familyHistory")?.code?.code).toBe("10157-6");
+    const xml = serializeCcda(doc);
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.15" extension="2015-08-01"');
+    // Family History Section (V3) has no entries-required variant (…2.15.1).
+    expect(xml).not.toContain('root="2.16.840.1.113883.10.20.22.2.15.1"');
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.4.45" extension="2015-08-01"');
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.4.46" extension="2015-08-01"');
+    // Age Observation (…4.31) and Family History Death Observation (…4.47) nested.
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.4.31"');
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.4.47"');
+    // The Age Observation rides an inverted SUBJ relationship (SHALL inversionInd="true"),
+    // the age being the subject of the condition; the Death Observation is a CAUS relationship.
+    expect(xml).toContain('typeCode="SUBJ" inversionInd="true"');
+    expect(xml).toContain('typeCode="CAUS"');
+    // The deceased flag rides the sdtc extension namespace.
+    expect(xml).toContain('xmlns:sdtc="urn:hl7-org:sdtc"');
+    expect(xml).toContain('deceasedInd value="true"');
+  });
+
+  it("emits nullFlavor=UNK for an unknown relationship and an unknown condition — never guessed", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      familyHistory: [{ relative: {}, observations: [{}] }],
+    });
+    expect(doc.warnings).toEqual([]);
+    const fh = doc.getFamilyHistory();
+    expect(fh).toHaveLength(1);
+    // An unknown relation is an explicit nullFlavor, not a fabricated relationship.
+    expect(fh[0]?.relative.relationship?.nullFlavor).toBe("UNK");
+    expect(fh[0]?.relative.relationship?.code).toBeUndefined();
+    // An unknown condition is an explicit nullFlavor, not a fabricated illness.
+    expect(fh[0]?.observations[0]?.condition?.nullFlavor).toBe("UNK");
+    expect(fh[0]?.observations[0]?.condition?.code).toBeUndefined();
+    // No demographics were supplied → no person <subject>, no age/death sub-obs.
+    expect(fh[0]?.relative.gender).toBeUndefined();
+    expect(fh[0]?.relative.deceased).toBeUndefined();
+    expect(fh[0]?.observations[0]?.ageAtOnset).toBeUndefined();
+    expect(fh[0]?.observations[0]?.causeOfDeath).toBeUndefined();
+  });
+
+  it("honors a caller-supplied non-SNOMED relationship code system (HL7 RoleCode)", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      familyHistory: [
+        {
+          relative: {
+            relationship: {
+              code: "FTH",
+              codeSystem: "2.16.840.1.113883.5.111",
+              displayName: "Father",
+            },
+          },
+          observations: [{ condition: { code: "22298006", displayName: "Myocardial infarction" } }],
+        },
+      ],
+    });
+    expect(doc.warnings).toEqual([]);
+    expect(doc.getFamilyHistory()[0]?.relative.relationship?.codeSystem).toBe(
+      "2.16.840.1.113883.5.111",
+    );
+  });
+
+  it("does NOT emit a Family History section when none is supplied", () => {
+    const doc = buildCcda({ patient: { mrn: "M" } });
+    expect(doc.findSection("familyHistory")).toBeUndefined();
+    expect(doc.getFamilyHistory()).toEqual([]);
+    expect(serializeCcda(doc)).not.toContain('code="10157-6"');
+  });
+
+  it("throws rather than emit a component-less organizer for an empty observations list", () => {
+    expect(() =>
+      buildCcda({
+        patient: { mrn: "M" },
+        familyHistory: [
+          {
+            relative: { relationship: { code: "72705000", displayName: "Mother" } },
+            observations: [],
+          },
+        ],
+      }),
+    ).toThrow(TypeError);
+  });
+
+  it("is a serialization fixed point with a Family History section present", () => {
+    const xml = serializeCcda(buildCcda(FHX_INIT));
+    expect(parseCcda(xml).toString()).toBe(xml);
+  });
+});
+
 describe("buildCcda — defaults, escaping, and input validation", () => {
   it("emits nullFlavor for omitted demographics and no MRN", () => {
     const doc = buildCcda({ patient: {} });

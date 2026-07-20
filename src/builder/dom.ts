@@ -12,7 +12,7 @@
 
 import { DOMImplementation, type Document, type Element } from "@xmldom/xmldom";
 
-import { V3_NS, XSI_NS } from "../parser/namespaces.js";
+import { SDTC_NS, V3_NS, XSI_NS } from "../parser/namespaces.js";
 
 /** The XML Namespaces namespace, used to declare `xmlns:*` prefixes. @internal */
 const XMLNS_NS = "http://www.w3.org/2000/xmlns/";
@@ -74,6 +74,22 @@ export function el(
 export function textEl(doc: Document, name: string, value: string, attrs?: Attrs): Element {
   const e = el(doc, name, attrs);
   e.appendChild(doc.createTextNode(value));
+  return e;
+}
+
+/**
+ * Create an element in the HL7 SDO-extension namespace (`urn:hl7-org:sdtc`),
+ * serialized with the `sdtc:` prefix (e.g. `<sdtc:deceasedInd>`). The prefix's
+ * `xmlns:sdtc` declaration is emitted by the serializer where the element is
+ * placed; the parser recognizes the namespace and reads the element by local
+ * name. Used for the standards-extension elements CDA permits outside the v3
+ * namespace (e.g. the family-member `sdtc:deceasedInd` flag).
+ *
+ * @internal
+ */
+export function sdtcEl(doc: Document, localName: string, attrs?: Attrs): Element {
+  const e = doc.createElementNS(SDTC_NS, `sdtc:${localName}`);
+  setAttrs(e, attrs);
   return e;
 }
 
