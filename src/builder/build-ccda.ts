@@ -267,6 +267,7 @@ import {
 import { serializeDocument } from "../serialize/serialize-dom.js";
 
 import { el, newCdaDocument, sdtcEl, textEl, typedEl, typedValue, type Attrs } from "./dom.js";
+import { assertHl7Ts } from "./hl7-ts.js";
 import type { Document, Element } from "@xmldom/xmldom";
 
 /** The US Realm Header template OID (root); the R2.1 stamp lives in `@extension`. @internal */
@@ -1619,7 +1620,7 @@ function makeIdGen(): (prefix: string) => string {
 
 /** Format an `effectiveTime` input to an HL7 v3 timestamp string. @internal */
 function formatEffectiveTime(input: Date | string | undefined): string {
-  if (typeof input === "string") return input;
+  if (typeof input === "string") return assertHl7Ts(input, "effectiveTime");
   const d = input ?? new Date();
   const p = (v: number, width = 2): string => v.toString().padStart(width, "0");
   return (
@@ -1638,10 +1639,10 @@ function formatEffectiveTime(input: Date | string | undefined): string {
  * (`date === undefined`), never as a real `Date`.
  * @internal
  */
-function pointEffectiveTime(doc: Document, value: string | undefined): Element {
+function pointEffectiveTime(doc: Document, value: string | undefined, field: string): Element {
   return value === undefined
     ? el(doc, "effectiveTime", { nullFlavor: "UNK" })
-    : el(doc, "effectiveTime", { value });
+    : el(doc, "effectiveTime", { value: assertHl7Ts(value, field) });
 }
 
 /**
@@ -1691,16 +1692,19 @@ function concernEffectiveTime(
   onset: string | undefined,
   resolution: string | undefined,
   status: "active" | "resolved" | "inactive" | undefined,
+  field: string,
 ): Element {
   const et = el(doc, "effectiveTime");
   et.appendChild(
-    onset === undefined ? el(doc, "low", { nullFlavor: "UNK" }) : el(doc, "low", { value: onset }),
+    onset === undefined
+      ? el(doc, "low", { nullFlavor: "UNK" })
+      : el(doc, "low", { value: assertHl7Ts(onset, `${field}.onset`) }),
   );
   if (status === "resolved") {
     et.appendChild(
       resolution === undefined
         ? el(doc, "high", { nullFlavor: "UNK" })
-        : el(doc, "high", { value: resolution }),
+        : el(doc, "high", { value: assertHl7Ts(resolution, `${field}.resolution`) }),
     );
   }
   return et;
@@ -1724,9 +1728,12 @@ function medicationDuration(
   ivl.appendChild(
     duration?.low === undefined
       ? el(doc, "low", { nullFlavor: "UNK" })
-      : el(doc, "low", { value: duration.low }),
+      : el(doc, "low", { value: assertHl7Ts(duration.low, "medication.duration.low") }),
   );
-  if (duration?.high !== undefined) ivl.appendChild(el(doc, "high", { value: duration.high }));
+  if (duration?.high !== undefined)
+    ivl.appendChild(
+      el(doc, "high", { value: assertHl7Ts(duration.high, "medication.duration.high") }),
+    );
   return ivl;
 }
 
@@ -1975,7 +1982,7 @@ function patientEl(doc: Document, patient: BuildCcdaPatient): Element {
   p.appendChild(
     patient.birthTime === undefined
       ? el(doc, "birthTime", { nullFlavor: "UNK" })
-      : el(doc, "birthTime", { value: patient.birthTime }),
+      : el(doc, "birthTime", { value: assertHl7Ts(patient.birthTime, "patient.birthTime") }),
   );
   return p;
 }
@@ -2230,7 +2237,7 @@ function problemObservation(
   // onset as low when supplied (nullFlavor="UNK" otherwise), plus a high for a
   // resolved problem: the caller's resolution date when supplied, else a
   // nullFlavor="UNK" high (resolved-but-date-unknown) — never a guessed date.
-  obs.appendChild(concernEffectiveTime(doc, p.onset, p.resolution, p.status));
+  obs.appendChild(concernEffectiveTime(doc, p.onset, p.resolution, p.status, "problem"));
   obs.appendChild(cdValue(doc, p.problem, SNOMED_CT));
   return obs;
 }
@@ -2254,7 +2261,7 @@ function problemEntry(
   );
   // Problem Concern Act (…22.4.3) SHALL contain effectiveTime [1..1]
   // (active→SHALL low CONF:1198-7504; completed→SHALL high CONF:1198-10085).
-  act.appendChild(concernEffectiveTime(doc, p.onset, p.resolution, p.status));
+  act.appendChild(concernEffectiveTime(doc, p.onset, p.resolution, p.status, "problem"));
   act.appendChild(el(doc, "entryRelationship", { typeCode: "SUBJ" }, obs));
   return el(doc, "entry", undefined, act);
 }
@@ -2316,7 +2323,7 @@ function allergyEntry(
   // nullFlavor="UNK"); a resolved concern adds a high — the resolution date when
   // supplied, else nullFlavor="UNK" — so the SHALL is satisfied without inventing
   // a clinical time.
-  obs.appendChild(concernEffectiveTime(doc, a.onset, a.resolution, a.status));
+  obs.appendChild(concernEffectiveTime(doc, a.onset, a.resolution, a.status, "allergy"));
   // The observation value is the propensity *type* (NOT the allergen). It defaults
   // to the neutral SNOMED "Allergy to substance" (419199007) — never a guessed
   // "Drug allergy", which would mis-classify a food/environmental allergen. A
@@ -2341,7 +2348,7 @@ function allergyEntry(
   // Allergy Concern Act (…22.4.30) SHALL contain effectiveTime [1..1] under the
   // shared Concern Act rule (active→SHALL low; completed→SHALL high), emitted
   // before the entryRelationship per the Act element order.
-  act.appendChild(concernEffectiveTime(doc, a.onset, a.resolution, a.status));
+  act.appendChild(concernEffectiveTime(doc, a.onset, a.resolution, a.status, "allergy"));
   act.appendChild(el(doc, "entryRelationship", { typeCode: "SUBJ" }, obs));
   return el(doc, "entry", undefined, act);
 }
@@ -2555,7 +2562,7 @@ function resultOrganizerEntry(
   // Result Organizer (…22.4.1) effectiveTime spans the contained observations.
   // Emitted for spec-completeness (nullFlavor="UNK" unless the caller supplied a
   // panel time) — the member observations each carry their own required time.
-  organizer.appendChild(pointEffectiveTime(doc, panel.effectiveTime));
+  organizer.appendChild(pointEffectiveTime(doc, panel.effectiveTime, "resultPanel.effectiveTime"));
   for (const result of panel.results) {
     organizer.appendChild(
       el(doc, "component", undefined, resultObservation(doc, result, text, id)),
@@ -2594,7 +2601,7 @@ function resultObservation(
   // Result Observation (…22.4.2) SHALL contain effectiveTime [1..1] — the
   // clinically-relevant measurement time. Always emitted (nullFlavor="UNK" when
   // the caller supplied none), never a guessed timestamp.
-  obs.appendChild(pointEffectiveTime(doc, result.effectiveTime));
+  obs.appendChild(pointEffectiveTime(doc, result.effectiveTime, "result.effectiveTime"));
   obs.appendChild(value);
   if (result.interpretation !== undefined) {
     obs.appendChild(
@@ -2703,7 +2710,7 @@ function vitalsOrganizerEntry(
   );
   // Vital Signs Organizer (…22.4.26) SHALL contain effectiveTime [1..1] — always
   // emitted (nullFlavor="UNK" unless a panel time was supplied).
-  organizer.appendChild(pointEffectiveTime(doc, panel.effectiveTime));
+  organizer.appendChild(pointEffectiveTime(doc, panel.effectiveTime, "vitalsPanel.effectiveTime"));
   for (const vital of panel.vitals) {
     organizer.appendChild(el(doc, "component", undefined, vitalObservation(doc, vital, text, id)));
   }
@@ -2742,7 +2749,7 @@ function vitalObservation(
   );
   // Vital Sign Observation (…22.4.27) SHALL contain effectiveTime [1..1] — the
   // reading time. Always emitted (nullFlavor="UNK" when none supplied).
-  obs.appendChild(pointEffectiveTime(doc, vital.effectiveTime));
+  obs.appendChild(pointEffectiveTime(doc, vital.effectiveTime, "vital.effectiveTime"));
   obs.appendChild(
     typedValue(doc, "PQ", { value: vital.quantity.value.toString(), unit: vital.quantity.unit }),
   );
@@ -2818,7 +2825,7 @@ function immunizationEntry(
   // SHALL-[1..1] cardinality is grounded against the R2.1 IG's Immunization Activity
   // constraint). Emitted as an @value when supplied, else nullFlavor="UNK" (the SHALL
   // satisfied without inventing a date), consistent with the every-entry effectiveTime rule.
-  sbadm.appendChild(pointEffectiveTime(doc, imm.effectiveTime));
+  sbadm.appendChild(pointEffectiveTime(doc, imm.effectiveTime, "immunization.effectiveTime"));
   // Route + dose are never guessed: an omitted one is left absent (the parser does
   // not require either on an immunization), never defaulted to a confident-wrong value.
   if (imm.route !== undefined) {
@@ -2940,7 +2947,9 @@ function procedureEntry(
   // Procedure Activity effectiveTime is SHOULD [0..1] (CONF:1098-7662): emitted
   // only when supplied — never fabricated with a nullFlavor when unknown.
   if (p.effectiveTime !== undefined) {
-    act.appendChild(el(doc, "effectiveTime", { value: p.effectiveTime }));
+    act.appendChild(
+      el(doc, "effectiveTime", { value: assertHl7Ts(p.effectiveTime, "procedure.effectiveTime") }),
+    );
   }
   // The assessment `observation` variant carries its SHALL coded result `value`
   // (guaranteed present by the guard above; the parser reads it back).
@@ -3016,9 +3025,10 @@ function encounterPeriod(
   et.appendChild(
     period?.low === undefined
       ? el(doc, "low", { nullFlavor: "UNK" })
-      : el(doc, "low", { value: period.low }),
+      : el(doc, "low", { value: assertHl7Ts(period.low, "encounter.period.low") }),
   );
-  if (period?.high !== undefined) et.appendChild(el(doc, "high", { value: period.high }));
+  if (period?.high !== undefined)
+    et.appendChild(el(doc, "high", { value: assertHl7Ts(period.high, "encounter.period.high") }));
   return et;
 }
 
@@ -3088,7 +3098,7 @@ function smokingStatusEntry(
   // Smoking Status Observation (…22.4.78) SHALL contain effectiveTime [1..1] — the
   // time the status was recorded. Emitted as an @value when supplied, else
   // nullFlavor="UNK" (the SHALL satisfied without inventing a date).
-  obs.appendChild(pointEffectiveTime(doc, s.effectiveTime));
+  obs.appendChild(pointEffectiveTime(doc, s.effectiveTime, "smokingStatus.effectiveTime"));
   // SHALL value [1..1] (SNOMED CT, Current Smoking Status value set). An omitted
   // status is an EXPLICIT nullFlavor="UNK" — read back as `unknown: true` and
   // flagged SMOKING_STATUS_UNKNOWN — NEVER defaulted to a real reading such as
@@ -3190,7 +3200,7 @@ function functionalStatusObservation(
   // (CONF:1098-13930) — the time the status was assessed. Emitted as an @value
   // when supplied, else nullFlavor="UNK" (the SHALL satisfied without inventing a
   // date).
-  obs.appendChild(pointEffectiveTime(doc, s.effectiveTime));
+  obs.appendChild(pointEffectiveTime(doc, s.effectiveTime, "functionalStatus.effectiveTime"));
   // SHALL value [1..1] (CONF:1098-13932; SHOULD be SNOMED CT for a CD). An omitted
   // finding is an EXPLICIT nullFlavor="UNK" — never defaulted to a real finding.
   obs.appendChild(
@@ -3234,7 +3244,11 @@ function functionalStatusOrganizerEntry(
   // effectiveTime [0..1] — the assessment time. Emitted only when supplied; an
   // optional element is never filled with a fabricated date.
   if (org.effectiveTime !== undefined) {
-    organizer.appendChild(el(doc, "effectiveTime", { value: org.effectiveTime }));
+    organizer.appendChild(
+      el(doc, "effectiveTime", {
+        value: assertHl7Ts(org.effectiveTime, "functionalStatusOrganizer.effectiveTime"),
+      }),
+    );
   }
   for (const s of org.findings) {
     organizer.appendChild(
@@ -3333,7 +3347,7 @@ function mentalStatusObservation(
   // Mental Status Observation (…22.4.74) SHALL contain effectiveTime [1..1] — the
   // time the status was assessed. Emitted as an @value when supplied, else
   // nullFlavor="UNK" (the SHALL satisfied without inventing a date).
-  obs.appendChild(pointEffectiveTime(doc, s.effectiveTime));
+  obs.appendChild(pointEffectiveTime(doc, s.effectiveTime, "mentalStatus.effectiveTime"));
   // SHALL value [1..1] (SHOULD be SNOMED CT for a CD). An omitted finding is an
   // EXPLICIT nullFlavor="UNK" — never defaulted to a real finding.
   obs.appendChild(
@@ -3378,7 +3392,11 @@ function mentalStatusOrganizerEntry(
   );
   // effectiveTime [0..1] — emitted only when supplied; never a fabricated date.
   if (org.effectiveTime !== undefined) {
-    organizer.appendChild(el(doc, "effectiveTime", { value: org.effectiveTime }));
+    organizer.appendChild(
+      el(doc, "effectiveTime", {
+        value: assertHl7Ts(org.effectiveTime, "mentalStatusOrganizer.effectiveTime"),
+      }),
+    );
   }
   for (const s of org.findings) {
     organizer.appendChild(
@@ -3465,7 +3483,7 @@ function assessmentScaleObservation(
     el(doc, "statusCode", { code: "completed" }),
   );
   // SHALL effectiveTime [1..1] (CONF:81-14445) — the administration time, else nullFlavor="UNK".
-  obs.appendChild(pointEffectiveTime(doc, scale.effectiveTime));
+  obs.appendChild(pointEffectiveTime(doc, scale.effectiveTime, "assessmentScale.effectiveTime"));
   // SHALL value [1..1] (CONF:81-14450) — the INT score, else an EXPLICIT nullFlavor="UNK".
   obs.appendChild(scoreValue(doc, scale.score));
   // interpretationCode [0..1] — emitted only when supplied.
@@ -3737,7 +3755,11 @@ function plannedItemEntry(
   // Planned effectiveTime is SHOULD [0..1]: emitted only when supplied — never
   // fabricated with a nullFlavor when a plan carries no date.
   if (p.effectiveTime !== undefined) {
-    act.appendChild(el(doc, "effectiveTime", { value: p.effectiveTime }));
+    act.appendChild(
+      el(doc, "effectiveTime", {
+        value: assertHl7Ts(p.effectiveTime, "plannedItem.effectiveTime"),
+      }),
+    );
   }
   if (p.kind === "medicationActivity") {
     act.appendChild(medicationConsumable(doc, p.code));
@@ -3884,7 +3906,9 @@ function familyMemberSubject(doc: Document, relative: BuildCcdaFamilyMember): El
       );
     }
     if (relative.birthTime !== undefined) {
-      person.appendChild(el(doc, "birthTime", { value: relative.birthTime }));
+      person.appendChild(
+        el(doc, "birthTime", { value: assertHl7Ts(relative.birthTime, "familyHistory.birthTime") }),
+      );
     }
     if (relative.deceased !== undefined) {
       // sdtc:deceasedInd is outside the v3 namespace (an HL7 SDO extension); the
@@ -3932,7 +3956,14 @@ function familyHistoryObservation(
   // supplied (never fabricated with a nullFlavor when the caller gave no date).
   if (obs.effectiveTime !== undefined) {
     observation.appendChild(
-      el(doc, "effectiveTime", undefined, el(doc, "low", { value: obs.effectiveTime })),
+      el(
+        doc,
+        "effectiveTime",
+        undefined,
+        el(doc, "low", {
+          value: assertHl7Ts(obs.effectiveTime, "familyHistory.observation.effectiveTime"),
+        }),
+      ),
     );
   }
   // SHALL value [1..1] — the coded condition. An omitted condition is an EXPLICIT
