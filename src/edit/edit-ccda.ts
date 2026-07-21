@@ -81,18 +81,6 @@ const AFTER_VERSION_NUMBER: readonly string[] = [
   "component",
 ];
 
-/** The `ClinicalDocument` child elements that follow `id` in the XSD sequence. @internal */
-const AFTER_ID: readonly string[] = [
-  "code",
-  "title",
-  "effectiveTime",
-  "confidentialityCode",
-  "languageCode",
-  "setId",
-  "versionNumber",
-  ...AFTER_VERSION_NUMBER,
-];
-
 /** The `ClinicalDocument` child elements that follow `relatedDocument` in the XSD sequence. @internal */
 const AFTER_RELATED_DOCUMENT: readonly string[] = ["authorization", "componentOf", "component"];
 
@@ -199,13 +187,16 @@ export type CcdaEditErrorCode =
   | "NO_STRUCTURED_BODY"
   | "SECTION_ALREADY_PRESENT"
   | "SECTION_ABSENT"
-  | "REQUIRED_SECTION_MISSING";
+  | "REQUIRED_SECTION_MISSING"
+  | "SOURCE_MISSING_ID";
 
 /**
  * The typed error {@link editCcda} throws when an edit cannot be applied safely
  * — a hand-constructed source with no XML to edit, a structured-body-less
- * document, an add/replace precondition violation, or an edit that would drop a
- * per-document-type SHALL required section. Consumers narrow via `code`.
+ * document, an add/replace precondition violation, an edit that would drop a
+ * per-document-type SHALL required section, or a revision of a source that
+ * carries no `ClinicalDocument.id` (the RPLC link has no prior version to name).
+ * Consumers narrow via `code`.
  *
  * @example
  * ```ts
@@ -249,8 +240,9 @@ export class CcdaEditError extends Error {
  * @returns A new {@link CcdaDocument} — the re-parse of the edited XML. The
  *   `source` is never mutated.
  * @throws {@link CcdaEditError} when the source has no retained XML, has no
- *   `structuredBody` to edit, violates an add/replace precondition, or when the
- *   edit would drop a SHALL required section.
+ *   `structuredBody` to edit, violates an add/replace precondition, would drop a
+ *   SHALL required section, or (when stamping a revision) has no
+ *   `ClinicalDocument.id` for the RPLC link to name (`SOURCE_MISSING_ID`).
  * @throws {TypeError} when a section's content violates a builder guard (an
  *   invalid timestamp, a resolved problem without a resolution date, …).
  * @example
@@ -509,6 +501,22 @@ function stampRevision(
   const oldSetIdEl = child(root, "setId");
   const oldVersion = intAttr(child(root, "versionNumber"), "value");
 
+  // CDA R2 (POCD_MT000040.xsd): ClinicalDocument.id is [1..1] SHALL and, on the
+  // RPLC revision, ParentDocument.id is [1..*] SHALL. A source with no <id> cannot
+  // be truthfully revised — the relatedDocument/parentDocument exists precisely to
+  // name the version being replaced by its id, and there is none to name. Minting a
+  // fresh id here would fabricate a clinical identifier for a document that provably
+  // has none, so we refuse rather than emit a SHALL-invalid parentDocument. Callers
+  // that only want an in-place edit pass `revision: false` (this path never runs).
+  if (oldIdEl === undefined) {
+    throw new CcdaEditError(
+      "SOURCE_MISSING_ID",
+      "editCcda: the source ClinicalDocument has no <id>, so a CDA R2 RPLC revision " +
+        "cannot name the prior version it replaces (ParentDocument.id is required 1..*). " +
+        "Pass revision: false to edit in place, or give the source an id before revising.",
+    );
+  }
+
   // The version-series id: keep the source's setId, else the caller's, else mint
   // one (the source starts a series here). The replacement's setId SHALL equal
   // the parentDocument's setId, so a single value feeds both.
@@ -529,7 +537,7 @@ function stampRevision(
   // Build the parentDocument (id, code, setId, versionNumber — CDA R2 order) from
   // the identity the source carried BEFORE we overwrite it.
   const parentDocument = el(dom, "parentDocument");
-  if (oldIdEl !== undefined) parentDocument.appendChild(idElement(dom, "id", iiFrom(oldIdEl)));
+  parentDocument.appendChild(idElement(dom, "id", iiFrom(oldIdEl)));
   if (oldCodeEl !== undefined) parentDocument.appendChild(cloneCode(dom, oldCodeEl));
   parentDocument.appendChild(idElement(dom, "setId", seriesId));
   parentDocument.appendChild(el(dom, "versionNumber", { value: parentVersion.toString() }));
@@ -537,8 +545,7 @@ function stampRevision(
 
   // Overwrite the document id in place (keeping its header position).
   const newIdEl = idElement(dom, "id", newDocId);
-  if (oldIdEl !== undefined) root.replaceChild(newIdEl, oldIdEl);
-  else insertBeforeFirst(root, newIdEl, AFTER_ID);
+  root.replaceChild(newIdEl, oldIdEl);
 
   // Replace setId + versionNumber (removing any existing pair), inserting them at
   // their CDA R2 sequence slot: immediately before the first element that follows
@@ -558,11 +565,7 @@ function stampRevision(
 }
 
 /** A fresh document id different from the parent's — same root, new extension. @internal */
-function deriveNewDocId(
-  oldIdEl: Element | undefined,
-  id: (prefix: string) => string,
-): DocumentIdInit {
-  if (oldIdEl === undefined) return { root: SYNTH_ROOT, extension: id("doc") };
+function deriveNewDocId(oldIdEl: Element, id: (prefix: string) => string): DocumentIdInit {
   const rootOid = attr(oldIdEl, "root");
   return { root: rootOid ?? SYNTH_ROOT, extension: id("doc") };
 }

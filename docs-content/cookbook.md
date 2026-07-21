@@ -436,7 +436,10 @@ corrupted), an empty content list emits a spec-clean `nullFlavor="NI"` shell rat
 entries, and an edit that would drop a document type's SHALL required section throws a typed
 `CcdaEditError` instead of emitting an invalid document. Use `mode: "add"` to require the section be
 absent (or `"replace"` to require it present); the default `"upsert"` replaces when present and adds
-when absent. Pass `revision: false` to edit in place without stamping a new version.
+when absent. Pass `revision: false` to edit in place without stamping a new version. Revising a source
+that carries no `ClinicalDocument.id` throws `CcdaEditError` (`SOURCE_MISSING_ID`): the RPLC
+`parentDocument.id` is a CDA R2 SHALL (1..\*) and there is no prior-version id to name, so `editCcda`
+refuses rather than mint a fabricated identifier — edit such a document in place with `revision: false`.
 
 > Editing scope: whole-section **add** / **replace** across the twelve single-list section kinds
 > (Problems, Allergies, Medications, Results, Vital Signs, Immunizations, Procedures, Encounters,
