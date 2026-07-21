@@ -249,7 +249,12 @@ re-checked against the computable UCUM grammar, a **refused** immunization is em
 `negationInd="true"` (flagged `IMMUNIZATION_REFUSED` on re-parse) never conflated with a `nullFlavor`
 "unknown", a **planned** procedure is emitted as `moodCode="INT"` so the parser never reads it as
 performed, and an unrecorded smoking-status / functional-status `value` is emitted as an explicit
-`nullFlavor="UNK"` rather than defaulted to a real finding. Each CCD SHALL section for which no content
+`nullFlavor="UNK"` rather than defaulted to a real finding. A Problem or Allergy concern accepts an
+`onset` and (on a `status: "resolved"` concern) a `resolution` date — filling the `effectiveTime`
+`low`/`high` on the Concern Act and its observation; the `high` (whose presence itself asserts the
+condition is resolved, per Problem Observation `…22.4.4`) is emitted only for a resolved concern —
+`buildCcda` throws on a `resolution` without `status: "resolved"`, and a resolved-but-undated concern
+keeps the `nullFlavor="UNK"` high, never a fabricated date. Each CCD SHALL section for which no content
 is supplied is emitted as a spec-clean empty `nullFlavor="NI"` section; the non-required Immunizations /
 Procedures / Encounters / Social History / Functional Status / Mental Status / Past Medical History /
 Plan of Treatment / Family History sections are emitted only when populated. The builder now emits two of

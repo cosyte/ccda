@@ -78,6 +78,26 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (seventeenth slice) — the builder accepts caller-supplied problem/allergy resolution +
+  onset dates.** A resolved Problem or Allergy concern can now carry a _real_ resolution date on its
+  `effectiveTime/high` instead of only `nullFlavor="UNK"`. `BuildCcdaProblem` gains a `resolution`
+  field (it already had `onset`); `BuildCcdaAllergy` gains **both** `onset` and `resolution` (it
+  previously had neither, so every emitted allergy concern was forced to a `nullFlavor="UNK"` `low`).
+  When supplied, `onset` fills the SHALL `effectiveTime/low` and `resolution` fills the `effectiveTime/high`
+  on both the Concern Act and its nested observation; both round-trip through `parseCcda` as the concern's
+  (and the Problem Observation's) `effectiveTime` `low`/`high`.
+  - **The `high` is emitted only for a `status: "resolved"` concern**, because its mere presence asserts
+    resolution — traced firsthand to the C-CDA R2.1 Problem Observation (`2.16.840.1.113883.10.20.22.4.4`)
+    rule: _"the existence of a high element within a problem does indicate that the problem has been
+    resolved"_ (`effectiveTime/high` [0..1], the "resolution date"; `effectiveTime/low` [1..1], the
+    Concern Act `low` under CONF:1198-7504). Emitting a resolution date on a still-active problem would
+    falsely signal resolution, so `buildCcda` **throws a `TypeError`** when a `resolution` is supplied
+    without `status: "resolved"` rather than emit a self-inconsistent document.
+  - **Never a fabricated date.** A resolved concern whose resolution date is unknown still emits the
+    `nullFlavor="UNK"` `high` (the SHALL form, unchanged); an absent onset stays `nullFlavor="UNK"` `low`.
+    An active concern emits no `high` at all. The Past Medical History section (bare Problem Observations)
+    benefits automatically — a resolved historical problem now carries its resolution date.
+  - No warning-code change; additive to `BuildCcdaProblem` / `BuildCcdaAllergy` only.
 - **Phase 7 (fifteenth slice) — the Referral Note SHALL set now asserts Reason for Referral.**
   Reconciles the parser's per-document-type required-section (SHALL) table with the section catalog the
   fourteenth slice expanded. That slice made the **Reason for Referral** Section a recognized catalog key
