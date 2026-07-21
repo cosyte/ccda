@@ -31,8 +31,10 @@ substrate for C-CDA's XML.
 > (organizer per relative, conditions with optional age-at-onset + cause-of-death) sections (each
 > round-tripping through `parseCcda`). A document **editor** (`editCcda`) re-emits a parsed document
 > with a section added or replaced — every untouched section preserved byte-for-byte — and stamps a
-> CDA R2 revision (`relatedDocument` `RPLC` + `setId`/`versionNumber`). The other document types and a
-> terminology adapter land in a later increment.
+> CDA R2 revision (`relatedDocument` `RPLC` + `setId`/`versionNumber`). A **bring-your-own terminology
+> adapter** (`parseCcda` / `buildCcda`'s optional `terminology` option) lets a consumer plug in their own
+> licensed terminology service to semantically validate coded values — a rejected code is flagged
+> (`SEMANTIC_CODE_INVALID`), never coerced. The other document types land in a later increment.
 
 ## Install
 
@@ -260,8 +262,9 @@ keeps the `nullFlavor="UNK"` high, never a fabricated date. Each CCD SHALL secti
 is supplied is emitted as a spec-clean empty `nullFlavor="NI"` section; the non-required Immunizations /
 Procedures / Encounters / Social History / Functional Status / Mental Status / Past Medical History /
 Plan of Treatment / Family History sections are emitted only when populated. The builder now emits two of
-the twelve document types (**CCD** and **Referral Note**); the remaining ten and a
-bring-your-own-credentials terminology adapter land in a later increment.
+the twelve document types (**CCD** and **Referral Note**); the remaining ten land in a later increment.
+`buildCcda(init, { terminology })` accepts an optional bring-your-own terminology adapter (see "Code
+systems & provenance") — every code is still emitted verbatim; the adapter can only flag, never coerce.
 
 ## Edit a document (Phase 7)
 
@@ -383,6 +386,34 @@ does **not** verify that a code is a real member of its system: that needs licen
 content (SNOMED CT / RxNorm via UMLS), which this suite never bundles. The OIDs themselves are public
 identifiers, not redistributable code-system data — bring your own terminology service for membership
 checks.
+
+**Bring-your-own terminology adapter (semantic validation).** For that last tier, `parseCcda` and
+`buildCcda` accept an optional `terminology` adapter — a small, dependency-free interface
+(`TerminologyAdapter`) you implement over your own licensed terminology service. `@cosyte/ccda` imports
+no terminology library; it only calls the adapter you supply, and only when supplied (absent → the
+recognize-only behavior above). Its shape mirrors the FHIR Terminology Module (`$validate-code`,
+`$translate`) and the sibling `@cosyte/terminology` engine, so you can wire that in behind it:
+
+```ts
+import { parseCcda, type TerminologyAdapter } from "@cosyte/ccda";
+
+const adapter: TerminologyAdapter = {
+  // system is the C-CDA @codeSystem OID exactly as the document carries it.
+  validateCode: (coding) =>
+    coding.system === "2.16.840.1.113883.6.96" // SNOMED CT
+      ? { result: mySnomedService.has(coding.code) }
+      : undefined, // no opinion on other systems → no warning
+};
+
+const doc = parseCcda(xml, { terminology: adapter });
+// A structurally-valid but non-member code now carries SEMANTIC_CODE_INVALID —
+// surfaced verbatim, never rewritten to a "corrected" value.
+```
+
+The adapter can only ever **report**: a `validateCode` verdict of `{ result: false }` raises
+`SEMANTIC_CODE_INVALID` with the code preserved verbatim (never coerced); `undefined` means "no
+opinion" (silent). The interface also declares an optional `translate` (`$translate`) method for a
+future `<translation>`-emit increment — defined so a consumer can wire it, but not yet consumed here.
 
 ## Known limitations
 

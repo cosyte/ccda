@@ -15,7 +15,13 @@
 
 import type { CD } from "./types/cd.js";
 import type { ParseCtx } from "./types/_shared.js";
-import { deprecatedCodeSystem, deprecatedLoinc, unexpectedCodeSystem } from "../parser/warnings.js";
+import type { TerminologyCoding } from "./terminology.js";
+import {
+  deprecatedCodeSystem,
+  deprecatedLoinc,
+  semanticCodeInvalid,
+  unexpectedCodeSystem,
+} from "../parser/warnings.js";
 import type { CcdaPosition } from "../parser/types.js";
 
 /** SNOMED CT — clinical findings, problems, allergen substances. */
@@ -88,15 +94,61 @@ export function checkCodeSlot(
   position: { readonly path?: string; readonly line?: number; readonly column?: number },
   ctx: ParseCtx,
 ): void {
-  const oid = code?.codeSystem;
-  if (oid === undefined) return;
+  // A guard on `code?.codeSystem` narrows `code` to a defined `CD` with a defined
+  // `codeSystem` for the rest of the function.
+  if (code?.codeSystem === undefined) return;
+  const oid = code.codeSystem;
   const binding = SLOT_BINDINGS[slot];
   if (binding.deprecated.includes(oid)) {
     ctx.emit(deprecatedCodeSystem(position, oid, slot));
-    return;
-  }
-  if (!binding.expected.includes(oid)) {
+  } else if (!binding.expected.includes(oid)) {
     ctx.emit(unexpectedCodeSystem(position, oid, slot));
+  }
+  // Semantic tier (opt-in): when a consumer supplied a bring-your-own terminology
+  // adapter, ask it whether the code is a real member of its system — the check
+  // structural recognition cannot make without a licensed terminology. The code
+  // is never coerced: a negative verdict is surfaced verbatim + flagged. Runs
+  // regardless of the structural verdict above (system-expectation and
+  // code-membership are orthogonal axes).
+  validateCodeSemantically(code, oid, slot, position, ctx);
+}
+
+/**
+ * When `ctx` carries a {@link TerminologyAdapter}, semantically validate a coded
+ * value against it and emit `SEMANTIC_CODE_INVALID` on a negative verdict — the
+ * code preserved verbatim, never coerced. A no-adapter parse, an adapter that
+ * declines (`undefined`), or a `code` with no concrete symbol is a silent no-op.
+ *
+ * A validation adapter is trusted consumer code: an exception it raises is **not**
+ * swallowed here — a failing terminology service should surface to its owner, not
+ * be masked into a document that merely *looks* validated (the confident-wrong
+ * failure mode this library exists to prevent).
+ * @internal
+ */
+function validateCodeSemantically(
+  code: CD,
+  system: string,
+  slot: CodeSlot,
+  position: CcdaPosition,
+  ctx: ParseCtx,
+): void {
+  const adapter = ctx.terminology;
+  if (adapter === undefined) return;
+  const symbol = code.code;
+  // Nothing to validate without a concrete code symbol (a nullFlavor-only CD
+  // carries a system but no membership claim).
+  if (symbol === undefined) return;
+
+  const coding: TerminologyCoding = {
+    system,
+    code: symbol,
+    ...(code.displayName !== undefined ? { display: code.displayName } : {}),
+  };
+  const verdict = adapter.validateCode(coding);
+  // `undefined` = the adapter has no opinion (system out of its scope) → stay
+  // silent. Only an explicit `result: false` is a flagged negative.
+  if (verdict !== undefined && !verdict.result) {
+    ctx.emit(semanticCodeInvalid(position, slot, system));
   }
 }
 

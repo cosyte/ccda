@@ -64,6 +64,7 @@ export const WARNING_CODES = {
   PLANNED_VS_PERFORMED_AMBIGUOUS: "PLANNED_VS_PERFORMED_AMBIGUOUS",
   SMOKING_STATUS_UNKNOWN: "SMOKING_STATUS_UNKNOWN",
   SMOKING_STATUS_CODE_UNRECOGNIZED: "SMOKING_STATUS_CODE_UNRECOGNIZED",
+  SEMANTIC_CODE_INVALID: "SEMANTIC_CODE_INVALID",
   PROFILE_QUIRK_APPLIED: "PROFILE_QUIRK_APPLIED",
 } as const;
 
@@ -832,6 +833,36 @@ export function smokingStatusCodeUnrecognized(position: CcdaPosition, code: stri
   return {
     code: WARNING_CODES.SMOKING_STATUS_CODE_UNRECOGNIZED,
     message: `Smoking status code "${code}" is not in the recognized Smoking Status value set; preserved verbatim.`,
+    position,
+  };
+}
+
+/**
+ * Build a `SEMANTIC_CODE_INVALID` warning. Emitted only when a consumer-supplied
+ * bring-your-own {@link TerminologyAdapter} reports (via `validateCode`) that a
+ * coded value is **not** a valid, active member of its code system — the semantic
+ * validation tier structural recognition cannot reach without a licensed
+ * terminology. The code is **preserved verbatim** (never coerced to a
+ * "corrected" value); this surfaces the adapter's negative verdict so a
+ * structurally-valid but wrong code — the highest-severity real-world defect — is
+ * not silently trusted. The message carries only the slot and the code-system
+ * OID (both structural identifiers); the specific code and any adapter message
+ * are never interpolated, so the warning stays PHI-free.
+ *
+ * @example
+ * ```ts
+ * import { semanticCodeInvalid } from "@cosyte/ccda";
+ * const w = semanticCodeInvalid({ path: "value" }, "problem", "2.16.840.1.113883.6.96");
+ * ```
+ */
+export function semanticCodeInvalid(
+  position: CcdaPosition,
+  slot: string,
+  observedOid: string,
+): CcdaWarning {
+  return {
+    code: WARNING_CODES.SEMANTIC_CODE_INVALID,
+    message: `The supplied terminology adapter reports the ${slot} code (code system OID "${observedOid}") is not a valid member of its system; code preserved verbatim, never coerced.`,
     position,
   };
 }

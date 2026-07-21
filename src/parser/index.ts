@@ -78,7 +78,12 @@ export function parseCcda(raw: string, options: ParseCcdaOptions = {}): CcdaDocu
     );
   }
 
-  const parts = buildDocument(root, { emit });
+  // The parse context threads the warning sink and — when the consumer supplied
+  // one — the bring-your-own terminology adapter down to the code-system layer.
+  // Under `exactOptionalPropertyTypes`, omit the key rather than pass `undefined`.
+  const ctx =
+    options.terminology !== undefined ? { emit, terminology: options.terminology } : { emit };
+  const parts = buildDocument(root, ctx);
   const serialized = serializeDocument(doc);
   const init = { ...parts, warnings, serialized };
   if (profile !== undefined) {

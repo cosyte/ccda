@@ -7,6 +7,7 @@
 export { buildCcda } from "./build-ccda.js";
 export type {
   BuildCcdaInit,
+  BuildCcdaOptions,
   BuildCcdaPatient,
   BuildCcdaProblem,
   BuildCcdaAllergy,

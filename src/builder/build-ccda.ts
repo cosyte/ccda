@@ -197,9 +197,18 @@
  * always emitted — they appear only when the caller supplies content. Every
  * emitted section is one the parser recognizes, so a clean Referral Note build
  * round-trips through {@link parseCcda} with **zero warnings**, exactly like a
- * CCD. The remaining ten document types, C-CDA document *editing*, and the
- * bring-your-own-credentials terminology adapter are deferred to a later
- * CCDA-P7 increment.
+ * CCD. The remaining ten document types are deferred to a later CCDA-P7 increment.
+ *
+ * **This slice adds the bring-your-own terminology adapter (validation path).**
+ * `buildCcda` (and `parseCcda`) now accept an optional {@link TerminologyAdapter}
+ * — a small, dependency-free interface a consumer implements to plug in their own
+ * licensed terminology service (`@cosyte/ccda` imports none). When supplied, each
+ * recognized coded value is semantically validated: a code the adapter rejects is
+ * surfaced **verbatim** and flagged `SEMANTIC_CODE_INVALID` — never coerced to a
+ * guessed value. The builder emits every code verbatim regardless; the adapter can
+ * only add a flag, never change a safety-critical code. The adapter's `translate`
+ * (`<translation>` emit) is defined on the interface but not yet consumed here —
+ * deferred to a later increment.
  *
  * **This slice adds caller-supplied problem/allergy resolution + onset dates.**
  * A {@link BuildCcdaProblem} takes a `resolution` date (and an
@@ -223,6 +232,7 @@
 
 import { CVX, INTERPRETATION, LOINC, NCI_ROUTE, RXNORM, SNOMED_CT } from "../model/code-systems.js";
 import type { CcdaDocument } from "../model/document.js";
+import type { TerminologyAdapter } from "../model/terminology.js";
 import type { PlannedItemKind } from "../model/entries/plan-of-treatment.js";
 import type { ProcedureKind } from "../model/entries/procedure.js";
 import { parseCcda } from "../parser/index.js";
@@ -1738,6 +1748,28 @@ function medicationDuration(
 }
 
 /**
+ * Options for {@link buildCcda}. Every field is optional — `buildCcda(init)` is
+ * valid and produces the default behavior.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaOptions, TerminologyAdapter } from "@cosyte/ccda";
+ * const adapter: TerminologyAdapter = { validateCode: (c) => ({ result: myService.has(c.code) }) };
+ * const opts: BuildCcdaOptions = { terminology: adapter };
+ * ```
+ */
+export interface BuildCcdaOptions {
+  /**
+   * An optional consumer-supplied bring-your-own {@link TerminologyAdapter},
+   * forwarded to the internal re-parse so a built document surfaces
+   * `SEMANTIC_CODE_INVALID` for any coded value the adapter rejects. The builder
+   * never coerces a code to satisfy the adapter — it emits every value verbatim;
+   * the adapter can only add a flag. Omit for the default behavior.
+   */
+  readonly terminology?: TerminologyAdapter;
+}
+
+/**
  * Build a spec-clean C-CDA R2.1 document from structured input and return the
  * parsed {@link CcdaDocument}. Emits a **CCD** by default, or a **Referral Note**
  * when `documentType: "referralNote"` — each with its own US Realm Header
@@ -1746,6 +1778,10 @@ function medicationDuration(
  * the module doc); a clean build carries zero warnings.
  *
  * @param init - The document content; see {@link BuildCcdaInit}. `patient` is required.
+ * @param options - Optional {@link BuildCcdaOptions}; pass a bring-your-own
+ *   `terminology` adapter to have the returned document flag adapter-rejected
+ *   codes (`SEMANTIC_CODE_INVALID`). The builder never coerces a code to satisfy
+ *   the adapter — every value is emitted verbatim.
  * @returns The parsed document — the parse of the spec-clean XML just emitted.
  * @throws {TypeError} When `documentType` is anything other than `"ccd"` or
  *   `"referralNote"` (the only two types this builder supports), when an allergy
@@ -1767,7 +1803,7 @@ function medicationDuration(
  * const xml = serializeCcda(doc);            // spec-clean C-CDA R2.1
  * ```
  */
-export function buildCcda(init: BuildCcdaInit): CcdaDocument {
+export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): CcdaDocument {
   // Typed as a closed union so the compiler narrows an invalid value to `never`;
   // widen to a string for the runtime guard that protects untyped (JS) callers.
   const documentType: string = init.documentType ?? "ccd";
@@ -1864,7 +1900,14 @@ export function buildCcda(init: BuildCcdaInit): CcdaDocument {
   }
   root.appendChild(el(doc, "component", undefined, structuredBody));
 
-  return parseCcda(serializeDocument(doc));
+  // Re-parse the spec-clean XML we just emitted. When the caller supplied a
+  // terminology adapter, forward it so the returned document surfaces
+  // `SEMANTIC_CODE_INVALID` for any coded value the adapter rejects — validation
+  // *on build*. The builder still emits every code **verbatim** (it never coerces
+  // a value to satisfy an adapter); the adapter can only ever add a flag.
+  return options.terminology !== undefined
+    ? parseCcda(serializeDocument(doc), { terminology: options.terminology })
+    : parseCcda(serializeDocument(doc));
 }
 
 /**
