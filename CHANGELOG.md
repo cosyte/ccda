@@ -39,6 +39,13 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Documentation
 
+- **README status banner refreshed to current reality (README-ORG-SWEEP).** The banner still read
+  "pre-alpha (`0.0.x`), not yet published to npm. Through **Phase 5b** the parser ships …" — both halves
+  stale: `@cosyte/ccda` is **published on npm at `0.0.1`** and **public**, and the package is well past
+  Phase 5b (the Phase 7 builder / editor / terminology-adapter surface the same paragraph already
+  describes). The banner now states published on npm at `0.0.1`, public, still pre-alpha on the cosyte
+  `0.0.x` ladder, with the parse → serialize → build → edit → BYO-terminology capability intact. No code,
+  public-API, or warning-code change.
 - **`docs-content/` now ships the full canonical Diátaxis spine (DOCS-CONTENT-P5), gated hard to the
   shipped Phase-5b parse surface.** The sidebar was Overview-only. This authors the rest of the spine
   every `@cosyte/*` package shares: four **Core Concepts** pages (the document model — recognition,
