@@ -1983,6 +1983,385 @@ describe("buildCcda — SHALL effectiveTime conformance (all sections)", () => {
   });
 });
 
+describe("buildCcda — HL7 v3 TS date-format validation (fail loud, never coerce)", () => {
+  // Every caller-supplied date the builder emits routes through the shared
+  // assertHl7Ts guard. A malformed date must throw a TypeError at build time —
+  // the builder never serializes a schema-invalid or guessed timestamp.
+
+  it("accepts legitimate partial precision (YYYY, YYYYMM, YYYYMMDD) unchanged, warning-free", () => {
+    for (const onset of ["2021", "202103", "20210301"]) {
+      const doc = buildCcda({
+        patient: { mrn: "M" },
+        problems: [{ problem: { code: "59621000", displayName: "Essential hypertension" }, onset }],
+      });
+      expect(doc.warnings).toEqual([]);
+      const low = doc.getProblems()[0]?.effectiveTime?.low;
+      expect(low?.raw).toBe(onset);
+      expect(low?.date).toBeInstanceOf(Date);
+    }
+  });
+
+  it("accepts full precision with fractional seconds and a ±ZZZZ offset", () => {
+    for (const onset of [
+      "20210301153045",
+      "20210301153045.5",
+      "20210301153045-0500",
+      "202103011530+00",
+    ]) {
+      const doc = buildCcda({
+        patient: { mrn: "M" },
+        problems: [{ problem: { code: "59621000", displayName: "Essential hypertension" }, onset }],
+      });
+      expect(doc.warnings).toEqual([]);
+      expect(doc.getProblems()[0]?.effectiveTime?.low?.date).toBeInstanceOf(Date);
+    }
+  });
+
+  it("throws TypeError on malformed date shapes (dashes, month names, garbage, empty)", () => {
+    for (const bad of ["2026-07-21", "July 2026", "07/21/2026", "not-a-date", "", "2026 07 21"]) {
+      expect(() =>
+        buildCcda({
+          patient: { mrn: "M" },
+          problems: [
+            { problem: { code: "59621000", displayName: "Essential hypertension" }, onset: bad },
+          ],
+        }),
+      ).toThrow(TypeError);
+    }
+  });
+
+  it("throws TypeError on calendar-invalid and out-of-range components", () => {
+    // Feb 30, month 13, day 00, hour 24, minute 60 — structurally digit-shaped
+    // but not a real instant; parseV3DateTime rejects each, so the builder must too.
+    for (const bad of ["20260230", "20261301", "20260300", "2026030124", "202603011560"]) {
+      expect(() =>
+        buildCcda({
+          patient: { mrn: "M" },
+          problems: [
+            { problem: { code: "59621000", displayName: "Essential hypertension" }, onset: bad },
+          ],
+        }),
+      ).toThrow(TypeError);
+    }
+  });
+
+  it("names the offending field and value in the error message", () => {
+    expect(() =>
+      buildCcda({
+        patient: { mrn: "M" },
+        problems: [
+          {
+            problem: { code: "59621000", displayName: "Essential hypertension" },
+            onset: "2026-07-21",
+          },
+        ],
+      }),
+    ).toThrow(/problem\.onset.*2026-07-21.*HL7 v3/s);
+  });
+
+  it("rejects a malformed date at every builder date-emission site", () => {
+    const BAD = "2026-07-21"; // dashes — invalid HL7 TS at every site
+    const base = { patient: { mrn: "M" as const } };
+    // Each entry supplies one malformed date at a distinct emission site.
+    const cases: Array<[string, BuildCcdaInit]> = [
+      ["patient.birthTime", { patient: { mrn: "M", birthTime: BAD } }],
+      ["document.effectiveTime", { ...base, effectiveTime: BAD }],
+      [
+        "problem.onset",
+        {
+          ...base,
+          problems: [{ problem: { code: "59621000", displayName: "HTN" }, onset: BAD }],
+        },
+      ],
+      [
+        "problem.resolution",
+        {
+          ...base,
+          problems: [
+            {
+              problem: { code: "59621000", displayName: "HTN" },
+              status: "resolved",
+              resolution: BAD,
+            },
+          ],
+        },
+      ],
+      [
+        "allergy.onset",
+        {
+          ...base,
+          allergies: [{ allergen: { code: "2670", displayName: "Codeine" }, onset: BAD }],
+        },
+      ],
+      [
+        "medication.duration.low",
+        {
+          ...base,
+          medications: [
+            {
+              drug: { code: "314076", displayName: "Lisinopril" },
+              dose: { value: 1, unit: "{tablet}" },
+              route: { code: "C38288", displayName: "Oral" },
+              duration: { low: BAD },
+            },
+          ],
+        },
+      ],
+      [
+        "medication.duration.high",
+        {
+          ...base,
+          medications: [
+            {
+              drug: { code: "314076", displayName: "Lisinopril" },
+              dose: { value: 1, unit: "{tablet}" },
+              route: { code: "C38288", displayName: "Oral" },
+              duration: { high: BAD },
+            },
+          ],
+        },
+      ],
+      [
+        "allergy.resolution",
+        {
+          ...base,
+          allergies: [
+            {
+              allergen: { code: "2670", displayName: "Codeine" },
+              status: "resolved",
+              resolution: BAD,
+            },
+          ],
+        },
+      ],
+      [
+        "vitalsPanel.effectiveTime",
+        {
+          ...base,
+          vitalSigns: [
+            {
+              effectiveTime: BAD,
+              vitals: [
+                {
+                  code: { code: "8480-6", displayName: "Systolic BP" },
+                  quantity: { value: 120, unit: "mm[Hg]" },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      [
+        "functionalStatus.effectiveTime",
+        {
+          ...base,
+          functionalStatus: [
+            { value: { code: "165245003", displayName: "Able to walk" }, effectiveTime: BAD },
+          ],
+        },
+      ],
+      [
+        "functionalStatusOrganizer.effectiveTime",
+        {
+          ...base,
+          functionalStatusOrganizers: [
+            {
+              effectiveTime: BAD,
+              findings: [{ value: { code: "165245003", displayName: "Able to walk" } }],
+            },
+          ],
+        },
+      ],
+      [
+        "mentalStatus.effectiveTime",
+        {
+          ...base,
+          mentalStatus: [
+            { value: { code: "247663003", displayName: "Alert" }, effectiveTime: BAD },
+          ],
+        },
+      ],
+      [
+        "mentalStatusOrganizer.effectiveTime",
+        {
+          ...base,
+          mentalStatusOrganizers: [
+            {
+              effectiveTime: BAD,
+              findings: [{ value: { code: "247663003", displayName: "Alert" } }],
+            },
+          ],
+        },
+      ],
+      [
+        "assessmentScale.effectiveTime",
+        {
+          ...base,
+          functionalStatusScales: [
+            {
+              code: { code: "85908-2", displayName: "Barthel index" },
+              score: 90,
+              effectiveTime: BAD,
+            },
+          ],
+        },
+      ],
+      [
+        "plannedItem.effectiveTime",
+        {
+          ...base,
+          planOfTreatment: [
+            {
+              kind: "observation",
+              code: { code: "24357-6", displayName: "Urinalysis" },
+              effectiveTime: BAD,
+            },
+          ],
+        },
+      ],
+      [
+        "resultPanel.effectiveTime",
+        {
+          ...base,
+          results: [
+            {
+              code: { code: "24323-8", displayName: "CMP" },
+              effectiveTime: BAD,
+              results: [
+                {
+                  test: { code: "2345-7", displayName: "Glucose" },
+                  quantity: { value: 95, unit: "mg/dL" },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      [
+        "result.effectiveTime",
+        {
+          ...base,
+          results: [
+            {
+              code: { code: "24323-8", displayName: "CMP" },
+              results: [
+                {
+                  test: { code: "2345-7", displayName: "Glucose" },
+                  quantity: { value: 95, unit: "mg/dL" },
+                  effectiveTime: BAD,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      [
+        "vital.effectiveTime",
+        {
+          ...base,
+          vitalSigns: [
+            {
+              vitals: [
+                {
+                  code: { code: "8480-6", displayName: "Systolic BP" },
+                  quantity: { value: 120, unit: "mm[Hg]" },
+                  effectiveTime: BAD,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      [
+        "immunization.effectiveTime",
+        {
+          ...base,
+          immunizations: [
+            { vaccine: { code: "140", displayName: "Influenza" }, effectiveTime: BAD },
+          ],
+        },
+      ],
+      [
+        "procedure.effectiveTime",
+        {
+          ...base,
+          procedures: [
+            { code: { code: "80146002", displayName: "Appendectomy" }, effectiveTime: BAD },
+          ],
+        },
+      ],
+      [
+        "encounter.period.low",
+        {
+          ...base,
+          encounters: [
+            { type: { code: "99213", displayName: "Office visit" }, period: { low: BAD } },
+          ],
+        },
+      ],
+      [
+        "encounter.period.high",
+        {
+          ...base,
+          encounters: [
+            {
+              type: { code: "99213", displayName: "Office visit" },
+              period: { low: "20240101", high: BAD },
+            },
+          ],
+        },
+      ],
+      [
+        "smokingStatus.effectiveTime",
+        {
+          ...base,
+          smokingStatus: [
+            { value: { code: "266919005", displayName: "Never smoker" }, effectiveTime: BAD },
+          ],
+        },
+      ],
+      [
+        "familyHistory.birthTime",
+        {
+          ...base,
+          familyHistory: [
+            {
+              relative: {
+                relationship: { code: "9947008", displayName: "Father" },
+                birthTime: BAD,
+              },
+              observations: [{ condition: { code: "22298006", displayName: "MI" } }],
+            },
+          ],
+        },
+      ],
+      [
+        "familyHistory.observation.effectiveTime",
+        {
+          ...base,
+          familyHistory: [
+            {
+              relative: { relationship: { code: "9947008", displayName: "Father" } },
+              observations: [
+                { condition: { code: "22298006", displayName: "MI" }, effectiveTime: BAD },
+              ],
+            },
+          ],
+        },
+      ],
+    ];
+    for (const [label, init] of cases) {
+      try {
+        buildCcda(init);
+        throw new Error(`expected ${label} to reject a malformed date but it did not`);
+      } catch (e) {
+        expect(e, label).toBeInstanceOf(TypeError);
+        expect((e as Error).message, label).toContain("HL7 v3");
+      }
+    }
+  });
+});
+
 describe("buildCcda — Referral Note document type", () => {
   /**
    * A Referral Note carrying the reconciliation triad plus its narrative SHALL

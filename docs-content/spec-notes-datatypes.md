@@ -18,6 +18,15 @@ keeps its `raw` and leaves `date` undefined (`MALFORMED_DATETIME`). `@nullFlavor
 throughout, and a value outside the HL7 v3 NullFlavor set is flagged (`INVALID_NULL_FLAVOR`) rather than
 dropped.
 
+On the **emit** side `buildCcda` is symmetric but strict (Postel's Law — conservative on emit): every
+date it writes into an `<effectiveTime>`/`low`/`high`/`value`/`birthTime` is validated against the same
+v3 TS grammar the parser reads, so a malformed caller input (`"2026-07-21"` with dashes, `"July 2026"`,
+or a calendar-invalid `"20260230"`) **throws a `TypeError` at build time** rather than serializing a
+schema-invalid or clinically-misread timestamp. Legitimate variable precision (`"2026"`, `"202607"`,
+`"20260721"`) is accepted unchanged. The builder never guesses or coerces a date it was given in the
+wrong shape — it fails loud. Everything it does accept round-trips back through `parseCcda` without a
+`MALFORMED_DATETIME` warning.
+
 ## Code systems — recognition, not membership
 
 Coded slots are validated **structurally**: `checkCodeSlot` checks that a value's `@codeSystem` OID is
