@@ -2030,6 +2030,22 @@ describe("buildCcda — HL7 v3 TS date-format validation (fail loud, never coerc
     }
   });
 
+  it("throws TypeError when an offset or fraction is hung on a value with no time-of-day", () => {
+    // A ±ZZZZ offset or a .fraction is only legal once the hour is present
+    // (`YYYYMMDDHHMMSS.UUUU[±ZZzz]`). A dropped-dash ISO date such as "2026-0721"
+    // must fail loud, not be silently reinterpreted as a -07:21 offset.
+    for (const bad of ["2026-0721", "2026+0500", "202607.5", "20260721.5", "20260721-0500"]) {
+      expect(() =>
+        buildCcda({
+          patient: { mrn: "M" },
+          problems: [
+            { problem: { code: "59621000", displayName: "Essential hypertension" }, onset: bad },
+          ],
+        }),
+      ).toThrow(TypeError);
+    }
+  });
+
   it("throws TypeError on calendar-invalid and out-of-range components", () => {
     // Feb 30, month 13, day 00, hour 24, minute 60 — structurally digit-shaped
     // but not a real instant; parseV3DateTime rejects each, so the builder must too.

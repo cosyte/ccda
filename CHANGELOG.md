@@ -78,6 +78,26 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (nineteenth slice) — the v3 `TS` datetime grammar now requires a time-of-day before a
+  fractional-second or timezone offset, closing a dropped-dash misparse.** `parseV3DateTime` /
+  `TS_RE` (`src/model/types/_shared.ts`) previously let a `.fraction` or a `±ZZZZ` offset hang on a
+  bare year/month/day value with no intervening time components. The effect was a **silent
+  misparse**: a dropped-dash ISO date like `"2026-0721"` (one dash removed from `"2026-07-21"`) was
+  read as year `2026` carrying a `-07:21` offset — i.e. `2026-01-01T07:21Z` — instead of being
+  rejected; likewise `"2026+0500"`, `"202607.5"`, `"20260721.5"`, and `"20260721-0500"`. The grammar
+  is tightened to the canonical CDA R2 / HL7 v3 `TS` literal `YYYYMMDDHHMMSS.UUUU[±ZZzz]` (and the
+  ISO 8601 it derives from, where a decimal fraction and a zone designator attach to a **time**
+  component, never to a bare date): a fraction/offset is accepted only once the **hour** is present.
+  Such inputs now surface `MALFORMED_DATETIME` on parse (raw preserved, `date` left `undefined`) and
+  **throw a `TypeError` at build time** — because the builder's `assertHl7Ts` (eighteenth slice)
+  delegates to this one grammar, the fix tightens both the parser and the builder from a single edit.
+  - **Every legitimate value is preserved byte-for-byte** — valid partial-precision dates (`YYYY`,
+    `YYYYMM`, `YYYYMMDD`), full timestamps, real `±ZZZZ` offsets on a time-of-day, and fractional
+    seconds on a full timestamp all parse exactly as before; only the "offset/fraction on a value
+    missing its time components" case changes, from silent-misparse to a surfaced rejection.
+  - No warning-code change and no public-surface change; the capture-group layout is unchanged, so no
+    call site is affected. Regression tests cover the `"2026-0721"`-class input on both the parse
+    (`parseV3DateTime`, `parseTs` → `MALFORMED_DATETIME`) and build (`assertHl7Ts` → `TypeError`) paths.
 - **Phase 7 (eighteenth slice) — a shared HL7 v3 TS date-format validator guards every builder date
   input.** Until now the builder emitted every caller-supplied date string _verbatim_ into
   `<effectiveTime>`/`low`/`high`/`value`/`birthTime`, so a malformed input (`"2026-07-21"` with dashes,

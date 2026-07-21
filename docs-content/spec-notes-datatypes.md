@@ -12,9 +12,13 @@ sidebar_position: 4
 C-CDA is built on the HL7 v3 abstract datatypes. The parser reads the ones that carry clinical meaning
 into typed shapes: `II` (instance identifier), `ST` (string), `BL` (boolean), `CD` (coded — the
 constrained `CE` parses into the same `CD` shape), `PQ` (physical quantity), `IVL_PQ` (quantity
-interval), `TS` (point in time), `IVL_TS` (time interval), and `ED` (encapsulated data). A `TS` supports **variable precision** (year → year-month → … → second, with
-an optional timezone) and exposes both the verbatim `raw` string and a parsed `date`; a malformed value
-keeps its `raw` and leaves `date` undefined (`MALFORMED_DATETIME`). `@nullFlavor` is preserved verbatim
+interval), `TS` (point in time), `IVL_TS` (time interval), and `ED` (encapsulated data). A `TS` supports **variable precision** (year → year-month → … → second) and
+exposes both the verbatim `raw` string and a parsed `date`; a malformed value keeps its `raw` and
+leaves `date` undefined (`MALFORMED_DATETIME`). Following the canonical CDA R2 / HL7 v3 `TS` literal
+`YYYYMMDDHHMMSS.UUUU[±ZZzz]` (and the ISO 8601 it derives from), a fractional-second or `±ZZZZ`
+timezone offset is only accepted once the **time-of-day** (at least the hour) is present — an offset
+or fraction hung on a bare date, such as the dropped-dash `"2026-0721"`, is a malformed value, not a
+year `2026` with a `-07:21` offset. `@nullFlavor` is preserved verbatim
 throughout, and a value outside the HL7 v3 NullFlavor set is flagged (`INVALID_NULL_FLAVOR`) rather than
 dropped.
 

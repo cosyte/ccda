@@ -125,6 +125,13 @@ describe("TS", () => {
     expect(ts?.date).toBeUndefined();
     expect(c.warnings.map((w) => w.code)).toContain("MALFORMED_DATETIME");
   });
+  it("warns on an offset hung on a value with no time-of-day (dropped-dash date)", () => {
+    const c = ctx();
+    const ts = parseTs(el(`<effectiveTime value="2026-0721"/>`), c);
+    expect(ts?.date).toBeUndefined();
+    expect(ts?.raw).toBe("2026-0721");
+    expect(c.warnings.map((w) => w.code)).toContain("MALFORMED_DATETIME");
+  });
 });
 
 describe("IVL_TS", () => {
@@ -167,6 +174,25 @@ describe("parseV3DateTime", () => {
   });
   it("returns undefined for unparseable input", () => {
     expect(parseV3DateTime("nonsense")).toBeUndefined();
+  });
+  it("preserves legitimate partial-precision dates", () => {
+    expect(parseV3DateTime("2026")?.toISOString()).toBe("2026-01-01T00:00:00.000Z");
+    expect(parseV3DateTime("202607")?.toISOString()).toBe("2026-07-01T00:00:00.000Z");
+    expect(parseV3DateTime("20260721")?.toISOString()).toBe("2026-07-21T00:00:00.000Z");
+  });
+  it("preserves fractions and offsets on a value that carries the time-of-day", () => {
+    expect(parseV3DateTime("2026072115+0500")?.toISOString()).toBe("2026-07-21T10:00:00.000Z");
+    expect(parseV3DateTime("20260721153045.123-0500")?.toISOString()).toBe(
+      "2026-07-21T20:30:45.123Z",
+    );
+  });
+  it("rejects an offset or fraction hung on a value with no time-of-day", () => {
+    // Dropped-dash ISO date: must be rejected, not misread as a -07:21 offset.
+    expect(parseV3DateTime("2026-0721")).toBeUndefined();
+    expect(parseV3DateTime("2026+0500")).toBeUndefined();
+    expect(parseV3DateTime("202607.5")).toBeUndefined();
+    expect(parseV3DateTime("20260721.5")).toBeUndefined();
+    expect(parseV3DateTime("20260721-0500")).toBeUndefined();
   });
 });
 
