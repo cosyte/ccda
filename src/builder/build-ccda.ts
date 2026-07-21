@@ -201,6 +201,23 @@
  * bring-your-own-credentials terminology adapter are deferred to a later
  * CCDA-P7 increment.
  *
+ * **This slice adds caller-supplied problem/allergy resolution + onset dates.**
+ * A {@link BuildCcdaProblem} takes a `resolution` date (and an
+ * {@link BuildCcdaAllergy} now takes both `onset` and `resolution`) so a resolved
+ * concern's `effectiveTime/high` — the C-CDA "resolution date" — carries a real
+ * date instead of only `nullFlavor="UNK"`. The high is emitted **only** for a
+ * `status: "resolved"` concern, because its mere presence asserts resolution
+ * (Problem Observation `…22.4.4`: "the existence of a high element … does indicate
+ * that the problem has been resolved") — a `resolution` without
+ * `status: "resolved"` is a contradiction {@link buildCcda} rejects, and a
+ * resolved concern whose date is unknown still emits the `nullFlavor="UNK"` high.
+ * Onset fills the SHALL `low`; both dates round-trip through {@link parseCcda} as
+ * the concern's (and the Problem Observation's) `effectiveTime` `low`/`high`. The
+ * builder **deliberately equates** the Concern Act window (when the concern was
+ * tracked) with the nested observation window (the biologically relevant
+ * onset/resolution) — the C-CDA IG allows these to differ, but a single-date
+ * builder input maps to both, producing internally consistent, spec-clean output.
+ *
  * @packageDocumentation
  */
 
@@ -460,6 +477,17 @@ export interface BuildCcdaPatient {
  * default, or ICD-10-CM) is the condition; `status` maps to the concern act's
  * status (active/resolved/inactive) and is never guessed.
  *
+ * `onset` is the condition's onset date (the concern/observation `effectiveTime`
+ * `low`); `resolution` is its resolution date (the `high`, a.k.a. "resolution
+ * date" — when the condition became biologically resolved). Per the C-CDA R2.1
+ * Problem Observation (`…22.4.4`) rule the *presence* of a `high` — whether a
+ * real date or `nullFlavor="UNK"` — itself asserts the problem is resolved, so a
+ * `resolution` is only meaningful on a **resolved** concern: {@link buildCcda}
+ * throws when `resolution` is supplied without `status: "resolved"` rather than
+ * emit a completion date on a still-active problem. A resolved problem whose
+ * resolution date is unknown still emits a `nullFlavor="UNK"` `high` (the SHALL
+ * form), never a fabricated date.
+ *
  * @example
  * ```ts
  * import type { BuildCcdaProblem } from "@cosyte/ccda";
@@ -468,6 +496,12 @@ export interface BuildCcdaPatient {
  *   status: "active",
  *   onset: "20210101",
  * };
+ * const resolved: BuildCcdaProblem = {
+ *   problem: { code: "195967001", displayName: "Asthma" },
+ *   status: "resolved",
+ *   onset: "20180301",
+ *   resolution: "20220615",
+ * };
  * ```
  */
 export interface BuildCcdaProblem {
@@ -475,8 +509,15 @@ export interface BuildCcdaProblem {
   readonly problem: BuildCode;
   /** Active / resolved / inactive; defaults to `"active"`. */
   readonly status?: "active" | "resolved" | "inactive";
-  /** Onset date as an HL7 date string (e.g. `"20210101"`), optional. */
+  /** Onset date as an HL7 date string (e.g. `"20210101"`) — the `effectiveTime/low`, optional. */
   readonly onset?: string;
+  /**
+   * Resolution date as an HL7 date string (the `effectiveTime/high`, a.k.a.
+   * "resolution date"). Requires `status: "resolved"` — a resolution date on a
+   * non-resolved problem is a contradiction {@link buildCcda} rejects. Omitting
+   * it on a resolved problem still emits a `nullFlavor="UNK"` `high`.
+   */
+  readonly resolution?: string;
 }
 
 /**
@@ -518,6 +559,20 @@ export interface BuildCcdaAllergy {
   readonly criticality?: BuildCode;
   /** Active / resolved / inactive; defaults to `"active"`. */
   readonly status?: "active" | "resolved" | "inactive";
+  /**
+   * Onset date as an HL7 date string — the Allergy Concern Act `effectiveTime/low`
+   * (when the allergy became a tracked concern), optional. When omitted the SHALL
+   * `low` is emitted as `nullFlavor="UNK"`, never a fabricated date.
+   */
+  readonly onset?: string;
+  /**
+   * Resolution date as an HL7 date string — the concern `effectiveTime/high`
+   * (when the concern was completed). Requires `status: "resolved"`, exactly as a
+   * {@link BuildCcdaProblem} resolution does; {@link buildCcda} rejects a
+   * resolution date on a non-resolved allergy. A resolved allergy whose date is
+   * unknown still emits a `nullFlavor="UNK"` `high`.
+   */
+  readonly resolution?: string;
 }
 
 /**
@@ -1599,21 +1654,55 @@ function pointEffectiveTime(doc: Document, value: string | undefined): Element {
  * Allergy Concern Act `…22.4.30` carries the same generic rule under its own
  * constraint ids. The Problem/Allergy-Intolerance Observation likewise SHALL
  * carry an effectiveTime whose `low` is the onset. The `low` carries the onset
- * when supplied, else `nullFlavor="UNK"`; a resolved concern adds a
- * `nullFlavor="UNK"` `high` — the builder never invents a resolution date it was
- * not given.
+ * when supplied, else `nullFlavor="UNK"`.
+ *
+ * A `high` (the "resolution date") is emitted **only** for a **resolved** concern
+ * — its mere presence asserts resolution (C-CDA R2.1 Problem Observation
+ * `…22.4.4`: "the existence of a high element … does indicate that the problem
+ * has been resolved"), so it must never appear on an active problem. When a
+ * `resolution` date is supplied it fills the `high`; when the problem is resolved
+ * but the date is unknown the `high` is `nullFlavor="UNK"` (the SHALL form) — the
+ * builder never invents a resolution date it was not given.
  * @internal
  */
+/**
+ * Reject a `resolution` (`effectiveTime/high`) date that is not paired with
+ * `status: "resolved"`. The presence of a `high` asserts the concern/condition
+ * is resolved (C-CDA R2.1 Problem Observation `…22.4.4`), so a resolution date on
+ * a still-active (or inactive) entry is a contradiction the builder refuses
+ * rather than emit a self-inconsistent document. @internal
+ */
+function assertResolutionConsistent(
+  kind: "problem" | "allergy",
+  resolution: string | undefined,
+  status: "active" | "resolved" | "inactive" | undefined,
+): void {
+  if (resolution !== undefined && status !== "resolved") {
+    throw new TypeError(
+      `buildCcda: a ${kind} \`resolution\` date requires \`status: "resolved"\` — a resolution ` +
+        `date on a ${status ?? "active"} ${kind} is a contradiction (a high effectiveTime asserts ` +
+        'the concern is resolved). Set `status: "resolved"` or omit `resolution`.',
+    );
+  }
+}
+
 function concernEffectiveTime(
   doc: Document,
   onset: string | undefined,
+  resolution: string | undefined,
   status: "active" | "resolved" | "inactive" | undefined,
 ): Element {
   const et = el(doc, "effectiveTime");
   et.appendChild(
     onset === undefined ? el(doc, "low", { nullFlavor: "UNK" }) : el(doc, "low", { value: onset }),
   );
-  if (status === "resolved") et.appendChild(el(doc, "high", { nullFlavor: "UNK" }));
+  if (status === "resolved") {
+    et.appendChild(
+      resolution === undefined
+        ? el(doc, "high", { nullFlavor: "UNK" })
+        : el(doc, "high", { value: resolution }),
+    );
+  }
   return et;
 }
 
@@ -1655,8 +1744,9 @@ function medicationDuration(
  *   `"referralNote"` (the only two types this builder supports), when an allergy
  *   is neither an `allergen` nor `noKnownAllergy`, when a result does not carry
  *   exactly one value form (`quantity` / `codedValue` / `stringValue`), when a
- *   `"observation"`-variant procedure omits its SHALL `value`, or when a
- *   family-history entry carries an empty `observations` list.
+ *   `"observation"`-variant procedure omits its SHALL `value`, when a
+ *   family-history entry carries an empty `observations` list, or when a problem
+ *   or allergy supplies a `resolution` date without `status: "resolved"`.
  * @example
  * ```ts
  * import { buildCcda, serializeCcda } from "@cosyte/ccda";
@@ -2116,6 +2206,7 @@ function problemObservation(
   contentId: string,
   id: (prefix: string) => string,
 ): Element {
+  assertResolutionConsistent("problem", p.resolution, p.status);
   const obs = el(
     doc,
     "observation",
@@ -2136,9 +2227,10 @@ function problemObservation(
     el(doc, "statusCode", { code: "completed" }),
   );
   // Problem Observation (…22.4.4) SHALL carry an effectiveTime — always emitted,
-  // onset as low when supplied (nullFlavor="UNK" otherwise), plus a nullFlavor
-  // high for a resolved problem (resolved-but-date-unknown), never a guessed date.
-  obs.appendChild(concernEffectiveTime(doc, p.onset, p.status));
+  // onset as low when supplied (nullFlavor="UNK" otherwise), plus a high for a
+  // resolved problem: the caller's resolution date when supplied, else a
+  // nullFlavor="UNK" high (resolved-but-date-unknown) — never a guessed date.
+  obs.appendChild(concernEffectiveTime(doc, p.onset, p.resolution, p.status));
   obs.appendChild(cdValue(doc, p.problem, SNOMED_CT));
   return obs;
 }
@@ -2162,7 +2254,7 @@ function problemEntry(
   );
   // Problem Concern Act (…22.4.3) SHALL contain effectiveTime [1..1]
   // (active→SHALL low CONF:1198-7504; completed→SHALL high CONF:1198-10085).
-  act.appendChild(concernEffectiveTime(doc, p.onset, p.status));
+  act.appendChild(concernEffectiveTime(doc, p.onset, p.resolution, p.status));
   act.appendChild(el(doc, "entryRelationship", { typeCode: "SUBJ" }, obs));
   return el(doc, "entry", undefined, act);
 }
@@ -2201,6 +2293,7 @@ function allergyEntry(
   contentId: string,
   id: (prefix: string) => string,
 ): Element {
+  assertResolutionConsistent("allergy", a.resolution, a.status);
   const nka = a.noKnownAllergy === true;
   const obsAttrs: Attrs = nka
     ? { classCode: "OBS", moodCode: "EVN", negationInd: "true" }
@@ -2219,10 +2312,11 @@ function allergyEntry(
     el(doc, "statusCode", { code: "completed" }),
   );
   // Allergy-Intolerance Observation (…22.4.7) SHALL carry an effectiveTime whose
-  // low is the biological onset. No onset is supplied to the builder, so the low
-  // is nullFlavor="UNK" (a resolved concern adds a nullFlavor high) — the SHALL is
-  // satisfied without inventing a clinical time.
-  obs.appendChild(concernEffectiveTime(doc, undefined, a.status));
+  // low is the biological onset (the caller's onset when supplied, else
+  // nullFlavor="UNK"); a resolved concern adds a high — the resolution date when
+  // supplied, else nullFlavor="UNK" — so the SHALL is satisfied without inventing
+  // a clinical time.
+  obs.appendChild(concernEffectiveTime(doc, a.onset, a.resolution, a.status));
   // The observation value is the propensity *type* (NOT the allergen). It defaults
   // to the neutral SNOMED "Allergy to substance" (419199007) — never a guessed
   // "Drug allergy", which would mis-classify a food/environmental allergen. A
@@ -2247,7 +2341,7 @@ function allergyEntry(
   // Allergy Concern Act (…22.4.30) SHALL contain effectiveTime [1..1] under the
   // shared Concern Act rule (active→SHALL low; completed→SHALL high), emitted
   // before the entryRelationship per the Act element order.
-  act.appendChild(concernEffectiveTime(doc, undefined, a.status));
+  act.appendChild(concernEffectiveTime(doc, a.onset, a.resolution, a.status));
   act.appendChild(el(doc, "entryRelationship", { typeCode: "SUBJ" }, obs));
   return el(doc, "entry", undefined, act);
 }

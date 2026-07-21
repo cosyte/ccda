@@ -351,6 +351,141 @@ describe("buildCcda — allergies + the negation/nullFlavor safety rule", () => 
   });
 });
 
+describe("buildCcda — problem/allergy onset + resolution dates", () => {
+  it("carries a resolved problem's onset as low and resolution as high (concern + observation)", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      problems: [
+        {
+          problem: { code: "195967001", displayName: "Asthma" },
+          status: "resolved",
+          onset: "20180301",
+          resolution: "20220615",
+        },
+      ],
+    });
+    expect(doc.warnings).toEqual([]);
+    const concern = doc.getProblems()[0];
+    expect(concern?.status).toBe("resolved");
+    // Concern Act effectiveTime window: low = onset, high = resolution date.
+    expect(concern?.effectiveTime?.low?.raw).toBe("20180301");
+    expect(concern?.effectiveTime?.high?.raw).toBe("20220615");
+    expect(concern?.effectiveTime?.high?.date).toBeInstanceOf(Date);
+    // The nested Problem Observation carries the same window (low = onset, high =
+    // the "resolution date" that asserts the condition is biologically resolved).
+    expect(concern?.problems[0]?.effectiveTime?.low?.raw).toBe("20180301");
+    expect(concern?.problems[0]?.effectiveTime?.high?.raw).toBe("20220615");
+  });
+
+  it("emits a nullFlavor='UNK' high for a resolved problem whose resolution date is unknown", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      problems: [
+        {
+          problem: { code: "44054006", displayName: "Type 2 diabetes mellitus" },
+          status: "resolved",
+        },
+      ],
+    });
+    const concern = doc.getProblems()[0];
+    // A resolved concern SHALL still carry a high — nullFlavor when the date is
+    // unknown — never a fabricated date, and its presence still asserts resolved.
+    expect(concern?.effectiveTime?.high?.nullFlavor).toBe("UNK");
+    expect(concern?.effectiveTime?.high?.date).toBeUndefined();
+    expect(concern?.problems[0]?.effectiveTime?.high?.nullFlavor).toBe("UNK");
+  });
+
+  it("emits no high element for an active problem (a high would falsely assert resolution)", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      problems: [
+        {
+          problem: { code: "59621000", displayName: "Essential hypertension" },
+          status: "active",
+          onset: "20210101",
+        },
+      ],
+    });
+    const concern = doc.getProblems()[0];
+    expect(concern?.effectiveTime?.low?.raw).toBe("20210101");
+    expect(concern?.effectiveTime?.high).toBeUndefined();
+    expect(concern?.problems[0]?.effectiveTime?.high).toBeUndefined();
+  });
+
+  it("rejects a problem resolution date without status:'resolved' (a contradiction)", () => {
+    expect(() =>
+      buildCcda({
+        patient: { mrn: "M" },
+        problems: [
+          {
+            problem: { code: "59621000", displayName: "Essential hypertension" },
+            resolution: "20220615",
+          },
+        ],
+      }),
+    ).toThrow(TypeError);
+  });
+
+  it("carries an allergy concern's onset + resolution on its effectiveTime window", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      allergies: [
+        {
+          allergen: { code: "7980", displayName: "Penicillin G" },
+          status: "resolved",
+          onset: "20150101",
+          resolution: "20200202",
+        },
+      ],
+    });
+    expect(doc.warnings).toEqual([]);
+    const concern = doc.getAllergies()[0];
+    expect(concern?.status).toBe("resolved");
+    expect(concern?.effectiveTime?.low?.raw).toBe("20150101");
+    expect(concern?.effectiveTime?.high?.raw).toBe("20200202");
+    expect(concern?.effectiveTime?.high?.date).toBeInstanceOf(Date);
+  });
+
+  it("emits an allergy onset low as nullFlavor='UNK' when no onset is supplied", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      allergies: [{ allergen: { code: "7980", displayName: "Penicillin G" } }],
+    });
+    const concern = doc.getAllergies()[0];
+    expect(concern?.effectiveTime?.low?.nullFlavor).toBe("UNK");
+    expect(concern?.effectiveTime?.high).toBeUndefined();
+  });
+
+  it("rejects an allergy resolution date without status:'resolved'", () => {
+    expect(() =>
+      buildCcda({
+        patient: { mrn: "M" },
+        allergies: [
+          { allergen: { code: "7980", displayName: "Penicillin G" }, resolution: "20200202" },
+        ],
+      }),
+    ).toThrow(TypeError);
+  });
+
+  it("carries a resolution date on a resolved Past Medical History problem", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      pastMedicalHistory: [
+        {
+          problem: { code: "195967001", displayName: "Asthma" },
+          status: "resolved",
+          onset: "20100101",
+          resolution: "20150505",
+        },
+      ],
+    });
+    expect(doc.warnings).toEqual([]);
+    const pmh = doc.getPastMedicalHistory()[0];
+    expect(pmh?.effectiveTime?.low?.raw).toBe("20100101");
+    expect(pmh?.effectiveTime?.high?.raw).toBe("20150505");
+  });
+});
+
 describe("buildCcda — emit conformance (header + section cardinality)", () => {
   it("emits SHALL addr + telecom on patientRole, assignedAuthor, and custodian org", () => {
     const xml = serializeCcda(buildCcda({ patient: { mrn: "M" } }));
