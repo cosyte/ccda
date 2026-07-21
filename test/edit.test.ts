@@ -28,7 +28,10 @@ import {
   serializeCcda,
   CcdaEditError,
   CcdaDocument,
+  WARNING_CODES,
   type BuildCcdaInit,
+  type CcdaWarning,
+  type TerminologyAdapter,
 } from "../src/index.js";
 
 const HYPERTENSION = { code: "38341003", displayName: "Hypertension" } as const;
@@ -594,5 +597,83 @@ describe("editCcda — edge-case coverage", () => {
     // Untouched: both original sections still read back.
     expect(revised.getProblems()).toHaveLength(1);
     expect(revised.getMedications()).toHaveLength(1);
+  });
+});
+
+describe("editCcda — bring-your-own terminology adapter threading", () => {
+  const has = (warnings: readonly CcdaWarning[]): boolean =>
+    warnings.some((w) => w.code === WARNING_CODES.SEMANTIC_CODE_INVALID);
+
+  /** An adapter that rejects one specific code and confirms everything else. */
+  const rejecting = (badCode: string): TerminologyAdapter => ({
+    validateCode: (c) => ({ result: c.code !== badCode }),
+  });
+
+  it("is opt-in: no adapter ⇒ the edited document carries no SEMANTIC_CODE_INVALID", () => {
+    const revised = editCcda(sampleDoc(), {
+      sections: [
+        { kind: "problems", mode: "replace", content: [{ problem: DIABETES, status: "active" }] },
+      ],
+    });
+    expect(has(revised.warnings)).toBe(false);
+  });
+
+  it("flags a rejected code in the grafted (edited) section, preserved verbatim", () => {
+    const revised = editCcda(sampleDoc(), {
+      sections: [
+        { kind: "problems", mode: "replace", content: [{ problem: DIABETES, status: "active" }] },
+      ],
+      terminology: rejecting(DIABETES.code),
+    });
+    expect(has(revised.warnings)).toBe(true);
+    // Never coerced: the grafted section still carries the verbatim rejected code.
+    expect(revised.getProblems()[0]?.problems[0]?.value?.code).toBe(DIABETES.code);
+    // PHI-free: the SEMANTIC_CODE_INVALID message names the system OID, not the code.
+    const w = revised.warnings.find((x) => x.code === WARNING_CODES.SEMANTIC_CODE_INVALID);
+    expect(w?.message).not.toContain(DIABETES.code);
+  });
+
+  it("also validates an untouched section — the adapter runs on the whole edited output", () => {
+    // Edit only medications; reject the untouched problem's code. The flag proves
+    // the adapter reached the section the edit did not target.
+    const revised = editCcda(sampleDoc(), {
+      sections: [
+        {
+          kind: "medications",
+          mode: "replace",
+          content: [
+            {
+              drug: LISINOPRIL,
+              dose: { value: 10, unit: "mg" },
+              route: { code: "C38288", displayName: "Oral" },
+            },
+          ],
+        },
+      ],
+      terminology: rejecting(HYPERTENSION.code),
+    });
+    expect(has(revised.warnings)).toBe(true);
+    expect(revised.getProblems()[0]?.problems[0]?.value?.code).toBe(HYPERTENSION.code);
+  });
+
+  it("threads the adapter on an in-place edit too (revision: false)", () => {
+    const revised = editCcda(sampleDoc(), {
+      revision: false,
+      sections: [
+        { kind: "problems", mode: "replace", content: [{ problem: DIABETES, status: "active" }] },
+      ],
+      terminology: rejecting(DIABETES.code),
+    });
+    expect(has(revised.warnings)).toBe(true);
+  });
+
+  it("stays silent (no new warning) when the adapter confirms every code", () => {
+    const revised = editCcda(sampleDoc(), {
+      sections: [
+        { kind: "problems", mode: "replace", content: [{ problem: DIABETES, status: "active" }] },
+      ],
+      terminology: { validateCode: () => ({ result: true }) },
+    });
+    expect(has(revised.warnings)).toBe(false);
   });
 });

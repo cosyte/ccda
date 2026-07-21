@@ -43,6 +43,7 @@ import { el } from "../builder/dom.js";
 import { LOINC } from "../model/code-systems.js";
 import type { CcdaDocument } from "../model/document.js";
 import { attr, child, childElements, children } from "../model/dom.js";
+import type { TerminologyAdapter } from "../model/terminology.js";
 import { parseCcda } from "../parser/index.js";
 import { missingRequiredSections } from "../parser/required-sections.js";
 import { DEFAULT_LIMITS, parseSecureXml } from "../parser/secure-xml.js";
@@ -170,6 +171,18 @@ export interface RevisionInit {
 export interface EditCcdaOptions {
   readonly sections?: readonly SectionEdit[];
   readonly revision?: RevisionInit | false;
+  /**
+   * An optional consumer-supplied bring-your-own {@link TerminologyAdapter},
+   * forwarded to the final re-parse of the edited document so it surfaces
+   * `SEMANTIC_CODE_INVALID` for any coded value the adapter rejects — the same
+   * semantic-validation tier `parseCcda` and `buildCcda` already offer, now
+   * reaching the edited output. `editCcda` never coerces a code to satisfy the
+   * adapter (it emits every value verbatim, byte-faithful on untouched sections
+   * and spec-clean on the one it rebuilds); the adapter can only ever add a flag.
+   * Omit for the default recognize-only behavior. `@cosyte/ccda` never imports a
+   * terminology library; you supply the adapter.
+   */
+  readonly terminology?: TerminologyAdapter;
 }
 
 /**
@@ -236,7 +249,9 @@ export class CcdaEditError extends Error {
  *
  * @param source - A document produced by {@link parseCcda} (it must retain its
  *   source XML — a hand-constructed document throws `NO_SOURCE_DOCUMENT`).
- * @param options - The section edits to apply and the revision behavior.
+ * @param options - The section edits to apply, the revision behavior, and an
+ *   optional bring-your-own `terminology` adapter forwarded to the final re-parse
+ *   so the edited document flags adapter-rejected codes (`SEMANTIC_CODE_INVALID`).
  * @returns A new {@link CcdaDocument} — the re-parse of the edited XML. The
  *   `source` is never mutated.
  * @throws {@link CcdaEditError} when the source has no retained XML, has no
@@ -281,7 +296,15 @@ export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): C
     stampRevision(dom, root, options.revision, uniqueIdGen(root));
   }
 
-  return parseCcda(serializeDocument(dom));
+  // Re-parse the edited XML into the returned document. When the caller supplied
+  // a terminology adapter, forward it so the edited document reaches the same
+  // semantic-validation tier `parseCcda`/`buildCcda` offer — surfacing
+  // `SEMANTIC_CODE_INVALID` for any coded value the adapter rejects (in a grafted
+  // section or an untouched one). The edit still emits every code **verbatim**; the
+  // adapter can only ever add a flag, never coerce a value.
+  return options.terminology !== undefined
+    ? parseCcda(serializeDocument(dom), { terminology: options.terminology })
+    : parseCcda(serializeDocument(dom));
 }
 
 /** Recover the source XML a parsed document retains, or throw `NO_SOURCE_DOCUMENT`. @internal */
