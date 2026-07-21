@@ -98,18 +98,36 @@ export function parseBooleanValue(value: string | undefined): boolean | undefine
   return undefined;
 }
 
-/** Matches an HL7 v3 TS value: `YYYY[MM[DD[HH[MM[SS]]]]][.fraction][±ZZZZ]`. @internal */
+/**
+ * Matches an HL7 v3 TS value: `YYYY[MM[DD[HH[MM[SS]]]][.fraction][±ZZZZ]]`.
+ *
+ * The nesting is load-bearing: a fractional-second (`.fraction`) or a timezone
+ * offset (`±ZZZZ`) may appear **only once the hour is present**, mirroring the
+ * canonical CDA R2 / HL7 v3 datatypes literal `YYYYMMDDHHMMSS.UUUU[±ZZzz]` (and
+ * ISO 8601, from which it derives, where a decimal fraction and a zone designator
+ * attach to a time component, never to a bare date). This rejects the malformed
+ * "offset/fraction on a value missing its time-of-day" shapes — e.g. a
+ * dropped-dash ISO date like `"2026-0721"`, which would otherwise be silently
+ * misread as year `2026` carrying a `-07:21` offset — while every legitimate
+ * partial-precision date (`YYYY`, `YYYYMM`, `YYYYMMDD`) still parses.
+ *
+ * @internal
+ */
 const TS_RE =
-  /^(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?(?:\.(\d+))?([+-]\d{2}(?:\d{2})?)?$/u;
+  /^(\d{4})(?:(\d{2})(?:(\d{2})(?:(\d{2})(\d{2})?(\d{2})?(?:\.(\d+))?([+-]\d{2}(?:\d{2})?)?)?)?)?$/u;
 
 /**
  * Parse a variable-precision HL7 v3 timestamp string to a JS `Date`. Accepts
  * year through second precision plus optional fractional seconds and an
- * optional `±HHMM` (or `±HH`) timezone offset. A value with no offset resolves
- * to UTC for determinism; truncated values resolve to the first instant of the
- * stated precision (e.g. `2026` → `2026-01-01T00:00:00Z`). Returns `undefined`
- * when the value does not match the shape or is calendar-invalid — never
- * throws.
+ * optional `±HHMM` (or `±HH`) timezone offset. Per the CDA R2 / HL7 v3 `TS`
+ * literal `YYYYMMDDHHMMSS.UUUU[±ZZzz]`, a fraction or offset is accepted **only
+ * on a value that carries the time-of-day** (at least the hour): a fraction or
+ * offset hung on a bare `YYYY`/`YYYYMM`/`YYYYMMDD` value — e.g. the dropped-dash
+ * `"2026-0721"` — is rejected rather than silently misread. A value with no
+ * offset resolves to UTC for determinism; truncated values resolve to the first
+ * instant of the stated precision (e.g. `2026` → `2026-01-01T00:00:00Z`).
+ * Returns `undefined` when the value does not match the shape or is
+ * calendar-invalid — never throws.
  *
  * @example
  * ```ts
