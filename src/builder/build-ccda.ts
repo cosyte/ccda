@@ -206,9 +206,21 @@
  * recognized coded value is semantically validated: a code the adapter rejects is
  * surfaced **verbatim** and flagged `SEMANTIC_CODE_INVALID` — never coerced to a
  * guessed value. The builder emits every code verbatim regardless; the adapter can
- * only add a flag, never change a safety-critical code. The adapter's `translate`
- * (`<translation>` emit) is defined on the interface but not yet consumed here —
- * deferred to a later increment.
+ * only add a flag, never change a safety-critical code.
+ *
+ * **This slice consumes the adapter's `translate` (`$translate`) to emit
+ * `<translation>` alternates.** When the supplied adapter's optional `translate`
+ * returns alternate codings for a clinical coded slot, `buildCcda` emits a
+ * spec-clean CDA R2 `<translation>` child (a CD/CE alternate coding) beside the
+ * primary `@code`/`@codeSystem` — **never** replacing it. The slots wired mirror
+ * the parser's recognized coded slots (`checkCodeSlot`: problem value, allergen,
+ * medication drug + route, vaccine + route). Per the never-fabricate
+ * invariant, `translate` returning `undefined` (no opinion) or an empty `matches`
+ * (unmapped) emits **no** `<translation>` and leaves output byte-identical; only a
+ * concrete adapter-supplied coding produces one. The alternates round-trip through
+ * {@link parseCcda} into `CD.translation`. The `buildSectionComponent` edit/append
+ * path and the non-`checkCodeSlot` slots (results/vitals LOINC, reaction/severity)
+ * are out of this slice's scope.
  *
  * **This slice adds caller-supplied problem/allergy resolution + onset dates.**
  * A {@link BuildCcdaProblem} takes a `resolution` date (and an
@@ -232,7 +244,7 @@
 
 import { CVX, INTERPRETATION, LOINC, NCI_ROUTE, RXNORM, SNOMED_CT } from "../model/code-systems.js";
 import type { CcdaDocument } from "../model/document.js";
-import type { TerminologyAdapter } from "../model/terminology.js";
+import type { TerminologyAdapter, TerminologyCoding } from "../model/terminology.js";
 import type { PlannedItemKind } from "../model/entries/plan-of-treatment.js";
 import type { ProcedureKind } from "../model/entries/procedure.js";
 import { parseCcda } from "../parser/index.js";
@@ -1760,11 +1772,16 @@ function medicationDuration(
  */
 export interface BuildCcdaOptions {
   /**
-   * An optional consumer-supplied bring-your-own {@link TerminologyAdapter},
-   * forwarded to the internal re-parse so a built document surfaces
-   * `SEMANTIC_CODE_INVALID` for any coded value the adapter rejects. The builder
-   * never coerces a code to satisfy the adapter — it emits every value verbatim;
-   * the adapter can only add a flag. Omit for the default behavior.
+   * An optional consumer-supplied bring-your-own {@link TerminologyAdapter}. Two
+   * paths consume it: (1) its `validateCode` is forwarded to the internal re-parse
+   * so a built document surfaces `SEMANTIC_CODE_INVALID` for any coded value the
+   * adapter rejects; (2) its optional `translate` is consulted at each clinical
+   * coded slot (problem value, allergen, medication drug + route, vaccine + route)
+   * to emit `<translation>` alternate codings **beside** the primary code. The
+   * builder never coerces a code to satisfy the adapter — it emits every primary
+   * value verbatim, a `<translation>` is only ever an *additional* alternate, and
+   * an adapter with no `translate` opinion produces byte-identical output. Omit for
+   * the default behavior.
    */
   readonly terminology?: TerminologyAdapter;
 }
@@ -1780,8 +1797,10 @@ export interface BuildCcdaOptions {
  * @param init - The document content; see {@link BuildCcdaInit}. `patient` is required.
  * @param options - Optional {@link BuildCcdaOptions}; pass a bring-your-own
  *   `terminology` adapter to have the returned document flag adapter-rejected
- *   codes (`SEMANTIC_CODE_INVALID`). The builder never coerces a code to satisfy
- *   the adapter — every value is emitted verbatim.
+ *   codes (`SEMANTIC_CODE_INVALID`) and to emit `<translation>` alternate codings
+ *   from its optional `translate`. The builder never coerces a code to satisfy the
+ *   adapter — every primary value is emitted verbatim and a `<translation>` is only
+ *   ever an additional alternate coding.
  * @returns The parsed document — the parse of the spec-clean XML just emitted.
  * @throws {TypeError} When `documentType` is anything other than `"ccd"` or
  *   `"referralNote"` (the only two types this builder supports), when an allergy
@@ -1818,6 +1837,12 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
   const { doc, root } = newCdaDocument();
   const id = makeIdGen();
   const effectiveTime = formatEffectiveTime(init.effectiveTime);
+  // The consumer adapter's optional `$translate`, threaded to the clinical
+  // coded-slot emitters so a supplied ConceptMap-backed adapter contributes
+  // `<translation>` alternates. Absent (no adapter, or a validation-only one) →
+  // byte-identical output. The primary code is always emitted verbatim; a
+  // translation is only ever an additional alternate coding (never a coercion).
+  const translate = options.terminology?.translate;
 
   appendHeader(doc, root, init, effectiveTime, id, spec);
 
@@ -1829,7 +1854,7 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
   // quiet on a clean build.
   const shall = new Set<ShallSectionKey>(spec.shallSections);
   for (const key of spec.shallSections) {
-    structuredBody.appendChild(shallSection(key, doc, init, id));
+    structuredBody.appendChild(shallSection(key, doc, init, id, translate));
   }
 
   // Results / Vital Signs are always-on SHALL sections for a CCD but *optional*
@@ -1846,7 +1871,7 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
   // emitted only when populated, rather than fabricating an empty section the
   // caller did not ask for.
   if ((init.immunizations?.length ?? 0) > 0) {
-    structuredBody.appendChild(immunizationsSection(doc, init.immunizations ?? [], id));
+    structuredBody.appendChild(immunizationsSection(doc, init.immunizations ?? [], id, translate));
   }
   if ((init.procedures?.length ?? 0) > 0) {
     structuredBody.appendChild(proceduresSection(doc, init.procedures ?? [], id));
@@ -1888,7 +1913,9 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
     );
   }
   if ((init.pastMedicalHistory?.length ?? 0) > 0) {
-    structuredBody.appendChild(pastMedicalHistorySection(doc, init.pastMedicalHistory ?? [], id));
+    structuredBody.appendChild(
+      pastMedicalHistorySection(doc, init.pastMedicalHistory ?? [], id, translate),
+    );
   }
   // Plan of Treatment is a Referral Note SHALL section (emitted above); for a CCD
   // it is optional, emitted here only when the caller supplied planned items.
@@ -1921,14 +1948,15 @@ function shallSection(
   doc: Document,
   init: BuildCcdaInit,
   id: (prefix: string) => string,
+  translate?: Translate,
 ): Element {
   switch (key) {
     case "problems":
-      return problemsSection(doc, init.problems ?? [], id);
+      return problemsSection(doc, init.problems ?? [], id, translate);
     case "allergies":
-      return allergiesSection(doc, init.allergies ?? [], id);
+      return allergiesSection(doc, init.allergies ?? [], id, translate);
     case "medications":
-      return medicationsSection(doc, init.medications ?? [], id);
+      return medicationsSection(doc, init.medications ?? [], id, translate);
     case "results":
       return resultsSection(doc, init.results ?? [], id);
     case "vitalSigns":
@@ -2085,11 +2113,77 @@ function custodian(doc: Document, orgName: string): Element {
   return el(doc, "custodian", undefined, el(doc, "assignedCustodian", undefined, org));
 }
 
+/**
+ * The consumer adapter's bound `$translate` ({@link TerminologyAdapter.translate}),
+ * threaded to the clinical coded-slot emitters so a supplied adapter can
+ * contribute `<translation>` alternate codings. `undefined` — no adapter, or a
+ * validation-only adapter that omits `translate` — means the emitters add nothing
+ * and the output is **byte-identical** to a build with no adapter. @internal
+ */
+type Translate = TerminologyAdapter["translate"];
+
+/**
+ * Append consumer-supplied `<translation>` alternate codings onto a just-built
+ * coded element (a CD or CE — both permit `translation` in their datatype
+ * xs:sequence). This is safety-critical emission; three invariants hold hard:
+ *
+ * - **Never coerces the primary code.** The element's own `@code`/`@codeSystem`
+ *   are already set by the caller and are left untouched — a `<translation>` is
+ *   only ever an *additional* alternate coding beside the original, never a
+ *   substitution.
+ * - **Never fabricates.** `translate` returning `undefined` (the adapter has no
+ *   opinion) or an empty `matches` (the source is unmapped) appends nothing, so
+ *   output is unchanged. Only a concrete adapter-supplied coding carrying **both**
+ *   a `code` and a `system` becomes a `<translation>`; a match missing a system is
+ *   not a spec-clean CD and is skipped (conservative on emit).
+ * - **Correct sequence position.** In CD/CE the `translation` children follow
+ *   `originalText`/`qualifier`; these emitters produce neither, so appending the
+ *   translations as the element's only children is XSD-sequence-correct.
+ *
+ * The parser reads each emitted `<translation>` back into `CD.translation`
+ * (`code`/`codeSystem`/`codeSystemName`/`displayName`), so the alternates
+ * round-trip; a match's `version` is emitted as the spec `@codeSystemVersion`
+ * (which the parser's shallow translation read does not currently surface — a
+ * pre-existing read scope, not a regression). @internal
+ */
+function appendTranslations(
+  doc: Document,
+  coded: Element,
+  primary: { readonly code?: string; readonly codeSystem: string; readonly displayName?: string },
+  translate: Translate,
+): void {
+  if (translate === undefined) return;
+  // A null-flavored / symbol-less slot carries no membership claim to translate.
+  if (primary.code === undefined) return;
+  const coding: TerminologyCoding = {
+    system: primary.codeSystem,
+    code: primary.code,
+    ...(primary.displayName !== undefined ? { display: primary.displayName } : {}),
+  };
+  const result = translate(coding);
+  // `undefined` = the adapter has no opinion → emit nothing (unchanged output).
+  if (result === undefined) return;
+  for (const match of result.matches) {
+    // A translation needs a concrete system to be an unambiguous CD; a match
+    // missing one is dropped rather than emitted half-formed.
+    if (match.system === undefined) continue;
+    coded.appendChild(
+      el(doc, "translation", {
+        code: match.code,
+        codeSystem: match.system,
+        displayName: match.display,
+        codeSystemVersion: match.version,
+      }),
+    );
+  }
+}
+
 /** Build a coded element (`<code>`, propensity `<code>`, …). @internal */
 function codeEl(
   doc: Document,
   name: string,
   code: BuildCode & { readonly codeSystem: string },
+  translate?: Translate,
 ): Element {
   const attrs: Attrs = {
     code: code.code,
@@ -2097,17 +2191,32 @@ function codeEl(
     displayName: code.displayName,
     codeSystemName: code.codeSystemName,
   };
-  return el(doc, name, attrs);
+  const e = el(doc, name, attrs);
+  appendTranslations(doc, e, code, translate);
+  return e;
 }
 
 /** Build a `<value xsi:type="CD">` from a {@link BuildCode} with a default system. @internal */
-function cdValue(doc: Document, code: BuildCode, defaultSystem: string): Element {
-  return typedValue(doc, "CD", {
+function cdValue(
+  doc: Document,
+  code: BuildCode,
+  defaultSystem: string,
+  translate?: Translate,
+): Element {
+  const codeSystem = code.codeSystem ?? defaultSystem;
+  const v = typedValue(doc, "CD", {
     code: code.code,
-    codeSystem: code.codeSystem ?? defaultSystem,
+    codeSystem,
     displayName: code.displayName,
     codeSystemName: code.codeSystemName,
   });
+  appendTranslations(
+    doc,
+    v,
+    { code: code.code, codeSystem, displayName: code.displayName },
+    translate,
+  );
+  return v;
 }
 
 /**
@@ -2226,6 +2335,7 @@ function problemsSection(
   doc: Document,
   problems: readonly BuildCcdaProblem[],
   id: (prefix: string) => string,
+  translate?: Translate,
 ): Element {
   if (problems.length === 0) {
     return emptySection(doc, PROBLEMS_SECTION_BASE, "11450-4", "Problems");
@@ -2235,7 +2345,7 @@ function problemsSection(
   for (const p of problems) {
     const contentId = id("prob-txt");
     text.appendChild(textEl(doc, "content", p.problem.displayName, { ID: contentId }));
-    entries.push(problemEntry(doc, p, contentId, id));
+    entries.push(problemEntry(doc, p, contentId, id, translate));
   }
   const section = sectionElement(doc, PROBLEMS_SECTION_BASE, "11450-4", "Problems", text, true);
   for (const entry of entries) section.appendChild(entry);
@@ -2255,6 +2365,7 @@ function problemObservation(
   p: BuildCcdaProblem,
   contentId: string,
   id: (prefix: string) => string,
+  translate?: Translate,
 ): Element {
   assertResolutionConsistent("problem", p.resolution, p.status);
   const obs = el(
@@ -2281,7 +2392,7 @@ function problemObservation(
   // resolved problem: the caller's resolution date when supplied, else a
   // nullFlavor="UNK" high (resolved-but-date-unknown) — never a guessed date.
   obs.appendChild(concernEffectiveTime(doc, p.onset, p.resolution, p.status, "problem"));
-  obs.appendChild(cdValue(doc, p.problem, SNOMED_CT));
+  obs.appendChild(cdValue(doc, p.problem, SNOMED_CT, translate));
   return obs;
 }
 
@@ -2291,8 +2402,9 @@ function problemEntry(
   p: BuildCcdaProblem,
   contentId: string,
   id: (prefix: string) => string,
+  translate?: Translate,
 ): Element {
-  const obs = problemObservation(doc, p, contentId, id);
+  const obs = problemObservation(doc, p, contentId, id, translate);
 
   const act = el(
     doc,
@@ -2314,6 +2426,7 @@ function allergiesSection(
   doc: Document,
   allergies: readonly BuildCcdaAllergy[],
   id: (prefix: string) => string,
+  translate?: Translate,
 ): Element {
   if (allergies.length === 0) {
     return emptySection(doc, ALLERGIES_SECTION_BASE, "48765-2", "Allergies");
@@ -2329,7 +2442,7 @@ function allergiesSection(
     const label = a.noKnownAllergy === true ? "No known allergies" : a.allergen?.displayName;
     const contentId = id("alg-txt");
     text.appendChild(textEl(doc, "content", label ?? "No known allergies", { ID: contentId }));
-    entries.push(allergyEntry(doc, a, contentId, id));
+    entries.push(allergyEntry(doc, a, contentId, id, translate));
   }
   const section = sectionElement(doc, ALLERGIES_SECTION_BASE, "48765-2", "Allergies", text, true);
   for (const entry of entries) section.appendChild(entry);
@@ -2342,6 +2455,7 @@ function allergyEntry(
   a: BuildCcdaAllergy,
   contentId: string,
   id: (prefix: string) => string,
+  translate?: Translate,
 ): Element {
   assertResolutionConsistent("allergy", a.resolution, a.status);
   const nka = a.noKnownAllergy === true;
@@ -2375,7 +2489,7 @@ function allergyEntry(
     cdValue(doc, a.type ?? { code: "419199007", displayName: "Allergy to substance" }, SNOMED_CT),
   );
   if (!nka && a.allergen !== undefined) {
-    obs.appendChild(allergenParticipant(doc, a.allergen));
+    obs.appendChild(allergenParticipant(doc, a.allergen, translate));
   }
   if (a.reaction !== undefined) obs.appendChild(reactionRelationship(doc, a.reaction, a.severity));
   if (a.criticality !== undefined) obs.appendChild(criticalityRelationship(doc, a.criticality));
@@ -2397,12 +2511,12 @@ function allergyEntry(
 }
 
 /** Build the allergen `participant/participantRole/playingEntity/code`. @internal */
-function allergenParticipant(doc: Document, allergen: BuildCode): Element {
+function allergenParticipant(doc: Document, allergen: BuildCode, translate?: Translate): Element {
   const playingEntity = el(
     doc,
     "playingEntity",
     { classCode: "MMAT" },
-    codeEl(doc, "code", { ...allergen, codeSystem: allergen.codeSystem ?? RXNORM }),
+    codeEl(doc, "code", { ...allergen, codeSystem: allergen.codeSystem ?? RXNORM }, translate),
   );
   const role = el(doc, "participantRole", { classCode: "MANU" }, playingEntity);
   return el(doc, "participant", { typeCode: "CSM" }, role);
@@ -2476,6 +2590,7 @@ function medicationsSection(
   doc: Document,
   meds: readonly BuildCcdaMedication[],
   id: (prefix: string) => string,
+  translate?: Translate,
 ): Element {
   if (meds.length === 0) {
     return emptySection(doc, MEDICATIONS_SECTION_BASE, "10160-0", "Medications");
@@ -2487,7 +2602,7 @@ function medicationsSection(
     // The narrative must carry the drug label so it agrees with the coded product
     // (the parser reconciles medication code ↔ narrative).
     text.appendChild(textEl(doc, "content", m.drug.displayName, { ID: contentId }));
-    entries.push(medicationEntry(doc, m, contentId, id));
+    entries.push(medicationEntry(doc, m, contentId, id, translate));
   }
   const section = sectionElement(
     doc,
@@ -2507,6 +2622,7 @@ function medicationEntry(
   m: BuildCcdaMedication,
   contentId: string,
   id: (prefix: string) => string,
+  translate?: Translate,
 ): Element {
   const sbadm = el(
     doc,
@@ -2539,22 +2655,27 @@ function medicationEntry(
   // rather than being invented into a confident-wrong value.
   if (m.route !== undefined) {
     sbadm.appendChild(
-      codeEl(doc, "routeCode", { ...m.route, codeSystem: m.route.codeSystem ?? NCI_ROUTE }),
+      codeEl(
+        doc,
+        "routeCode",
+        { ...m.route, codeSystem: m.route.codeSystem ?? NCI_ROUTE },
+        translate,
+      ),
     );
   }
   if (m.dose !== undefined) sbadm.appendChild(pqEl(doc, "doseQuantity", m.dose));
-  sbadm.appendChild(medicationConsumable(doc, m.drug));
+  sbadm.appendChild(medicationConsumable(doc, m.drug, translate));
 
   return el(doc, "entry", undefined, sbadm);
 }
 
 /** Build the `consumable/manufacturedProduct` carrying the RxNorm drug code. @internal */
-function medicationConsumable(doc: Document, drug: BuildCode): Element {
+function medicationConsumable(doc: Document, drug: BuildCode, translate?: Translate): Element {
   const material = el(
     doc,
     "manufacturedMaterial",
     undefined,
-    codeEl(doc, "code", { ...drug, codeSystem: drug.codeSystem ?? RXNORM }),
+    codeEl(doc, "code", { ...drug, codeSystem: drug.codeSystem ?? RXNORM }, translate),
   );
   const product = el(
     doc,
@@ -2818,6 +2939,7 @@ function immunizationsSection(
   doc: Document,
   imms: readonly BuildCcdaImmunization[],
   id: (prefix: string) => string,
+  translate?: Translate,
 ): Element {
   const text = el(doc, "text");
   const entries: Element[] = [];
@@ -2826,7 +2948,7 @@ function immunizationsSection(
     // The narrative carries the vaccine label so it agrees with the coded product
     // (the parser reconciles the immunization vaccine code ↔ narrative).
     text.appendChild(textEl(doc, "content", imm.vaccine.displayName, { ID: contentId }));
-    entries.push(immunizationEntry(doc, imm, contentId, id));
+    entries.push(immunizationEntry(doc, imm, contentId, id, translate));
   }
   const section = sectionElement(
     doc,
@@ -2846,6 +2968,7 @@ function immunizationEntry(
   imm: BuildCcdaImmunization,
   contentId: string,
   id: (prefix: string) => string,
+  translate?: Translate,
 ): Element {
   // A refused / not-administered shot is `negationInd="true"` — the parser reads
   // it back as `refused` and flags IMMUNIZATION_REFUSED; it is NEVER conflated
@@ -2873,11 +2996,16 @@ function immunizationEntry(
   // not require either on an immunization), never defaulted to a confident-wrong value.
   if (imm.route !== undefined) {
     sbadm.appendChild(
-      codeEl(doc, "routeCode", { ...imm.route, codeSystem: imm.route.codeSystem ?? NCI_ROUTE }),
+      codeEl(
+        doc,
+        "routeCode",
+        { ...imm.route, codeSystem: imm.route.codeSystem ?? NCI_ROUTE },
+        translate,
+      ),
     );
   }
   if (imm.dose !== undefined) sbadm.appendChild(pqEl(doc, "doseQuantity", imm.dose));
-  sbadm.appendChild(immunizationConsumable(doc, imm.vaccine));
+  sbadm.appendChild(immunizationConsumable(doc, imm.vaccine, translate));
   return el(doc, "entry", undefined, sbadm);
 }
 
@@ -2886,12 +3014,12 @@ function immunizationEntry(
  * Immunization Medication Information template `…22.4.54`).
  * @internal
  */
-function immunizationConsumable(doc: Document, vaccine: BuildCode): Element {
+function immunizationConsumable(doc: Document, vaccine: BuildCode, translate?: Translate): Element {
   const material = el(
     doc,
     "manufacturedMaterial",
     undefined,
-    codeEl(doc, "code", { ...vaccine, codeSystem: vaccine.codeSystem ?? CVX }),
+    codeEl(doc, "code", { ...vaccine, codeSystem: vaccine.codeSystem ?? CVX }, translate),
   );
   const product = el(
     doc,
@@ -3593,13 +3721,14 @@ function pastMedicalHistorySection(
   doc: Document,
   history: readonly BuildCcdaProblem[],
   id: (prefix: string) => string,
+  translate?: Translate,
 ): Element {
   const text = el(doc, "text");
   const entries: Element[] = [];
   for (const p of history) {
     const contentId = id("pmh-txt");
     text.appendChild(textEl(doc, "content", p.problem.displayName, { ID: contentId }));
-    entries.push(el(doc, "entry", undefined, problemObservation(doc, p, contentId, id)));
+    entries.push(el(doc, "entry", undefined, problemObservation(doc, p, contentId, id, translate)));
   }
   const section = sectionElement(
     doc,

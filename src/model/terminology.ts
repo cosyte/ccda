@@ -92,11 +92,15 @@ export interface CodeValidationResult {
  * adapter must return an empty `matches` for an unmapped source — **never a
  * guessed target**.
  *
- * **Reserved surface.** `@cosyte/ccda` defines this so a consumer can wire a
- * ConceptMap-backed engine in behind {@link TerminologyAdapter.translate}, but
- * **this slice does not yet consume it** — emitting `<translation>` alternates
- * from an adapter is a deferred builder increment. `translate` is therefore
- * optional on the interface: a validation-only adapter need not implement it.
+ * **Consumed on build.** `@cosyte/ccda` defines this so a consumer can wire a
+ * ConceptMap-backed engine in behind {@link TerminologyAdapter.translate}.
+ * `buildCcda` consults it at each clinical coded slot (problem value, allergen,
+ * medication drug + route, vaccine + route) and emits any returned coding as a
+ * spec-clean CDA R2 `<translation>` alternate **beside** the primary code — never
+ * replacing it, and never fabricated (an empty `matches` emits nothing). The
+ * alternates round-trip through `parseCcda` into `CD.translation`. `translate`
+ * stays optional on the interface: a validation-only adapter need not implement it,
+ * and its absence yields byte-identical output.
  *
  * @example
  * ```ts
@@ -126,7 +130,9 @@ export interface CodeTranslationResult {
  * coverage); the parser then stays silent and falls back to recognize-only, so an
  * adapter that only covers some systems adds no noise for the rest.
  *
- * **`translate` is reserved and optional** — see {@link CodeTranslationResult}.
+ * **`translate` is consumed on build and optional.** `buildCcda` calls it at each
+ * clinical coded slot and emits any returned coding as a `<translation>` alternate
+ * beside the primary code (never a substitution) — see {@link CodeTranslationResult}.
  *
  * @example
  * ```ts
@@ -153,9 +159,11 @@ export interface TerminologyAdapter {
    */
   readonly validateCode: (coding: TerminologyCoding) => CodeValidationResult | undefined;
   /**
-   * **Reserved (not yet consumed by this slice).** Translate `coding` through the
-   * consumer's map, returning declared targets verbatim (empty ⇒ unmapped, never
-   * fabricated). Optional — a validation-only adapter may omit it.
+   * Translate `coding` through the consumer's map, returning declared targets
+   * verbatim (empty ⇒ unmapped, never fabricated). `buildCcda` emits each returned
+   * coding as a `<translation>` alternate beside the primary code — never a
+   * substitution. Optional — a validation-only adapter may omit it, and its absence
+   * yields byte-identical output.
    */
   readonly translate?: (coding: TerminologyCoding) => CodeTranslationResult | undefined;
 }

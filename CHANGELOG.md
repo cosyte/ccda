@@ -78,6 +78,36 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (twenty-fourth slice) — `buildCcda` consumes the terminology adapter's `translate`
+  (`$translate`) to emit `<translation>` alternate codings.** Closes the "translate-emit" boundary the
+  twenty-first (terminology-adapter) slice deferred ("emitting `<translation>` alternates from an adapter is
+  a later increment"). When a caller supplies an adapter whose optional `translate` returns an alternate
+  coding for a clinical coded slot, `buildCcda` emits a spec-clean CDA R2 `<translation>` child on the
+  relevant CD/CE element (`<value xsi:type="CD">`, `<code>`, `<routeCode>`) **beside** the primary code —
+  `@cosyte/ccda` still imports no terminology library and only calls the adapter you supply.
+  - **Additive, never a coercion.** A `<translation>` is only ever an _additional_ alternate coding
+    alongside the original `@code`/`@codeSystem`; the primary code is emitted verbatim and never replaced —
+    the same discipline the validation path follows (the adapter can add to a coded slot, never change it).
+  - **Never fabricated.** `translate` returning `undefined` (no opinion) or an empty `matches` (unmapped)
+    emits **no** `<translation>` and leaves output byte-identical; only a concrete adapter-supplied coding
+    produces one, and a match missing a `system` (not an unambiguous CD) is dropped — conservative on emit.
+  - **Opt-in, non-breaking.** No adapter, a validation-only adapter, or a `translate` with no opinions all
+    yield byte-identical output to the pre-adapter build. `translate` stays optional on the interface.
+  - **Scoped to the recognized clinical slots.** Emitted for the coded slots the parser recognizes via
+    `checkCodeSlot` — problem value, allergen, medication drug + route, vaccine + route. Structural
+    act/section codes (`ASSERTION`, section LOINC) are never handed to `translate`, mirroring the validation
+    path's slot discipline. Results/vitals LOINC, reaction/severity/criticality values, and the
+    `buildSectionComponent` edit/append path are out of this slice's scope.
+  - **Round-trips.** Emitted at the correct CD/CE `xs:sequence` position (`translation` follows
+    `originalText`/`qualifier`, neither of which these emitters produce); the parser reads the primary code
+    unchanged and surfaces each alternate in `CD.translation` (`parseCd` already reads `<translation>`), so a
+    translated build round-trips through `parseCcda` with zero new warnings. A match's `version` is emitted
+    as the spec `@codeSystemVersion` (the parser's shallow translation read does not currently surface it — a
+    pre-existing read scope, not a regression).
+  - **Public surface:** no change — the existing optional `TerminologyAdapter.translate` is now consumed on
+    the `buildCcda` / `BuildCcdaOptions.terminology` path; no new export, no warning-code change. Slice
+    verified NOT REFUTED by the conformance-refuter gate.
+
 - **Phase 7 (twenty-third slice) — `editCcda` threads a bring-your-own terminology adapter into its
   final re-parse.** Closes the "editCcda-adapter-threading" boundary the twenty-first (terminology-adapter)
   slice deferred ("wiring the adapter into `editCcda`'s final re-parse is likewise deferred"). `parseCcda`
