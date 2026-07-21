@@ -15,7 +15,8 @@ lenient parser that turns real-world, vendor-quirky input into **warnings** rath
 [`@xmldom/xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) (exact-pinned), the hardened W3C-DOM
 substrate for C-CDA's XML.
 
-> **Status:** pre-alpha (`0.0.x`), not yet published to npm. Through **Phase 5b** the parser ships
+> **Status:** **published on npm at `0.0.1`** and **public** — still pre-alpha on the cosyte `0.0.x`
+> version ladder (`0.0.x` until first alpha). The parser ships
 > document recognition, the US Realm header + patient demographics, section framing, the
 > reconciliation triad (Problems / Medications / Allergies), the discrete-data families
 > (Results / Vital Signs / Immunizations) with a computable UCUM unit check, Procedures (with a
