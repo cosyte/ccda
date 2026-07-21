@@ -39,6 +39,17 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Documentation
 
+- **`docs-content/` publish-status + capability drift corrected (README-ORG-SWEEP, wave 2).** The
+  user-facing docs pages (rendered on docs.cosyte.com) still claimed `@cosyte/ccda` was "not yet
+  published to npm" / "gated on the coordinated public launch", and `intro.md` still described the
+  builder as through **Phase 5b** ("`buildCcda` ships its first slice — a CCD with the US Realm header +
+  Problems + Allergies"). Both are stale: the package is **published on npm at `0.0.1`** and **public**,
+  and the builder is through Phase 7 (`buildCcda` emits a CCD **or** Referral Note, `editCcda` edits a
+  parsed document, and a bring-your-own terminology adapter validates coded values). The status banners
+  in `intro.md` / `installation.md` and the "Scope (non-goals)" note in `troubleshooting.md` now state
+  published on npm at `0.0.1`, public, still pre-alpha on the cosyte `0.0.x` ladder; the install command
+  is live; and `intro.md`'s builder capability now mirrors the corrected README. No code, public-API, or
+  warning-code change.
 - **README status banner refreshed to current reality (README-ORG-SWEEP).** The banner still read
   "pre-alpha (`0.0.x`), not yet published to npm. Through **Phase 5b** the parser ships …" — both halves
   stale: `@cosyte/ccda` is **published on npm at `0.0.1`** and **public**, and the package is well past
