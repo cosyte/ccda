@@ -415,8 +415,37 @@ const doc = parseCcda(xml, { terminology: adapter });
 
 The adapter can only ever **report**: a `validateCode` verdict of `{ result: false }` raises
 `SEMANTIC_CODE_INVALID` with the code preserved verbatim (never coerced); `undefined` means "no
-opinion" (silent). The interface also declares an optional `translate` (`$translate`) method for a
-future `<translation>`-emit increment — defined so a consumer can wire it, but not yet consumed here.
+opinion" (silent).
+
+The interface also declares an optional `translate` (`$translate`) method. `buildCcda` consults it at
+each clinical coded slot (problem value, allergen, medication drug + route, vaccine + route) and emits
+any returned coding as a spec-clean CDA R2 `<translation>` alternate **beside** the primary code — an
+_additional_ coding, never a substitution:
+
+```ts
+import { buildCcda, type TerminologyAdapter } from "@cosyte/ccda";
+
+const adapter: TerminologyAdapter = {
+  validateCode: () => ({ result: true }),
+  // Map a SNOMED problem to an ICD-10-CM alternate; empty matches ⇒ unmapped (never fabricated).
+  translate: (coding) =>
+    coding.code === "38341003" // Hypertension (SNOMED CT)
+      ? {
+          matches: [
+            { system: "2.16.840.1.113883.6.90", code: "I10", display: "Essential hypertension" },
+          ],
+        }
+      : { matches: [] },
+};
+
+const doc = buildCcda(init, { terminology: adapter });
+// The problem <value> now carries a <translation> alongside its verbatim SNOMED code;
+// parseCcda reads the primary code unchanged and surfaces the alternate in CD.translation.
+```
+
+Here too the adapter can only ever **add**: `translate` returning `undefined` (no opinion) or an empty
+`matches` (unmapped) emits no `<translation>` and leaves output byte-identical, and the primary code is
+never rewritten to satisfy it.
 
 ## Known limitations
 
