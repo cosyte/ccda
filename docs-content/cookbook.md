@@ -368,5 +368,79 @@ doc.getSmokingStatus()[1]?.unknown; // => true
 > their Supporting Observations `…22.4.86` and an `INT` score), **Past Medical History**, **Plan of
 > Treatment** (planned entries, never conflated with performed), and **Family History** (a Family
 > History Organizer per relative, with conditions carrying optional age-at-onset + cause-of-death)
-> sections when populated. The remaining builder work (the other eleven document types, C-CDA document
-> _editing_, and a bring-your-own-credentials terminology adapter) is a later increment.
+> sections when populated. The remaining builder work (the other eleven document types and a
+> bring-your-own-credentials terminology adapter) is a later increment.
+
+## 6. Edit a parsed document — add or replace a section, keep a revision trail
+
+**The problem:** you have a real C-CDA document, and you need to correct one section (add a Problem,
+swap out the Medications) and send the fix — **without** disturbing every other section or losing the
+audit trail that this is a new version of the original.
+
+`editCcda(doc, options)` is the read→edit→write loop. It takes a document from `parseCcda`, rebuilds
+only the section you target (through the same emitters `buildCcda` uses), and carries every other
+section through **byte-for-byte**. By default it stamps a CDA R2 revision: a new document `id`, the
+same version-series `setId`, an incremented `versionNumber`, and a `relatedDocument typeCode="RPLC"`
+naming the version it replaces.
+
+```ts runnable
+import { buildCcda, editCcda, parseCcda } from "@cosyte/ccda";
+
+// Start from a document the parser produced (here, one we built and re-parsed).
+const original = parseCcda(
+  buildCcda({
+    patient: { mrn: "MRN-00042", given: ["Jane"], family: "Doe" },
+    documentId: "DOC-1",
+    problems: [{ problem: { code: "38341003", displayName: "Hypertension" }, status: "active" }],
+    medications: [{ drug: { code: "197361", displayName: "Amlodipine 5 MG" } }],
+  }).toString(),
+);
+
+const revised = editCcda(original, {
+  sections: [
+    // Replace the Medications section wholesale…
+    {
+      kind: "medications",
+      mode: "replace",
+      content: [{ drug: { code: "314076", displayName: "Lisinopril 10 MG" } }],
+    },
+    // …and add a Family History section the source did not have.
+    {
+      kind: "familyHistory",
+      content: [
+        {
+          relative: { relationship: { code: "72705000", displayName: "Mother" } },
+          observations: [{ condition: { code: "73211009", displayName: "Diabetes mellitus" } }],
+        },
+      ],
+    },
+  ],
+});
+
+revised.getMedications()[0]?.drug?.code; // => "314076"
+revised.getFamilyHistory().length; // => 1
+// The untouched Problems section is preserved:
+revised.getProblems()[0]?.problems[0]?.value?.code; // => "38341003"
+
+// A CDA R2 revision that replaces DOC-1 (version 1):
+revised.header.versionNumber; // => 2
+revised.header.relatedDocuments[0]?.typeCode; // => "RPLC"
+revised.header.relatedDocuments[0]?.parentDocument.ids[0]?.extension; // => "DOC-1"
+
+// Re-parsing the edited XML is a fixed point.
+parseCcda(revised.toString()).toString() === revised.toString(); // => true
+```
+
+`editCcda` is fail-safe by construction: an unedited section is carried by reference (never dropped or
+corrupted), an empty content list emits a spec-clean `nullFlavor="NI"` shell rather than fabricated
+entries, and an edit that would drop a document type's SHALL required section throws a typed
+`CcdaEditError` instead of emitting an invalid document. Use `mode: "add"` to require the section be
+absent (or `"replace"` to require it present); the default `"upsert"` replaces when present and adds
+when absent. Pass `revision: false` to edit in place without stamping a new version.
+
+> Editing scope: whole-section **add** / **replace** across the twelve single-list section kinds
+> (Problems, Allergies, Medications, Results, Vital Signs, Immunizations, Procedures, Encounters,
+> Social History, Past Medical History, Plan of Treatment, Family History). Entry-level append that
+> byte-preserves a section's other entries (supply the full entry set via a `replace` instead), the
+> Functional/Mental Status and narrative-only sections as edit targets, section removal, and the
+> addendum (`APND`) / transform (`XFRM`) relationships are a later increment.

@@ -55,6 +55,20 @@ export type { CcdaDocumentInit, ProfileAttribution } from "./model/document.js";
 // Spec-clean serializer (Postel's-Law emit side; symmetric with parseCcda).
 export { serializeCcda } from "./serialize/index.js";
 
+// Document editing (the read→edit→write loop): re-emit a parsed document with a
+// section added or replaced, preserving every unedited section byte-faithfully
+// and stamping a CDA R2 revision (`relatedDocument` RPLC + setId/versionNumber).
+export { editCcda, CcdaEditError } from "./edit/index.js";
+export type {
+  EditCcdaOptions,
+  SectionEdit,
+  SectionEditMode,
+  RevisionInit,
+  DocumentIdInit,
+  CcdaEditErrorCode,
+  EditableSectionKind,
+} from "./edit/index.js";
+
 // Document builder (the emit *factory*, symmetric with parseCcda): construct a
 // spec-clean C-CDA R2.1 CCD from structured input, round-tripping through the
 // same parse model.
@@ -92,7 +106,13 @@ export type {
 
 // Header + patient + section models.
 export { buildHeader } from "./model/header.js";
-export type { CcdaHeader, CcdaPatient, HumanName } from "./model/header.js";
+export type {
+  CcdaHeader,
+  CcdaPatient,
+  HumanName,
+  RelatedDocument,
+  ParentDocument,
+} from "./model/header.js";
 export { buildSection, buildNarrativeIndex } from "./model/section.js";
 export type { CcdaSection } from "./model/section.js";
 

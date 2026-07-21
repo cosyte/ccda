@@ -90,7 +90,7 @@ describe("CcdaDocument.toString — hand-constructed guard", () => {
   it("throws when no source document was retained", () => {
     const doc = new CcdaDocument({
       templateIds: [],
-      header: { recordTargets: [] },
+      header: { recordTargets: [], relatedDocuments: [] },
       sections: [],
       problems: [],
       medications: [],

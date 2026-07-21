@@ -57,7 +57,7 @@ import type { Element } from "@xmldom/xmldom";
  * import type { CcdaDocumentInit } from "@cosyte/ccda";
  * const init: CcdaDocumentInit = {
  *   templateIds: [],
- *   header: { recordTargets: [] },
+ *   header: { recordTargets: [], relatedDocuments: [] },
  *   sections: [],
  *   problems: [],
  *   medications: [],

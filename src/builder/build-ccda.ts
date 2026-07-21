@@ -4041,3 +4041,132 @@ function deathObservation(doc: Document): Element {
     }),
   );
 }
+
+// ---------------------------------------------------------------------------
+// Section-level edit support (consumed by `src/edit/edit-ccda.ts`).
+//
+// C-CDA document *editing* re-emits an already-parsed document with a modified
+// or added section. To keep every SHALL guard, templateId, LOINC code, and
+// narrative/entry agreement identical to a freshly-built document, the editor
+// reuses the very same per-section emitters `buildCcda` uses — it never
+// re-implements a section. These exports expose that machinery (and the
+// identifying template roots the editor matches a source section against)
+// without widening the package's public surface: they are re-exported only into
+// the internal `edit` module, never from `src/index.ts`.
+// ---------------------------------------------------------------------------
+
+/**
+ * The section kinds {@link buildSectionComponent} can emit as a standalone
+ * `<component>` — the sections `buildCcda` builds from a single content list.
+ * The compound Functional/Mental Status sections (three content arrays each)
+ * and narrative-only sections are intentionally excluded from edit support.
+ * @internal
+ */
+export type EditableSectionKind =
+  | "problems"
+  | "allergies"
+  | "medications"
+  | "results"
+  | "vitalSigns"
+  | "immunizations"
+  | "procedures"
+  | "encounters"
+  | "socialHistory"
+  | "pastMedicalHistory"
+  | "planOfTreatment"
+  | "familyHistory";
+
+/**
+ * A section edit's `kind` paired with its typed builder content — a
+ * discriminated union on `kind`, so a `switch` narrows `content` to the exact
+ * `BuildCcda*` shape that kind's emitter accepts.
+ * @internal
+ */
+export type SectionInput =
+  | { readonly kind: "problems"; readonly content: readonly BuildCcdaProblem[] }
+  | { readonly kind: "allergies"; readonly content: readonly BuildCcdaAllergy[] }
+  | { readonly kind: "medications"; readonly content: readonly BuildCcdaMedication[] }
+  | { readonly kind: "results"; readonly content: readonly BuildCcdaResultPanel[] }
+  | { readonly kind: "vitalSigns"; readonly content: readonly BuildCcdaVitalsPanel[] }
+  | { readonly kind: "immunizations"; readonly content: readonly BuildCcdaImmunization[] }
+  | { readonly kind: "procedures"; readonly content: readonly BuildCcdaProcedure[] }
+  | { readonly kind: "encounters"; readonly content: readonly BuildCcdaEncounter[] }
+  | { readonly kind: "socialHistory"; readonly content: readonly BuildCcdaSmokingStatus[] }
+  | { readonly kind: "pastMedicalHistory"; readonly content: readonly BuildCcdaProblem[] }
+  | { readonly kind: "planOfTreatment"; readonly content: readonly BuildCcdaPlannedItem[] }
+  | { readonly kind: "familyHistory"; readonly content: readonly BuildCcdaFamilyHistory[] };
+
+/**
+ * The identifying base `templateId` root + LOINC `code` an editable section
+ * carries — used to locate the matching `<section>` in a source document's DOM
+ * (by templateId root, primary; LOINC, fallback) so an edit can replace it.
+ * @internal
+ */
+export interface EditableSectionMeta {
+  readonly base: string;
+  readonly loinc: string;
+}
+
+/**
+ * Base `templateId` root + section LOINC per {@link EditableSectionKind}. The
+ * values mirror the constants the `buildCcda` emitters use, so a section the
+ * builder emits is matched here by the identity it was emitted with.
+ * @internal
+ */
+export const EDITABLE_SECTIONS: Readonly<Record<EditableSectionKind, EditableSectionMeta>> = {
+  problems: { base: PROBLEMS_SECTION_BASE, loinc: "11450-4" },
+  allergies: { base: ALLERGIES_SECTION_BASE, loinc: "48765-2" },
+  medications: { base: MEDICATIONS_SECTION_BASE, loinc: "10160-0" },
+  results: { base: RESULTS_SECTION_BASE, loinc: "30954-2" },
+  vitalSigns: { base: VITALS_SECTION_BASE, loinc: "8716-3" },
+  immunizations: { base: IMMUNIZATIONS_SECTION_BASE, loinc: "11369-6" },
+  procedures: { base: PROCEDURES_SECTION_BASE, loinc: "47519-4" },
+  encounters: { base: ENCOUNTERS_SECTION_BASE, loinc: "46240-8" },
+  socialHistory: { base: SOCIAL_HISTORY_SECTION_BASE, loinc: "29762-2" },
+  pastMedicalHistory: { base: PAST_MEDICAL_HISTORY_SECTION_BASE, loinc: "11348-0" },
+  planOfTreatment: { base: PLAN_OF_TREATMENT_SECTION_BASE, loinc: "18776-5" },
+  familyHistory: { base: FAMILY_HISTORY_SECTION_BASE, loinc: "10157-6" },
+};
+
+/**
+ * Build one section `<component>` (bound to `doc`) for a {@link SectionInput},
+ * dispatching to the same emitter `buildCcda` uses for that kind. An empty
+ * content list yields that kind's spec-clean empty section exactly as a fresh
+ * build would (an entries-required section becomes a `nullFlavor="NI"` shell,
+ * never an entries-required template with zero entries). Any builder guard the
+ * emitter enforces (e.g. a resolved-without-resolution contradiction, an
+ * invalid HL7 timestamp) throws here just as it would in `buildCcda`.
+ * @internal
+ */
+export function buildSectionComponent(
+  doc: Document,
+  input: SectionInput,
+  id: (prefix: string) => string,
+): Element {
+  switch (input.kind) {
+    case "problems":
+      return problemsSection(doc, input.content, id);
+    case "allergies":
+      return allergiesSection(doc, input.content, id);
+    case "medications":
+      return medicationsSection(doc, input.content, id);
+    case "results":
+      return resultsSection(doc, input.content, id);
+    case "vitalSigns":
+      return vitalsSection(doc, input.content, id);
+    case "immunizations":
+      return immunizationsSection(doc, input.content, id);
+    case "procedures":
+      return proceduresSection(doc, input.content, id);
+    case "encounters":
+      return encountersSection(doc, input.content, id);
+    case "socialHistory":
+      return socialHistorySection(doc, input.content, id);
+    case "pastMedicalHistory":
+      return pastMedicalHistorySection(doc, input.content, id);
+    case "planOfTreatment":
+      return planOfTreatmentSection(doc, input.content, id);
+    case "familyHistory":
+      return familyHistorySection(doc, input.content, id);
+  }
+}
