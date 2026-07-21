@@ -78,6 +78,34 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (twenty-third slice) — `editCcda` threads a bring-your-own terminology adapter into its
+  final re-parse.** Closes the "editCcda-adapter-threading" boundary the twenty-first (terminology-adapter)
+  slice deferred ("wiring the adapter into `editCcda`'s final re-parse is likewise deferred"). `parseCcda`
+  and `buildCcda` already reach the semantic-validation tier — calling a consumer's
+  `TerminologyAdapter.validateCode` on each recognized coded slot (problem, medication, allergen, route,
+  vaccine) and raising `SEMANTIC_CODE_INVALID` on a negative verdict — but `editCcda` re-parsed its edited
+  output with **no options**, so an edited document never reached that tier even when the caller held an
+  adapter. This threads it through, mirroring the `buildCcda` pattern exactly.
+  - **Opt-in, non-breaking.** `EditCcdaOptions` gains an optional `terminology?: TerminologyAdapter`;
+    `editCcda`'s closing `parseCcda(serializeDocument(dom))` forwards it (`{ terminology }`) only when
+    supplied. With no adapter the behavior is unchanged. The adapter is honored on both a stamped revision
+    and an in-place (`revision: false`) edit.
+  - **Surfaced, never coerced.** As on the parse and build paths, the adapter can only ever add a flag:
+    `editCcda` emits every code **verbatim** (byte-faithful on untouched sections, spec-clean on the one it
+    rebuilds), and a `{ result: false }` verdict raises `SEMANTIC_CODE_INVALID` with the code preserved and
+    never rewritten. Validation runs over the **whole** edited document — a rejected code in an untouched
+    section is flagged too, not only one in a grafted section. The flag stays PHI-free (slot name + code
+    system OID, never the clinical code).
+  - **Scope note.** The intermediate `parseSecureXml(...)` that recovers the DOM for surgery is
+    deliberately left adapter-free — it re-reads the library's own already-clean source XML only to mutate
+    it; semantic validation belongs on the **final** re-parse of the edited output, where `buildCcda` runs
+    it too.
+  - **Public surface:** additive optional `terminology` field on `EditCcdaOptions`. No warning-code change
+    (`SEMANTIC_CODE_INVALID` already exists), no new type.
+  - **Deferred (unchanged):** the adapter's optional `translate` (`$translate`) method remains defined but
+    not consumed (emitting `<translation>` alternates is a later increment); entry-level append into a
+    populated section, section removal, and subsection edits stay out of `editCcda`'s scope.
+
 - **Phase 7 (twenty-first slice) — bring-your-own terminology adapter (semantic-validation path).** A
   small, dependency-free `TerminologyAdapter` interface a consumer implements over their own **licensed**
   terminology service, wired into the parser's code-system recognition so `parseCcda(xml, { terminology })`
