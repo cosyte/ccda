@@ -10,6 +10,7 @@
 
 import { invalidNullFlavor, type CcdaWarning } from "../../parser/warnings.js";
 import { attr, positionOf } from "../dom.js";
+import type { TerminologyAdapter } from "../terminology.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
@@ -68,6 +69,14 @@ export function isNullFlavor(value: string): value is NullFlavor {
  */
 export interface ParseCtx {
   readonly emit: (warning: CcdaWarning) => void;
+  /**
+   * The optional consumer-supplied {@link TerminologyAdapter}. When present, the
+   * code-system recognition layer ({@link checkCodeSlot}) calls it to
+   * semantically validate coded values; when absent, recognition falls back to
+   * structural checks only. `@cosyte/ccda` never constructs one — it only calls
+   * the adapter a consumer passed to `parseCcda` / `buildCcda`.
+   */
+  readonly terminology?: TerminologyAdapter;
 }
 
 /**

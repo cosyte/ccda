@@ -14,6 +14,7 @@
 // remains the single source of truth for `CcdaWarning`.
 import type { CcdaWarning } from "./warnings.js";
 import type { CcdaProfile } from "../profiles/types.js";
+import type { TerminologyAdapter } from "../model/terminology.js";
 
 /**
  * Structural locator attached to every warning and fatal error. Every field
@@ -120,4 +121,13 @@ export interface ParseCcdaOptions {
    * default for this call.
    */
   readonly profile?: CcdaProfile | null;
+  /**
+   * An optional consumer-supplied bring-your-own {@link TerminologyAdapter}. When
+   * present, the parser semantically validates each recognized coded value (a
+   * problem, medication, allergen, route, or vaccine code) against it and emits
+   * `SEMANTIC_CODE_INVALID` on a negative verdict — the code preserved verbatim,
+   * never coerced. Omit it for the default recognize-only behavior. `@cosyte/ccda`
+   * never imports a terminology library; you supply the adapter.
+   */
+  readonly terminology?: TerminologyAdapter;
 }

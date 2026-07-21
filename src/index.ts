@@ -43,7 +43,7 @@ export { parseSecureXml, resolveLimits, DEFAULT_LIMITS } from "./parser/secure-x
 export type { ResolvedLimits } from "./parser/secure-xml.js";
 
 // Tier-2 warning registry + Tier-3 fatal registry (stable public contract).
-export { WARNING_CODES, profileQuirkApplied } from "./parser/warnings.js";
+export { WARNING_CODES, profileQuirkApplied, semanticCodeInvalid } from "./parser/warnings.js";
 export type { WarningCode, CcdaWarning } from "./parser/warnings.js";
 export { FATAL_CODES, CcdaParseError, CcdaProfileDefinitionError } from "./parser/errors.js";
 export type { FatalCode } from "./parser/errors.js";
@@ -75,6 +75,7 @@ export type {
 export { buildCcda } from "./builder/index.js";
 export type {
   BuildCcdaInit,
+  BuildCcdaOptions,
   BuildCcdaPatient,
   BuildCcdaProblem,
   BuildCcdaAllergy,
@@ -195,6 +196,14 @@ export {
   looksProductLevel,
 } from "./model/code-systems.js";
 export type { CodeSlot } from "./model/code-systems.js";
+
+// Bring-your-own terminology adapter — the pluggable semantic-validation contract.
+export type {
+  TerminologyAdapter,
+  TerminologyCoding,
+  CodeValidationResult,
+  CodeTranslationResult,
+} from "./model/terminology.js";
 
 // Recognition tables — document types + section catalog.
 export {
