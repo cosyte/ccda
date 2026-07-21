@@ -305,6 +305,9 @@ By default an edit stamps a **CDA R2 revision**: a new `ClinicalDocument.id`, th
 `setId` (minted when absent), an incremented `versionNumber`, and a `relatedDocument typeCode="RPLC"`
 naming the prior version — inserted at their CDA R2 XSD sequence positions, and surfaced back on the
 parsed header (`setId` / `versionNumber` / `relatedDocuments`). Pass `revision: false` to edit in place.
+A source with no `ClinicalDocument.id` cannot be revised — the RPLC link's `parentDocument.id` is a CDA
+R2 SHALL (1..\*) and there is no prior-version id to name — so `editCcda` throws
+`CcdaEditError` (`SOURCE_MISSING_ID`) rather than fabricate one; use `revision: false` to edit it in place.
 
 It is fail-safe: an unedited section is carried by reference (never dropped), an empty content list
 emits a spec-clean `nullFlavor="NI"` shell (never fabricated entries), and an edit that would drop a

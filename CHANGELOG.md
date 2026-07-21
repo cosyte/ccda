@@ -895,6 +895,22 @@ statusCode, effectiveTime, component+`).
 
 ### Fixed
 
+- **Phase 7 (twenty-second slice) — `editCcda` no longer emits an id-less RPLC `parentDocument` (CDA R2
+  SHALL fix).** `stampRevision` appended the parent `<id>` only when the source `ClinicalDocument`
+  carried one, while `deriveNewDocId` always minted the new document's id — so revising a source with no
+  `<id>` produced a `<relatedDocument typeCode="RPLC"><parentDocument>` with `code`/`setId`/`versionNumber`
+  but **no `<id>`**. That violates `POCD_MT000040.ParentDocument.id`, which is `1..*` SHALL — grounded
+  firsthand against `HL7/CDA-core-2.0` `schema/normative/infrastructure/cda/POCD_MT000040.xsd`
+  (`<xs:element name="id" type="II" maxOccurs="unbounded"/>`, no `minOccurs` ⇒ default `1`). The source
+  itself was also invalid: `ClinicalDocument.id` is `1..1` SHALL there. `editCcda` now **refuses** to
+  stamp a revision of an id-less source, throwing the new stable `CcdaEditError` code `SOURCE_MISSING_ID`
+  rather than mint a fabricated parent identifier for a document that provably has none — the RPLC link
+  exists to name the replaced version by its id, and a random id would make that clinical link look valid
+  while pointing at nothing real (conservative-emit + never-fabricate). Refusal is scoped to the revision
+  path: `revision: false` still edits an id-less source in place (no `parentDocument`, no id requirement).
+  A source **with** an id is byte-unchanged. New `SOURCE_MISSING_ID` value on the `CcdaEditErrorCode`
+  union (additive); regression tests cover the id-less parse path (throws), the in-place `revision: false`
+  escape, and the build path (`buildCcda` always mints an id, so its RPLC parent always carries one).
 - **Phase 7 (sixteenth slice) — the builder emits `<text>` in CDA R2 element-sequence order for
   Problem, Allergy, and Smoking Status observations.** The base CDA R2 schema
   (`POCD_MT000040.Observation`) is an `xs:sequence` — `code`, `text`, `statusCode`, `effectiveTime`, …,

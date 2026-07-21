@@ -467,9 +467,10 @@ describe("editCcda — edge-case coverage", () => {
     expect(revised.header.versionNumber).toBe(2);
   });
 
-  it("stamps a revision for a source with no id, a root-only setId, an unparseable version, and no recordTarget", () => {
+  it("stamps a revision for a source with a root-only setId, an unparseable version, and no recordTarget", () => {
     const doc = parseCcda(
       rawCda({
+        id: '<id root="1.2.3.doc" extension="SRC-1"/>',
         setId: '<setId root="1.2.3.series"/>',
         versionNumber: '<versionNumber value="not-a-number"/>',
         recordTarget: false,
@@ -481,8 +482,10 @@ describe("editCcda — edge-case coverage", () => {
         { kind: "problems", mode: "replace", content: [{ problem: DIABETES, status: "active" }] },
       ],
     });
-    // No prior id → a synthetic new document id is minted.
-    expect(revised.header.documentId?.root).toBe("2.16.840.1.113883.19.5.99999");
+    // The new document id keeps the source root with a fresh extension.
+    expect(revised.header.documentId?.root).toBe("1.2.3.doc");
+    // The RPLC parentDocument carries the source's id (SHALL 1..*, CDA R2).
+    expect(revised.header.relatedDocuments[0]?.parentDocument.ids[0]?.extension).toBe("SRC-1");
     // Root-only setId is kept as the series id; version defaults to parent(1)+1.
     expect(revised.header.setId?.root).toBe("1.2.3.series");
     expect(revised.header.setId?.extension).toBeUndefined();
@@ -495,6 +498,59 @@ describe("editCcda — edge-case coverage", () => {
     expect(order.indexOf("versionNumber")).toBe(order.indexOf("setId") + 1);
     expect(order.indexOf("setId")).toBeLessThan(order.indexOf("component"));
     expect(order.indexOf("relatedDocument")).toBeLessThan(order.indexOf("component"));
+  });
+
+  it("refuses to revise an id-less source: CDA R2 ParentDocument.id is SHALL 1..* (parse path)", () => {
+    // A source ClinicalDocument with no <id> (itself a CDA R2 [1..1] SHALL violation).
+    // Stamping an RPLC revision would emit a <parentDocument> with no <id>, which
+    // violates POCD_MT000040.ParentDocument.id (minOccurs=1). Minting a fake parent id
+    // would fabricate a clinical identifier for a document that has none — so we throw.
+    const doc = parseCcda(rawCda({ problemsByLoincOnly: true }));
+    expect(doc.header.documentId).toBeUndefined();
+    // The emitted XML never contains a parentDocument (we refuse before serializing).
+    try {
+      editCcda(doc, {
+        sections: [
+          { kind: "problems", mode: "replace", content: [{ problem: DIABETES, status: "active" }] },
+        ],
+      });
+      throw new Error("expected throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(CcdaEditError);
+      expect((err as CcdaEditError).code).toBe("SOURCE_MISSING_ID");
+    }
+  });
+
+  it("an id-less source can still be edited in place with revision: false", () => {
+    // Refusal is scoped to the revision path: no RPLC link, no ParentDocument.id
+    // requirement, so an in-place edit of an id-less source is allowed.
+    const doc = parseCcda(rawCda({ problemsByLoincOnly: true }));
+    const revised = editCcda(doc, {
+      sections: [
+        { kind: "problems", mode: "replace", content: [{ problem: DIABETES, status: "active" }] },
+      ],
+      revision: false,
+    });
+    expect(revised.getProblems().map((p) => p.problems[0]?.value?.code)).toEqual(["73211009"]);
+    expect(revised.header.relatedDocuments).toHaveLength(0);
+    expect(revised.toString()).not.toContain("parentDocument");
+  });
+
+  it("a built source (documentId omitted) still mints an id, so its RPLC parent carries one (build path)", () => {
+    // buildCcda always emits a ClinicalDocument.id even when documentId is omitted,
+    // so the build path can never reach the id-less defect: the revision's
+    // parentDocument always carries its SHALL id.
+    const built = buildCcda({ patient: { given: ["A"], family: "B", mrn: "M1" } });
+    expect(built.header.documentId).toBeDefined();
+    const revised = editCcda(built, {
+      sections: [
+        { kind: "problems", mode: "replace", content: [{ problem: DIABETES, status: "active" }] },
+      ],
+    });
+    const parentId = revised.header.relatedDocuments[0]?.parentDocument.ids[0];
+    expect(parentId).toBeDefined();
+    expect(parentId?.root).toBe(built.header.documentId?.root);
+    expect(parentId?.extension).toBe(built.header.documentId?.extension);
   });
 
   it("derives a new document id when the source id carries no root", () => {
