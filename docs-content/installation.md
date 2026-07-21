@@ -11,8 +11,8 @@ per-condition type declarations, so it works from either module system without c
 has a **single** exact-pinned runtime dependency — the hardened W3C-DOM substrate `@xmldom/xmldom`
 (ratified by an ADR for C-CDA's XML; C-CDA is XML, so a DOM is unavoidable).
 
-> **Status:** pre-alpha (`0.0.x`), not yet published to npm. The command below is the shape it will
-> take at first publish; until then, consume it from source or a workspace link.
+> **Status:** **published on npm at `0.0.1`** and **public** — still pre-alpha on the cosyte `0.0.x`
+> version ladder (`0.0.x` until first alpha). The install command below is live.
 
 ## Prerequisites
 

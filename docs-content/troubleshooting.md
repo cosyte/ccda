@@ -113,8 +113,8 @@ authored here so a reader never relies on something absent. They grow as the par
 - **C-CDA R2.1, US Realm.** Other CDA templates and realms are out of the current scope.
 - **A parser + serializer, not a transport or a validator suite.** No MLLP/XDS delivery, no Schematron
   conformance report — this reads and re-emits documents.
-- **Not yet published.** The package sits on the `0.0.x`-until-first-alpha ladder and is **not on npm**;
-  the first provenance publish is gated on the coordinated public launch.
+- **Pre-alpha on the `0.0.x` ladder.** `@cosyte/ccda` is **published on npm at `0.0.1`** and **public**,
+  but still pre-alpha — on the `0.0.x`-until-first-alpha ladder, the API can still change.
 
 For the phase-by-phase surface and the exact fields each accessor decodes, see the package's `README.md`
 and `CLAUDE.md` status sections and the [Core Concepts](./spec-notes-clinical).
