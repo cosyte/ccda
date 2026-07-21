@@ -29,8 +29,10 @@ substrate for C-CDA's XML.
 > Encounters, Social-History smoking status, Functional Status, Mental Status, Past Medical History,
 > Plan of Treatment** (planned entries, never conflated with performed), **and Family History**
 > (organizer per relative, conditions with optional age-at-onset + cause-of-death) sections (each
-> round-tripping through `parseCcda`); the other document types and remaining sections land in a later
-> increment.
+> round-tripping through `parseCcda`). A document **editor** (`editCcda`) re-emits a parsed document
+> with a section added or replaced — every untouched section preserved byte-for-byte — and stamps a
+> CDA R2 revision (`relatedDocument` `RPLC` + `setId`/`versionNumber`). The other document types and a
+> terminology adapter land in a later increment.
 
 ## Install
 
@@ -258,8 +260,56 @@ keeps the `nullFlavor="UNK"` high, never a fabricated date. Each CCD SHALL secti
 is supplied is emitted as a spec-clean empty `nullFlavor="NI"` section; the non-required Immunizations /
 Procedures / Encounters / Social History / Functional Status / Mental Status / Past Medical History /
 Plan of Treatment / Family History sections are emitted only when populated. The builder now emits two of
-the twelve document types (**CCD** and **Referral Note**); the remaining ten, C-CDA document editing, and
-a bring-your-own-credentials terminology adapter land in a later increment.
+the twelve document types (**CCD** and **Referral Note**); the remaining ten and a
+bring-your-own-credentials terminology adapter land in a later increment.
+
+## Edit a document (Phase 7)
+
+`editCcda(doc, options)` is the read→edit→write loop: it takes a document from `parseCcda` and re-emits
+it with a section **added** or **replaced**, returning the re-parsed document. It rebuilds only the
+targeted section (through the same emitters `buildCcda` uses) and carries every other section through
+**byte-for-byte** — including content this library never models.
+
+```ts
+import { parseCcda, editCcda } from "@cosyte/ccda";
+
+const revised = editCcda(parseCcda(xml), {
+  sections: [
+    // Replace the whole Medications section…
+    {
+      kind: "medications",
+      mode: "replace",
+      content: [{ drug: { code: "314076", displayName: "Lisinopril 10 MG" } }],
+    },
+    // …and add a section the source did not have.
+    {
+      kind: "familyHistory",
+      content: [
+        {
+          relative: { relationship: { code: "72705000", displayName: "Mother" } },
+          observations: [{ condition: { code: "73211009", displayName: "Diabetes mellitus" } }],
+        },
+      ],
+    },
+  ],
+});
+
+revised.header.versionNumber; // 2 — a CDA R2 revision of the source
+revised.header.relatedDocuments[0]?.typeCode; // "RPLC"
+```
+
+By default an edit stamps a **CDA R2 revision**: a new `ClinicalDocument.id`, the same version-series
+`setId` (minted when absent), an incremented `versionNumber`, and a `relatedDocument typeCode="RPLC"`
+naming the prior version — inserted at their CDA R2 XSD sequence positions, and surfaced back on the
+parsed header (`setId` / `versionNumber` / `relatedDocuments`). Pass `revision: false` to edit in place.
+
+It is fail-safe: an unedited section is carried by reference (never dropped), an empty content list
+emits a spec-clean `nullFlavor="NI"` shell (never fabricated entries), and an edit that would drop a
+SHALL required section throws a typed `CcdaEditError`. `mode` is `"add"` (require absent), `"replace"`
+(require present), or `"upsert"` (default — replace-or-add). Editing supports whole-section add/replace
+across the twelve single-list section kinds; entry-level append that byte-preserves a section's other
+entries (use a `replace` with the full entry set), section removal, and the `APND`/`XFRM` relationships
+land in a later increment.
 
 ## What it extracts (Phase 5) — Procedures, Encounters, Social History
 

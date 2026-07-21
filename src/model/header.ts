@@ -58,9 +58,53 @@ export interface CcdaPatient {
 }
 
 /**
+ * A CDA R2 `parentDocument` — the earlier document a {@link RelatedDocument}
+ * points back at. Carries the parent's `id`(s), optional `code`, and the
+ * `setId`/`versionNumber` revision pair (the version this document supersedes).
+ *
+ * @example
+ * ```ts
+ * import type { ParentDocument } from "@cosyte/ccda";
+ * function priorVersion(p: ParentDocument): number | undefined {
+ *   return p.versionNumber;
+ * }
+ * ```
+ */
+export interface ParentDocument {
+  readonly ids: readonly II[];
+  readonly code?: CD;
+  readonly setId?: II;
+  readonly versionNumber?: number;
+}
+
+/**
+ * A CDA R2 `relatedDocument` — the header link that makes one document a
+ * revision of another. `typeCode` is the ActRelationshipType (`RPLC` replaces,
+ * `APND` appends, `XFRM` transforms); `parentDocument` names the prior version.
+ * A replacement (revision) carries `typeCode="RPLC"`, the **same** `setId` as
+ * its parent, and an incremented `versionNumber`.
+ *
+ * @example
+ * ```ts
+ * import type { RelatedDocument } from "@cosyte/ccda";
+ * function replaces(r: RelatedDocument): boolean {
+ *   return r.typeCode === "RPLC";
+ * }
+ * ```
+ */
+export interface RelatedDocument {
+  readonly typeCode?: string;
+  readonly parentDocument: ParentDocument;
+}
+
+/**
  * The parsed US Realm Header. `documentId` + `code` + `title` + `effectiveTime`
  * answer the document's identity; `recordTargets` are the patient(s) (usually
- * exactly one — more than one emits `MULTIPLE_RECORD_TARGETS`).
+ * exactly one — more than one emits `MULTIPLE_RECORD_TARGETS`). `setId` +
+ * `versionNumber` + `relatedDocuments` carry the CDA R2 revision chain — a
+ * replacement document (see {@link editCcda}) shares its predecessor's `setId`,
+ * bumps `versionNumber`, and names the prior version in a `RPLC`
+ * {@link RelatedDocument}.
  *
  * @example
  * ```ts
@@ -77,7 +121,10 @@ export interface CcdaHeader {
   readonly effectiveTime?: TS;
   readonly confidentialityCode?: CD;
   readonly languageCode?: string;
+  readonly setId?: II;
+  readonly versionNumber?: number;
   readonly recordTargets: readonly CcdaPatient[];
+  readonly relatedDocuments: readonly RelatedDocument[];
 }
 
 /**
@@ -100,8 +147,11 @@ export function buildHeader(root: Element, ctx: ParseCtx): CcdaHeader {
     effectiveTime?: TS;
     confidentialityCode?: CD;
     languageCode?: string;
+    setId?: II;
+    versionNumber?: number;
     recordTargets: readonly CcdaPatient[];
-  } = { recordTargets: [] };
+    relatedDocuments: readonly RelatedDocument[];
+  } = { recordTargets: [], relatedDocuments: [] };
 
   const documentId = parseIi(child(root, "id"), ctx);
   if (documentId !== undefined) out.documentId = documentId;
@@ -117,6 +167,10 @@ export function buildHeader(root: Element, ctx: ParseCtx): CcdaHeader {
   const langEl = child(root, "languageCode");
   const languageCode = langEl === undefined ? undefined : attr(langEl, "code");
   if (languageCode !== undefined) out.languageCode = languageCode;
+  const setId = parseIi(child(root, "setId"), ctx);
+  if (setId !== undefined) out.setId = setId;
+  const versionNumber = intValue(child(root, "versionNumber"));
+  if (versionNumber !== undefined) out.versionNumber = versionNumber;
 
   const recordTargets = children(root, "recordTarget");
   if (recordTargets.length > 1) {
@@ -127,6 +181,49 @@ export function buildHeader(root: Element, ctx: ParseCtx): CcdaHeader {
     .filter((pr): pr is Element => pr !== undefined)
     .map((pr) => buildPatient(pr, ctx));
 
+  out.relatedDocuments = children(root, "relatedDocument").map((rd) =>
+    parseRelatedDocument(rd, ctx),
+  );
+
+  return out;
+}
+
+/**
+ * The `@value` of an `INT`-typed element (e.g. `<versionNumber value="2"/>`) as
+ * a finite number, or `undefined` when the element or a parseable value is
+ * absent. @internal
+ */
+function intValue(el: Element | undefined): number | undefined {
+  if (el === undefined) return undefined;
+  const raw = attr(el, "value");
+  if (raw === undefined) return undefined;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/** Parse a `<relatedDocument>` into a {@link RelatedDocument}. @internal */
+function parseRelatedDocument(rd: Element, ctx: ParseCtx): RelatedDocument {
+  const parentEl = child(rd, "parentDocument");
+  const parent: {
+    ids: readonly II[];
+    code?: CD;
+    setId?: II;
+    versionNumber?: number;
+  } = { ids: [] };
+  if (parentEl !== undefined) {
+    parent.ids = children(parentEl, "id")
+      .map((idEl) => parseIi(idEl, ctx))
+      .filter((ii): ii is II => ii !== undefined);
+    const code = parseCd(child(parentEl, "code"), ctx);
+    if (code !== undefined) parent.code = code;
+    const parentSetId = parseIi(child(parentEl, "setId"), ctx);
+    if (parentSetId !== undefined) parent.setId = parentSetId;
+    const parentVersion = intValue(child(parentEl, "versionNumber"));
+    if (parentVersion !== undefined) parent.versionNumber = parentVersion;
+  }
+  const out: { typeCode?: string; parentDocument: ParentDocument } = { parentDocument: parent };
+  const typeCode = attr(rd, "typeCode");
+  if (typeCode !== undefined) out.typeCode = typeCode;
   return out;
 }
 

@@ -78,6 +78,50 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Added
 
+- **Phase 7 (twentieth slice) — `editCcda`: the read→edit→write loop (C-CDA document editing).** A
+  third emit-side primitive alongside `parseCcda` (read) and `buildCcda` (construct): it takes a
+  document already produced by `parseCcda` and re-emits it with a section **added** or **replaced**,
+  returning the re-parsed `CcdaDocument` — so `parseCcda(editCcda(parseCcda(xml), …).toString())`
+  round-trips. Grounded firsthand against CDA R2 (the `ClinicalDocument` XSD sequence in
+  `HL7/CDA-core-2.0 POCD_MT000040.xsd`) and the HL7 C-CDA-Examples "Parent Document Replace
+  Relationship" sample.
+  - **Byte-faithful on untouched sections.** The edit is DOM surgery on the document the parser
+    actually read (recovered from the serialized snapshot every parsed document retains), not a
+    reconstruction from the lossy read-model — so every section, entry, attribute, namespace
+    declaration, and even content this library never models survives an edit verbatim; only the one
+    targeted section is rebuilt. The replacement section is emitted through the **same per-section
+    emitters `buildCcda` uses** (a new internal `buildSectionComponent` dispatcher over the twelve
+    single-list section kinds), so it carries identical templateIds, LOINC code, SHALL
+    `effectiveTime`, and narrative/entry agreement, and re-parses with zero new warnings. Narrative
+    `ID`s in a grafted section are renumbered to never collide with an existing `ID` (which would make
+    a `<reference value="#id">` ambiguous).
+  - **Fail-safe.** An edit never silently drops or corrupts an unedited section; an empty content
+    list yields that section's spec-clean `nullFlavor="NI"` shell, never fabricated entries; and an
+    edit that would drop a per-document-type SHALL required section throws a typed `CcdaEditError`
+    (`REQUIRED_SECTION_MISSING`) instead of emitting an invalid document. `add`/`replace`/`upsert`
+    modes throw `SECTION_ALREADY_PRESENT` / `SECTION_ABSENT` on a precondition violation rather than a
+    silent no-op or duplicate section; every builder guard (an invalid HL7 timestamp, a resolved
+    problem without a resolution date) still throws.
+  - **CDA R2 revision provenance.** By default an edit produces a _revision_: a new
+    `ClinicalDocument.id`, the **same** `setId` that identifies the version series (minted when the
+    source has none), an incremented `versionNumber`, and a `relatedDocument typeCode="RPLC"` whose
+    `parentDocument` names the prior version (with the same `setId` and the prior `versionNumber`) —
+    the replacement relationship shown in the HL7 sample. New header elements are inserted at their
+    CDA R2 XSD sequence positions (`setId`/`versionNumber` after `languageCode`, before
+    `recordTarget`; `relatedDocument` after `documentationOf`, before `componentOf`/`component`).
+    Chained edits keep the series `setId`, bump the version, and point at the immediate parent (the
+    source's own parent link is superseded, not accumulated). Pass `revision: false` to edit in place.
+  - **Parser surfaces the revision chain.** The header model now reads `setId`, `versionNumber`, and
+    `relatedDocuments` (`RelatedDocument` → `ParentDocument`), so a revision is observable through the
+    public parse API, not just written.
+  - **Public surface:** `editCcda`, `CcdaEditError`, and the types `EditCcdaOptions`, `SectionEdit`,
+    `SectionEditMode`, `RevisionInit`, `DocumentIdInit`, `CcdaEditErrorCode`, `EditableSectionKind`,
+    plus `RelatedDocument` / `ParentDocument` on `CcdaHeader`.
+  - **Deferred (stated boundaries):** entry-level append into an existing populated section while
+    byte-preserving its other entries (needs DOM entry splicing the lossy read-model can't drive —
+    supply the full new entry set via a section `replace` instead); the compound Functional/Mental
+    Status sections (three content arrays each) and narrative-only sections as edit targets; section
+    _removal_; subsection-level edits; and the addendum (`APND`) / transform (`XFRM`) relationships.
 - **Phase 7 (nineteenth slice) — the v3 `TS` datetime grammar now requires a time-of-day before a
   fractional-second or timezone offset, closing a dropped-dash misparse.** `parseV3DateTime` /
   `TS_RE` (`src/model/types/_shared.ts`) previously let a `.fraction` or a `±ZZZZ` offset hang on a
