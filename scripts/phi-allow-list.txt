@@ -1,12 +1,12 @@
 # scripts/phi-allow-list.txt
 #
-# PHI-scan allow-list — the positive declaration that a fixture's identifiers
+# PHI-scan allow-list, the positive declaration that a fixture's identifiers
 # are synthetic. `scripts/phi-scan.ts` reads this file; any realistic-PHI-shaped
 # token NOT covered here is a hit. C-CDA fixtures are XML with no natural place
 # for an inline `<!-- synthetic: true -->` marker every parser test would agree
 # to ignore, and this repo keeps its fixtures as embedded XML inside
 # `test/__fixtures__/*.ts` (plus any committed `.xml`). This allow-list is
-# therefore the synthetic-fixture declaration mechanism — the same approach the
+# therefore the synthetic-fixture declaration mechanism, the same approach the
 # byte-strict siblings use (`@cosyte/hl7`, `@cosyte/dicom` binary `.dcm`,
 # `@cosyte/x12` `.edi`).
 #
@@ -23,7 +23,7 @@
 #   EMAILDOMAIN <domain>  reserved / test email domain that is allowed to appear
 #
 # To add a new synthetic fixture: reuse the tokens below, or append new ones here
-# and commit. Adding a token is a reviewed, intentional act — never silent.
+# and commit. Adding a token is a reviewed, intentional act, never silent.
 
 # --- Synthetic person names ---
 # The canonical synthetic patient across the corpus is "Jane Q Doe" (Q is a

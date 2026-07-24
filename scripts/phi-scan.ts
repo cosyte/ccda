@@ -1,13 +1,13 @@
 #!/usr/bin/env tsx
 /**
- * `@cosyte/ccda` PHI scanner — the CI / pre-commit half of the PHI commit-gate.
+ * `@cosyte/ccda` PHI scanner, the CI / pre-commit half of the PHI commit-gate.
  *
  * Pure Node. Zero runtime deps (it does NOT import the package's `@xmldom/xmldom`
- * runtime dependency — a commit gate must run without a build and must tolerate
+ * runtime dependency, a commit gate must run without a build and must tolerate
  * the malformed / fragmentary XML a real leaked document arrives as, which a
  * strict DOM parser would reject). Walks the ENTIRE working tree (CI) / every
- * staged file (pre-commit) — enumeration is not scoped by directory or extension,
- * so a real document cannot dodge the scanner by its file name — then decides per
+ * staged file (pre-commit), enumeration is not scoped by directory or extension,
+ * so a real document cannot dodge the scanner by its file name, then decides per
  * file whether to run the full structured C-CDA scan (a document) or the
  * conservative dashed-SSN + email text pass (`src/` + `scripts/` code), and
  * REFUSES anything that looks like real PHI, so a developer cannot commit a
@@ -24,14 +24,14 @@
  * (`scripts/phi-allow-list.txt`) is the positive declaration that a fixture's
  * identifiers are fake. Any realistic-PHI-shaped token not covered by the
  * allow-list is a hit. Adding a new synthetic fixture therefore means either
- * reusing known-synthetic tokens or consciously extending the allow-list — a
+ * reusing known-synthetic tokens or consciously extending the allow-list, a
  * reviewed act, never silent.
  *
  * Detection is CDA-shape-aware, NOT a blind text regex: the scanner reads the
  * text of the person-name elements (`given` / `family`, plus a bare `name`),
  * the `birthTime@value` date, `id@root`/`@extension` identifiers, the address
- * elements (`streetAddressLine` / `city` / `postalCode`), and `telecom@value` —
- * and ONLY those. That is deliberate — a naive scan for `<code code="…">` or a
+ * elements (`streetAddressLine` / `city` / `postalCode`), and `telecom@value`,
+ * and ONLY those. That is deliberate, a naive scan for `<code code="…">` or a
  * `templateId root="2.16.840…"` OID would trip on coded clinical values and
  * template identifiers, giving false confidence, not safety. The detectors are
  * namespace-prefix tolerant (`<given>` == `<v3:given>`), case tolerant, quote
@@ -69,7 +69,7 @@ const OVERRIDE_LOG_PATH = join(REPO_ROOT, "phi-scan-overrides.md");
 // a real C-CDA document can land anywhere (a `.cda` fixture, an `examples/`
 // sample, a repo-root file) and detection follows the file's CONTENT, so the
 // walk has to reach every candidate. `scanTarget` then decides per file whether
-// it is in scope (a C-CDA document, or `src/` code for the conservative pass) —
+// it is in scope (a C-CDA document, or `src/` code for the conservative pass),
 // keeping incidental config/lockfile emails (e.g. the author address in
 // package.json) out of scope so they are not false positives.
 const WALK_SKIP_DIRS = new Set<string>([
@@ -95,7 +95,7 @@ const EXCLUDED_PREFIX = "test/scripts/";
 const SSN_ROOT_OID = "2.16.840.1.113883.4.1";
 
 // Person-name tokens that are honorific / degree / suffix words, never an
-// identifying name — skipped when they appear inside a bare `<name>` element.
+// identifying name, skipped when they appear inside a bare `<name>` element.
 const NAME_NOISE_TOKENS = new Set<string>([
   "MD",
   "DO",
@@ -204,7 +204,7 @@ function parseArgs(argv: string[]): Args {
   }
 
   // An `--allow-fixture` path is a *subtractive* acknowledgement on a broader
-  // scan, never a scan target on its own — so it also seeds the positional path
+  // scan, never a scan target on its own, so it also seeds the positional path
   // set. That makes `--allow-fixture X` mean "scan X, but allow it" (proving the
   // override gate actually subtracts a scanned target) instead of a silent no-op.
   const scanPaths = paths.length > 0 ? paths : [...allowFixtures];
@@ -331,7 +331,7 @@ function gitIgnored(paths: string[]): Set<string> {
   const ignored = new Set<string>();
   if (paths.length === 0) return ignored;
   try {
-    // SECURITY: array-form execFileSync, no shell. Default (Buffer) encoding —
+    // SECURITY: array-form execFileSync, no shell. Default (Buffer) encoding,
     // `encoding: "buffer"` with `input` is rejected by Node.
     const out = execFileSync("git", ["check-ignore", "--stdin", "-z"], {
       input: paths.map(normalizePath).join("\0"),
@@ -341,7 +341,7 @@ function gitIgnored(paths: string[]): Set<string> {
       if (p.length > 0) ignored.add(p);
     }
   } catch {
-    // `git check-ignore` exits 1 when nothing matches — treat as none ignored.
+    // `git check-ignore` exits 1 when nothing matches, treat as none ignored.
   }
   return ignored;
 }
@@ -380,7 +380,7 @@ function buildTargetsForStaged(): Target[] {
     );
   }
   // Every staged (added/modified) file except markdown docs and the scanner's own
-  // test is a candidate — `scanTarget` decides scope by content, so a real C-CDA
+  // test is a candidate, `scanTarget` decides scope by content, so a real C-CDA
   // document staged under ANY name / directory (`patient.cda`, a root `.xml`, an
   // `examples/` sample) is caught, not just `test/` / `.xml` / `src/*.ts`.
   const list = listBuf
@@ -401,7 +401,7 @@ function buildTargetsForStaged(): Target[] {
 }
 
 // ---------------------------------------------------------------------------
-// XML structural helpers (tolerant — fragments, malformed input, no DOM)
+// XML structural helpers (tolerant, fragments, malformed input, no DOM)
 // ---------------------------------------------------------------------------
 
 /** Best-effort code-point from an entity, guarding invalid values. */
@@ -445,7 +445,7 @@ function reEscape(s: string): string {
  * Yield the direct text of every leaf `<localName>…</localName>` element,
  * namespace-prefix + case tolerant, entities decoded. The `[^<]*` body captures
  * only DIRECT text, so an element with child elements (`<name><given>…`) yields
- * an empty (skipped) body — its children are matched on their own.
+ * an empty (skipped) body, its children are matched on their own.
  */
 function* leafTexts(text: string, localName: string): Generator<string> {
   const n = reEscape(localName);
@@ -484,7 +484,7 @@ function nameTokens(value: string): string[] {
   for (const raw of value.split(/[^\p{L}]+/u)) {
     if (raw.length === 0) continue;
     if (!/\p{L}/u.test(raw)) continue;
-    // A single Latin letter is a middle initial — not identifying. A single CJK
+    // A single Latin letter is a middle initial, not identifying. A single CJK
     // ideograph / kana / hangul IS a name (Chinese/Korean surnames are 1 char).
     const isCjk = /[぀-ヿ㐀-鿿가-힯]/u.test(raw);
     if (raw.length < 2 && !isCjk) continue;
@@ -520,7 +520,7 @@ function normalizeDob(value: string): string | null {
 // ---------------------------------------------------------------------------
 
 function checkNames(path: string, text: string, allow: AllowList, hits: Hit[]): void {
-  // Structured PN parts — `<given>` / `<family>` wherever they appear (patient,
+  // Structured PN parts, `<given>` / `<family>` wherever they appear (patient,
   // guardian, assignedPerson, informant, relatedSubject, provider). The element
   // name alone identifies a person-name part in CDA, so no ancestor path needed.
   for (const loc of ["given", "family"] as const) {
@@ -538,7 +538,7 @@ function checkNames(path: string, text: string, allow: AllowList, hits: Hit[]): 
       }
     }
   }
-  // A bare `<name>` carrying DIRECT text (`<name>Jane Doe</name>`) — an
+  // A bare `<name>` carrying DIRECT text (`<name>Jane Doe</name>`), an
   // unstructured person / organization name. `leafTexts` captures only direct
   // text (`[^<]*`), so a structured name (with `<given>` / `<family>` children)
   // yields an empty body and is handled by the part detectors above. Direct-text
@@ -587,7 +587,7 @@ function checkIds(path: string, text: string, allow: AllowList, hits: Hit[]): vo
     const extUpper = ext.toUpperCase();
     const digits = ext.replace(/\D/g, "");
     if (root === SSN_ROOT_OID) {
-      // SSN by OID declaration — a 9-digit extension is an SSN.
+      // SSN by OID declaration, a 9-digit extension is an SSN.
       if (/^\d{9}$/.test(digits) && !allow.ids.has(extUpper) && !allow.ids.has(digits)) {
         hits.push({
           path,
@@ -601,7 +601,7 @@ function checkIds(path: string, text: string, allow: AllowList, hits: Hit[]): vo
     // A bare all-numeric extension of 6+ digits is a real-looking MRN / account
     // number (or a 9-digit SSN dropped in the wrong slot). Synthetic fixtures use
     // prefixed / alphanumeric shapes (MRN001, DOC123, prob-act-1), so a bare
-    // numeric id is suspect. A `code`/`templateId`/OID never reaches here — only
+    // numeric id is suspect. A `code`/`templateId`/OID never reaches here, only
     // `<id>`. Not upper-bounded: a real MRN / account is commonly 10+ digits.
     if (/^\d{6,}$/.test(ext) && !allow.ids.has(extUpper)) {
       hits.push({
@@ -720,7 +720,7 @@ function isSourceCode(path: string): boolean {
  * it has a native C-CDA extension (`.xml` / `.cda` / `.ccda`), lives under
  * `test/` (this repo's fixtures + suites embed C-CDA there), or carries a C-CDA
  * content marker while NOT being hand-written source code. The content-sniff is
- * what closes the "rename the document to dodge the scanner" bypass — detection
+ * what closes the "rename the document to dodge the scanner" bypass, detection
  * follows the bytes, not the file name. The `!isSourceCode` guard keeps a marker
  * that appears in a `src/` or `scripts/` comment / example string (including this
  * scanner's own doc comment) from turning code into a "document" and flagging its
@@ -741,10 +741,10 @@ function scanCda(path: string, text: string, allow: AllowList, hits: Hit[]): voi
 }
 
 /**
- * Scope + scan one target. `force` (paths mode — a file named explicitly on the
+ * Scope + scan one target. `force` (paths mode, a file named explicitly on the
  * CLI) scans whatever it is pointed at. In `all` / `staged` mode a file is in
  * scope only when it is a C-CDA document (full structured scan) or `src/` code
- * (conservative shape pass) — an incidental config / lockfile (e.g. package.json,
+ * (conservative shape pass), an incidental config / lockfile (e.g. package.json,
  * whose author email is not PHI) is out of scope and skipped, so it is not a
  * false positive.
  */
@@ -764,11 +764,11 @@ function scanTarget(target: Target, allow: AllowList, hits: Hit[], force: boolea
     return;
   }
   if (force || isSourceCode(target.path)) {
-    // Not a document — conservative shape pass only (dashed SSN + non-test email)
+    // Not a document, conservative shape pass only (dashed SSN + non-test email)
     // over hand-written src/ + scripts/ code (or an explicitly-named path).
     scanCommonShapes(target.path, text, allow, hits);
   }
-  // Otherwise: out of scope (config / lockfile / non-code non-document) — skip.
+  // Otherwise: out of scope (config / lockfile / non-code non-document), skip.
 }
 
 // ---------------------------------------------------------------------------
@@ -777,7 +777,7 @@ function scanTarget(target: Target, allow: AllowList, hits: Hit[], force: boolea
 
 function report(hits: Hit[]): void {
   if (hits.length === 0) {
-    process.stdout.write("[phi-scan] OK — no hits\n");
+    process.stdout.write("[phi-scan] OK, no hits\n");
     return;
   }
   const byPath = new Map<string, Hit[]>();

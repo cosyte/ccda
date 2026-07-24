@@ -3,14 +3,14 @@
  * spec-clean C-CDA R2.1 CCD through the *same DOM the parser reads*, so the
  * central guarantees are:
  *
- *   - **round-trip fidelity** — a document `buildCcda` emits parses back to the
+ *   - **round-trip fidelity**, a document `buildCcda` emits parses back to the
  *     same structured content across every populated section (Problems,
  *     Allergies, Medications, Results, Vital Signs), and serialization is a
  *     fixed point;
- *   - **spec-clean emit** — a clean build produces zero warnings (correct
+ *   - **spec-clean emit**, a clean build produces zero warnings (correct
  *     templateIds, LOINC section codes, RxNorm/LOINC/UCUM coding, structured +
  *     narrative agreement, empty sections as `nullFlavor="NI"`); and
- *   - **the safety-critical fail-safes** — "No Known Allergies" is a negation
+ *   - **the safety-critical fail-safes**, "No Known Allergies" is a negation
  *     never collapsed into an unknown, and a missing dose/route or a bad UCUM
  *     unit is surfaced, never silently defaulted to a confident-wrong value.
  */
@@ -35,7 +35,7 @@ const SMOKING_STATUS_OBSERVATION = "2.16.840.1.113883.10.20.22.4.78";
  * The ordered direct-child element tag names of the first `<observation>` whose
  * first `<templateId>` carries `templateRoot`. Used to assert the CDA R2
  * `POCD_MT000040.Observation` element sequence (…code, text, statusCode,
- * effectiveTime, …, value…) is honored on emit — an `xs:sequence`, so a `<text>`
+ * effectiveTime, …, value…) is honored on emit, an `xs:sequence`, so a `<text>`
  * emitted after `<value>` is XSD-invalid, not a cosmetic reordering.
  */
 function observationChildOrder(xml: string, templateRoot: string): string[] {
@@ -171,7 +171,7 @@ const RICH_INIT: BuildCcdaInit = {
   ],
 };
 
-describe("buildCcda — document identity + header", () => {
+describe("buildCcda, document identity + header", () => {
   it("emits a recognized R2.1 CCD with the CCD document code", () => {
     const doc = buildCcda(RICH_INIT);
     expect(doc.documentType).toBe("ccd");
@@ -210,7 +210,7 @@ describe("buildCcda — document identity + header", () => {
   });
 });
 
-describe("buildCcda — spec-clean emit (zero warnings)", () => {
+describe("buildCcda, spec-clean emit (zero warnings)", () => {
   it("produces no warnings for a fully-populated build", () => {
     expect(buildCcda(RICH_INIT).warnings).toEqual([]);
   });
@@ -236,7 +236,7 @@ describe("buildCcda — spec-clean emit (zero warnings)", () => {
   });
 });
 
-describe("buildCcda — round-trip through the parse model", () => {
+describe("buildCcda, round-trip through the parse model", () => {
   it("is a serialization fixed point", () => {
     const xml = serializeCcda(buildCcda(RICH_INIT));
     expect(parseCcda(xml).toString()).toBe(xml);
@@ -293,7 +293,7 @@ describe("buildCcda — round-trip through the parse model", () => {
   });
 });
 
-describe("buildCcda — allergies + the negation/nullFlavor safety rule", () => {
+describe("buildCcda, allergies + the negation/nullFlavor safety rule", () => {
   it("preserves allergen, reaction, severity, and criticality as distinct axes", () => {
     const allergy = buildCcda(RICH_INIT).getAllergies()[0]?.allergies[0];
     expect(allergy?.allergen?.code).toBe("7980");
@@ -351,7 +351,7 @@ describe("buildCcda — allergies + the negation/nullFlavor safety rule", () => 
   });
 });
 
-describe("buildCcda — problem/allergy onset + resolution dates", () => {
+describe("buildCcda, problem/allergy onset + resolution dates", () => {
   it("carries a resolved problem's onset as low and resolution as high (concern + observation)", () => {
     const doc = buildCcda({
       patient: { mrn: "M" },
@@ -388,8 +388,8 @@ describe("buildCcda — problem/allergy onset + resolution dates", () => {
       ],
     });
     const concern = doc.getProblems()[0];
-    // A resolved concern SHALL still carry a high — nullFlavor when the date is
-    // unknown — never a fabricated date, and its presence still asserts resolved.
+    // A resolved concern SHALL still carry a high, nullFlavor when the date is
+    // unknown, never a fabricated date, and its presence still asserts resolved.
     expect(concern?.effectiveTime?.high?.nullFlavor).toBe("UNK");
     expect(concern?.effectiveTime?.high?.date).toBeUndefined();
     expect(concern?.problems[0]?.effectiveTime?.high?.nullFlavor).toBe("UNK");
@@ -486,7 +486,7 @@ describe("buildCcda — problem/allergy onset + resolution dates", () => {
   });
 });
 
-describe("buildCcda — emit conformance (header + section cardinality)", () => {
+describe("buildCcda, emit conformance (header + section cardinality)", () => {
   it("emits SHALL addr + telecom on patientRole, assignedAuthor, and custodian org", () => {
     const xml = serializeCcda(buildCcda({ patient: { mrn: "M" } }));
     // Three participations × (addr + telecom) = at least three of each.
@@ -497,7 +497,7 @@ describe("buildCcda — emit conformance (header + section cardinality)", () => 
   it("empty required sections declare entries-optional templateId only (no entries-required)", () => {
     const xml = serializeCcda(buildCcda({ patient: { mrn: "M" } }));
     // Empty Medications/Results must NOT carry the entries-required (.1) template
-    // with zero entries — that violates its "SHALL contain ≥1 entry" statement.
+    // with zero entries, that violates its "SHALL contain ≥1 entry" statement.
     expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.1" extension="2015-08-01"');
     expect(xml).not.toContain("2.16.840.1.113883.10.20.22.2.1.1");
     expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.3" extension="2015-08-01"');
@@ -515,7 +515,7 @@ describe("buildCcda — emit conformance (header + section cardinality)", () => 
   });
 });
 
-describe("buildCcda — medications round-trip", () => {
+describe("buildCcda, medications round-trip", () => {
   it("re-parses the RxNorm drug, dose, route, frequency, and duration", () => {
     const [lisinopril] = buildCcda(RICH_INIT).getMedications();
     expect(lisinopril?.drug?.code).toBe("314076");
@@ -546,7 +546,7 @@ describe("buildCcda — medications round-trip", () => {
     expect(buildCcda(RICH_INIT).warnings).toEqual([]);
   });
 
-  it("does NOT default a missing dose/route — it flags them, never invents a value", () => {
+  it("does NOT default a missing dose/route, it flags them, never invents a value", () => {
     const doc = buildCcda({
       patient: { mrn: "M" },
       medications: [{ drug: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" } }],
@@ -561,7 +561,7 @@ describe("buildCcda — medications round-trip", () => {
   });
 });
 
-describe("buildCcda — results round-trip", () => {
+describe("buildCcda, results round-trip", () => {
   it("re-parses the panel and its member observations with values intact", () => {
     const [panel] = buildCcda(RICH_INIT).getResults();
     expect(panel?.code?.code).toBe("24323-8");
@@ -641,7 +641,7 @@ describe("buildCcda — results round-trip", () => {
   });
 });
 
-describe("buildCcda — vital signs round-trip", () => {
+describe("buildCcda, vital signs round-trip", () => {
   it("re-parses the vital signs cluster with LOINC + UCUM readings", () => {
     const [cluster] = buildCcda(RICH_INIT).getVitals();
     expect(cluster?.vitals).toHaveLength(2);
@@ -673,12 +673,12 @@ describe("buildCcda — vital signs round-trip", () => {
         },
       ],
     });
-    // "Kg" is a case slip of "kg" — surfaced, never silently accepted.
+    // "Kg" is a case slip of "kg", surfaced, never silently accepted.
     expect(doc.warnings.map((w) => w.code)).toContain("UCUM_CASE_SUSPECT");
   });
 });
 
-describe("buildCcda — immunizations round-trip", () => {
+describe("buildCcda, immunizations round-trip", () => {
   it("re-parses the CVX vaccine, dose, route, and administration date", () => {
     const [flu] = buildCcda(RICH_INIT).getImmunizations();
     expect(flu?.vaccine?.code).toBe("140");
@@ -716,13 +716,13 @@ describe("buildCcda — immunizations round-trip", () => {
     const shot = doc.getImmunizations()[0];
     expect(shot?.refused).toBe(true);
     expect(shot?.nullFlavor).toBeUndefined();
-    // The refusal is clinically load-bearing — surfaced, never silently dropped.
+    // The refusal is clinically load-bearing, surfaced, never silently dropped.
     expect(doc.warnings.map((w) => w.code)).toContain("IMMUNIZATION_REFUSED");
   });
 
   it("does NOT emit an Immunizations section when none are supplied", () => {
     const xml = serializeCcda(buildCcda({ patient: { mrn: "M" } }));
-    // Immunizations is not a CCD SHALL section — an empty one is not fabricated.
+    // Immunizations is not a CCD SHALL section, an empty one is not fabricated.
     expect(xml).not.toContain('code="11369-6"');
     expect(buildCcda({ patient: { mrn: "M" } }).findSection("immunizations")).toBeUndefined();
   });
@@ -746,7 +746,7 @@ describe("buildCcda — immunizations round-trip", () => {
   });
 });
 
-describe("buildCcda — procedures round-trip", () => {
+describe("buildCcda, procedures round-trip", () => {
   it("re-parses an operative procedure with code, performed disposition, status, and time", () => {
     const [appendectomy] = buildCcda(RICH_INIT).getProcedures();
     expect(appendectomy?.kind).toBe("procedure");
@@ -827,7 +827,7 @@ describe("buildCcda — procedures round-trip", () => {
   });
 
   it("rejects an observation-variant procedure that omits its SHALL value", () => {
-    // Procedure Activity Observation (…22.4.13) SHALL carry a value [1..1] — the
+    // Procedure Activity Observation (…22.4.13) SHALL carry a value [1..1], the
     // builder refuses to emit a non-conformant value-less observation.
     expect(() =>
       buildCcda({
@@ -843,7 +843,7 @@ describe("buildCcda — procedures round-trip", () => {
   });
 });
 
-describe("buildCcda — encounters round-trip", () => {
+describe("buildCcda, encounters round-trip", () => {
   it("re-parses the Encounter Activity with type code, status, and visit period", () => {
     const [visit] = buildCcda(RICH_INIT).getEncounters();
     expect(visit?.code?.code).toBe("99213");
@@ -888,7 +888,7 @@ describe("buildCcda — encounters round-trip", () => {
   });
 });
 
-describe("buildCcda — social history (smoking status) round-trip", () => {
+describe("buildCcda, social history (smoking status) round-trip", () => {
   it("re-parses a known Smoking Status with its SNOMED value, recorded time, and no unknown flag", () => {
     const doc = buildCcda(RICH_INIT);
     const [status] = doc.getSmokingStatus();
@@ -908,13 +908,13 @@ describe("buildCcda — social history (smoking status) round-trip", () => {
     // Social History Section (V3) is 2015-08-01; it has no entries-required variant.
     expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.17" extension="2015-08-01"');
     expect(xml).not.toContain('root="2.16.840.1.113883.10.20.22.2.17.1"');
-    // The Smoking Status — Meaningful Use observation carries the 2014-06-09 stamp
+    // The Smoking Status, Meaningful Use observation carries the 2014-06-09 stamp
     // and the fixed LOINC "Tobacco smoking status" code.
     expect(xml).toContain('root="2.16.840.1.113883.10.20.22.4.78" extension="2014-06-09"');
     expect(xml).toContain('code="72166-2"');
   });
 
-  it("emits an EXPLICIT nullFlavor=UNK value for an unrecorded status — never a fabricated reading", () => {
+  it("emits an EXPLICIT nullFlavor=UNK value for an unrecorded status, never a fabricated reading", () => {
     const doc = buildCcda({ patient: { mrn: "M" }, smokingStatus: [{}] });
     const [status] = doc.getSmokingStatus();
     expect(status?.unknown).toBe(true);
@@ -958,7 +958,7 @@ describe("buildCcda — social history (smoking status) round-trip", () => {
   });
 });
 
-describe("buildCcda — functional status round-trip", () => {
+describe("buildCcda, functional status round-trip", () => {
   it("re-parses a known Functional Status finding tagged domain=functional, warning-free", () => {
     const doc = buildCcda(RICH_INIT);
     const findings = doc.getFunctionalStatus();
@@ -994,7 +994,7 @@ describe("buildCcda — functional status round-trip", () => {
     expect(xml).toContain('code="54522-8"');
   });
 
-  it("emits an EXPLICIT nullFlavor=UNK value for an unrecorded finding — never a fabricated one", () => {
+  it("emits an EXPLICIT nullFlavor=UNK value for an unrecorded finding, never a fabricated one", () => {
     const doc = buildCcda({ patient: { mrn: "M" }, functionalStatus: [{}] });
     expect(doc.warnings).toEqual([]);
     const [finding] = doc.getFunctionalStatus();
@@ -1046,7 +1046,7 @@ describe("buildCcda — functional status round-trip", () => {
   });
 });
 
-describe("buildCcda — mental status round-trip", () => {
+describe("buildCcda, mental status round-trip", () => {
   /** A build carrying BOTH a functional and a mental finding, to prove the two
    * domains are kept separate (they key off distinct observation template roots). */
   const MENTAL_INIT: BuildCcdaInit = {
@@ -1097,7 +1097,7 @@ describe("buildCcda — mental status round-trip", () => {
     expect(xml).toContain('code="373930000"');
   });
 
-  it("emits an EXPLICIT nullFlavor=UNK value for an unrecorded finding — never a fabricated one", () => {
+  it("emits an EXPLICIT nullFlavor=UNK value for an unrecorded finding, never a fabricated one", () => {
     const doc = buildCcda({ patient: { mrn: "M" }, mentalStatus: [{}] });
     expect(doc.warnings).toEqual([]);
     const [finding] = doc.getMentalStatus();
@@ -1160,10 +1160,10 @@ describe("buildCcda — mental status round-trip", () => {
   });
 });
 
-describe("buildCcda — functional/mental status organizers", () => {
+describe("buildCcda, functional/mental status organizers", () => {
   /** A functional organizer (ICF-coded self-care cluster) grouping two findings,
    * plus a mental organizer (uncoded) grouping two, and one standalone functional
-   * finding — to prove grouping, domain separation, and mixed grouped/standalone. */
+   * finding, to prove grouping, domain separation, and mixed grouped/standalone. */
   const ORG_INIT: BuildCcdaInit = {
     patient: { mrn: "M" },
     functionalStatusOrganizers: [
@@ -1243,7 +1243,7 @@ describe("buildCcda — functional/mental status organizers", () => {
     expect(doc.getMentalStatus()).toHaveLength(1);
   });
 
-  it("omits the organizer effectiveTime when none is supplied — never a fabricated date", () => {
+  it("omits the organizer effectiveTime when none is supplied, never a fabricated date", () => {
     const doc = buildCcda({
       patient: { mrn: "M" },
       functionalStatusOrganizers: [
@@ -1259,7 +1259,7 @@ describe("buildCcda — functional/mental status organizers", () => {
     expect(orgFragment).not.toContain("effectiveTime");
   });
 
-  it("throws on an empty organizer — the template SHALL contain at least one member", () => {
+  it("throws on an empty organizer, the template SHALL contain at least one member", () => {
     expect(() =>
       buildCcda({ patient: { mrn: "M" }, functionalStatusOrganizers: [{ findings: [] }] }),
     ).toThrow(/at least one finding/);
@@ -1279,9 +1279,9 @@ describe("buildCcda — functional/mental status organizers", () => {
   });
 });
 
-describe("buildCcda — direct-entry assessment scales", () => {
+describe("buildCcda, direct-entry assessment scales", () => {
   /** A PHQ-9 in Mental Status (score + interpretation + two supporting items) and a
-   * Glasgow Coma total in Functional Status — the two carrying sections for a
+   * Glasgow Coma total in Functional Status, the two carrying sections for a
    * direct-entry Assessment Scale Observation. */
   const SCALE_INIT: BuildCcdaInit = {
     patient: { mrn: "M" },
@@ -1312,7 +1312,7 @@ describe("buildCcda — direct-entry assessment scales", () => {
     expect(functional[0]?.domain).toBe("functional");
     expect(mental.every((s) => s.assessmentScale === true)).toBe(true);
     expect(functional.every((s) => s.assessmentScale === true)).toBe(true);
-    // The score round-trips as an INT (not a PQ) — units are not allowed on an INT.
+    // The score round-trips as an INT (not a PQ), units are not allowed on an INT.
     expect(mental[0]?.value?.kind === "integer" ? mental[0].value.value : undefined).toBe(12);
     expect(functional[0]?.value?.kind === "integer" ? functional[0].value.value : undefined).toBe(
       9,
@@ -1338,7 +1338,7 @@ describe("buildCcda — direct-entry assessment scales", () => {
     expect(xml).toMatch(/<value value="12" xsi:type="INT"\/>/);
   });
 
-  it("emits an EXPLICIT nullFlavor=UNK INT score when none is supplied — never fabricated", () => {
+  it("emits an EXPLICIT nullFlavor=UNK INT score when none is supplied, never fabricated", () => {
     const doc = buildCcda({
       patient: { mrn: "M" },
       functionalStatusScales: [
@@ -1347,7 +1347,7 @@ describe("buildCcda — direct-entry assessment scales", () => {
     });
     expect(doc.warnings).toEqual([]);
     const scale = doc.getFunctionalStatus()[0];
-    // An unknown score reads back as an integer value with no number — never a guessed 0.
+    // An unknown score reads back as an integer value with no number, never a guessed 0.
     expect(scale?.value?.kind).toBe("integer");
     expect(scale?.value?.kind === "integer" ? scale.value.value : "set").toBeUndefined();
     expect(scale?.value?.kind === "integer" ? scale.value.nullFlavor : undefined).toBe("UNK");
@@ -1366,9 +1366,9 @@ describe("buildCcda — direct-entry assessment scales", () => {
   });
 });
 
-describe("buildCcda — past medical history round-trip", () => {
+describe("buildCcda, past medical history round-trip", () => {
   /** A build carrying BOTH an active problem concern and a historical (past) one,
-   * to prove the two never conflate — the past problem is a bare observation
+   * to prove the two never conflate, the past problem is a bare observation
    * (…22.4.4) routed to getPastMedicalHistory, the active one a concern act
    * (…22.4.3) routed to getProblems. */
   const PMH_INIT: BuildCcdaInit = {
@@ -1423,7 +1423,7 @@ describe("buildCcda — past medical history round-trip", () => {
     expect(xml).toContain('code="55607006"');
   });
 
-  it("emits nullFlavor=UNK onset when no onset is supplied — never a fabricated date", () => {
+  it("emits nullFlavor=UNK onset when no onset is supplied, never a fabricated date", () => {
     const doc = buildCcda({
       patient: { mrn: "M" },
       pastMedicalHistory: [{ problem: { code: "74400008", displayName: "Appendicitis" } }],
@@ -1454,9 +1454,9 @@ describe("buildCcda — past medical history round-trip", () => {
   });
 });
 
-describe("buildCcda — plan of treatment round-trip", () => {
+describe("buildCcda, plan of treatment round-trip", () => {
   /** A build carrying all six planned-entry variants AND a *performed* procedure,
-   * to prove the planned items are never conflated with the performed acts — each
+   * to prove the planned items are never conflated with the performed acts, each
    * reads back with disposition "planned", statusCode "active", and a planned mood,
    * while the performed procedure stays disposition "performed". */
   const PLAN_INIT: BuildCcdaInit = {
@@ -1499,7 +1499,7 @@ describe("buildCcda — plan of treatment round-trip", () => {
       "supply",
     ]);
     for (const item of planned) {
-      // Every plan item is future/ordered — never performed — and SHALL statusCode "active".
+      // Every plan item is future/ordered, never performed, and SHALL statusCode "active".
       expect(item.disposition).toBe("planned");
       expect(item.statusCode).toBe("active");
     }
@@ -1515,7 +1515,7 @@ describe("buildCcda — plan of treatment round-trip", () => {
     expect(byKind.get("observation")).toBe("RQO");
     expect(byKind.get("medicationActivity")).toBe("RQO");
     expect(byKind.get("encounter")).toBe("APT");
-    // Omitted mood defaults to INT (a planned mood) — the performed EVN is not emitted.
+    // Omitted mood defaults to INT (a planned mood), the performed EVN is not emitted.
     expect(byKind.get("procedure")).toBe("INT");
     expect(byKind.get("act")).toBe("INT");
     expect(byKind.get("supply")).toBe("INT");
@@ -1584,7 +1584,7 @@ describe("buildCcda — plan of treatment round-trip", () => {
     const procedures = doc.getProcedures();
     expect(procedures).toHaveLength(1);
     expect(procedures[0]?.disposition).toBe("performed");
-    // The planned colonoscopy stays in getPlannedItems, planned — never a performed procedure.
+    // The planned colonoscopy stays in getPlannedItems, planned, never a performed procedure.
     const plannedProc = doc.getPlannedItems().find((p) => p.kind === "procedure");
     expect(plannedProc?.code?.code).toBe("73761001");
     expect(plannedProc?.disposition).toBe("planned");
@@ -1606,24 +1606,24 @@ describe("buildCcda — plan of treatment round-trip", () => {
   it("forbids appointment moods on medication/supply/observation at the type level", () => {
     // APT/ARQ are outside the base CDA mood domains for substanceAdministration
     // (x_DocumentSubstanceMood), supply (same), and observation
-    // (x_ActMoodDocumentObservation) — so the type must make them unrepresentable
+    // (x_ActMoodDocumentObservation), so the type must make them unrepresentable
     // on those kinds. A schema-invalid @moodCode can never be emitted "by
     // construction", not merely discouraged.
-    // @ts-expect-error — APT is not in a medication's mood domain.
+    // @ts-expect-error, APT is not in a medication's mood domain.
     const badMed: BuildCcdaPlannedItem = {
       kind: "medicationActivity",
       code: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" },
       mood: "APT",
     };
     void badMed;
-    // @ts-expect-error — ARQ is not in an observation's mood domain.
+    // @ts-expect-error, ARQ is not in an observation's mood domain.
     const badObs: BuildCcdaPlannedItem = {
       kind: "observation",
       code: { code: "58410-2", displayName: "CBC panel" },
       mood: "ARQ",
     };
     void badObs;
-    // The SAME appointment mood IS valid on an encounter — this must compile.
+    // The SAME appointment mood IS valid on an encounter, this must compile.
     const okEnc: BuildCcdaPlannedItem = {
       kind: "encounter",
       code: { code: "99213", displayName: "Office outpatient visit 15 minutes" },
@@ -1640,10 +1640,10 @@ describe("buildCcda — plan of treatment round-trip", () => {
   });
 });
 
-describe("buildCcda — family history round-trip", () => {
+describe("buildCcda, family history round-trip", () => {
   /** A build carrying two relatives: a deceased father (male, born 1950) whose
    * myocardial infarction (age 57) was his cause of death, and a mother with a
-   * living condition — proving the organizer groups conditions by relative and
+   * living condition, proving the organizer groups conditions by relative and
    * carries the age/death sub-observations. */
   const FHX_INIT: BuildCcdaInit = {
     patient: { mrn: "M" },
@@ -1675,7 +1675,7 @@ describe("buildCcda — family history round-trip", () => {
     const doc = buildCcda(FHX_INIT);
     const fh = doc.getFamilyHistory();
     expect(fh).toHaveLength(2);
-    // Father — relationship defaults to SNOMED CT, demographics preserved.
+    // Father, relationship defaults to SNOMED CT, demographics preserved.
     expect(fh[0]?.relative.relationship?.code).toBe("9947008");
     expect(fh[0]?.relative.relationship?.codeSystem).toBe("2.16.840.1.113883.6.96");
     expect(fh[0]?.relative.gender?.code).toBe("M");
@@ -1688,7 +1688,7 @@ describe("buildCcda — family history round-trip", () => {
     expect(cond?.ageAtOnset?.unit).toBe("a");
     expect(cond?.causeOfDeath).toBe(true);
     expect(cond?.effectiveTime?.low?.raw).toBe("20070101");
-    // Mother — a distinct relative with her own condition.
+    // Mother, a distinct relative with her own condition.
     expect(fh[1]?.relative.relationship?.code).toBe("72705000");
     expect(fh[1]?.observations[0]?.condition?.code).toBe("73211009");
     expect(fh[1]?.observations[0]?.causeOfDeath).toBeUndefined();
@@ -1716,7 +1716,7 @@ describe("buildCcda — family history round-trip", () => {
     expect(xml).toContain('deceasedInd value="true"');
   });
 
-  it("emits nullFlavor=UNK for an unknown relationship and an unknown condition — never guessed", () => {
+  it("emits nullFlavor=UNK for an unknown relationship and an unknown condition, never guessed", () => {
     const doc = buildCcda({
       patient: { mrn: "M" },
       familyHistory: [{ relative: {}, observations: [{}] }],
@@ -1786,7 +1786,7 @@ describe("buildCcda — family history round-trip", () => {
   });
 });
 
-describe("buildCcda — defaults, escaping, and input validation", () => {
+describe("buildCcda, defaults, escaping, and input validation", () => {
   it("emits nullFlavor for omitted demographics and no MRN", () => {
     const doc = buildCcda({ patient: {} });
     expect(doc.warnings).toEqual([]);
@@ -1818,15 +1818,15 @@ describe("buildCcda — defaults, escaping, and input validation", () => {
   });
 
   it("rejects an unsupported document type", () => {
-    // @ts-expect-error — documentType is typed to "ccd"; exercise the runtime guard.
+    // @ts-expect-error, documentType is typed to "ccd"; exercise the runtime guard.
     expect(() => buildCcda({ documentType: "dischargeSummary", patient: { mrn: "M" } })).toThrow(
       TypeError,
     );
   });
 });
 
-describe("buildCcda — SHALL effectiveTime conformance (all sections)", () => {
-  /** A populated build that supplies NO times anywhere — every SHALL effectiveTime
+describe("buildCcda, SHALL effectiveTime conformance (all sections)", () => {
+  /** A populated build that supplies NO times anywhere, every SHALL effectiveTime
    * slot must therefore be filled with nullFlavor="UNK", and the build must stay
    * warning-free. */
   const NO_TIMES: BuildCcdaInit = {
@@ -1983,9 +1983,9 @@ describe("buildCcda — SHALL effectiveTime conformance (all sections)", () => {
   });
 });
 
-describe("buildCcda — HL7 v3 TS date-format validation (fail loud, never coerce)", () => {
+describe("buildCcda, HL7 v3 TS date-format validation (fail loud, never coerce)", () => {
   // Every caller-supplied date the builder emits routes through the shared
-  // assertHl7Ts guard. A malformed date must throw a TypeError at build time —
+  // assertHl7Ts guard. A malformed date must throw a TypeError at build time,
   // the builder never serializes a schema-invalid or guessed timestamp.
 
   it("accepts legitimate partial precision (YYYY, YYYYMM, YYYYMMDD) unchanged, warning-free", () => {
@@ -2047,7 +2047,7 @@ describe("buildCcda — HL7 v3 TS date-format validation (fail loud, never coerc
   });
 
   it("throws TypeError on calendar-invalid and out-of-range components", () => {
-    // Feb 30, month 13, day 00, hour 24, minute 60 — structurally digit-shaped
+    // Feb 30, month 13, day 00, hour 24, minute 60, structurally digit-shaped
     // but not a real instant; parseV3DateTime rejects each, so the builder must too.
     for (const bad of ["20260230", "20261301", "20260300", "2026030124", "202603011560"]) {
       expect(() =>
@@ -2076,7 +2076,7 @@ describe("buildCcda — HL7 v3 TS date-format validation (fail loud, never coerc
   });
 
   it("rejects a malformed date at every builder date-emission site", () => {
-    const BAD = "2026-07-21"; // dashes — invalid HL7 TS at every site
+    const BAD = "2026-07-21"; // dashes, invalid HL7 TS at every site
     const base = { patient: { mrn: "M" as const } };
     // Each entry supplies one malformed date at a distinct emission site.
     const cases: Array<[string, BuildCcdaInit]> = [
@@ -2378,7 +2378,7 @@ describe("buildCcda — HL7 v3 TS date-format validation (fail loud, never coerc
   });
 });
 
-describe("buildCcda — Referral Note document type", () => {
+describe("buildCcda, Referral Note document type", () => {
   /**
    * A Referral Note carrying the reconciliation triad plus its narrative SHALL
    * sections. Grounded in the CC0 onc-healthit ToC Referral Note certification
@@ -2489,7 +2489,7 @@ describe("buildCcda — Referral Note document type", () => {
     }
     expect(doc.getProblems()).toEqual([]);
     expect(doc.getMedications()).toEqual([]);
-    // Results / Vital Signs are not Referral Note SHALL sections — not fabricated.
+    // Results / Vital Signs are not Referral Note SHALL sections, not fabricated.
     expect(doc.findSection("results")).toBeUndefined();
     expect(doc.findSection("vitalSigns")).toBeUndefined();
   });
@@ -2526,16 +2526,16 @@ describe("buildCcda — Referral Note document type", () => {
   });
 
   it("rejects an unsupported document type with a TypeError", () => {
-    // @ts-expect-error — exercise the runtime guard for untyped (JS) callers.
+    // @ts-expect-error, exercise the runtime guard for untyped (JS) callers.
     expect(() => buildCcda({ documentType: "dischargeSummary", patient: { mrn: "X" } })).toThrow(
       TypeError,
     );
   });
 });
 
-describe("buildCcda — CDA R2 observation element ordering (text before statusCode/value)", () => {
+describe("buildCcda, CDA R2 observation element ordering (text before statusCode/value)", () => {
   // POCD_MT000040.Observation is an xs:sequence: realmCode, typeId, templateId,
-  // id, code, derivationExpr, text, statusCode, effectiveTime, …, value, … — so
+  // id, code, derivationExpr, text, statusCode, effectiveTime, …, value, …, so
   // `<text>` MUST precede statusCode/effectiveTime/value. Emitting the narrative
   // reference later is XSD-invalid (it fails the core-CDA-R2 XSD stage before the
   // Schematron even runs), not a cosmetic nit. These three builders previously

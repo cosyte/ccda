@@ -1,6 +1,6 @@
 /**
  * Barrel for the C-CDA clinical entry layer (the reconciliation triad plus the
- * discrete-data sections — Results, Vital Signs, Immunizations). Re-exports the
+ * discrete-data sections, Results, Vital Signs, Immunizations). Re-exports the
  * entry models, their extractors, the entry-template OID roots, the shared
  * reconciliation helpers, and the shared observation-value machinery, so the
  * package root and the document model import the entry surface from one place.

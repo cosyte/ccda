@@ -6,11 +6,11 @@
  * it came from).
  *
  * The load-bearing check is {@link validateTolerations}: it refuses any
- * `tolerate` entry whose code is unknown, whose rationale is empty, or — the
- * safety rule — whose code is **safety-critical**. That refusal is what lets the
+ * `tolerate` entry whose code is unknown, whose rationale is empty, or, the
+ * safety rule, whose code is **safety-critical**. That refusal is what lets the
  * rest of the system treat "an active profile" as safe by construction.
  *
- * Zero runtime deps — inlined Levenshtein for the "did you mean?" hint.
+ * Zero runtime deps, inlined Levenshtein for the "did you mean?" hint.
  *
  * @internal
  */
@@ -141,7 +141,7 @@ export function validateTolerations(
     }
     if (isSafetyCriticalCode(t.code)) {
       throw new CcdaProfileDefinitionError(
-        `Profile '${profileName}' may not tolerate '${t.code}' — it is a safety-critical warning ` +
+        `Profile '${profileName}' may not tolerate '${t.code}', it is a safety-critical warning ` +
           `code (patient identity / allergy / dose / unit / value integrity). A profile quiets ` +
           `benign structural noise, never a deviation that could change a clinical reading.`,
         profileName,

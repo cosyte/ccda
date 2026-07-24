@@ -1,12 +1,12 @@
 /**
- * The `default` conservative baseline profile. Tolerates **nothing** — every
+ * The `default` conservative baseline profile. Tolerates **nothing**, every
  * deviation surfaces as its own warning, unmodified. It exists so "no profile"
  * and "the default profile" are the same, explicit, behaviour, and so a
  * consumer can name the baseline when composing (`extends: ccdaProfiles.default`)
  * without importing a special sentinel. Absence of a profile means this
- * conservative default applied — not that a document was fully understood.
+ * conservative default applied, not that a document was fully understood.
  *
- * Authored through the public `defineCcdaProfile()` API — zero privileged
+ * Authored through the public `defineCcdaProfile()` API, zero privileged
  * coupling; it is exactly what a user would write.
  */
 
@@ -25,6 +25,6 @@ import type { CcdaProfile } from "./types.js";
  */
 export const defaultProfile: CcdaProfile = defineCcdaProfile({
   name: "default",
-  description: "Conservative baseline — tolerates nothing; every deviation surfaces as a warning.",
+  description: "Conservative baseline, tolerates nothing; every deviation surfaces as a warning.",
   tolerate: [],
 });

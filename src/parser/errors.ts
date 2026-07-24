@@ -5,7 +5,7 @@
  * directly; consumers narrow via the `code` discriminant.
  *
  * The first five codes are **security fatals** raised by the hardened XML
- * substrate (`./secure-xml.ts`) before or during DOM construction — they are
+ * substrate (`./secure-xml.ts`) before or during DOM construction, they are
  * the load-bearing defense against hostile XML (XXE, billion-laughs, oversized,
  * pathologically deep, or pathologically wide payloads). The last two cover
  * malformed input and a well-formed-but-wrong-root document.
@@ -27,7 +27,7 @@ import type { CcdaPosition } from "./types.js";
  *   parseCcda(hostileXml);
  * } catch (err) {
  *   if (err instanceof CcdaParseError && err.code === FATAL_CODES.XXE_OR_DTD_PRESENT) {
- *     // reject the document — it declared a DTD / external entity
+ *     // reject the document, it declared a DTD / external entity
  *   }
  * }
  * ```
@@ -75,7 +75,7 @@ export type FatalCode = (typeof FATAL_CODES)[keyof typeof FATAL_CODES];
 
 /**
  * Thrown by `parseCcda` (and the secure XML substrate it calls) when the
- * input violates one of the seven unrecoverable Tier-3 rules — a declared
+ * input violates one of the seven unrecoverable Tier-3 rules, a declared
  * DTD/external entity, entity-expansion or size/depth/node-count limits,
  * malformed XML, or a well-formed document whose root is not
  * `ClinicalDocument`. Carries a
@@ -90,7 +90,7 @@ export type FatalCode = (typeof FATAL_CODES)[keyof typeof FATAL_CODES];
  *   parseCcda(raw);
  * } catch (err) {
  *   if (err instanceof CcdaParseError && err.code === "NOT_A_CLINICAL_DOCUMENT") {
- *     // err.position, err.code available — no PHI in either
+ *     // err.position, err.code available, no PHI in either
  *   }
  * }
  * ```
@@ -116,9 +116,9 @@ export class CcdaParseError extends Error {
 
 /**
  * Thrown by `defineCcdaProfile` when a profile definition is structurally
- * invalid — a missing/empty `name`, an unknown option key, a `tolerate` entry
- * whose `code` is not a real {@link WarningCode}, a missing `rationale`, or —
- * the load-bearing safety rule — an attempt to tolerate a **safety-critical**
+ * invalid, a missing/empty `name`, an unknown option key, a `tolerate` entry
+ * whose `code` is not a real {@link WarningCode}, a missing `rationale`, or,
+ * the load-bearing safety rule, an attempt to tolerate a **safety-critical**
  * warning code. Distinct from {@link CcdaParseError} (which is about a
  * *document*): this is about a malformed *profile*, so it is never part of the
  * lenient parse path and carries no `CcdaPosition`.

@@ -5,7 +5,7 @@ import { buildCcda } from "./__fixtures__/ccda.js";
 
 /**
  * PHI discipline: warning and fatal *messages* (and positions) describe
- * structure — element names, OIDs, codes, line/column — never clinical values.
+ * structure, element names, OIDs, codes, line/column, never clinical values.
  * These guards parse documents seeded with distinctive sentinel values in the
  * PHI-bearing slots and assert no diagnostic string echoes them back.
  */
@@ -21,7 +21,7 @@ function leaks(haystack: string): string | undefined {
   return SENTINELS.find((s) => haystack.includes(s));
 }
 
-describe("PHI guard — warnings carry no clinical values", () => {
+describe("PHI guard, warnings carry no clinical values", () => {
   it("never echoes patient/MRN/narrative/birthdate into warning messages or positions", () => {
     const xml = buildCcda({
       // Force a fan-out of warnings: unrecognized doc OID + bad nullFlavor + multiple targets.
@@ -46,13 +46,13 @@ describe("PHI guard — warnings carry no clinical values", () => {
   it("nullFlavor warning reports the structural locator, not the sentinel value", () => {
     const doc = parseCcda(buildCcda({ genderNullFlavor: "BOGUS" }));
     const nf = doc.warnings.find((w) => w.code === WARNING_CODES.INVALID_NULL_FLAVOR);
-    // The observed token "BOGUS" is a code, not PHI, so it MAY appear — but a real
+    // The observed token "BOGUS" is a code, not PHI, so it MAY appear, but a real
     // patient value never reaches a message because only coded slots feed it.
     expect(nf).toBeDefined();
   });
 });
 
-describe("PHI guard — fatal errors carry no payload snippet", () => {
+describe("PHI guard, fatal errors carry no payload snippet", () => {
   it("never echoes document content into a CcdaParseError message or position", () => {
     const xml = buildCcda({ xmlDecl: false })
       .replace(/<given>Jane<\/given>/g, "<given>ZZSECRETPATIENTZZ</given>")

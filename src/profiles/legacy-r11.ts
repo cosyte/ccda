@@ -1,5 +1,5 @@
 /**
- * The `legacyR11` profile — receive-tolerance for **R1.1-origin** C-CDA
+ * The `legacyR11` profile, receive-tolerance for **R1.1-origin** C-CDA
  * documents, grounded in the regulation and a public corpus rather than an
  * invented vendor deviation.
  *
@@ -8,16 +8,16 @@
  *   must *produce* C-CDA **R2.1** but must *receive and validate* **both R2.1 and
  *   R1.1**. So a conformant receiver genuinely encounters R1.1-origin documents
  *   whose document/section `templateId`s lack the R2.1 `2015-08-01` `@extension`
- *   stamp — exactly the condition that raises `TEMPLATE_EXTENSION_ABSENT`.
+ *   stamp, exactly the condition that raises `TEMPLATE_EXTENSION_ABSENT`.
  * - **HL7/C-CDA-Examples** (github.com/HL7/C-CDA-Examples, CC0 public domain,
  *   commit `ad5007abd912a45bbd04ce96e871c70954c2b2c2`). Its README states the
  *   corpus is "all approved C-CDA **R1.1** samples **upgraded to R2.1**" and that
- *   "R2.1 is compatible with 1.1" — the canonical public demonstration that
+ *   "R2.1 is compatible with 1.1", the canonical public demonstration that
  *   R1.1-shaped and R2.1-shaped documents are received interchangeably, and that
  *   a section is routinely identified by its LOINC `code` (the fallback that
  *   raises `SECTION_MATCHED_BY_LOINC_FALLBACK`).
  *
- * It tolerates only **structural version-tolerance noise** — the absent R2.1
+ * It tolerates only **structural version-tolerance noise**, the absent R2.1
  * version stamp and LOINC-fallback section identification. It cannot tolerate any
  * safety-critical deviation (enforced by the `defineCcdaProfile` safety gate);
  * an R1.1 document with a wrong dose still surfaces that warning in full.

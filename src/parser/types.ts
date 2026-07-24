@@ -3,7 +3,7 @@
  * These types are contracts between parser stages (secure-xml, namespaces,
  * templates) and the `CcdaDocument` model shell.
  *
- * Every type here is deliberately readonly — the parser produces immutable
+ * Every type here is deliberately readonly, the parser produces immutable
  * data structures and consumers must not mutate them. Narrowing is done via
  * the `CcdaWarning.code` and `CcdaParseError.code` discriminants defined in
  * sibling files (`./warnings.ts`, `./errors.ts`).
@@ -18,7 +18,7 @@ import type { TerminologyAdapter } from "../model/terminology.js";
 
 /**
  * Structural locator attached to every warning and fatal error. Every field
- * is optional and **PHI-free by construction** — a `path` carries element
+ * is optional and **PHI-free by construction**, a `path` carries element
  * names and positional indices (never attribute values or narrative text),
  * and `templateId` / `sectionCode` are OIDs / LOINC codes, not patient data.
  * For a top-level fatal like `INPUT_SIZE_LIMIT_EXCEEDED` no field need be
@@ -27,7 +27,7 @@ import type { TerminologyAdapter } from "../model/terminology.js";
  *
  * @remarks
  * With `exactOptionalPropertyTypes: true`, do not pass `line: undefined`
- * explicitly — omit the key instead.
+ * explicitly, omit the key instead.
  *
  * @example
  * ```ts
@@ -66,8 +66,8 @@ export type OnWarningCallback = (warning: CcdaWarning) => void;
  * Hard safety limits applied to every parse before the XML is handed to the
  * DOM. Each cap defends a specific denial-of-service vector for hostile XML
  * (oversized payloads, billion-laughs entity expansion, pathological element
- * nesting). All four have library defaults; callers may tighten — or, at
- * their own risk, loosen — any of them via `ParseCcdaOptions.limits`.
+ * nesting). All four have library defaults; callers may tighten, or, at
+ * their own risk, loosen, any of them via `ParseCcdaOptions.limits`.
  *
  * @example
  * ```ts
@@ -93,7 +93,7 @@ export interface CcdaParseLimits {
  *
  * @remarks
  * With `exactOptionalPropertyTypes: true`, callers cannot pass
- * `{ strict: undefined }` — either omit the key or pass a boolean.
+ * `{ strict: undefined }`, either omit the key or pass a boolean.
  *
  * @example
  * ```ts
@@ -115,7 +115,7 @@ export interface ParseCcdaOptions {
   /**
    * The vendor/conformance {@link CcdaProfile} to apply. A profile downgrades the
    * **non-safety-critical** deviations it expects to `PROFILE_QUIRK_APPLIED`
-   * (flagged `expected`) — it never changes an extracted value and can never
+   * (flagged `expected`), it never changes an extracted value and can never
    * tolerate a safety-critical warning. Omit to consult the process-scoped
    * default ({@link setDefaultCcdaProfile}); pass `null` to opt out of that
    * default for this call.
@@ -125,7 +125,7 @@ export interface ParseCcdaOptions {
    * An optional consumer-supplied bring-your-own {@link TerminologyAdapter}. When
    * present, the parser semantically validates each recognized coded value (a
    * problem, medication, allergen, route, or vaccine code) against it and emits
-   * `SEMANTIC_CODE_INVALID` on a negative verdict — the code preserved verbatim,
+   * `SEMANTIC_CODE_INVALID` on a negative verdict, the code preserved verbatim,
    * never coerced. Omit it for the default recognize-only behavior. `@cosyte/ccda`
    * never imports a terminology library; you supply the adapter.
    */

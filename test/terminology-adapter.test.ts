@@ -1,34 +1,34 @@
 /**
- * Tests for the bring-your-own {@link TerminologyAdapter} — the pluggable
+ * Tests for the bring-your-own {@link TerminologyAdapter}, the pluggable
  * semantic-validation contract added in CCDA-P7.
  *
  * The invariants under test:
  *
- *   - **opt-in** — with no adapter, behavior is unchanged (recognize-only, no
+ *   - **opt-in**, with no adapter, behavior is unchanged (recognize-only, no
  *     `SEMANTIC_CODE_INVALID`);
- *   - **surfaced, never coerced** — a code the adapter rejects is flagged
+ *   - **surfaced, never coerced**, a code the adapter rejects is flagged
  *     `SEMANTIC_CODE_INVALID` while the code itself is preserved verbatim in the
  *     document (the builder never rewrites a value to satisfy the adapter);
- *   - **no opinion is silent** — an adapter that returns `undefined` (system out
+ *   - **no opinion is silent**, an adapter that returns `undefined` (system out
  *     of its scope) adds no warning, so a partial-coverage adapter is not noisy;
- *   - **the adapter sees the wire coding** — the C-CDA `@codeSystem` OID, `@code`,
+ *   - **the adapter sees the wire coding**, the C-CDA `@codeSystem` OID, `@code`,
  *     and `@displayName`, exactly as the document carries them; and
- *   - **both entry points honor it** — `parseCcda` on existing XML and `buildCcda`
+ *   - **both entry points honor it**, `parseCcda` on existing XML and `buildCcda`
  *     on the document it emits.
  *
- * A second block covers the adapter's `translate` (`$translate`) path — `buildCcda`
+ * A second block covers the adapter's `translate` (`$translate`) path, `buildCcda`
  * consuming it to emit `<translation>` alternate codings:
  *
- *   - **opt-in / non-breaking** — no adapter, a validation-only adapter, a
+ *   - **opt-in / non-breaking**, no adapter, a validation-only adapter, a
  *     `translate` with no opinion (`undefined`), or an unmapped source (empty
  *     `matches`) all yield **byte-identical** output (no `<translation>`);
- *   - **additive, never a coercion** — a returned coding becomes a `<translation>`
+ *   - **additive, never a coercion**, a returned coding becomes a `<translation>`
  *     *beside* the primary `@code`/`@codeSystem`, which stay verbatim;
- *   - **never fabricated** — only a concrete adapter-supplied coding produces one,
+ *   - **never fabricated**, only a concrete adapter-supplied coding produces one,
  *     and a match missing a `system` is skipped (not a spec-clean CD);
- *   - **round-trips** — the parser reads the primary code unchanged and surfaces
+ *   - **round-trips**, the parser reads the primary code unchanged and surfaces
  *     the alternate in `CD.translation`;
- *   - **scoped to the recognized clinical slots** — problem value, allergen,
+ *   - **scoped to the recognized clinical slots**, problem value, allergen,
  *     medication drug + route, vaccine + route; structural act/section codes
  *     (`ASSERTION`, section LOINC) are never handed to `translate`.
  */
@@ -49,7 +49,7 @@ import {
 const SNOMED_CT = "2.16.840.1.113883.6.96";
 const RXNORM = "2.16.840.1.113883.6.88";
 
-/** Hypertension (SNOMED CT) — the problem code used across these fixtures. */
+/** Hypertension (SNOMED CT), the problem code used across these fixtures. */
 const HYPERTENSION = "38341003";
 
 const INIT: BuildCcdaInit = {
@@ -73,7 +73,7 @@ function rejecting(badCode: string): TerminologyAdapter {
   return { validateCode: (c) => ({ result: c.code !== badCode }) };
 }
 
-describe("bring-your-own terminology adapter — parse path", () => {
+describe("bring-your-own terminology adapter, parse path", () => {
   const xml = serializeCcda(buildCcda(INIT));
 
   it("is opt-in: no adapter ⇒ no SEMANTIC_CODE_INVALID", () => {
@@ -84,7 +84,7 @@ describe("bring-your-own terminology adapter — parse path", () => {
   it("flags a code the adapter rejects, verbatim-preserved", () => {
     const doc = parseCcda(xml, { terminology: rejecting(HYPERTENSION) });
     expect(codes(doc.warnings)).toContain(WARNING_CODES.SEMANTIC_CODE_INVALID);
-    // The rejected code is never coerced away — it survives in the model.
+    // The rejected code is never coerced away, it survives in the model.
     expect(doc.getProblems()[0]?.problems[0]?.value?.code).toBe(HYPERTENSION);
     const w = doc.warnings.find((x) => x.code === WARNING_CODES.SEMANTIC_CODE_INVALID);
     // PHI-free: the message names the slot + system OID, never the code itself.
@@ -104,7 +104,7 @@ describe("bring-your-own terminology adapter — parse path", () => {
 
   it("only flags the slot the adapter rejects (partial coverage is not noisy)", () => {
     // An adapter that only covers RxNorm: it rejects the med code and declines
-    // (undefined) on SNOMED — so exactly one SEMANTIC_CODE_INVALID, for the med.
+    // (undefined) on SNOMED, so exactly one SEMANTIC_CODE_INVALID, for the med.
     const adapter: TerminologyAdapter = {
       validateCode: (c) => (c.system === RXNORM ? { result: false } : undefined),
     };
@@ -116,7 +116,7 @@ describe("bring-your-own terminology adapter — parse path", () => {
   it("skips a coded value that has a system but no concrete code symbol", () => {
     // Strip the SNOMED problem's @code, leaving a codeSystem-only value. An
     // adapter that would reject any SNOMED code is never consulted for it, so no
-    // SEMANTIC_CODE_INVALID is raised — there is no membership claim to test.
+    // SEMANTIC_CODE_INVALID is raised, there is no membership claim to test.
     const noCodeXml = xml.replaceAll(`code="${HYPERTENSION}"`, "");
     const adapter: TerminologyAdapter = {
       validateCode: (c) => (c.system === SNOMED_CT ? { result: false } : undefined),
@@ -141,7 +141,7 @@ describe("bring-your-own terminology adapter — parse path", () => {
   });
 });
 
-describe("bring-your-own terminology adapter — build path", () => {
+describe("bring-your-own terminology adapter, build path", () => {
   it("validates on build: a rejected code is flagged on the returned document", () => {
     const doc = buildCcda(INIT, { terminology: rejecting(HYPERTENSION) });
     expect(codes(doc.warnings)).toContain(WARNING_CODES.SEMANTIC_CODE_INVALID);
@@ -159,9 +159,9 @@ describe("bring-your-own terminology adapter — build path", () => {
   });
 });
 
-/** ICD-10-CM code system OID — the translation target used across these fixtures. */
+/** ICD-10-CM code system OID, the translation target used across these fixtures. */
 const ICD10CM = "2.16.840.1.113883.6.90";
-/** Essential hypertension (ICD-10-CM) — the alternate coding mapped from HYPERTENSION. */
+/** Essential hypertension (ICD-10-CM), the alternate coding mapped from HYPERTENSION. */
 const I10 = "I10";
 
 /** A CCD carrying every wired clinical coded slot: problem, allergen, med drug + route, vaccine + route. */
@@ -198,7 +198,7 @@ function translating(from: string, target: TerminologyCoding): TerminologyAdapte
 /** Count non-overlapping `<translation` element starts in a serialized document. */
 const translationCount = (xml: string): number => xml.split("<translation").length - 1;
 
-describe("bring-your-own terminology adapter — <translation> emit path", () => {
+describe("bring-your-own terminology adapter, <translation> emit path", () => {
   const target: TerminologyCoding = {
     system: ICD10CM,
     code: I10,
@@ -258,7 +258,7 @@ describe("bring-your-own terminology adapter — <translation> emit path", () =>
     expect(value?.translation?.[0]?.code).toBe(I10);
     expect(value?.translation?.[0]?.codeSystem).toBe(ICD10CM);
     expect(value?.translation?.[0]?.displayName).toBe("Essential hypertension");
-    // Clean build — a translation is spec-clean, so no new warnings.
+    // Clean build, a translation is spec-clean, so no new warnings.
     expect(doc.warnings).toHaveLength(0);
   });
 

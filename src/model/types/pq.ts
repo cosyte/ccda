@@ -1,5 +1,5 @@
 /**
- * PQ — HL7 v3 Physical Quantity. A dimensioned number: a `@value` and an
+ * PQ, HL7 v3 Physical Quantity. A dimensioned number: a `@value` and an
  * optional `@unit` (UCUM). The raw value string is preserved alongside the
  * parsed number so a non-numeric `@value` is never silently coerced.
  */

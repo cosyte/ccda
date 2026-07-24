@@ -7,7 +7,7 @@
  * a single call.
  *
  * The single mutable module-scoped `let` is the only such state in the profile
- * subsystem — an intentional, documented trade-off (identical to the sibling).
+ * subsystem, an intentional, documented trade-off (identical to the sibling).
  * Tests that set a default MUST clear it in teardown (`setDefaultCcdaProfile(null)`)
  * to avoid cross-test bleed.
  */
@@ -32,7 +32,7 @@ const BUILT_INS: ReadonlyMap<string, CcdaProfile> = new Map<string, CcdaProfile>
 
 /**
  * Look up a built-in profile by name. Returns `undefined` when no built-in has
- * that name (a user-defined profile is not in this registry — pass it directly).
+ * that name (a user-defined profile is not in this registry, pass it directly).
  *
  * @example
  * ```ts
@@ -59,7 +59,7 @@ export function listCcdaProfiles(): readonly string[] {
 }
 
 /**
- * Process-scoped default profile. `undefined` means "unset" — `parseCcda`
+ * Process-scoped default profile. `undefined` means "unset", `parseCcda`
  * applies no profile in that state.
  *
  * @internal
@@ -72,7 +72,7 @@ let _defaultProfile: CcdaProfile | undefined = undefined;
  * An explicit `parseCcda(raw, { profile })` always wins; `{ profile: null }`
  * opts out of the default for a single call.
  *
- * **Test hygiene:** the only mutable module-scoped state here — tests that call
+ * **Test hygiene:** the only mutable module-scoped state here, tests that call
  * this MUST clear it in teardown or default-profile bleed infects later tests.
  *
  * @example

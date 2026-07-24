@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`serializeCcda — golden snapshot > emits a stable spec-clean document for the triad fixture 1`] = `
+exports[`serializeCcda, golden snapshot > emits a stable spec-clean document for the triad fixture 1`] = `
 "<?xml version="1.0" encoding="UTF-8"?>
 <ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <realmCode code="US"/>

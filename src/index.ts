@@ -1,10 +1,10 @@
 /**
- * Public entry point for the `@cosyte/ccda` package — a lenient, PHI-aware
+ * Public entry point for the `@cosyte/ccda` package, a lenient, PHI-aware
  * parser for HL7 Consolidated CDA R2.1 documents.
  *
  * `parseCcda` turns vendor-quirky C-CDA XML into an immutable
  * {@link CcdaDocument}: the recognized {@link DocumentType}, the US Realm
- * {@link CcdaHeader}, and the framed {@link CcdaSection}s — with recoverable
+ * {@link CcdaHeader}, and the framed {@link CcdaSection}s, with recoverable
  * deviations surfaced as stable-coded {@link CcdaWarning}s rather than thrown.
  * The XML substrate is hardened against XXE / billion-laughs / oversized input
  * (Tier-3 {@link FatalCode}s). This module re-exports the public surface every
@@ -197,7 +197,7 @@ export {
 } from "./model/code-systems.js";
 export type { CodeSlot } from "./model/code-systems.js";
 
-// Bring-your-own terminology adapter — the pluggable semantic-validation contract.
+// Bring-your-own terminology adapter, the pluggable semantic-validation contract.
 export type {
   TerminologyAdapter,
   TerminologyCoding,
@@ -205,7 +205,7 @@ export type {
   CodeTranslationResult,
 } from "./model/terminology.js";
 
-// Recognition tables — document types + section catalog.
+// Recognition tables, document types + section catalog.
 export {
   documentTypeForOid,
   sectionForTemplateRoot,

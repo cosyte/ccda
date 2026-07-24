@@ -4,7 +4,7 @@
  * posture recorded in `docs/adr/0001-xml-parser.md`:
  *
  * - **No DTD / DOCTYPE.** Any `<!DOCTYPE` or `<!ENTITY` declaration is rejected
- *   outright (`XXE_OR_DTD_PRESENT`) before the DOM is built — this is the
+ *   outright (`XXE_OR_DTD_PRESENT`) before the DOM is built, this is the
  *   XXE / external-entity defense.
  * - **No external entity resolver.** `@xmldom/xmldom` is DOM-only and never
  *   dereferences external/system entities (no filesystem or network fetch);
@@ -15,7 +15,7 @@
  *   (`ELEMENT_DEPTH_LIMIT_EXCEEDED`), and pathological fan-out
  *   (`NODE_COUNT_LIMIT_EXCEEDED`) are rejected.
  * - **Base64 quarantine.** Embedded base64 (`<text mediaType=... representation="B64">`,
- *   nonXMLBody) is never decoded here — it survives as inert text in the DOM.
+ *   nonXMLBody) is never decoded here, it survives as inert text in the DOM.
  *
  * A UTF-8 BOM is stripped (emitting `ENCODING_BOM_STRIPPED`). Malformed XML
  * surfaces as `NOT_WELL_FORMED_XML`. Everything here is pure and synchronous.
@@ -28,7 +28,7 @@ import { CcdaParseError, FATAL_CODES } from "./errors.js";
 import type { CcdaParseLimits } from "./types.js";
 import { encodingBomStripped, type CcdaWarning } from "./warnings.js";
 
-/** Fully-resolved safety caps — every field present (defaults merged in). @internal */
+/** Fully-resolved safety caps, every field present (defaults merged in). @internal */
 export interface ResolvedLimits {
   readonly maxInputBytes: number;
   readonly maxDepth: number;
@@ -58,10 +58,10 @@ export const DEFAULT_LIMITS: ResolvedLimits = {
 /** Element node type per the DOM spec (`Node.ELEMENT_NODE`). @internal */
 const ELEMENT_NODE = 1 as const;
 
-/** The five XML predefined entities — always legal, never counted toward the expansion cap. @internal */
+/** The five XML predefined entities, always legal, never counted toward the expansion cap. @internal */
 const PREDEFINED_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
 
-/** Detects a declared DTD or entity — the XXE / external-entity attack surface. @internal */
+/** Detects a declared DTD or entity, the XXE / external-entity attack surface. @internal */
 const DTD_RE = /<!DOCTYPE|<!ENTITY/iu;
 
 /** Matches a custom (non-predefined, non-numeric) entity reference `&name;`. @internal */
@@ -69,7 +69,7 @@ const ENTITY_REF_RE = /&[a-z_][\w.-]*;/giu;
 
 /**
  * Merge caller-supplied limit overrides over {@link DEFAULT_LIMITS}. Honors
- * `exactOptionalPropertyTypes` — an omitted override key falls back to the
+ * `exactOptionalPropertyTypes`, an omitted override key falls back to the
  * default rather than producing `undefined`.
  *
  * @example
@@ -96,7 +96,7 @@ export function resolveLimits(overrides?: CcdaParseLimits): ResolvedLimits {
  * `ENCODING_BOM_STRIPPED` via `emit` when a BOM was removed.
  *
  * Throws a {@link CcdaParseError} carrying a PHI-free {@link CcdaPosition} for
- * any safety violation or malformed XML — never returns a partially-built
+ * any safety violation or malformed XML, never returns a partially-built
  * document.
  *
  * @example
@@ -145,7 +145,7 @@ export function parseSecureXml(
  * Count custom entity references and throw `ENTITY_EXPANSION_LIMIT` when the
  * count exceeds the cap. Predefined (`&amp;` …) and numeric (`&#…;`) references
  * are never counted. With DTDs already rejected these references could only be
- * undefined anyway — this is billion-laughs defense-in-depth.
+ * undefined anyway, this is billion-laughs defense-in-depth.
  *
  * @internal
  */
@@ -170,14 +170,14 @@ function countEntityRefs(source: string, limits: ResolvedLimits): void {
 /**
  * PHI-safe message for any not-well-formed-XML fatal. The raw `@xmldom/xmldom`
  * error text can echo surrounding source (which for a C-CDA is clinical
- * content), so it is **never** propagated — every malformed-XML path reports
+ * content), so it is **never** propagated, every malformed-XML path reports
  * this generic, content-free string instead. @internal
  */
 const NOT_WELL_FORMED_MESSAGE = "Input is not well-formed XML.";
 
 /**
  * Construct the DOM with a hardened parser. The `onError` handler tolerates
- * `warning`/`error` levels (Postel's Law — the lenient parser recovers what it
+ * `warning`/`error` levels (Postel's Law, the lenient parser recovers what it
  * can) but converts any `fatalError` into a PHI-safe `NOT_WELL_FORMED_XML`
  * fatal. `@xmldom/xmldom` also throws directly for some malformed inputs; those
  * are caught and normalized to the same fatal. A null document element is left
@@ -204,7 +204,7 @@ function buildDom(source: string): Document {
 }
 
 /**
- * Walk the constructed DOM iteratively (no recursion — itself a depth-attack
+ * Walk the constructed DOM iteratively (no recursion, itself a depth-attack
  * surface) to enforce `maxDepth` and `maxNodeCount`. Counts element nodes only;
  * throws `ELEMENT_DEPTH_LIMIT_EXCEEDED` for over-deep nesting and
  * `NODE_COUNT_LIMIT_EXCEEDED` for excessive fan-out.

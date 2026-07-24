@@ -4,7 +4,7 @@ import { sortedCodeSet } from "@cosyte/test-utils";
 import { WARNING_CODES, FATAL_CODES } from "../src/index.js";
 
 /**
- * The warning + fatal code surface is part of the public contract — consumers
+ * The warning + fatal code surface is part of the public contract, consumers
  * branch on `w.code`, so adding/removing/renaming a code is a reviewable event.
  * These inline snapshots turn any such change into a failing diff.
  */

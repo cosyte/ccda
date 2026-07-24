@@ -1,5 +1,5 @@
 /**
- * `pickMrn` — pick the Medical Record Number string from a C-CDA patient's
+ * `pickMrn`, pick the Medical Record Number string from a C-CDA patient's
  * `patientRole/id` list. Isolated from the document model so a later
  * profile-aware variant can substitute without patching every caller.
  *

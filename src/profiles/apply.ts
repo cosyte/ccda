@@ -1,7 +1,7 @@
 /**
  * The runtime side of the profile subsystem: turning an active
  * {@link CcdaProfile} into a warning transform the parser's emitter runs. A
- * profile never touches extracted clinical values — it operates purely at the
+ * profile never touches extracted clinical values, it operates purely at the
  * warning layer, downgrading a deviation it *expects* into a
  * `PROFILE_QUIRK_APPLIED` warning (flagged `expected`, carrying the original
  * `toleratedCode`) while leaving every un-expected warning untouched.
@@ -17,7 +17,7 @@ import type { CcdaProfile, QuirkTolerance } from "./types.js";
 /**
  * Does `tolerance` apply to `warning`? The codes must match, and every
  * structural key present in the tolerance's `match` must equal the warning's
- * position — a tolerance with no `match` applies to every warning of its code.
+ * position, a tolerance with no `match` applies to every warning of its code.
  * Matching is on PHI-free structural identifiers only (section LOINC code,
  * template OID).
  *

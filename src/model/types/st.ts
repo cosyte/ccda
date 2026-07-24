@@ -1,5 +1,5 @@
 /**
- * ST — HL7 v3 Character String. The simplest v3 datatype: a plain text value
+ * ST, HL7 v3 Character String. The simplest v3 datatype: a plain text value
  * with an optional `nullFlavor`. Used for `title`, free-text names, and similar
  * narrative-adjacent fields. The value is the element's trimmed text content;
  * embedded markup is not interpreted.

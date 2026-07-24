@@ -1,8 +1,8 @@
 /**
- * Family History extraction — the Family History Organizer (`…22.4.45`) → Family
+ * Family History extraction, the Family History Organizer (`…22.4.45`) → Family
  * History Observation (`…22.4.46`) tree. The organizer names one family member
  * (the `relatedSubject`: relationship, gender, birth time, deceased flag); each
- * member observation is a condition that relative had — coded in `value` — with
+ * member observation is a condition that relative had, coded in `value`, with
  * an optional Age Observation (`…22.4.31`, the relative's age at onset) and an
  * optional Family History Death Observation (`…22.4.47`, marking the condition
  * as the cause of death).
@@ -10,7 +10,7 @@
  * The relative's identity is preserved as a structured {@link FamilyMember} (not
  * flattened into each condition) so a consumer can group conditions by relative.
  * The deceased flag lives in the `sdtc:deceasedInd` extension element, which is
- * outside the HL7 v3 namespace — it is read by local name rather than the
+ * outside the HL7 v3 namespace, it is read by local name rather than the
  * v3-scoped child lookup.
  */
 
@@ -42,7 +42,7 @@ import type { Element } from "@xmldom/xmldom";
  * The family member a {@link FamilyHistory} group describes. `relationship` is
  * the coded relation (e.g. SNOMED/HL7 `FTH` father); `gender` the relative's
  * administrative gender; `birthTime` their birth date; `deceased` the
- * `sdtc:deceasedInd` flag. All optional — a document may name only the relation.
+ * `sdtc:deceasedInd` flag. All optional, a document may name only the relation.
  *
  * @example
  * ```ts

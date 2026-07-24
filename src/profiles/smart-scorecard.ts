@@ -1,9 +1,9 @@
 /**
- * The `smartScorecard` profile — deprecated-terminology tolerance grounded in
+ * The `smartScorecard` profile, deprecated-terminology tolerance grounded in
  * **public conformance evidence**, not an invented vendor deviation matrix.
  *
  * Grounding (per ADR 0018, public artifacts are valid grounding):
- * - **SMART C-CDA Scorecard** (SMART Health IT / Boston Children's) — the public
+ * - **SMART C-CDA Scorecard** (SMART Health IT / Boston Children's), the public
  *   rubric that scores real C-CDA documents and explicitly flags **deprecated
  *   codes** (notably the deprecated BMI LOINC **41909-3** in place of the current
  *   **39156-5**) as a common real-world deviation.
@@ -14,7 +14,7 @@
  *
  * What it tolerates is strictly **non-safety-critical terminology-freshness
  * noise**: a deprecated-but-recognizable LOINC or a legacy code system. It does
- * **not** — and by the safety gate in `defineCcdaProfile` **cannot** — tolerate a
+ * **not**, and by the safety gate in `defineCcdaProfile` **cannot**, tolerate a
  * wrong dose, a mis-coded allergen, a code↔narrative mismatch, or any other
  * safety-critical deviation. Those always surface, profile or not.
  *
@@ -42,7 +42,7 @@ export const smartScorecard: CcdaProfile = defineCcdaProfile({
   name: "smartScorecard",
   description:
     "Deprecated-terminology tolerance grounded in the public SMART C-CDA Scorecard rubric and " +
-    "the D'Amore JAMIA 2014 study. Terminology-freshness noise only — never a safety-critical value.",
+    "the D'Amore JAMIA 2014 study. Terminology-freshness noise only, never a safety-critical value.",
   provenance: {
     source: "SMART C-CDA Scorecard + D'Amore et al., JAMIA 2014 (SMART C-CDA Collaborative)",
     reference:
@@ -61,8 +61,8 @@ export const smartScorecard: CcdaProfile = defineCcdaProfile({
     {
       code: "DEPRECATED_CODE_SYSTEM",
       rationale:
-        "D'Amore et al. (JAMIA 2014) documented legacy code systems — ICD-9 persisting in newer " +
-        "documents — across real C-CDA documents; the value is preserved, the deprecation expected.",
+        "D'Amore et al. (JAMIA 2014) documented legacy code systems, ICD-9 persisting in newer " +
+        "documents, across real C-CDA documents; the value is preserved, the deprecation expected.",
     },
     {
       code: "INVALID_NULL_FLAVOR",

@@ -1,5 +1,5 @@
 /**
- * Discrete-data extraction tests — Results, Vital Signs, and Immunizations (the
+ * Discrete-data extraction tests, Results, Vital Signs, and Immunizations (the
  * Phase 3 sections). Covers happy-path extraction with units intact, the
  * UCUM unit warnings (never normalized away), reference-range handling, the
  * polymorphic observation `value`, deprecated-LOINC flagging, and the
@@ -30,9 +30,9 @@ function withResultValue(valueXml: string): string {
 }
 
 /**
- * A Results section with a bare Result Organizer + Observation — no organizer
+ * A Results section with a bare Result Organizer + Observation, no organizer
  * `code`/`statusCode`, no result `code`/`value`/`interpretation`/`effectiveTime`/
- * `referenceRange`/narrative — exercising every "field absent" branch.
+ * `referenceRange`/narrative, exercising every "field absent" branch.
  */
 const MINIMAL_RESULTS_SECTION = `
       <component>
@@ -75,7 +75,7 @@ const MINIMAL_VITALS_SECTION = `
         </section>
       </component>`;
 
-/** An Immunizations section with a bare activity — no vaccine/dose/route/date/narrative. */
+/** An Immunizations section with a bare activity, no vaccine/dose/route/date/narrative. */
 const MINIMAL_IMMUNIZATIONS_SECTION = `
       <component>
         <section>
@@ -91,7 +91,7 @@ const MINIMAL_IMMUNIZATIONS_SECTION = `
         </section>
       </component>`;
 
-describe("results — Tier-1 extraction", () => {
+describe("results, Tier-1 extraction", () => {
   it("extracts a Result Organizer with a UCUM-checked value and reference range", () => {
     const doc = parseCcda(
       buildCcda({
@@ -204,7 +204,7 @@ describe("results — Tier-1 extraction", () => {
   });
 });
 
-describe("results — polymorphic observation value", () => {
+describe("results, polymorphic observation value", () => {
   it("reads a coded (CD) result value", () => {
     const xml = withResultValue(
       '<value xsi:type="CD" code="260385009" codeSystem="2.16.840.1.113883.6.96" displayName="Negative"/>',
@@ -275,7 +275,7 @@ describe("results — polymorphic observation value", () => {
   });
 });
 
-describe("vital signs — Tier-1 extraction", () => {
+describe("vital signs, Tier-1 extraction", () => {
   it("extracts a Vital Signs Organizer with a UCUM-checked PQ value", () => {
     const doc = parseCcda(
       buildCcda({
@@ -325,7 +325,7 @@ describe("vital signs — Tier-1 extraction", () => {
   });
 });
 
-describe("immunizations — Tier-1 extraction", () => {
+describe("immunizations, Tier-1 extraction", () => {
   it("extracts an Immunization Activity with its CVX vaccine, dose, and route", () => {
     const doc = parseCcda(
       buildCcda({

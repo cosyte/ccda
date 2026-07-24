@@ -3,7 +3,7 @@
  * the CDA R2 wrapper around every document type: the document `id`/`code`/
  * `title`/`effectiveTime`, and one or more `recordTarget` participations
  * carrying the patient. Phase 1 extracts the header fields most consumers
- * reach for first — enough to answer "whose document is this, what kind, and
+ * reach for first, enough to answer "whose document is this, what kind, and
  * when" in one line.
  */
 
@@ -58,7 +58,7 @@ export interface CcdaPatient {
 }
 
 /**
- * A CDA R2 `parentDocument` — the earlier document a {@link RelatedDocument}
+ * A CDA R2 `parentDocument`, the earlier document a {@link RelatedDocument}
  * points back at. Carries the parent's `id`(s), optional `code`, and the
  * `setId`/`versionNumber` revision pair (the version this document supersedes).
  *
@@ -78,7 +78,7 @@ export interface ParentDocument {
 }
 
 /**
- * A CDA R2 `relatedDocument` — the header link that makes one document a
+ * A CDA R2 `relatedDocument`, the header link that makes one document a
  * revision of another. `typeCode` is the ActRelationshipType (`RPLC` replaces,
  * `APND` appends, `XFRM` transforms); `parentDocument` names the prior version.
  * A replacement (revision) carries `typeCode="RPLC"`, the **same** `setId` as
@@ -100,8 +100,8 @@ export interface RelatedDocument {
 /**
  * The parsed US Realm Header. `documentId` + `code` + `title` + `effectiveTime`
  * answer the document's identity; `recordTargets` are the patient(s) (usually
- * exactly one — more than one emits `MULTIPLE_RECORD_TARGETS`). `setId` +
- * `versionNumber` + `relatedDocuments` carry the CDA R2 revision chain — a
+ * exactly one, more than one emits `MULTIPLE_RECORD_TARGETS`). `setId` +
+ * `versionNumber` + `relatedDocuments` carry the CDA R2 revision chain, a
  * replacement document (see {@link editCcda}) shares its predecessor's `setId`,
  * bumps `versionNumber`, and names the prior version in a `RPLC`
  * {@link RelatedDocument}.

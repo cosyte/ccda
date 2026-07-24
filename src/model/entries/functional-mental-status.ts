@@ -1,19 +1,19 @@
 /**
- * Functional Status and Mental Status extraction — two structurally identical
+ * Functional Status and Mental Status extraction, two structurally identical
  * sections that differ only in their template roots and clinical domain. Each
  * carries Functional/Mental Status Observations (`…22.4.67` / `…22.4.74`) either
  * directly under an `<entry>` or clustered in a Functional/Mental Status
  * Organizer (`…22.4.66` / `…22.4.75`), plus Assessment Scale Observations
- * (`…22.4.69`, a scored scale such as a PHQ-9 or a Glasgow Coma) — which C-CDA
+ * (`…22.4.69`, a scored scale such as a PHQ-9 or a Glasgow Coma), which C-CDA
  * R2.1 places as **direct section entries**, each grouping its scored
  * Assessment Scale Supporting Observations (`…22.4.86`) via `entryRelationship`.
  * Every form is read into a flat list of typed {@link StatusObservation}s tagged
- * with their {@link StatusDomain} — nothing is dropped, and the two domains are
+ * with their {@link StatusDomain}, nothing is dropped, and the two domains are
  * never conflated.
  *
  * A direct-entry Assessment Scale Observation's domain is the section that
- * carries it — a scale in the Functional Status section is functional, one in
- * the Mental Status section is mental — so it is read (flagged `assessmentScale`)
+ * carries it, a scale in the Functional Status section is functional, one in
+ * the Mental Status section is mental, so it is read (flagged `assessmentScale`)
  * without ever guessing a domain from the template alone. A scale wrongly nested
  * inside a domain organizer is still read leniently (its parent organizer
  * anchors the domain), but the conformant placement the builder emits is the
@@ -46,7 +46,7 @@ import { readObservationValue, type ObservationValue } from "./observation.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
- * Which status section a {@link StatusObservation} came from — `"functional"`
+ * Which status section a {@link StatusObservation} came from, `"functional"`
  * (ADLs, mobility, self-care) or `"mental"` (cognition, mood). Preserved so a
  * consumer can tell the two apart without re-reading the DOM; the two are never
  * conflated.
@@ -95,7 +95,7 @@ export interface StatusObservation {
 }
 
 /**
- * One scored component of an Assessment Scale Observation — an Assessment Scale
+ * One scored component of an Assessment Scale Observation, an Assessment Scale
  * Supporting Observation (`…22.4.86`), such as a single PHQ-9 question or a
  * Glasgow Coma sub-score. `code` is the item code (LOINC/SNOMED), `value` its
  * scored answer (usually an `integer`). Modeled so the scale's detail is never
@@ -118,7 +118,7 @@ export interface SupportingObservation {
 
 /**
  * Extract every Functional Status finding from a Functional Status `<section>`
- * element — standalone Functional Status Observations plus the members
+ * element, standalone Functional Status Observations plus the members
  * (observations and assessment scales) of any Functional Status Organizer. Never
  * throws.
  *
@@ -146,7 +146,7 @@ export function extractFunctionalStatus(
 }
 
 /**
- * Extract every Mental Status finding from a Mental Status `<section>` element —
+ * Extract every Mental Status finding from a Mental Status `<section>` element,
  * standalone Mental Status Observations plus the members (observations and
  * assessment scales) of any Mental Status Organizer. Never throws.
  *
@@ -183,11 +183,11 @@ const MENTAL_STATUS_SECTION = "2.16.840.1.113883.10.20.22.2.56";
 const MENTAL_STATUS_SECTION_LOINC = "10190-7";
 
 /**
- * Whether a `<section>` is the given status-domain section — by templateId root
+ * Whether a `<section>` is the given status-domain section, by templateId root
  * (primary) or its LOINC section `<code>` (fallback). A **direct-entry Assessment
  * Scale Observation** (`…22.4.69`) carries the *same* template in both the
  * Functional and Mental Status sections, so its domain can only be read from the
- * section that carries it — this gate is what stops a scale in one section from
+ * section that carries it, this gate is what stops a scale in one section from
  * being pulled into the other domain. @internal
  */
 function isDomainSection(sectionEl: Element, sectionRoot: string, sectionLoinc: string): boolean {
@@ -196,7 +196,7 @@ function isDomainSection(sectionEl: Element, sectionRoot: string, sectionLoinc: 
   return code !== undefined && attr(code, "code") === sectionLoinc;
 }
 
-/** Shared walk for a status section — standalone observations + organizer members. @internal */
+/** Shared walk for a status section, standalone observations + organizer members. @internal */
 function extractStatus(
   sectionEl: Element,
   domain: StatusDomain,
@@ -210,7 +210,7 @@ function extractStatus(
   const out: StatusObservation[] = [];
   // A direct-entry Assessment Scale Observation carries the SAME template in both
   // status sections, so it is only read when THIS section is the matching-domain
-  // section — the domain comes from the section, never guessed from the template.
+  // section, the domain comes from the section, never guessed from the template.
   const readScales = isDomainSection(sectionEl, sectionRoot, sectionLoinc);
   for (const entry of childEntries(sectionEl)) {
     const organizer = entryAct(entry, organizerRoot);

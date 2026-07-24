@@ -1,15 +1,15 @@
 /**
- * `buildCcda` — the conservative *emit* factory for `@cosyte/ccda`, symmetric
+ * `buildCcda`, the conservative *emit* factory for `@cosyte/ccda`, symmetric
  * with `parseCcda` and mirroring the sibling `@cosyte/hl7`'s `buildMessage`.
  * From a semantic {@link BuildCcdaInit} it assembles a **spec-clean C-CDA R2.1
- * document** — correct `templateId`s, LOINC section codes, structured entries
- * whose coded values agree with a regenerated narrative — and returns a real
+ * document**, correct `templateId`s, LOINC section codes, structured entries
+ * whose coded values agree with a regenerated narrative, and returns a real
  * {@link CcdaDocument}.
  *
  * **Round-trip by construction.** The builder emits through the *same DOM the
  * parser reads*: it builds a `@xmldom/xmldom` document, serializes it with the
  * shared serializer, then parses that text with {@link parseCcda}. The returned
- * document is therefore the parse of the emitted XML — a document `buildCcda`
+ * document is therefore the parse of the emitted XML, a document `buildCcda`
  * emits always parses back to the same structured content, and
  * `parseCcda(doc.toString()).toString() === doc.toString()` (the serializer
  * fixed-point) holds automatically. A clean build produces **zero warnings**.
@@ -25,99 +25,99 @@
  * Observation, LOINC + UCUM). It also emits an **Immunizations** section (an
  * Immunization Activity → Immunization Medication Information with a CVX vaccine,
  * dose, route, and the SHALL administration `effectiveTime`) when the caller
- * supplies immunizations — a `refused` shot is emitted as `negationInd="true"`,
+ * supplies immunizations, a `refused` shot is emitted as `negationInd="true"`,
  * never conflated with a `nullFlavor` "unknown", exactly as the parser reads it
  * back. Every section carries the entries-required templateId only when it has
  * entries; a CCD SHALL section (Problems, Allergies, Medications, Results, Vital
  * Signs) for which no content is supplied is emitted as a spec-clean empty
  * `nullFlavor="NI"` section so the document stays conformant. The Immunizations
- * section — not a CCD SHALL section — is emitted only when populated.
+ * section, not a CCD SHALL section, is emitted only when populated.
  *
  * **This slice adds Procedures and Encounters.** A **Procedures** section emits
- * one of the three Procedure Activity variants — an operative `<procedure>`
+ * one of the three Procedure Activity variants, an operative `<procedure>`
  * (`…22.4.14`), a non-altering `<act>` service (`…22.4.12`), or an assessment
- * `<observation>` (`…22.4.13`) — each with its coded procedure, the
+ * `<observation>` (`…22.4.13`), each with its coded procedure, the
  * performed-vs-planned `moodCode` (`EVN`/`INT`, read back as the parser's
  * disposition and never conflated), a SHALL `statusCode`, and the SHOULD [0..1]
  * `effectiveTime` emitted only when supplied. An **Encounters** section emits an
  * Encounter Activity (`…22.4.49`) with its SHALL `code` [1..1] (the encounter
  * type, CPT by default) and SHALL `effectiveTime` [1..1] visit period (an
- * `IVL_TS`; a `nullFlavor="UNK"` low when no period is known). Both — like
- * Immunizations, and unlike the four CCD SHALL sections — are emitted only when
+ * `IVL_TS`; a `nullFlavor="UNK"` low when no period is known). Both, like
+ * Immunizations, and unlike the four CCD SHALL sections, are emitted only when
  * populated; neither is a CCD SHALL section, so an empty one is never fabricated.
  * The Procedures section and its entry templates carry the R2.1 `2014-06-09`
  * stamp (not the `2015-08-01` stamp the other sections use).
  *
  * **This slice adds Social History (Smoking Status).** A **Social History**
- * section (`…22.2.17`, LOINC `29762-2`) emits one or more Smoking Status —
- * Meaningful Use observations (`…22.4.78`, the `2014-06-09` stamp) — each with
+ * section (`…22.2.17`, LOINC `29762-2`) emits one or more Smoking Status,
+ * Meaningful Use observations (`…22.4.78`, the `2014-06-09` stamp), each with
  * the fixed LOINC `code` (`72166-2` "Tobacco smoking status"), a SHALL
  * `statusCode`, a SHALL `effectiveTime` (the recorded time, `nullFlavor="UNK"`
  * when unknown), and the SHALL SNOMED CT `value` from the Current Smoking Status
  * value set. **Unknown is never defaulted to a status:** when the caller supplies
- * no `value` the SHALL `value` is emitted as `nullFlavor="UNK"` — an explicit
+ * no `value` the SHALL `value` is emitted as `nullFlavor="UNK"`, an explicit
  * unknown the parser reads back as `unknown: true` and flags
- * `SMOKING_STATUS_UNKNOWN` — never invented as a "never smoker" (absent status ≠
+ * `SMOKING_STATUS_UNKNOWN`, never invented as a "never smoker" (absent status ≠
  * non-smoker, the single safety rule this section turns on). Like Immunizations,
- * Procedures, and Encounters — and unlike the four CCD SHALL sections — Social
+ * Procedures, and Encounters, and unlike the four CCD SHALL sections, Social
  * History is emitted only when populated; it is a CCD SHOULD section, so an empty
  * one is never fabricated.
  *
  * **This slice adds Functional Status.** A **Functional Status** section
  * (`…22.2.14`, LOINC `47420-5`, the `2014-06-09` stamp) emits one or more
- * standalone Functional Status Observations (`…22.4.67`) — each with the
+ * standalone Functional Status Observations (`…22.4.67`), each with the
  * template-**fixed** LOINC `code` (`54522-8` "Functional status"), a SHALL
  * `statusCode` (fixed `completed`), a SHALL `effectiveTime` [1..1] (the assessed
  * time, `nullFlavor="UNK"` when unknown), and the SHALL SNOMED CT `value` [1..1]
  * carrying the specific finding. **Unknown is never defaulted to a finding:** when
  * the caller supplies no `value` the SHALL `value` is emitted as
- * `nullFlavor="UNK"` — an explicit unknown, never invented. Only Functional Status
+ * `nullFlavor="UNK"`, an explicit unknown, never invented. Only Functional Status
  * templates are emitted, so the parser reads every finding back tagged
- * `domain: "functional"` — never conflated with Mental Status. Like the other
+ * `domain: "functional"`, never conflated with Mental Status. Like the other
  * non-SHALL sections, Functional Status is emitted only when populated. The
  * Functional Status Section has no entries-required variant, so only the base
  * `templateId` is emitted even when it carries entries.
  *
  * **This slice adds Mental Status.** A **Mental Status** section (`…22.2.56`,
  * LOINC `10190-7`, the R2.1 `2015-08-01` stamp) emits one or more standalone
- * Mental Status Observations (`…22.4.74`) — each with the R2.1 template-**fixed**
+ * Mental Status Observations (`…22.4.74`), each with the R2.1 template-**fixed**
  * SNOMED CT `code` (`373930000` "Cognitive function finding"), a SHALL `statusCode`
  * (fixed `completed`), a SHALL `effectiveTime` [1..1] (the assessed time,
  * `nullFlavor="UNK"` when unknown), and the SHALL SNOMED CT `value` [1..1] carrying
  * the specific cognition/mood finding. **Unknown is never defaulted to a finding:**
  * an absent `value` is emitted as `nullFlavor="UNK"`, never invented. The Mental
  * Status templates are new in the R2.1 August 2015 errata (split out of Functional
- * Status, hence the `2015-08-01` — not `2014-06-09` — stamp) and the two extractors
+ * Status, hence the `2015-08-01`, not `2014-06-09`, stamp) and the two extractors
  * key off their distinct observation roots (`…22.4.67` vs `…22.4.74`), so a mental
- * finding reads back tagged `domain: "mental"` — **never conflated** with functional
+ * finding reads back tagged `domain: "mental"`, **never conflated** with functional
  * status. Like the other non-SHALL sections it is emitted only when populated, and
  * its section has no entries-required variant.
  *
  * **This slice adds Past Medical History.** A **Past Medical History** section
  * (`…22.2.20`, LOINC `11348-0`, the R2.1 `2015-08-01` stamp) emits one or more
  * historical problems as **bare** Problem Observations (`…22.4.4`) directly under
- * each `<entry>` — reusing the exact observation the Problems section builds, but
+ * each `<entry>`, reusing the exact observation the Problems section builds, but
  * **without** the Problem Concern Act (`…22.4.3`) wrapper. That structural
  * distinction is load-bearing: the parser routes a bare observation to
  * `getPastMedicalHistory` and a concern-wrapped one to `getProblems`, so a resolved
  * past illness is **never double-counted** as an active problem concern. Each
  * observation carries the SHALL fixed `code` (SNOMED CT `55607006` "Problem"), a
  * SHALL `statusCode` (`completed`), the SHALL `effectiveTime` (onset as `low`, a
- * `nullFlavor="UNK"` `high` for a resolved problem — never a guessed date), and the
+ * `nullFlavor="UNK"` `high` for a resolved problem, never a guessed date), and the
  * coded condition in `value`; an absent onset/resolution is `nullFlavor="UNK"`,
  * never invented. The section has no entries-required variant and, like the other
  * non-SHALL sections, is emitted only when populated.
  *
  * **This slice adds Plan of Treatment.** A **Plan of Treatment** section (V2,
  * `…22.2.10`, LOINC `18776-5`, the R2.1 `2014-06-09` stamp) emits one or more of
- * the six planned-entry templates — a Planned Act (`…4.39`), Encounter (`…4.40`),
+ * the six planned-entry templates, a Planned Act (`…4.39`), Encounter (`…4.40`),
  * Procedure (`…4.41`), Medication Activity (`…4.42`), Supply (`…4.43`), or
- * Observation (`…4.44`) — each with its coded order (its default code system
+ * Observation (`…4.44`), each with its coded order (its default code system
  * varies by kind: SNOMED CT for an act/procedure/supply, CPT for an encounter,
- * LOINC for an observation, RxNorm — via the `consumable` — for a medication), a
+ * LOINC for an observation, RxNorm, via the `consumable`, for a medication), a
  * planned `@moodCode`, and the SHALL `statusCode` fixed to `active`. **Planned is
  * never conflated with performed.** The builder input admits *only* planned
- * `@moodCode`s (default `INT`) — `EVN` is not representable — and, correct by
+ * `@moodCode`s (default `INT`), `EVN` is not representable, and, correct by
  * construction, splits the mood type by kind so the appointment moods
  * (`APT`/`ARQ`) are representable **only** on act/encounter/procedure (whose CDA
  * mood domains permit them) and never on a medication/supply/observation (whose
@@ -126,14 +126,14 @@
  * every entry reads back through the parser as `disposition: "planned"`, never
  * mistaken for a performed Procedure or Encounter.
  * The planned `effectiveTime` is SHOULD [0..1], emitted only when supplied (a plan
- * may be undated — never a fabricated date), and the Planned Observation's
+ * may be undated, never a fabricated date), and the Planned Observation's
  * expected coded result `value` [0..1] is emitted only when supplied, never
  * invented. Like the other non-SHALL sections it is emitted only when populated,
  * and its section has no entries-required variant.
  *
  * **This slice adds Family History.** A **Family History** section (V3,
  * `…22.2.15`, LOINC `10157-6`, the R2.1 `2015-08-01` stamp) emits one or more
- * Family History Organizers (`…22.4.45`) — one per relative. Each organizer names
+ * Family History Organizers (`…22.4.45`), one per relative. Each organizer names
  * the relative through its `subject/relatedSubject` (`@classCode="PRS"`): a coded
  * `relationship` (SNOMED CT by default, e.g. `72705000` mother, `9947008`
  * father), and the MAY `gender`/`birthTime`/`sdtc:deceasedInd` demographics. Under
@@ -143,33 +143,33 @@
  * at onset) and/or Family History Death Observation (`…22.4.47`, cause of death).
  * **Nothing clinical is fabricated:** an unknown relationship is
  * `relatedSubject/code nullFlavor="UNK"` and an unknown condition is `value
- * nullFlavor="UNK"` — an explicit unknown, never a guessed relation or illness;
+ * nullFlavor="UNK"`, an explicit unknown, never a guessed relation or illness;
  * the MAY demographics, age, death flag, and SHOULD `effectiveTime` are each
  * emitted only when supplied. Like the other non-SHALL sections it is emitted only
  * when populated, and its section has no entries-required variant.
  *
  * **This slice adds direct-entry Assessment Scale Observations.** The Functional
  * Status and Mental Status sections can now carry **Assessment Scale
- * Observations** (`…22.4.69`) — formal scored instruments such as a PHQ-9
+ * Observations** (`…22.4.69`), formal scored instruments such as a PHQ-9
  * depression screen or a Glasgow Coma scale. C-CDA R2.1 places these as **direct
  * section entries** (`entry/observation`), **not** as Functional/Mental Status
  * Organizer members, so the builder emits each directly under its section with the
  * **bare-root** templateId `…22.4.69` (R2.1 SHALL: `@root` with **no**
  * `@extension`), the scale `code` (LOINC), a SHALL `statusCode` (`completed`), the
  * SHALL `effectiveTime` [1..1], and the SHALL `value` [1..1] carrying the total
- * score as an `xsi:type="INT"` (the type C-CDA prefers for a questionnaire — units
+ * score as an `xsi:type="INT"` (the type C-CDA prefers for a questionnaire, units
  * are not allowed on an INT). The individual items are optional Assessment Scale
  * Supporting Observations (`…22.4.86`, bare root) grouped by `entryRelationship`
  * `typeCode="COMP"`, each with its own INT score. **The score is never
  * fabricated:** an omitted score (total or item) is emitted as `value
  * nullFlavor="UNK"`, an explicit unknown the parser reads back as an `integer`
- * value with no number — never a guessed reading. Because only the carrying
+ * value with no number, never a guessed reading. Because only the carrying
  * section's templates are emitted, the parser tags each scale `domain:
- * "functional"` or `"mental"` from its section, never conflating the two — exactly
+ * "functional"` or `"mental"` from its section, never conflating the two, exactly
  * the placement the slice-11 organizers deferred to here.
  *
  * **SHALL `effectiveTime` on every entry.** Each act/observation the builder
- * emits carries the `effectiveTime` its C-CDA R2.1 template requires — the
+ * emits carries the `effectiveTime` its C-CDA R2.1 template requires, the
  * Problem/Allergy Concern Acts and their observations, the Medication Activity
  * IVL_TS duration, and the Result/Vital Signs organizers and observations. When
  * the caller supplied a time it is used; when a SHALL requires the element but no
@@ -181,30 +181,30 @@
  * **This slice adds a second document type: the Referral Note.** `buildCcda`
  * now emits either a **CCD** (default) or a **Referral Note**
  * (`documentType: "referralNote"`), establishing the multi-document-type pattern
- * in the builder. The Referral Note specializes the US Realm Header — its own
+ * in the builder. The Referral Note specializes the US Realm Header, its own
  * document `templateId` root (`…22.1.14`, the R2.1 `2015-08-01` stamp), LOINC
- * document `code` (`57133-1` "Referral Note"), and title — and its own SHALL
+ * document `code` (`57133-1` "Referral Note"), and title, and its own SHALL
  * section set: the entries-required **Problems**, **Allergies**, and
  * **Medications** (each emitted empty as `nullFlavor="NI"` when the caller
  * supplies none), plus the narrative-only **Reason for Referral** (V2,
  * `1.3.6.1.4.1.19376.1.5.3.1.3.1`, LOINC `42349-1`), **Assessment** (`…22.2.8`,
- * unversioned — a root-only `templateId` with no `@extension` — LOINC `51848-0`),
- * and **Plan of Treatment** (`…22.2.10`, LOINC `18776-5`) — the last three
+ * unversioned, a root-only `templateId` with no `@extension`, LOINC `51848-0`),
+ * and **Plan of Treatment** (`…22.2.10`, LOINC `18776-5`), the last three
  * satisfying the Referral Note's Assessment/Plan narrative requirements
  * (confirmed against the C-CDA R2.1 IG StructureDefinition and the CC0
  * onc-healthit ToC Referral Note certification sample). Results and Vital Signs
- * are **not** Referral Note SHALL sections, so — unlike in a CCD, where they are
- * always emitted — they appear only when the caller supplies content. Every
+ * are **not** Referral Note SHALL sections, so, unlike in a CCD, where they are
+ * always emitted, they appear only when the caller supplies content. Every
  * emitted section is one the parser recognizes, so a clean Referral Note build
  * round-trips through {@link parseCcda} with **zero warnings**, exactly like a
  * CCD. The remaining ten document types are deferred to a later CCDA-P7 increment.
  *
  * **This slice adds the bring-your-own terminology adapter (validation path).**
  * `buildCcda` (and `parseCcda`) now accept an optional {@link TerminologyAdapter}
- * — a small, dependency-free interface a consumer implements to plug in their own
+ *, a small, dependency-free interface a consumer implements to plug in their own
  * licensed terminology service (`@cosyte/ccda` imports none). When supplied, each
  * recognized coded value is semantically validated: a code the adapter rejects is
- * surfaced **verbatim** and flagged `SEMANTIC_CODE_INVALID` — never coerced to a
+ * surfaced **verbatim** and flagged `SEMANTIC_CODE_INVALID`, never coerced to a
  * guessed value. The builder emits every code verbatim regardless; the adapter can
  * only add a flag, never change a safety-critical code.
  *
@@ -212,7 +212,7 @@
  * `<translation>` alternates.** When the supplied adapter's optional `translate`
  * returns alternate codings for a clinical coded slot, `buildCcda` emits a
  * spec-clean CDA R2 `<translation>` child (a CD/CE alternate coding) beside the
- * primary `@code`/`@codeSystem` — **never** replacing it. The slots wired mirror
+ * primary `@code`/`@codeSystem`, **never** replacing it. The slots wired mirror
  * the parser's recognized coded slots (`checkCodeSlot`: problem value, allergen,
  * medication drug + route, vaccine + route). Per the never-fabricate
  * invariant, `translate` returning `undefined` (no opinion) or an empty `matches`
@@ -225,18 +225,18 @@
  * **This slice adds caller-supplied problem/allergy resolution + onset dates.**
  * A {@link BuildCcdaProblem} takes a `resolution` date (and an
  * {@link BuildCcdaAllergy} now takes both `onset` and `resolution`) so a resolved
- * concern's `effectiveTime/high` — the C-CDA "resolution date" — carries a real
+ * concern's `effectiveTime/high`, the C-CDA "resolution date", carries a real
  * date instead of only `nullFlavor="UNK"`. The high is emitted **only** for a
  * `status: "resolved"` concern, because its mere presence asserts resolution
  * (Problem Observation `…22.4.4`: "the existence of a high element … does indicate
- * that the problem has been resolved") — a `resolution` without
+ * that the problem has been resolved"), a `resolution` without
  * `status: "resolved"` is a contradiction {@link buildCcda} rejects, and a
  * resolved concern whose date is unknown still emits the `nullFlavor="UNK"` high.
  * Onset fills the SHALL `low`; both dates round-trip through {@link parseCcda} as
  * the concern's (and the Problem Observation's) `effectiveTime` `low`/`high`. The
  * builder **deliberately equates** the Concern Act window (when the concern was
  * tracked) with the nested observation window (the biologically relevant
- * onset/resolution) — the C-CDA IG allows these to differ, but a single-date
+ * onset/resolution), the C-CDA IG allows these to differ, but a single-date
  * builder input maps to both, producing internally consistent, spec-clean output.
  *
  * @packageDocumentation
@@ -314,7 +314,7 @@ const REFERRAL_NOTE_TEMPLATE = "2.16.840.1.113883.10.20.22.1.14";
 const REFERRAL_NOTE_DOC_CODE = { code: "57133-1", displayName: "Referral Note" } as const;
 /**
  * The Assessment Section (`…22.2.8`, LOINC `51848-0`). Narrative-only. Note it
- * is **unversioned** in C-CDA R2.1 — there is no R2.0/R2.1 revision, so the
+ * is **unversioned** in C-CDA R2.1, there is no R2.0/R2.1 revision, so the
  * section carries the base R1.1 `templateId` with **no `@extension`** (verified
  * in the CC0 onc-healthit ToC Referral Note sample). @internal
  */
@@ -340,20 +340,20 @@ const IMMUNIZATION_MED_INFO_EXT = "2014-06-09";
 /**
  * The `@extension` stamp carried by the Procedures Section (V2) and all three
  * Procedure Activity templates (Procedure `…4.14`, Act `…4.12`, Observation
- * `…4.13`) — these are R2.1's `2014-06-09` versions, not the `2015-08-01` stamp
+ * `…4.13`), these are R2.1's `2014-06-09` versions, not the `2015-08-01` stamp
  * the other sections use. @internal
  */
 const PROCEDURE_EXT = "2014-06-09";
-/** The CPT-4 code system OID — the default terminology for an encounter type code. @internal */
+/** The CPT-4 code system OID, the default terminology for an encounter type code. @internal */
 const CPT = "2.16.840.1.113883.6.12";
 /**
- * The `@extension` stamp carried by the Smoking Status — Meaningful Use (V2)
- * observation template (`…22.4.78`) — R2.1's `2014-06-09` version. @internal
+ * The `@extension` stamp carried by the Smoking Status, Meaningful Use (V2)
+ * observation template (`…22.4.78`), R2.1's `2014-06-09` version. @internal
  */
 const SMOKING_STATUS_EXT = "2014-06-09";
 /**
- * The LOINC `code` every Smoking Status observation carries — `72166-2`
- * "Tobacco smoking status" (fixed by the Smoking Status — Meaningful Use
+ * The LOINC `code` every Smoking Status observation carries, `72166-2`
+ * "Tobacco smoking status" (fixed by the Smoking Status, Meaningful Use
  * template, independent of the coded `value`). @internal
  */
 const SMOKING_STATUS_CODE = {
@@ -362,13 +362,13 @@ const SMOKING_STATUS_CODE = {
 } as const;
 /**
  * The `@extension` stamp carried by both the Functional Status Section (V2,
- * `…22.2.14`) and the Functional Status Observation (`…22.4.67`) — R2.1's
+ * `…22.2.14`) and the Functional Status Observation (`…22.4.67`), R2.1's
  * `2014-06-09` version, not the `2015-08-01` stamp the CCD SHALL sections use.
  * @internal
  */
 const FUNCTIONAL_STATUS_EXT = "2014-06-09";
 /**
- * The LOINC `code` every Functional Status Observation carries — `54522-8`
+ * The LOINC `code` every Functional Status Observation carries, `54522-8`
  * "Functional status", **fixed** by the template (CONF: `patternCode`,
  * independent of the specific finding). The finding itself lives in the coded
  * `value`, never in this `code`. @internal
@@ -381,17 +381,17 @@ const FUNCTIONAL_STATUS_CODE = {
  * The `@extension` stamp carried by both the Mental Status Section (V2,
  * `…22.2.56`) and the Mental Status Observation (`…22.4.74`). Unlike Functional
  * Status (which keeps the `2014-06-09` version), the Mental Status Section and its
- * observation were **introduced in the R2.1 August 2015 errata** — split out of
- * Functional Status, "not backwards compatible with prior `…22.2.14`" — so they
+ * observation were **introduced in the R2.1 August 2015 errata**, split out of
+ * Functional Status, "not backwards compatible with prior `…22.2.14`", so they
  * carry the `2015-08-01` stamp. Verified against the HL7 C-CDA R2.1 examples
  * (`Mental Status/*(C-CDAR2.1).xml`). @internal
  */
 const MENTAL_STATUS_EXT = "2015-08-01";
 /**
- * The SNOMED CT `code` every Mental Status Observation carries — `373930000`
+ * The SNOMED CT `code` every Mental Status Observation carries, `373930000`
  * "Cognitive function finding", **fixed** by the R2.1 template (the IG notes "In
  * C-CDA R2.1 August 2015 this is a fixed code"; both R2.1 examples emit it). The
- * specific finding lives in the coded `value`, never in this `code` — exactly as
+ * specific finding lives in the coded `value`, never in this `code`, exactly as
  * Functional Status fixes LOINC `54522-8`. (A later C-CDA version re-binds this
  * code to LOINC `8693-4`; that is out of scope for this R2.1 builder.) @internal
  */
@@ -403,43 +403,43 @@ const MENTAL_STATUS_CODE = {
  * The `@extension` stamp carried by the Plan of Treatment Section (V2,
  * `…22.2.10`) and all six planned-entry templates it can carry (Planned Act
  * `…4.39`, Encounter `…4.40`, Procedure `…4.41`, Medication Activity `…4.42`,
- * Supply `…4.43`, Observation `…4.44`) — R2.1's `2014-06-09` version, not the
+ * Supply `…4.43`, Observation `…4.44`), R2.1's `2014-06-09` version, not the
  * `2015-08-01` stamp the CCD SHALL sections use. @internal
  */
 const PLAN_OF_TREATMENT_EXT = "2014-06-09";
 /**
- * The HL7 AdministrativeGender code system OID — the terminology for a family
+ * The HL7 AdministrativeGender code system OID, the terminology for a family
  * member's `administrativeGenderCode` (the same system the patient's gender
  * uses). @internal
  */
 const ADMINISTRATIVE_GENDER = "2.16.840.1.113883.5.1";
 /**
- * The fixed `code` every Family History Observation (`…22.4.46`) carries —
+ * The fixed `code` every Family History Observation (`…22.4.46`) carries,
  * SNOMED CT `64572001` "Condition". Like the Problem Observation's fixed
  * "Problem" code, this names the *kind* of observation; the specific illness
  * lives in the coded `value`. @internal
  */
 const FAMILY_HISTORY_CONDITION_CODE = { code: "64572001", displayName: "Condition" } as const;
 /**
- * The fixed `code` an Age Observation (`…22.4.31`) carries — SNOMED CT
+ * The fixed `code` an Age Observation (`…22.4.31`) carries, SNOMED CT
  * `397659008` "Age". The relative's age at onset is the observation's `PQ`
  * `value` (in UCUM years). @internal
  */
 const AGE_OBSERVATION_CODE = { code: "397659008", displayName: "Age" } as const;
 /**
- * The UCUM unit for an age in years (`a`, annum) — the unit the Age Observation
+ * The UCUM unit for an age in years (`a`, annum), the unit the Age Observation
  * `value` carries. @internal
  */
 const AGE_UNIT = "a";
 /**
  * The fixed coded `value` a Family History Death Observation (`…22.4.47`)
- * carries — SNOMED CT `419620001` "Death" — marking its parent condition as the
+ * carries, SNOMED CT `419620001` "Death", marking its parent condition as the
  * relative's cause of death. @internal
  */
 const DEATH_VALUE = { code: "419620001", displayName: "Death" } as const;
 
 /**
- * A coded value for the builder — the tuple the parser reads back as a `CD`.
+ * A coded value for the builder, the tuple the parser reads back as a `CD`.
  * `codeSystem` defaults per slot (SNOMED CT for a problem, RxNorm for an
  * allergen), so most callers pass only `code` + `displayName`.
  *
@@ -454,7 +454,7 @@ export interface BuildCode {
   readonly code: string;
   /** The code system OID; defaults per slot when omitted. */
   readonly codeSystem?: string;
-  /** The human-readable label — regenerated into the narrative so the two agree. */
+  /** The human-readable label, regenerated into the narrative so the two agree. */
   readonly displayName: string;
   /** The code system's human name (e.g. `"SNOMED CT"`), optional. */
   readonly codeSystemName?: string;
@@ -502,9 +502,9 @@ export interface BuildCcdaPatient {
  *
  * `onset` is the condition's onset date (the concern/observation `effectiveTime`
  * `low`); `resolution` is its resolution date (the `high`, a.k.a. "resolution
- * date" — when the condition became biologically resolved). Per the C-CDA R2.1
- * Problem Observation (`…22.4.4`) rule the *presence* of a `high` — whether a
- * real date or `nullFlavor="UNK"` — itself asserts the problem is resolved, so a
+ * date", when the condition became biologically resolved). Per the C-CDA R2.1
+ * Problem Observation (`…22.4.4`) rule the *presence* of a `high`, whether a
+ * real date or `nullFlavor="UNK"`, itself asserts the problem is resolved, so a
  * `resolution` is only meaningful on a **resolved** concern: {@link buildCcda}
  * throws when `resolution` is supplied without `status: "resolved"` rather than
  * emit a completion date on a still-active problem. A resolved problem whose
@@ -532,11 +532,11 @@ export interface BuildCcdaProblem {
   readonly problem: BuildCode;
   /** Active / resolved / inactive; defaults to `"active"`. */
   readonly status?: "active" | "resolved" | "inactive";
-  /** Onset date as an HL7 date string (e.g. `"20210101"`) — the `effectiveTime/low`, optional. */
+  /** Onset date as an HL7 date string (e.g. `"20210101"`), the `effectiveTime/low`, optional. */
   readonly onset?: string;
   /**
    * Resolution date as an HL7 date string (the `effectiveTime/high`, a.k.a.
-   * "resolution date"). Requires `status: "resolved"` — a resolution date on a
+   * "resolution date"). Requires `status: "resolved"`, a resolution date on a
    * non-resolved problem is a contradiction {@link buildCcda} rejects. Omitting
    * it on a resolved problem still emits a `nullFlavor="UNK"` `high`.
    */
@@ -546,7 +546,7 @@ export interface BuildCcdaProblem {
 /**
  * An Allergy Concern for the Allergies section. Either an `allergen` (RxNorm at
  * ingredient level by default, or UNII / SNOMED CT) **or** `noKnownAllergy:
- * true` (the `negationInd` "No Known Allergies" assertion) is required — the two
+ * true` (the `negationInd` "No Known Allergies" assertion) is required, the two
  * are never conflated. `reaction`, `severity`, and `criticality` are optional;
  * severity (of a reaction) and criticality (of the propensity) are distinct axes.
  *
@@ -565,14 +565,14 @@ export interface BuildCcdaAllergy {
   /** The offending substance (RxNorm ingredient default, or UNII / SNOMED CT). */
   readonly allergen?: BuildCode;
   /**
-   * The propensity **type** — the Allergy-Intolerance Observation `value` (SNOMED
+   * The propensity **type**, the Allergy-Intolerance Observation `value` (SNOMED
    * CT by default), from the C-CDA Allergy/Intolerance Type value set: e.g. drug
    * allergy `416098002`, food allergy `414285001`, environmental `426232007`.
-   * Defaults to the neutral `419199007` "Allergy to substance" — the builder does
+   * Defaults to the neutral `419199007` "Allergy to substance", the builder does
    * **not** guess "Drug allergy" for a non-drug allergen.
    */
   readonly type?: BuildCode;
-  /** Assert "No Known Allergies" (`negationInd="true"`) — mutually exclusive with `allergen`. */
+  /** Assert "No Known Allergies" (`negationInd="true"`), mutually exclusive with `allergen`. */
   readonly noKnownAllergy?: boolean;
   /** The reaction manifestation (SNOMED CT by default), optional. */
   readonly reaction?: BuildCode;
@@ -583,13 +583,13 @@ export interface BuildCcdaAllergy {
   /** Active / resolved / inactive; defaults to `"active"`. */
   readonly status?: "active" | "resolved" | "inactive";
   /**
-   * Onset date as an HL7 date string — the Allergy Concern Act `effectiveTime/low`
+   * Onset date as an HL7 date string, the Allergy Concern Act `effectiveTime/low`
    * (when the allergy became a tracked concern), optional. When omitted the SHALL
    * `low` is emitted as `nullFlavor="UNK"`, never a fabricated date.
    */
   readonly onset?: string;
   /**
-   * Resolution date as an HL7 date string — the concern `effectiveTime/high`
+   * Resolution date as an HL7 date string, the concern `effectiveTime/high`
    * (when the concern was completed). Requires `status: "resolved"`, exactly as a
    * {@link BuildCcdaProblem} resolution does; {@link buildCcda} rejects a
    * resolution date on a non-resolved allergy. A resolved allergy whose date is
@@ -599,11 +599,11 @@ export interface BuildCcdaAllergy {
 }
 
 /**
- * A dimensioned quantity for the builder — a numeric `value` and a **UCUM** unit
+ * A dimensioned quantity for the builder, a numeric `value` and a **UCUM** unit
  * (the parser round-trips it as a `PQ`). The unit is emitted verbatim: it is the
  * caller's responsibility that it be valid, case-correct UCUM (`"mg/dL"`,
  * `"mm[Hg]"`, `"10*3/uL"`), because a non-UCUM or case-slipped unit is a real
- * defect the parser is designed to flag (`NON_UCUM_UNIT` / `UCUM_CASE_SUSPECT`) —
+ * defect the parser is designed to flag (`NON_UCUM_UNIT` / `UCUM_CASE_SUSPECT`),
  * the builder never silently "corrects" a unit to a confident-wrong value.
  *
  * @example
@@ -615,7 +615,7 @@ export interface BuildCcdaAllergy {
 export interface BuildQuantity {
   /** The numeric magnitude. */
   readonly value: number;
-  /** The UCUM unit (emitted verbatim — must be valid, case-correct UCUM). */
+  /** The UCUM unit (emitted verbatim, must be valid, case-correct UCUM). */
   readonly unit: string;
 }
 
@@ -626,7 +626,7 @@ export interface BuildQuantity {
  * absent, which the parser then flags (`MISSING_DOSE_QUANTITY` /
  * `MISSING_ROUTE_CODE`) rather than being defaulted to a confident-wrong value.
  * `frequency` is the periodic timing (a `PIVL_TS` period, e.g. every 8 hours);
- * `duration` is the therapy window (an `IVL_TS` low/high) — the two are emitted
+ * `duration` is the therapy window (an `IVL_TS` low/high), the two are emitted
  * as distinct `effectiveTime` siblings, never conflated.
  *
  * @example
@@ -647,7 +647,7 @@ export interface BuildCcdaMedication {
   readonly dose?: BuildQuantity;
   /** The administration route (`routeCode`); NCI Thesaurus by default. */
   readonly route?: BuildCode;
-  /** The periodic dosing frequency — a `PIVL_TS` period (e.g. `{ value: 8, unit: "h" }`). */
+  /** The periodic dosing frequency, a `PIVL_TS` period (e.g. `{ value: 8, unit: "h" }`). */
   readonly frequency?: BuildQuantity;
   /** The therapy window (`IVL_TS`) as HL7 date strings; either bound optional. */
   readonly duration?: { readonly low?: string; readonly high?: string };
@@ -656,10 +656,10 @@ export interface BuildCcdaMedication {
 }
 
 /**
- * One member observation of a Results panel — a Result Observation. `test` is the
+ * One member observation of a Results panel, a Result Observation. `test` is the
  * LOINC test code. **Exactly one** value form is required: a UCUM `quantity`
  * (`xsi:type="PQ"`), a `codedValue` (`xsi:type="CD"`), or a `stringValue`
- * (`xsi:type="ST"`) — the builder throws if none (or more than one) is set, so a
+ * (`xsi:type="ST"`), the builder throws if none (or more than one) is set, so a
  * result value is never silently dropped or invented. `referenceRange` (when
  * given) is emitted as a structured `IVL_PQ` so it round-trips numerically.
  *
@@ -692,7 +692,7 @@ export interface BuildCcdaResult {
 }
 
 /**
- * A Results panel — a Result Organizer (the battery/panel wrapper, e.g. a CBC)
+ * A Results panel, a Result Organizer (the battery/panel wrapper, e.g. a CBC)
  * around one or more {@link BuildCcdaResult} member observations. `code` is the
  * panel LOINC; `status` maps to the organizer `statusCode` (default
  * `"completed"`).
@@ -722,9 +722,9 @@ export interface BuildCcdaResultPanel {
 }
 
 /**
- * One member reading of a Vital Signs panel — a Vital Sign Observation. `code` is
+ * One member reading of a Vital Signs panel, a Vital Sign Observation. `code` is
  * the LOINC vital (e.g. `8480-6` systolic BP); `quantity` is the UCUM-checked
- * `PQ` reading (required — a vital sign without a value is not emitted).
+ * `PQ` reading (required, a vital sign without a value is not emitted).
  *
  * @example
  * ```ts
@@ -747,7 +747,7 @@ export interface BuildCcdaVital {
 }
 
 /**
- * A Vital Signs panel — a Vital Signs Organizer clustering the readings taken in
+ * A Vital Signs panel, a Vital Signs Organizer clustering the readings taken in
  * one event (e.g. a set of vitals at a single visit). `status` maps to the
  * organizer `statusCode` (default `"completed"`); `vitals` are the member
  * readings.
@@ -778,10 +778,10 @@ export interface BuildCcdaVitalsPanel {
 /**
  * An Immunization Activity for the Immunizations section. `vaccine` is the CVX
  * coded product (CVX by default). `dose` and `route` are optional and **never
- * guessed** — an omitted one is simply left absent. `refused: true` emits the
+ * guessed**, an omitted one is simply left absent. `refused: true` emits the
  * administration with `negationInd="true"` (a *not-administered* / refused
  * record), which the parser reads back as `refused` and flags
- * `IMMUNIZATION_REFUSED` — the clinically load-bearing refusal is surfaced, never
+ * `IMMUNIZATION_REFUSED`, the clinically load-bearing refusal is surfaced, never
  * conflated with a `nullFlavor` "unknown". `effectiveTime` is the administration
  * date; when omitted the SHALL slot is filled with `nullFlavor="UNK"`.
  *
@@ -803,7 +803,7 @@ export interface BuildCcdaVitalsPanel {
 export interface BuildCcdaImmunization {
   /** The CVX-coded vaccine product (CVX by default). */
   readonly vaccine: BuildCode;
-  /** The amount administered (`doseQuantity`), optional — never defaulted. */
+  /** The amount administered (`doseQuantity`), optional, never defaulted. */
   readonly dose?: BuildQuantity;
   /** The administration route (`routeCode`); NCI Thesaurus by default. */
   readonly route?: BuildCode;
@@ -817,15 +817,15 @@ export interface BuildCcdaImmunization {
 
 /**
  * A Procedure for the Procedures section. `kind` selects the C-CDA Procedure
- * Activity variant — an altering/operative `"procedure"` (default, `<procedure>`
+ * Activity variant, an altering/operative `"procedure"` (default, `<procedure>`
  * `…22.4.14`), a non-altering `"act"` service (`<act>` `…22.4.12`), or an
  * assessment `"observation"` (`<observation>` `…22.4.13`). `code` is the coded
  * procedure (SNOMED CT by default, or CPT / ICD-10-PCS / LOINC) and is required
  * (the template SHALL contain a `code`). `disposition` maps to the act's
- * `moodCode` — **performed** (`EVN`) vs **planned** (`INT`) — which the parser
+ * `moodCode`, **performed** (`EVN`) vs **planned** (`INT`), which the parser
  * reads back as its performed-vs-planned disposition; the two are never
  * conflated. `effectiveTime` is emitted only when supplied (the template's
- * effectiveTime is SHOULD [0..1], CONF:1098-7662 — not fabricated when unknown).
+ * effectiveTime is SHOULD [0..1], CONF:1098-7662, not fabricated when unknown).
  *
  * @example
  * ```ts
@@ -857,8 +857,8 @@ export interface BuildCcdaProcedure {
   readonly effectiveTime?: string;
   /**
    * The coded result `value` (`xsi:type="CD"`, SNOMED CT default). **Required for
-   * the `"observation"` variant** — Procedure Activity Observation (`…22.4.13`)
-   * SHALL contain a `value` [1..1] — and ignored for the other two variants;
+   * the `"observation"` variant**, Procedure Activity Observation (`…22.4.13`)
+   * SHALL contain a `value` [1..1], and ignored for the other two variants;
    * {@link buildCcda} throws if a `"observation"` procedure omits it.
    */
   readonly value?: BuildCode;
@@ -867,7 +867,7 @@ export interface BuildCcdaProcedure {
 /**
  * An Encounter Activity for the Encounters section (`…22.4.49`). `type` is the
  * coded encounter type (CPT by default, or SNOMED CT / HL7 ActEncounterCode) and
- * is required — the template SHALL contain a `code` [1..1]. `period` is the
+ * is required, the template SHALL contain a `code` [1..1]. `period` is the
  * visit/admission window emitted as the SHALL `effectiveTime` [1..1] (an
  * `IVL_TS`); when omitted the SHALL slot is filled with a `nullFlavor="UNK"`
  * `low` rather than a fabricated date. `status` maps to the optional `statusCode`.
@@ -896,15 +896,15 @@ export interface BuildCcdaEncounter {
 }
 
 /**
- * A Smoking Status observation for the Social History section — the Smoking
- * Status — Meaningful Use observation (`…22.4.78`), the safety-relevant
+ * A Smoking Status observation for the Social History section, the Smoking
+ * Status, Meaningful Use observation (`…22.4.78`), the safety-relevant
  * social-history fact most consumers ask for. `value` is the SNOMED CT concept
  * from the Current Smoking Status value set (`2.16.840.1.113883.11.20.9.38`,
  * e.g. former smoker `8517006`, never smoker `266919005`, current every-day
  * smoker `449868002`).
  *
  * **Unknown is never defaulted to a status.** When `value` is omitted the
- * observation's SHALL `value` is emitted as `nullFlavor="UNK"` — an *explicit*
+ * observation's SHALL `value` is emitted as `nullFlavor="UNK"`, an *explicit*
  * unknown that the parser reads back as `unknown: true` (and flags
  * `SMOKING_STATUS_UNKNOWN`). The builder will **never** invent a "never smoker"
  * (or any other) reading the caller did not supply: absent status ≠ non-smoker.
@@ -923,7 +923,7 @@ export interface BuildCcdaEncounter {
 export interface BuildCcdaSmokingStatus {
   /**
    * The SNOMED CT smoking-status concept (Current Smoking Status value set).
-   * Omit for an explicit unknown (`value nullFlavor="UNK"`) — never defaulted to
+   * Omit for an explicit unknown (`value nullFlavor="UNK"`), never defaulted to
    * a real status.
    */
   readonly value?: BuildCode;
@@ -934,7 +934,7 @@ export interface BuildCcdaSmokingStatus {
 }
 
 /**
- * A Functional Status finding for the Functional Status section — a Functional
+ * A Functional Status finding for the Functional Status section, a Functional
  * Status Observation (`…22.4.67`, the `2014-06-09` stamp). The observation's
  * `code` is **fixed** to LOINC `54522-8` "Functional status" by the template;
  * the specific finding is the coded `value`. `value` is the SNOMED CT finding
@@ -943,11 +943,11 @@ export interface BuildCcdaSmokingStatus {
  *
  * **Functional and mental status are never conflated.** This builds only the
  * Functional Status templates (section `…22.2.14`, observation `…22.4.67`), so
- * the parser reads every finding back tagged `domain: "functional"` — a
+ * the parser reads every finding back tagged `domain: "functional"`, a
  * functional finding is never filed under mental status (or vice versa).
  *
  * **Unknown is never defaulted to a finding.** When `value` is omitted the
- * observation's SHALL `value` is emitted as `nullFlavor="UNK"` — an *explicit*
+ * observation's SHALL `value` is emitted as `nullFlavor="UNK"`, an *explicit*
  * unknown, never invented as a real finding. `effectiveTime` is when the status
  * was assessed; the template's SHALL effectiveTime is filled with
  * `nullFlavor="UNK"` when the caller supplies none, never a fabricated date.
@@ -965,7 +965,7 @@ export interface BuildCcdaSmokingStatus {
 export interface BuildCcdaFunctionalStatus {
   /**
    * The SNOMED CT functional-status finding (the observation `value`). Omit for
-   * an explicit unknown (`value nullFlavor="UNK"`) — never defaulted to a real
+   * an explicit unknown (`value nullFlavor="UNK"`), never defaulted to a real
    * finding.
    */
   readonly value?: BuildCode;
@@ -974,20 +974,20 @@ export interface BuildCcdaFunctionalStatus {
 }
 
 /**
- * A Mental Status finding for the Mental Status section — a Mental Status
+ * A Mental Status finding for the Mental Status section, a Mental Status
  * Observation (`…22.4.74`, the R2.1 `2015-08-01` stamp). The observation's `code`
  * is **fixed** to SNOMED CT `373930000` "Cognitive function finding" by the R2.1
  * template; the specific cognition/mood finding is the coded `value` (e.g. memory
- * impairment `386807006`, no abnormality detected `281900007` — SNOMED CT).
+ * impairment `386807006`, no abnormality detected `281900007`, SNOMED CT).
  *
  * **Mental and functional status are never conflated.** This builds only the
  * Mental Status templates (section `…22.2.56`, observation `…22.4.74`), so the
- * parser reads every finding back tagged `domain: "mental"` — a mental finding is
+ * parser reads every finding back tagged `domain: "mental"`, a mental finding is
  * never filed under functional status (or vice versa); the two extractors key off
  * their distinct observation template roots.
  *
  * **Unknown is never defaulted to a finding.** When `value` is omitted the
- * observation's SHALL `value` is emitted as `nullFlavor="UNK"` — an *explicit*
+ * observation's SHALL `value` is emitted as `nullFlavor="UNK"`, an *explicit*
  * unknown, never invented as a real finding. `effectiveTime` is when the status
  * was assessed; the template's SHALL effectiveTime is filled with
  * `nullFlavor="UNK"` when the caller supplies none, never a fabricated date.
@@ -1005,7 +1005,7 @@ export interface BuildCcdaFunctionalStatus {
 export interface BuildCcdaMentalStatus {
   /**
    * The SNOMED CT mental-status finding (the observation `value`). Omit for an
-   * explicit unknown (`value nullFlavor="UNK"`) — never defaulted to a real
+   * explicit unknown (`value nullFlavor="UNK"`), never defaulted to a real
    * finding.
    */
   readonly value?: BuildCode;
@@ -1014,7 +1014,7 @@ export interface BuildCcdaMentalStatus {
 }
 
 /**
- * A Functional Status Organizer for the Functional Status section — a Functional
+ * A Functional Status Organizer for the Functional Status section, a Functional
  * Status Organizer (`…22.4.66`, the `2014-06-09` stamp, `@classCode="CLUSTER"`)
  * that **groups** two or more related Functional Status Observations (`…22.4.67`)
  * under one categorization. Use it instead of standalone findings when the
@@ -1023,16 +1023,16 @@ export interface BuildCcdaMentalStatus {
  * {@link BuildCcdaFunctionalStatus} and reads back tagged `domain: "functional"`.
  *
  * **`code` is the organizer's categorization, not a finding.** It SHALL be present
- * [1..1] and SHOULD be drawn from ICF (`2.16.840.1.113883.6.254`) or LOINC — pass
+ * [1..1] and SHOULD be drawn from ICF (`2.16.840.1.113883.6.254`) or LOINC, pass
  * the ICF chapter/category (e.g. `d5` "Self-care") via `code` with its
- * `codeSystem`. When omitted the SHALL `code` is emitted as `nullFlavor="UNK"` — an
+ * `codeSystem`. When omitted the SHALL `code` is emitted as `nullFlavor="UNK"`, an
  * *explicit* unknown category, never a fabricated one. `codeSystem` defaults to
  * LOINC when a `code` is supplied without one.
  *
  * **`findings` must be non-empty.** The organizer SHALL contain at least one
  * [1..\*] Functional Status Observation; an empty organizer is a `TypeError`
  * (never an organizer emitted with zero members). The Assessment Scale Observation
- * (`…22.4.69`) — a scored scale such as a Barthel index — is a *direct section
+ * (`…22.4.69`), a scored scale such as a Barthel index, is a *direct section
  * entry* in C-CDA R2.1, **not** an organizer component, and is deferred to a later
  * increment; only status observations are grouped here.
  *
@@ -1052,7 +1052,7 @@ export interface BuildCcdaMentalStatus {
 export interface BuildCcdaFunctionalStatusOrganizer {
   /**
    * The organizer's categorization `code` (SHOULD be ICF or LOINC). Omit for an
-   * explicit unknown (`code nullFlavor="UNK"`) — never a fabricated category.
+   * explicit unknown (`code nullFlavor="UNK"`), never a fabricated category.
    * `codeSystem` defaults to LOINC when a `code` is supplied without one.
    */
   readonly code?: BuildCode;
@@ -1060,24 +1060,24 @@ export interface BuildCcdaFunctionalStatusOrganizer {
   readonly effectiveTime?: string;
   /**
    * The Functional Status Observations grouped by this organizer. **Must be
-   * non-empty** — the organizer SHALL contain at least one member.
+   * non-empty**, the organizer SHALL contain at least one member.
    */
   readonly findings: readonly BuildCcdaFunctionalStatus[];
 }
 
 /**
- * A Mental Status Organizer for the Mental Status section — a Mental Status
+ * A Mental Status Organizer for the Mental Status section, a Mental Status
  * Organizer (`…22.4.75`, the R2.1 `2015-08-01` stamp, `@classCode="CLUSTER"`) that
  * **groups** two or more related Mental Status Observations (`…22.4.74`) under one
  * categorization. Use it instead of standalone findings when the assessment is a
  * cluster (e.g. an orientation battery); each grouped observation is otherwise
  * identical to a standalone {@link BuildCcdaMentalStatus} and reads back tagged
- * `domain: "mental"` — **never conflated** with functional status (the two key off
+ * `domain: "mental"`, **never conflated** with functional status (the two key off
  * distinct organizer/observation roots).
  *
  * **`code` is the organizer's categorization, not a finding.** It SHALL be present
  * [1..1] and SHOULD be drawn from ICF (`2.16.840.1.113883.6.254`) or LOINC. When
- * omitted the SHALL `code` is emitted as `nullFlavor="UNK"` — an *explicit* unknown
+ * omitted the SHALL `code` is emitted as `nullFlavor="UNK"`, an *explicit* unknown
  * category, never fabricated. `codeSystem` defaults to LOINC when a `code` is
  * supplied without one.
  *
@@ -1101,7 +1101,7 @@ export interface BuildCcdaFunctionalStatusOrganizer {
 export interface BuildCcdaMentalStatusOrganizer {
   /**
    * The organizer's categorization `code` (SHOULD be ICF or LOINC). Omit for an
-   * explicit unknown (`code nullFlavor="UNK"`) — never a fabricated category.
+   * explicit unknown (`code nullFlavor="UNK"`), never a fabricated category.
    * `codeSystem` defaults to LOINC when a `code` is supplied without one.
    */
   readonly code?: BuildCode;
@@ -1109,19 +1109,19 @@ export interface BuildCcdaMentalStatusOrganizer {
   readonly effectiveTime?: string;
   /**
    * The Mental Status Observations grouped by this organizer. **Must be
-   * non-empty** — the organizer SHALL contain at least one member.
+   * non-empty**, the organizer SHALL contain at least one member.
    */
   readonly findings: readonly BuildCcdaMentalStatus[];
 }
 
 /**
- * One scored component of an Assessment Scale — an Assessment Scale Supporting
+ * One scored component of an Assessment Scale, an Assessment Scale Supporting
  * Observation (`…22.4.86`), e.g. a single PHQ-9 question or a Glasgow Coma
  * sub-score. `code` is the item's LOINC/SNOMED code (SHALL, LOINC default);
  * `score` its integer answer (the SHALL `value`, `xsi:type="INT"`).
  *
  * **The answer is never fabricated.** When `score` is omitted the SHALL `value`
- * is emitted as `nullFlavor="UNK"` — an *explicit* unknown, never a guessed
+ * is emitted as `nullFlavor="UNK"`, an *explicit* unknown, never a guessed
  * number. Units are not allowed on an `INT`, so a supporting item carries no unit.
  *
  * @example
@@ -1142,22 +1142,22 @@ export interface BuildCcdaAssessmentScaleItem {
 
 /**
  * A direct-entry Assessment Scale Observation (`…22.4.69`) for the Functional
- * Status or Mental Status section — a formal scored instrument (e.g. a PHQ-9
+ * Status or Mental Status section, a formal scored instrument (e.g. a PHQ-9
  * depression screen or a Glasgow Coma scale). C-CDA R2.1 carries the Assessment
  * Scale Observation as a **direct section entry** (`entry/observation`), *not* as
- * a Functional/Mental Status Organizer member — so the builder emits it directly
+ * a Functional/Mental Status Organizer member, so the builder emits it directly
  * under the section, and the parser reads it back tagged `assessmentScale: true`
  * with the section's `domain`. The template id is the **bare root** `…22.4.69`
  * (R2.1 SHALL: `@root` with **no** `@extension`).
  *
  * **`code` is the scale panel code** (LOINC by default, e.g. PHQ-9 `44249-1`).
  * `score` is the total score, emitted as the SHALL `value` [1..1] with
- * `xsi:type="INT"` (the type C-CDA prefers for a questionnaire — units are not
+ * `xsi:type="INT"` (the type C-CDA prefers for a questionnaire, units are not
  * allowed on an `INT`). **The score is never fabricated:** when `score` is
  * omitted the SHALL `value` is `nullFlavor="UNK"`, an explicit unknown. The SHALL
  * `effectiveTime` [1..1] is the administration time (`nullFlavor="UNK"` when
  * omitted). `interpretation` (e.g. High/Low/Normal) and the `supporting`
- * components (the individual items) are optional — each emitted only when
+ * components (the individual items) are optional, each emitted only when
  * supplied, never invented.
  *
  * @example
@@ -1188,18 +1188,18 @@ export interface BuildCcdaAssessmentScale {
 }
 
 /**
- * The relative a {@link BuildCcdaFamilyHistory} organizer describes — the family
+ * The relative a {@link BuildCcdaFamilyHistory} organizer describes, the family
  * member whose conditions the organizer records. Emitted as the organizer's
  * `subject/relatedSubject` (a `@classCode="PRS"` personal relationship).
  *
  * **The relationship is never fabricated.** `relationship` is the coded relation
- * of the relative to the patient — SNOMED CT by default (e.g. `72705000` mother,
+ * of the relative to the patient, SNOMED CT by default (e.g. `72705000` mother,
  * `9947008` father, `394859005`… ), overridable via `codeSystem` (e.g. the HL7
  * RoleCode `FTH`/`MTH` on `2.16.840.1.113883.5.111`). When omitted, the SHALL
- * `relatedSubject/code` is emitted as `nullFlavor="UNK"` — an *explicit* unknown
+ * `relatedSubject/code` is emitted as `nullFlavor="UNK"`, an *explicit* unknown
  * relation, never guessed. `gender` (an HL7 AdministrativeGender code, e.g.
  * `"M"`/`"F"`), `birthTime` (an HL7 date string), and `deceased` (the
- * `sdtc:deceasedInd` flag) are all optional MAY elements — each emitted only when
+ * `sdtc:deceasedInd` flag) are all optional MAY elements, each emitted only when
  * supplied, never fabricated.
  *
  * @example
@@ -1215,7 +1215,7 @@ export interface BuildCcdaAssessmentScale {
 export interface BuildCcdaFamilyMember {
   /**
    * The coded relationship of the relative to the patient (SNOMED CT default).
-   * Omit for an explicit unknown (`relatedSubject/code nullFlavor="UNK"`) — never
+   * Omit for an explicit unknown (`relatedSubject/code nullFlavor="UNK"`), never
    * guessed.
    */
   readonly relationship?: BuildCode;
@@ -1228,7 +1228,7 @@ export interface BuildCcdaFamilyMember {
 }
 
 /**
- * A single condition recorded for a relative — one Family History Observation
+ * A single condition recorded for a relative, one Family History Observation
  * (`…22.4.46`). The illness is the coded `condition` (SNOMED CT by default);
  * `ageAtOnset` (whole UCUM years) becomes a nested Age Observation (`…22.4.31`);
  * `causeOfDeath` adds a Family History Death Observation (`…22.4.47`) marking this
@@ -1236,9 +1236,9 @@ export interface BuildCcdaFamilyMember {
  * string) is the SHOULD [0..1] time of the condition.
  *
  * **The condition is never fabricated.** When `condition` is omitted the SHALL
- * `value` is emitted as `nullFlavor="UNK"` — an *explicit* unknown, never a
+ * `value` is emitted as `nullFlavor="UNK"`, an *explicit* unknown, never a
  * guessed illness. `ageAtOnset`, `causeOfDeath`, and `effectiveTime` are optional
- * — each emitted only when supplied, never invented.
+ *, each emitted only when supplied, never invented.
  *
  * @example
  * ```ts
@@ -1253,10 +1253,10 @@ export interface BuildCcdaFamilyMember {
 export interface BuildCcdaFamilyHistoryObservation {
   /**
    * The coded condition the relative had (SNOMED CT default). Omit for an explicit
-   * unknown (`value nullFlavor="UNK"`) — never guessed.
+   * unknown (`value nullFlavor="UNK"`), never guessed.
    */
   readonly condition?: BuildCode;
-  /** The relative's age at onset in whole years — a nested Age Observation, emitted only when supplied. */
+  /** The relative's age at onset in whole years, a nested Age Observation, emitted only when supplied. */
   readonly ageAtOnset?: number;
   /** When `true`, marks this condition as the relative's cause of death (Family History Death Observation). */
   readonly causeOfDeath?: boolean;
@@ -1265,7 +1265,7 @@ export interface BuildCcdaFamilyHistoryObservation {
 }
 
 /**
- * One Family History Organizer (`…22.4.45`) for the Family History section — a
+ * One Family History Organizer (`…22.4.45`) for the Family History section, a
  * single `relative` plus the `observations` (conditions) recorded for them. The
  * relative's identity is carried once on the organizer (not flattened into each
  * condition), so the parser reads every condition back grouped under its relative.
@@ -1286,7 +1286,7 @@ export interface BuildCcdaFamilyHistory {
   readonly relative: BuildCcdaFamilyMember;
   /**
    * The conditions recorded for the relative; each becomes a Family History
-   * Observation. **Must be non-empty** — the organizer SHALL carry at least one
+   * Observation. **Must be non-empty**, the organizer SHALL carry at least one
    * observation component; pass `[{}]` (an unknown condition) rather than an empty
    * list, else {@link buildCcda} throws a `TypeError`.
    */
@@ -1294,13 +1294,13 @@ export interface BuildCcdaFamilyHistory {
 }
 
 /**
- * The planned `@moodCode` for the **act / encounter / procedure** kinds — the
+ * The planned `@moodCode` for the **act / encounter / procedure** kinds, the
  * Planned moodCode value set (`2.16.840.1.113883.11.20.9.23`): `INT` intent
  * (default), `RQO` request/order, `PRMS` promise, `PRP` proposal, `APT`
  * appointment, `ARQ` appointment request. The appointment moods (`APT`/`ARQ`)
  * are valid **only** on these three element domains (`x_DocumentActMood` /
  * `x_DocumentEncounterMood` / `x_DocumentProcedureMood`). `EVN` (a performed
- * event) is deliberately not a member — the plan carries only future/ordered
+ * event) is deliberately not a member, the plan carries only future/ordered
  * items, so a performed act can never be emitted into it.
  *
  * @example
@@ -1313,11 +1313,11 @@ export type PlannedActMood = "INT" | "RQO" | "PRMS" | "PRP" | "APT" | "ARQ";
 
 /**
  * The planned `@moodCode` for the **medication / supply / observation** kinds.
- * The base CDA R2 mood domains for these elements — `x_DocumentSubstanceMood`
+ * The base CDA R2 mood domains for these elements, `x_DocumentSubstanceMood`
  * (`substanceAdministration`/`supply`) and `x_ActMoodDocumentObservation`
- * (`observation`) — **exclude the appointment moods** (`APT`/`ARQ`), so those are
+ * (`observation`), **exclude the appointment moods** (`APT`/`ARQ`), so those are
  * not representable here (you cannot "appoint" a drug order or a lab). `EVN` is
- * likewise excluded — the plan is future/ordered, never performed.
+ * likewise excluded, the plan is future/ordered, never performed.
  *
  * @example
  * ```ts
@@ -1401,14 +1401,14 @@ export interface BuildCcdaPlannedObservation extends BuildCcdaPlannedItemBase {
   /** The planned `@moodCode`; defaults to `"INT"`. Appointment moods not representable. */
   readonly mood?: PlannedOrderMood;
   /**
-   * The expected coded result `value` (`xsi:type="CD"`, SNOMED CT default) — the
+   * The expected coded result `value` (`xsi:type="CD"`, SNOMED CT default), the
    * plan's goal/target. Emitted only when supplied; never fabricated.
    */
   readonly value?: BuildCode;
 }
 
 /**
- * A planned item for the Plan of Treatment section (`…22.2.10`) — a discriminated
+ * A planned item for the Plan of Treatment section (`…22.2.10`), a discriminated
  * union over the six planned-entry templates, split by which `@moodCode` domain
  * each element admits: {@link BuildCcdaPlannedAct} (act/encounter/procedure, which
  * accept the appointment moods `APT`/`ARQ`), {@link BuildCcdaPlannedOrder}
@@ -1416,12 +1416,12 @@ export interface BuildCcdaPlannedObservation extends BuildCcdaPlannedItemBase {
  * also carries an expected `value`). **The mood split is correct by
  * construction:** the base CDA R2 mood domains for `substanceAdministration`,
  * `supply`, and `observation` exclude `APT`/`ARQ`, so those appointment moods are
- * simply not representable on those kinds — the type prevents emitting a
+ * simply not representable on those kinds, the type prevents emitting a
  * schema-invalid `@moodCode`, not merely a discouraged one.
  *
  * **Everything here is future/ordered, never performed.** No variant admits the
  * performed `EVN`; each entry's `statusCode` is fixed to `"active"` (the SHALL the
- * planned templates require) — never a performed `"completed"` — and the planned
+ * planned templates require), never a performed `"completed"`, and the planned
  * `@moodCode` reads back through the parser's `disposition` as `"planned"`; the
  * two dispositions are never conflated.
  *
@@ -1443,7 +1443,7 @@ export type BuildCcdaPlannedItem =
  * Input to {@link buildCcda}. `patient` is required; each clinical collection
  * (`problems`, `allergies`, `medications`, `results`, `vitalSigns`) defaults to
  * empty, in which case its section is emitted as a spec-clean empty
- * `nullFlavor="NI"` section. `immunizations` is optional — its section is emitted
+ * `nullFlavor="NI"` section. `immunizations` is optional, its section is emitted
  * only when populated (Immunizations is not a CCD SHALL section). `documentType`
  * is `"ccd"` in this slice.
  *
@@ -1459,7 +1459,7 @@ export type BuildCcdaPlannedItem =
  */
 export interface BuildCcdaInit {
   /**
-   * The document type — `"ccd"` (default) or `"referralNote"`. Each specializes
+   * The document type, `"ccd"` (default) or `"referralNote"`. Each specializes
    * the US Realm Header (its own document `templateId` + LOINC `code`) and its
    * SHALL section set; the other ten C-CDA R2.1 document types are deferred.
    */
@@ -1507,7 +1507,7 @@ export interface BuildCcdaInit {
   readonly functionalStatusOrganizers?: readonly BuildCcdaFunctionalStatusOrganizer[];
   /**
    * Direct-entry Assessment Scale Observations (`…22.4.69`) for the Functional
-   * Status section — scored instruments (e.g. a Barthel index, a Glasgow Coma
+   * Status section, scored instruments (e.g. a Barthel index, a Glasgow Coma
    * scale). Emitted as direct section entries (the conformant R2.1 placement),
    * read back tagged `assessmentScale: true`, `domain: "functional"`. The
    * Functional Status section is emitted when this, {@link functionalStatus}, or
@@ -1525,7 +1525,7 @@ export interface BuildCcdaInit {
   readonly mentalStatusOrganizers?: readonly BuildCcdaMentalStatusOrganizer[];
   /**
    * Direct-entry Assessment Scale Observations (`…22.4.69`) for the Mental Status
-   * section — scored instruments (e.g. a PHQ-9 depression screen, a MoCA). Emitted
+   * section, scored instruments (e.g. a PHQ-9 depression screen, a MoCA). Emitted
    * as direct section entries (the conformant R2.1 placement), read back tagged
    * `assessmentScale: true`, `domain: "mental"`. The Mental Status section is
    * emitted when this, {@link mentalStatus}, or {@link mentalStatusOrganizers} is
@@ -1535,13 +1535,13 @@ export interface BuildCcdaInit {
   /**
    * Historical problems for the Past Medical History section; the section is
    * emitted only when non-empty (a CCD MAY section). Each is a bare Problem
-   * Observation (not a concern act), read back via `getPastMedicalHistory` — never
+   * Observation (not a concern act), read back via `getPastMedicalHistory`, never
    * conflated with the active Problems returned by `getProblems`.
    */
   readonly pastMedicalHistory?: readonly BuildCcdaProblem[];
   /**
    * Planned items for the Plan of Treatment section; the section is emitted only
-   * when non-empty (a CCD SHOULD section). Every item is future/ordered — read
+   * when non-empty (a CCD SHOULD section). Every item is future/ordered, read
    * back via `getPlannedItems` with `disposition: "planned"`, never conflated
    * with the performed Procedures/Encounters.
    */
@@ -1549,12 +1549,12 @@ export interface BuildCcdaInit {
   /**
    * Family history for the Family History section; the section is emitted only
    * when non-empty (a CCD SHOULD section). Each entry is one relative (a Family
-   * History Organizer) carrying that relative's conditions — read back via
+   * History Organizer) carrying that relative's conditions, read back via
    * `getFamilyHistory`, grouped by relative.
    */
   readonly familyHistory?: readonly BuildCcdaFamilyHistory[];
   /**
-   * The Assessment Section narrative (`documentType: "referralNote"` only — a
+   * The Assessment Section narrative (`documentType: "referralNote"` only, a
    * Referral Note SHALL section). Narrative-only, so this is a free-text
    * clinician summary; when omitted the SHALL section is emitted as a spec-clean
    * empty `nullFlavor="NI"` section (never a fabricated assessment). Ignored for
@@ -1563,7 +1563,7 @@ export interface BuildCcdaInit {
   readonly assessment?: string;
   /**
    * The Reason for Referral Section narrative (`documentType: "referralNote"`
-   * only — a Referral Note SHALL section). Narrative-only free text; when omitted
+   * only, a Referral Note SHALL section). Narrative-only free text; when omitted
    * the SHALL section is emitted as an empty `nullFlavor="NI"` section (never a
    * fabricated reason). Ignored for a CCD.
    */
@@ -1609,7 +1609,7 @@ interface DocTypeSpec {
  * builder always emits Vital Signs). **Referral Note** SHALL (confirmed against
  * the C-CDA R2.1 IG StructureDefinition + the CC0 onc-healthit ToC sample):
  * Problems, Allergies, Medications (entries-required), Reason for Referral,
- * Assessment, and Plan of Treatment — the last three satisfying the document's
+ * Assessment, and Plan of Treatment, the last three satisfying the document's
  * "Assessment (and Plan) + Plan of Treatment" narrative requirements. Results and
  * Vital Signs are not Referral Note SHALL sections, so they become optional
  * (emitted only when populated). @internal
@@ -1656,7 +1656,7 @@ function formatEffectiveTime(input: Date | string | undefined): string {
  * Result Observation `…22.4.2` / Vital Sign Observation `…22.4.27`, and the
  * Result/Vital Signs organizers). When the caller supplied a time it is emitted
  * as an `@value`; when nothing is known the element is emitted with
- * `nullFlavor="UNK"` — the SHALL cardinality is satisfied **without inventing** a
+ * `nullFlavor="UNK"`, the SHALL cardinality is satisfied **without inventing** a
  * clinical timestamp, and the parser reads a `nullFlavor` time back as absent
  * (`date === undefined`), never as a real `Date`.
  * @internal
@@ -1672,7 +1672,7 @@ function pointEffectiveTime(doc: Document, value: string | undefined, field: str
  * concern-tracking window). The C-CDA Concern Act pattern (shared by the Problem
  * and Allergy Concern Acts) SHALL contain effectiveTime [1..1]; when the concern
  * is **active** it SHALL contain a `low`, and when **completed** (a resolved
- * concern) it SHALL contain a `high` — on the Problem Concern Act `…22.4.3` these
+ * concern) it SHALL contain a `high`, on the Problem Concern Act `…22.4.3` these
  * are CONF:1198-7504 (active→low) and CONF:1198-10085 (completed→high); the
  * Allergy Concern Act `…22.4.30` carries the same generic rule under its own
  * constraint ids. The Problem/Allergy-Intolerance Observation likewise SHALL
@@ -1680,11 +1680,11 @@ function pointEffectiveTime(doc: Document, value: string | undefined, field: str
  * when supplied, else `nullFlavor="UNK"`.
  *
  * A `high` (the "resolution date") is emitted **only** for a **resolved** concern
- * — its mere presence asserts resolution (C-CDA R2.1 Problem Observation
+ *, its mere presence asserts resolution (C-CDA R2.1 Problem Observation
  * `…22.4.4`: "the existence of a high element … does indicate that the problem
  * has been resolved"), so it must never appear on an active problem. When a
  * `resolution` date is supplied it fills the `high`; when the problem is resolved
- * but the date is unknown the `high` is `nullFlavor="UNK"` (the SHALL form) — the
+ * but the date is unknown the `high` is `nullFlavor="UNK"` (the SHALL form), the
  * builder never invents a resolution date it was not given.
  * @internal
  */
@@ -1702,7 +1702,7 @@ function assertResolutionConsistent(
 ): void {
   if (resolution !== undefined && status !== "resolved") {
     throw new TypeError(
-      `buildCcda: a ${kind} \`resolution\` date requires \`status: "resolved"\` — a resolution ` +
+      `buildCcda: a ${kind} \`resolution\` date requires \`status: "resolved"\`, a resolution ` +
         `date on a ${status ?? "active"} ${kind} is a contradiction (a high effectiveTime asserts ` +
         'the concern is resolved). Set `status: "resolved"` or omit `resolution`.',
     );
@@ -1733,12 +1733,12 @@ function concernEffectiveTime(
 }
 
 /**
- * The Medication Activity duration `<effectiveTime xsi:type="IVL_TS">` — the
+ * The Medication Activity duration `<effectiveTime xsi:type="IVL_TS">`, the
  * therapy window. C-CDA Medication Activity SHALL contain this effectiveTime
  * [1..1] (CONF:1098-7495; it SHALL be an IVL_TS, CONF:1098-7496). Bounds are
  * emitted when supplied; when the window is unknown a `nullFlavor="UNK"` `low`
  * keeps the SHALL satisfied without a confident-wrong date (and satisfies
- * CONF:1098-32890 — it carries a `low`, not an invented `@value`). The separate
+ * CONF:1098-32890, it carries a `low`, not an invented `@value`). The separate
  * `PIVL_TS` frequency remains a distinct, caller-supplied-only sibling.
  * @internal
  */
@@ -1760,7 +1760,7 @@ function medicationDuration(
 }
 
 /**
- * Options for {@link buildCcda}. Every field is optional — `buildCcda(init)` is
+ * Options for {@link buildCcda}. Every field is optional, `buildCcda(init)` is
  * valid and produces the default behavior.
  *
  * @example
@@ -1778,7 +1778,7 @@ export interface BuildCcdaOptions {
    * adapter rejects; (2) its optional `translate` is consulted at each clinical
    * coded slot (problem value, allergen, medication drug + route, vaccine + route)
    * to emit `<translation>` alternate codings **beside** the primary code. The
-   * builder never coerces a code to satisfy the adapter — it emits every primary
+   * builder never coerces a code to satisfy the adapter, it emits every primary
    * value verbatim, a `<translation>` is only ever an *additional* alternate, and
    * an adapter with no `translate` opinion produces byte-identical output. Omit for
    * the default behavior.
@@ -1789,7 +1789,7 @@ export interface BuildCcdaOptions {
 /**
  * Build a spec-clean C-CDA R2.1 document from structured input and return the
  * parsed {@link CcdaDocument}. Emits a **CCD** by default, or a **Referral Note**
- * when `documentType: "referralNote"` — each with its own US Realm Header
+ * when `documentType: "referralNote"`, each with its own US Realm Header
  * specialization (document `templateId` + LOINC `code`) and SHALL section set.
  * The emitted document round-trips through {@link parseCcda} by construction (see
  * the module doc); a clean build carries zero warnings.
@@ -1799,9 +1799,9 @@ export interface BuildCcdaOptions {
  *   `terminology` adapter to have the returned document flag adapter-rejected
  *   codes (`SEMANTIC_CODE_INVALID`) and to emit `<translation>` alternate codings
  *   from its optional `translate`. The builder never coerces a code to satisfy the
- *   adapter — every primary value is emitted verbatim and a `<translation>` is only
+ *   adapter, every primary value is emitted verbatim and a `<translation>` is only
  *   ever an additional alternate coding.
- * @returns The parsed document — the parse of the spec-clean XML just emitted.
+ * @returns The parsed document, the parse of the spec-clean XML just emitted.
  * @throws {TypeError} When `documentType` is anything other than `"ccd"` or
  *   `"referralNote"` (the only two types this builder supports), when an allergy
  *   is neither an `allergen` nor `noKnownAllergy`, when a result does not carry
@@ -1828,7 +1828,7 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
   const documentType: string = init.documentType ?? "ccd";
   if (documentType !== "ccd" && documentType !== "referralNote") {
     throw new TypeError(
-      `buildCcda: documentType "${documentType}" is not supported yet — this builder ` +
+      `buildCcda: documentType "${documentType}" is not supported yet, this builder ` +
         'emits a CCD or a Referral Note. Pass "ccd" or "referralNote" (or omit for a CCD).',
     );
   }
@@ -1848,8 +1848,8 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
 
   const structuredBody = el(doc, "structuredBody");
 
-  // This document type's SHALL sections, always emitted in its declared order —
-  // an empty one as a spec-clean nullFlavor="NI" section — so the document is
+  // This document type's SHALL sections, always emitted in its declared order,
+  // an empty one as a spec-clean nullFlavor="NI" section, so the document is
   // conformant for its type and the parser's required-section validation stays
   // quiet on a clean build.
   const shall = new Set<ShallSectionKey>(spec.shallSections);
@@ -1858,7 +1858,7 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
   }
 
   // Results / Vital Signs are always-on SHALL sections for a CCD but *optional*
-  // for a Referral Note — emit them here only when they are not this type's SHALL
+  // for a Referral Note, emit them here only when they are not this type's SHALL
   // section AND the caller supplied content (never a fabricated empty one).
   if (!shall.has("results") && (init.results?.length ?? 0) > 0) {
     structuredBody.appendChild(resultsSection(doc, init.results ?? [], id));
@@ -1867,7 +1867,7 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
     structuredBody.appendChild(vitalsSection(doc, init.vitalSigns ?? [], id));
   }
 
-  // Immunizations, Procedures, and Encounters are not CCD SHALL sections — each is
+  // Immunizations, Procedures, and Encounters are not CCD SHALL sections, each is
   // emitted only when populated, rather than fabricating an empty section the
   // caller did not ask for.
   if ((init.immunizations?.length ?? 0) > 0) {
@@ -1929,7 +1929,7 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
 
   // Re-parse the spec-clean XML we just emitted. When the caller supplied a
   // terminology adapter, forward it so the returned document surfaces
-  // `SEMANTIC_CODE_INVALID` for any coded value the adapter rejects — validation
+  // `SEMANTIC_CODE_INVALID` for any coded value the adapter rejects, validation
   // *on build*. The builder still emits every code **verbatim** (it never coerces
   // a value to satisfy an adapter); the adapter can only ever add a flag.
   return options.terminology !== undefined
@@ -2002,7 +2002,7 @@ function appendHeader(
 }
 
 /**
- * A `nullFlavor="UNK"` `<addr>` — satisfies the US Realm Header's SHALL
+ * A `nullFlavor="UNK"` `<addr>`, satisfies the US Realm Header's SHALL
  * `addr[1..*]` cardinality on `patientRole` / `assignedAuthor` /
  * `representedCustodianOrganization` without inventing (fabricating) a synthetic
  * street address. Consistent with the omitted-demographic policy elsewhere.
@@ -2012,7 +2012,7 @@ function addrStub(doc: Document): Element {
   return el(doc, "addr", { nullFlavor: "UNK" });
 }
 
-/** A `nullFlavor="UNK"` `<telecom>` — satisfies the SHALL `telecom[1..*]` cardinality. @internal */
+/** A `nullFlavor="UNK"` `<telecom>`, satisfies the SHALL `telecom[1..*]` cardinality. @internal */
 function telecomStub(doc: Document): Element {
   return el(doc, "telecom", { nullFlavor: "UNK" });
 }
@@ -2116,19 +2116,19 @@ function custodian(doc: Document, orgName: string): Element {
 /**
  * The consumer adapter's bound `$translate` ({@link TerminologyAdapter.translate}),
  * threaded to the clinical coded-slot emitters so a supplied adapter can
- * contribute `<translation>` alternate codings. `undefined` — no adapter, or a
- * validation-only adapter that omits `translate` — means the emitters add nothing
+ * contribute `<translation>` alternate codings. `undefined`, no adapter, or a
+ * validation-only adapter that omits `translate`, means the emitters add nothing
  * and the output is **byte-identical** to a build with no adapter. @internal
  */
 type Translate = TerminologyAdapter["translate"];
 
 /**
  * Append consumer-supplied `<translation>` alternate codings onto a just-built
- * coded element (a CD or CE — both permit `translation` in their datatype
+ * coded element (a CD or CE, both permit `translation` in their datatype
  * xs:sequence). This is safety-critical emission; three invariants hold hard:
  *
  * - **Never coerces the primary code.** The element's own `@code`/`@codeSystem`
- *   are already set by the caller and are left untouched — a `<translation>` is
+ *   are already set by the caller and are left untouched, a `<translation>` is
  *   only ever an *additional* alternate coding beside the original, never a
  *   substitution.
  * - **Never fabricates.** `translate` returning `undefined` (the adapter has no
@@ -2143,7 +2143,7 @@ type Translate = TerminologyAdapter["translate"];
  * The parser reads each emitted `<translation>` back into `CD.translation`
  * (`code`/`codeSystem`/`codeSystemName`/`displayName`), so the alternates
  * round-trip; a match's `version` is emitted as the spec `@codeSystemVersion`
- * (which the parser's shallow translation read does not currently surface — a
+ * (which the parser's shallow translation read does not currently surface, a
  * pre-existing read scope, not a regression). @internal
  */
 function appendTranslations(
@@ -2222,7 +2222,7 @@ function cdValue(
 /**
  * Build a section's `<templateId>`s. The entries-**optional** template
  * (`root` = base, `@2015-08-01`) is always emitted; the entries-**required**
- * template (`${base}.1`) is added only when the section carries entries — an
+ * template (`${base}.1`) is added only when the section carries entries, an
  * entries-required template with zero entries violates its "SHALL contain at
  * least one entry" conformance statement, so an empty (`nullFlavor="NI"`)
  * section must NOT declare it.
@@ -2234,7 +2234,7 @@ function sectionTemplateIds(
   entriesRequired: boolean,
   extension: string | null = R21,
 ): readonly Element[] {
-  // A `null` extension emits a root-only `templateId` (no `@extension`) —
+  // A `null` extension emits a root-only `templateId` (no `@extension`),
   // required for unversioned templates such as the Assessment Section (…22.2.8),
   // which has no R2.0/R2.1 revision. (`null`, not `undefined`, so the `= R21`
   // default still applies when the parameter is simply omitted.)
@@ -2330,7 +2330,7 @@ const PLAN_OF_TREATMENT_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.10";
 /** @internal */
 const FAMILY_HISTORY_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.15";
 
-/** Build the Problems section — populated, or empty when there are none. @internal */
+/** Build the Problems section, populated, or empty when there are none. @internal */
 function problemsSection(
   doc: Document,
   problems: readonly BuildCcdaProblem[],
@@ -2356,7 +2356,7 @@ function problemsSection(
  * Build one bare Problem Observation (`…22.4.4`, the R2.1 `2015-08-01` stamp).
  * Shared by the Problems section (nested under a Problem Concern Act via
  * {@link problemEntry}) and the Past Medical History section (bare, directly under
- * `<entry>` — {@link pastMedicalHistorySection}); both carry the identical coded
+ * `<entry>`, {@link pastMedicalHistorySection}); both carry the identical coded
  * shape, so the same observation reuse mirrors the parser reusing `buildProblem`
  * for both. @internal
  */
@@ -2382,15 +2382,15 @@ function problemObservation(
     }),
     // `<text>` slots directly after `<code>`, before statusCode/effectiveTime/value,
     // per the CDA R2 Observation element sequence (POCD_MT000040.Observation:
-    // code, text, statusCode, effectiveTime, …, value) — emitting it later is
+    // code, text, statusCode, effectiveTime, …, value), emitting it later is
     // XSD-invalid.
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     el(doc, "statusCode", { code: "completed" }),
   );
-  // Problem Observation (…22.4.4) SHALL carry an effectiveTime — always emitted,
+  // Problem Observation (…22.4.4) SHALL carry an effectiveTime, always emitted,
   // onset as low when supplied (nullFlavor="UNK" otherwise), plus a high for a
   // resolved problem: the caller's resolution date when supplied, else a
-  // nullFlavor="UNK" high (resolved-but-date-unknown) — never a guessed date.
+  // nullFlavor="UNK" high (resolved-but-date-unknown), never a guessed date.
   obs.appendChild(concernEffectiveTime(doc, p.onset, p.resolution, p.status, "problem"));
   obs.appendChild(cdValue(doc, p.problem, SNOMED_CT, translate));
   return obs;
@@ -2421,7 +2421,7 @@ function problemEntry(
   return el(doc, "entry", undefined, act);
 }
 
-/** Build the Allergies section — populated, or empty when there are none. @internal */
+/** Build the Allergies section, populated, or empty when there are none. @internal */
 function allergiesSection(
   doc: Document,
   allergies: readonly BuildCcdaAllergy[],
@@ -2470,19 +2470,19 @@ function allergyEntry(
     el(doc, "id", { root: SYNTH_ROOT, extension: id("alg-obs") }),
     el(doc, "code", { code: "ASSERTION", codeSystem: ACT_CODE }),
     // `<text>` slots directly after `<code>`, before statusCode/effectiveTime/value,
-    // per the CDA R2 Observation element sequence — emitting it after the value or
+    // per the CDA R2 Observation element sequence, emitting it after the value or
     // the entryRelationships (as this builder previously did) is XSD-invalid.
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     el(doc, "statusCode", { code: "completed" }),
   );
   // Allergy-Intolerance Observation (…22.4.7) SHALL carry an effectiveTime whose
   // low is the biological onset (the caller's onset when supplied, else
-  // nullFlavor="UNK"); a resolved concern adds a high — the resolution date when
-  // supplied, else nullFlavor="UNK" — so the SHALL is satisfied without inventing
+  // nullFlavor="UNK"); a resolved concern adds a high, the resolution date when
+  // supplied, else nullFlavor="UNK", so the SHALL is satisfied without inventing
   // a clinical time.
   obs.appendChild(concernEffectiveTime(doc, a.onset, a.resolution, a.status, "allergy"));
   // The observation value is the propensity *type* (NOT the allergen). It defaults
-  // to the neutral SNOMED "Allergy to substance" (419199007) — never a guessed
+  // to the neutral SNOMED "Allergy to substance" (419199007), never a guessed
   // "Drug allergy", which would mis-classify a food/environmental allergen. A
   // caller sets `type` for the specific class.
   obs.appendChild(
@@ -2585,7 +2585,7 @@ function pqEl(doc: Document, name: string, q: BuildQuantity): Element {
   return el(doc, name, { value: q.value.toString(), unit: q.unit });
 }
 
-/** Build the Medications section — populated, or empty when there are none. @internal */
+/** Build the Medications section, populated, or empty when there are none. @internal */
 function medicationsSection(
   doc: Document,
   meds: readonly BuildCcdaMedication[],
@@ -2633,8 +2633,8 @@ function medicationEntry(
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     el(doc, "statusCode", { code: concernStatusCode(m.status) }),
   );
-  // Timing is two distinct effectiveTime siblings — an IVL_TS therapy window and
-  // a PIVL_TS periodic frequency — never conflated (mirrors how the parser reads
+  // Timing is two distinct effectiveTime siblings, an IVL_TS therapy window and
+  // a PIVL_TS periodic frequency, never conflated (mirrors how the parser reads
   // them back). The IVL_TS duration is a SHALL slot (CONF:1098-7495), so it is
   // ALWAYS emitted (nullFlavor="UNK" low when no window is supplied); the PIVL_TS
   // frequency is optional and emitted only when the caller supplied it.
@@ -2687,7 +2687,7 @@ function medicationConsumable(doc: Document, drug: BuildCode, translate?: Transl
   return el(doc, "consumable", undefined, product);
 }
 
-/** Build the Results section — populated, or empty when there are none. @internal */
+/** Build the Results section, populated, or empty when there are none. @internal */
 function resultsSection(
   doc: Document,
   panels: readonly BuildCcdaResultPanel[],
@@ -2725,7 +2725,7 @@ function resultOrganizerEntry(
   );
   // Result Organizer (…22.4.1) effectiveTime spans the contained observations.
   // Emitted for spec-completeness (nullFlavor="UNK" unless the caller supplied a
-  // panel time) — the member observations each carry their own required time.
+  // panel time), the member observations each carry their own required time.
   organizer.appendChild(pointEffectiveTime(doc, panel.effectiveTime, "resultPanel.effectiveTime"));
   for (const result of panel.results) {
     organizer.appendChild(
@@ -2762,7 +2762,7 @@ function resultObservation(
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     el(doc, "statusCode", { code: "completed" }),
   );
-  // Result Observation (…22.4.2) SHALL contain effectiveTime [1..1] — the
+  // Result Observation (…22.4.2) SHALL contain effectiveTime [1..1], the
   // clinically-relevant measurement time. Always emitted (nullFlavor="UNK" when
   // the caller supplied none), never a guessed timestamp.
   obs.appendChild(pointEffectiveTime(doc, result.effectiveTime, "result.effectiveTime"));
@@ -2785,7 +2785,7 @@ function resultObservation(
  * Build a result's typed `<value>`, enforcing **exactly one** value form. A UCUM
  * `quantity` → `xsi:type="PQ"`; a `codedValue` → `xsi:type="CD"` (SNOMED CT by
  * default); a `stringValue` → `xsi:type="ST"`. Throws when none (or more than
- * one) is set — a result value is never dropped or invented.
+ * one) is set, a result value is never dropped or invented.
  * @internal
  */
 function observationValue(doc: Document, testCode: BuildCode, r: BuildCcdaResult): Element {
@@ -2840,7 +2840,7 @@ const VITAL_SIGNS_CLUSTER = {
   codeSystemName: "SNOMED CT",
 } as const;
 
-/** Build the Vital Signs section — populated, or empty when there are none. @internal */
+/** Build the Vital Signs section, populated, or empty when there are none. @internal */
 function vitalsSection(
   doc: Document,
   panels: readonly BuildCcdaVitalsPanel[],
@@ -2872,7 +2872,7 @@ function vitalsOrganizerEntry(
     codeEl(doc, "code", VITAL_SIGNS_CLUSTER),
     el(doc, "statusCode", { code: panel.status ?? "completed" }),
   );
-  // Vital Signs Organizer (…22.4.26) SHALL contain effectiveTime [1..1] — always
+  // Vital Signs Organizer (…22.4.26) SHALL contain effectiveTime [1..1], always
   // emitted (nullFlavor="UNK" unless a panel time was supplied).
   organizer.appendChild(pointEffectiveTime(doc, panel.effectiveTime, "vitalsPanel.effectiveTime"));
   for (const vital of panel.vitals) {
@@ -2911,7 +2911,7 @@ function vitalObservation(
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     el(doc, "statusCode", { code: "completed" }),
   );
-  // Vital Sign Observation (…22.4.27) SHALL contain effectiveTime [1..1] — the
+  // Vital Sign Observation (…22.4.27) SHALL contain effectiveTime [1..1], the
   // reading time. Always emitted (nullFlavor="UNK" when none supplied).
   obs.appendChild(pointEffectiveTime(doc, vital.effectiveTime, "vital.effectiveTime"));
   obs.appendChild(
@@ -2930,7 +2930,7 @@ function vitalObservation(
 
 /**
  * Build the Immunizations section from one or more Immunization Activities. This
- * section is only ever called with a non-empty list (see {@link buildCcda}) — it
+ * section is only ever called with a non-empty list (see {@link buildCcda}), it
  * is not a CCD SHALL section, so an unpopulated Immunizations section is not
  * emitted rather than fabricated as an empty `nullFlavor="NI"` shell.
  * @internal
@@ -2970,7 +2970,7 @@ function immunizationEntry(
   id: (prefix: string) => string,
   translate?: Translate,
 ): Element {
-  // A refused / not-administered shot is `negationInd="true"` — the parser reads
+  // A refused / not-administered shot is `negationInd="true"`, the parser reads
   // it back as `refused` and flags IMMUNIZATION_REFUSED; it is NEVER conflated
   // with a `nullFlavor` "unknown" (opposite clinical meaning).
   const attrs: Attrs =
@@ -2986,7 +2986,7 @@ function immunizationEntry(
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     el(doc, "statusCode", { code: imm.status ?? "completed" }),
   );
-  // Immunization Activity (…22.4.52) SHALL contain effectiveTime [1..1] — the
+  // Immunization Activity (…22.4.52) SHALL contain effectiveTime [1..1], the
   // administration time (the exact CONF id is not re-verified here; the substantive
   // SHALL-[1..1] cardinality is grounded against the R2.1 IG's Immunization Activity
   // constraint). Emitted as an @value when supplied, else nullFlavor="UNK" (the SHALL
@@ -3048,7 +3048,7 @@ const PROCEDURE_VARIANTS: Readonly<
 
 /**
  * Build the Procedures section from one or more {@link BuildCcdaProcedure}s. Only
- * called with a non-empty list (see {@link buildCcda}) — Procedures is a CCD
+ * called with a non-empty list (see {@link buildCcda}), Procedures is a CCD
  * SHOULD (not SHALL) section, so an unpopulated one is not fabricated. The
  * section and its entry templates carry the R2.1 `2014-06-09` stamp.
  * @internal
@@ -3090,14 +3090,14 @@ function procedureEntry(
 ): Element {
   const kind = p.kind ?? "procedure";
   // Procedure Activity Observation (…22.4.13) SHALL contain a value [1..1] (the
-  // assessment result — "if nothing is appropriate, use a nullFlavor"). Refuse to
+  // assessment result, "if nothing is appropriate, use a nullFlavor"). Refuse to
   // emit a value-less observation-variant procedure rather than ship a document
-  // that violates the SHALL — a caller with an unknown result passes an explicit
+  // that violates the SHALL, a caller with an unknown result passes an explicit
   // `nullFlavor`-bearing value form in a later slice; today it is required.
   if (kind === "observation" && p.value === undefined) {
     throw new TypeError(
       `buildCcda: procedure "${p.code.displayName}" uses kind "observation", which SHALL ` +
-        "carry a `value` (Procedure Activity Observation …22.4.13) — supply `value`.",
+        "carry a `value` (Procedure Activity Observation …22.4.13), supply `value`.",
     );
   }
   const variant = PROCEDURE_VARIANTS[kind];
@@ -3116,7 +3116,7 @@ function procedureEntry(
     el(doc, "statusCode", { code: statusCode }),
   );
   // Procedure Activity effectiveTime is SHOULD [0..1] (CONF:1098-7662): emitted
-  // only when supplied — never fabricated with a nullFlavor when unknown.
+  // only when supplied, never fabricated with a nullFlavor when unknown.
   if (p.effectiveTime !== undefined) {
     act.appendChild(
       el(doc, "effectiveTime", { value: assertHl7Ts(p.effectiveTime, "procedure.effectiveTime") }),
@@ -3132,7 +3132,7 @@ function procedureEntry(
 
 /**
  * Build the Encounters section from one or more {@link BuildCcdaEncounter}s. Only
- * called with a non-empty list (see {@link buildCcda}) — Encounters is a CCD
+ * called with a non-empty list (see {@link buildCcda}), Encounters is a CCD
  * SHOULD (not SHALL) section, so an unpopulated one is not fabricated.
  * @internal
  */
@@ -3174,7 +3174,7 @@ function encounterEntry(
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     el(doc, "statusCode", { code: e.status ?? "completed" }),
   );
-  // Encounter Activity SHALL contain effectiveTime [1..1] — the visit/admission
+  // Encounter Activity SHALL contain effectiveTime [1..1], the visit/admission
   // period. Always emitted as an IVL_TS; a nullFlavor="UNK" low satisfies the
   // SHALL without inventing a date when the caller supplied no period.
   enc.appendChild(encounterPeriod(doc, e.period));
@@ -3184,7 +3184,7 @@ function encounterEntry(
 /**
  * The Encounter Activity SHALL `<effectiveTime>` (an `IVL_TS` visit period). The
  * `low` carries the start when supplied, else `nullFlavor="UNK"`; a `high` is
- * added only when an end was supplied — the builder never invents a discharge
+ * added only when an end was supplied, the builder never invents a discharge
  * date it was not given.
  * @internal
  */
@@ -3203,14 +3203,14 @@ function encounterPeriod(
   return et;
 }
 
-/** The narrative line for a Smoking Status — the status label, or an explicit "unknown". @internal */
+/** The narrative line for a Smoking Status, the status label, or an explicit "unknown". @internal */
 function smokingStatusLabel(s: BuildCcdaSmokingStatus): string {
   return s.value?.displayName ?? "Smoking status unknown";
 }
 
 /**
  * Build the Social History section from one or more {@link BuildCcdaSmokingStatus}
- * observations. Only called with a non-empty list (see {@link buildCcda}) —
+ * observations. Only called with a non-empty list (see {@link buildCcda}),
  * Social History is a CCD SHOULD (not SHALL) section, so an unpopulated one is not
  * fabricated. The Social History Section template (`…22.2.17`) has no
  * entries-required variant, so only the base `templateId` is emitted even though
@@ -3257,22 +3257,22 @@ function smokingStatusEntry(
     { classCode: "OBS", moodCode: "EVN" },
     el(doc, "templateId", { root: SMOKING_STATUS_OBSERVATION, extension: SMOKING_STATUS_EXT }),
     el(doc, "id", { root: SYNTH_ROOT, extension: id("smk") }),
-    // SHALL code [1..1] — the fixed LOINC "Tobacco smoking status"; the specific
+    // SHALL code [1..1], the fixed LOINC "Tobacco smoking status"; the specific
     // reading lives in `value`, not here.
     codeEl(doc, "code", { ...SMOKING_STATUS_CODE, codeSystem: LOINC, codeSystemName: "LOINC" }),
     // `<text>` slots directly after `<code>`, before statusCode/effectiveTime/value,
-    // per the CDA R2 Observation element sequence — emitting it after the value is
+    // per the CDA R2 Observation element sequence, emitting it after the value is
     // XSD-invalid.
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     el(doc, "statusCode", { code: s.status ?? "completed" }),
   );
-  // Smoking Status Observation (…22.4.78) SHALL contain effectiveTime [1..1] — the
+  // Smoking Status Observation (…22.4.78) SHALL contain effectiveTime [1..1], the
   // time the status was recorded. Emitted as an @value when supplied, else
   // nullFlavor="UNK" (the SHALL satisfied without inventing a date).
   obs.appendChild(pointEffectiveTime(doc, s.effectiveTime, "smokingStatus.effectiveTime"));
   // SHALL value [1..1] (SNOMED CT, Current Smoking Status value set). An omitted
-  // status is an EXPLICIT nullFlavor="UNK" — read back as `unknown: true` and
-  // flagged SMOKING_STATUS_UNKNOWN — NEVER defaulted to a real reading such as
+  // status is an EXPLICIT nullFlavor="UNK", read back as `unknown: true` and
+  // flagged SMOKING_STATUS_UNKNOWN, NEVER defaulted to a real reading such as
   // "never smoker" (absent status ≠ non-smoker; the single safety rule here).
   obs.appendChild(
     s.value === undefined
@@ -3283,7 +3283,7 @@ function smokingStatusEntry(
 }
 
 /**
- * The narrative line for a Functional Status finding — the fixed `code` label
+ * The narrative line for a Functional Status finding, the fixed `code` label
  * ("Functional status") plus the specific finding, so it agrees with the
  * observation's `code` (which the parser reconciles against the narrative). An
  * omitted finding reads "Functional status: unknown", never a fabricated
@@ -3297,13 +3297,13 @@ function functionalStatusLabel(s: BuildCcdaFunctionalStatus): string {
  * Build the Functional Status section from standalone
  * {@link BuildCcdaFunctionalStatus} findings and/or
  * {@link BuildCcdaFunctionalStatusOrganizer}s. Only called when at least one is
- * non-empty (see {@link buildCcda}) — Functional Status is a CCD SHOULD (not
+ * non-empty (see {@link buildCcda}), Functional Status is a CCD SHOULD (not
  * SHALL) section, so an unpopulated one is not fabricated. The Functional Status
  * Section (V2, `…22.2.14`) has no entries-required variant, so only the base
  * `templateId` (the `2014-06-09` stamp) is emitted even though the section
  * carries entries. Organizers are emitted first (a grouped assessment), then
  * standalone findings. Only Functional Status templates are emitted here, so
- * every finding reads back tagged `domain: "functional"` — never conflated with
+ * every finding reads back tagged `domain: "functional"`, never conflated with
  * mental status. @internal
  */
 function functionalStatusSection(
@@ -3360,7 +3360,7 @@ function functionalStatusObservation(
       extension: FUNCTIONAL_STATUS_EXT,
     }),
     el(doc, "id", { root: SYNTH_ROOT, extension: id("func") }),
-    // SHALL code [1..1] — the template-fixed LOINC "Functional status"; the
+    // SHALL code [1..1], the template-fixed LOINC "Functional status"; the
     // specific finding lives in `value`, not here.
     codeEl(doc, "code", { ...FUNCTIONAL_STATUS_CODE, codeSystem: LOINC, codeSystemName: "LOINC" }),
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
@@ -3368,12 +3368,12 @@ function functionalStatusObservation(
     el(doc, "statusCode", { code: "completed" }),
   );
   // Functional Status Observation (…22.4.67) SHALL contain effectiveTime [1..1]
-  // (CONF:1098-13930) — the time the status was assessed. Emitted as an @value
+  // (CONF:1098-13930), the time the status was assessed. Emitted as an @value
   // when supplied, else nullFlavor="UNK" (the SHALL satisfied without inventing a
   // date).
   obs.appendChild(pointEffectiveTime(doc, s.effectiveTime, "functionalStatus.effectiveTime"));
   // SHALL value [1..1] (CONF:1098-13932; SHOULD be SNOMED CT for a CD). An omitted
-  // finding is an EXPLICIT nullFlavor="UNK" — never defaulted to a real finding.
+  // finding is an EXPLICIT nullFlavor="UNK", never defaulted to a real finding.
   obs.appendChild(
     s.value === undefined
       ? typedValue(doc, "CD", { nullFlavor: "UNK" })
@@ -3406,13 +3406,13 @@ function functionalStatusOrganizerEntry(
     { classCode: "CLUSTER", moodCode: "EVN" },
     el(doc, "templateId", { root: FUNCTIONAL_STATUS_ORGANIZER, extension: FUNCTIONAL_STATUS_EXT }),
     el(doc, "id", { root: SYNTH_ROOT, extension: id("func-org") }),
-    // SHALL code [1..1] (SHOULD be ICF or LOINC — CONF:1098-31417). An omitted
+    // SHALL code [1..1] (SHOULD be ICF or LOINC, CONF:1098-31417). An omitted
     // categorization is an EXPLICIT nullFlavor="UNK", never a fabricated category.
     organizerCode(doc, org.code),
     // SHALL statusCode [1..1], fixed "completed".
     el(doc, "statusCode", { code: "completed" }),
   );
-  // effectiveTime [0..1] — the assessment time. Emitted only when supplied; an
+  // effectiveTime [0..1], the assessment time. Emitted only when supplied; an
   // optional element is never filled with a fabricated date.
   if (org.effectiveTime !== undefined) {
     organizer.appendChild(
@@ -3430,7 +3430,7 @@ function functionalStatusOrganizerEntry(
 }
 
 /**
- * The narrative line for a Mental Status finding — the fixed `code` label
+ * The narrative line for a Mental Status finding, the fixed `code` label
  * ("Cognitive function finding") plus the specific finding, so it agrees with the
  * observation's `code` (which the parser reconciles against the narrative). An
  * omitted finding reads "Cognitive function finding: unknown", never a fabricated
@@ -3443,13 +3443,13 @@ function mentalStatusLabel(s: BuildCcdaMentalStatus): string {
 /**
  * Build the Mental Status section from standalone {@link BuildCcdaMentalStatus}
  * findings and/or {@link BuildCcdaMentalStatusOrganizer}s. Only called when at
- * least one is non-empty (see {@link buildCcda}) — Mental Status is a CCD SHOULD
+ * least one is non-empty (see {@link buildCcda}), Mental Status is a CCD SHOULD
  * (not SHALL) section, so an unpopulated one is not fabricated. The Mental Status
  * Section (V2, `…22.2.56`, the R2.1 `2015-08-01` stamp) has no entries-required
  * variant, so only the base `templateId` is emitted even though the section
  * carries entries. Organizers are emitted first, then standalone findings. Only
  * Mental Status templates are emitted here, so every finding reads back tagged
- * `domain: "mental"` — never conflated with functional status. @internal
+ * `domain: "mental"`, never conflated with functional status. @internal
  */
 function mentalStatusSection(
   doc: Document,
@@ -3504,7 +3504,7 @@ function mentalStatusObservation(
       extension: MENTAL_STATUS_EXT,
     }),
     el(doc, "id", { root: SYNTH_ROOT, extension: id("ment") }),
-    // SHALL code [1..1] — the R2.1 template-fixed SNOMED CT "Cognitive function
+    // SHALL code [1..1], the R2.1 template-fixed SNOMED CT "Cognitive function
     // finding"; the specific finding lives in `value`, not here.
     codeEl(doc, "code", {
       ...MENTAL_STATUS_CODE,
@@ -3515,12 +3515,12 @@ function mentalStatusObservation(
     // SHALL statusCode [1..1], fixed "completed".
     el(doc, "statusCode", { code: "completed" }),
   );
-  // Mental Status Observation (…22.4.74) SHALL contain effectiveTime [1..1] — the
+  // Mental Status Observation (…22.4.74) SHALL contain effectiveTime [1..1], the
   // time the status was assessed. Emitted as an @value when supplied, else
   // nullFlavor="UNK" (the SHALL satisfied without inventing a date).
   obs.appendChild(pointEffectiveTime(doc, s.effectiveTime, "mentalStatus.effectiveTime"));
   // SHALL value [1..1] (SHOULD be SNOMED CT for a CD). An omitted finding is an
-  // EXPLICIT nullFlavor="UNK" — never defaulted to a real finding.
+  // EXPLICIT nullFlavor="UNK", never defaulted to a real finding.
   obs.appendChild(
     s.value === undefined
       ? typedValue(doc, "CD", { nullFlavor: "UNK" })
@@ -3553,15 +3553,15 @@ function mentalStatusOrganizerEntry(
     { classCode: "CLUSTER", moodCode: "EVN" },
     el(doc, "templateId", { root: MENTAL_STATUS_ORGANIZER, extension: MENTAL_STATUS_EXT }),
     el(doc, "id", { root: SYNTH_ROOT, extension: id("ment-org") }),
-    // code [0..1] (SHOULD be ICF or LOINC — CONF:1198-14698); the organizer SHALL
+    // code [0..1] (SHOULD be ICF or LOINC, CONF:1198-14698); the organizer SHALL
     // have at least one of code or effectiveTime (CONF:1198-32426). We always emit
     // a code element (an EXPLICIT nullFlavor="UNK" categorization when the caller
-    // supplies none — never fabricated), which satisfies the one-of floor.
+    // supplies none, never fabricated), which satisfies the one-of floor.
     organizerCode(doc, org.code),
     // SHALL statusCode [1..1], fixed "completed".
     el(doc, "statusCode", { code: "completed" }),
   );
-  // effectiveTime [0..1] — emitted only when supplied; never a fabricated date.
+  // effectiveTime [0..1], emitted only when supplied; never a fabricated date.
   if (org.effectiveTime !== undefined) {
     organizer.appendChild(
       el(doc, "effectiveTime", {
@@ -3578,7 +3578,7 @@ function mentalStatusOrganizerEntry(
 }
 
 /**
- * The status-organizer categorization `<code>` — SHALL [1..1], SHOULD be ICF or
+ * The status-organizer categorization `<code>`, SHALL [1..1], SHOULD be ICF or
  * LOINC. When the caller supplies a `code` it is emitted with its `codeSystem`
  * (defaulting to LOINC); when omitted it is an EXPLICIT `nullFlavor="UNK"`, an
  * unknown category that satisfies the SHALL without fabricating one. @internal
@@ -3600,7 +3600,7 @@ function organizerCode(doc: Document, code: BuildCode | undefined): Element {
 }
 
 /**
- * The narrative line for an Assessment Scale — the scale's `code` label plus its
+ * The narrative line for an Assessment Scale, the scale's `code` label plus its
  * total score, so it agrees with the observation's `code` (which the parser
  * reconciles against the narrative). An omitted score reads "…: unknown", never a
  * fabricated number. @internal
@@ -3610,7 +3610,7 @@ function assessmentScaleLabel(scale: BuildCcdaAssessmentScale): string {
 }
 
 /**
- * An assessment-scale `<value xsi:type="INT">` — the SHALL score. Emitted as an
+ * An assessment-scale `<value xsi:type="INT">`, the SHALL score. Emitted as an
  * `@value` when supplied, else an EXPLICIT `nullFlavor="UNK"` (the SHALL cardinality
  * satisfied without inventing a number, read back as `{ kind: "integer" }` with no
  * `value`). Units are not allowed on an INT, so none is emitted. @internal
@@ -3623,12 +3623,12 @@ function scoreValue(doc: Document, score: number | undefined): Element {
 
 /**
  * Build one direct-entry Assessment Scale Observation `<observation>` (`…22.4.69`,
- * the **bare root** — R2.1 SHALL: `@root` with no `@extension`), appending its
+ * the **bare root**, R2.1 SHALL: `@root` with no `@extension`), appending its
  * narrative line to `text`. Emits the SHALL slots in schema order: templateId, id,
  * code (the scale panel LOINC), text/reference, statusCode (fixed `completed`),
  * effectiveTime [1..1], value [1..1] (the INT score), then the optional
  * interpretationCode and the Assessment Scale Supporting Observations. Shared by
- * the Functional and Mental Status sections — the carrying section's domain is
+ * the Functional and Mental Status sections, the carrying section's domain is
  * what the parser tags the scale with, so the same observation is correct in
  * either. @internal
  */
@@ -3647,17 +3647,17 @@ function assessmentScaleObservation(
     // SHALL templateId [1..1] @root="…4.69" with NO @extension (R2.1 CONF:81-14436/14437).
     el(doc, "templateId", { root: ASSESSMENT_SCALE_OBSERVATION }),
     el(doc, "id", { root: SYNTH_ROOT, extension: id("scale") }),
-    // SHALL code [1..1] — the scale/panel code (LOINC default).
+    // SHALL code [1..1], the scale/panel code (LOINC default).
     codeEl(doc, "code", { ...scale.code, codeSystem: scale.code.codeSystem ?? LOINC }),
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     // SHALL statusCode [1..1], fixed "completed" (CONF:81-19088).
     el(doc, "statusCode", { code: "completed" }),
   );
-  // SHALL effectiveTime [1..1] (CONF:81-14445) — the administration time, else nullFlavor="UNK".
+  // SHALL effectiveTime [1..1] (CONF:81-14445), the administration time, else nullFlavor="UNK".
   obs.appendChild(pointEffectiveTime(doc, scale.effectiveTime, "assessmentScale.effectiveTime"));
-  // SHALL value [1..1] (CONF:81-14450) — the INT score, else an EXPLICIT nullFlavor="UNK".
+  // SHALL value [1..1] (CONF:81-14450), the INT score, else an EXPLICIT nullFlavor="UNK".
   obs.appendChild(scoreValue(doc, scale.score));
-  // interpretationCode [0..1] — emitted only when supplied.
+  // interpretationCode [0..1], emitted only when supplied.
   if (scale.interpretation !== undefined) {
     obs.appendChild(
       codeEl(doc, "interpretationCode", {
@@ -3666,7 +3666,7 @@ function assessmentScaleObservation(
       }),
     );
   }
-  // The scored components [0..*] — each an Assessment Scale Supporting Observation.
+  // The scored components [0..*], each an Assessment Scale Supporting Observation.
   for (const item of scale.supporting ?? []) {
     obs.appendChild(
       el(doc, "entryRelationship", { typeCode: "COMP" }, supportingObservation(doc, item, id)),
@@ -3677,7 +3677,7 @@ function assessmentScaleObservation(
 
 /**
  * Build one Assessment Scale Supporting Observation `<observation>` (`…22.4.86`,
- * bare root) — a scored component of a scale. Emits its SHALL slots: templateId,
+ * bare root), a scored component of a scale. Emits its SHALL slots: templateId,
  * id, code (LOINC/SNOMED), statusCode (fixed `completed`), and value [1..*] (the
  * INT item score). effectiveTime is not required on this template, so none is
  * fabricated. @internal
@@ -3698,7 +3698,7 @@ function supportingObservation(
     // SHALL statusCode [1..1], fixed "completed" (CONF:81-19089).
     el(doc, "statusCode", { code: "completed" }),
   );
-  // SHALL value [1..*] (CONF:81-16754) — the INT item score, else nullFlavor="UNK".
+  // SHALL value [1..*] (CONF:81-16754), the INT item score, else nullFlavor="UNK".
   obs.appendChild(scoreValue(doc, item.score));
   return obs;
 }
@@ -3706,10 +3706,10 @@ function supportingObservation(
 /**
  * Build the Past Medical History section from one or more historical
  * {@link BuildCcdaProblem}s. Only called with a non-empty list (see
- * {@link buildCcda}) — Past Medical History is a CCD MAY (not SHALL) section, so
+ * {@link buildCcda}), Past Medical History is a CCD MAY (not SHALL) section, so
  * an unpopulated one is not fabricated. The Past Medical History Section (V3,
  * `…22.2.20`, LOINC `11348-0`, the R2.1 `2015-08-01` stamp) carries **bare**
- * Problem Observations (`…22.4.4`) directly under each `<entry>` — unlike the
+ * Problem Observations (`…22.4.4`) directly under each `<entry>`, unlike the
  * Problems section, which nests each Problem Observation inside a Problem Concern
  * Act (`…22.4.3`). The two never double-count: the parser routes a bare
  * observation to `getPastMedicalHistory` and a concern-wrapped one to
@@ -3782,19 +3782,19 @@ const PLANNED_VARIANTS: Record<
 
 /**
  * Build the Plan of Treatment section from one or more {@link BuildCcdaPlannedItem}s.
- * Only called with a non-empty list (see {@link buildCcda}) — Plan of Treatment is
+ * Only called with a non-empty list (see {@link buildCcda}), Plan of Treatment is
  * a CCD SHOULD (not SHALL) section, so an unpopulated one is not fabricated. The
  * Plan of Treatment Section (V2, `…22.2.10`, LOINC `18776-5`, the R2.1
  * `2014-06-09` stamp) carries the six planned-entry templates, each future/ordered
- * — never a performed act. The section has no entries-required variant (`…2.10.1`),
+ *, never a performed act. The section has no entries-required variant (`…2.10.1`),
  * so only the base `templateId` is emitted even when it carries entries. @internal
  */
 /**
- * Build the narrative-only Assessment Section (`…22.2.8`, LOINC `51848-0`) — a
+ * Build the narrative-only Assessment Section (`…22.2.8`, LOINC `51848-0`), a
  * Referral Note SHALL section. The template is **unversioned** in C-CDA R2.1
  * (no R2.0/R2.1 revision), so it carries a root-only `templateId` with **no
  * `@extension`**. When the caller supplies no `assessment` text it is emitted as
- * a spec-clean empty `nullFlavor="NI"` section — never a fabricated assessment.
+ * a spec-clean empty `nullFlavor="NI"` section, never a fabricated assessment.
  * @internal
  */
 function assessmentSection(doc: Document, narrative: string | undefined): Element {
@@ -3822,10 +3822,10 @@ function assessmentSection(doc: Document, narrative: string | undefined): Elemen
 
 /**
  * Build the narrative-only Reason for Referral Section (V2,
- * `1.3.6.1.4.1.19376.1.5.3.1.3.1`, LOINC `42349-1`) — a Referral Note SHALL
+ * `1.3.6.1.4.1.19376.1.5.3.1.3.1`, LOINC `42349-1`), a Referral Note SHALL
  * section. An IHE PCC template whose version stamp is `@extension` `2014-06-09`.
  * When the caller supplies no `reasonForReferral` text it is emitted as a
- * spec-clean empty `nullFlavor="NI"` section — never a fabricated reason.
+ * spec-clean empty `nullFlavor="NI"` section, never a fabricated reason.
  * @internal
  */
 function reasonForReferralSection(doc: Document, narrative: string | undefined): Element {
@@ -3901,7 +3901,7 @@ function plannedItemEntry(
   const variant = PLANNED_VARIANTS[p.kind];
   // `@moodCode` is the planned axis. The per-kind mood types admit only planned
   // moods (never `EVN`), and appointment moods (`APT`/`ARQ`) only on the
-  // act/encounter/procedure kinds whose element domains permit them — so a plan
+  // act/encounter/procedure kinds whose element domains permit them, so a plan
   // item can never be emitted with a schema-invalid or performed mood. The parser
   // classifies the mood into `disposition: "planned"`.
   const mood: PlannedActMood | PlannedOrderMood = p.mood ?? "INT";
@@ -3921,10 +3921,10 @@ function plannedItemEntry(
     );
   }
   act.appendChild(el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })));
-  // Planned entries fix statusCode to "active" (SHALL) — the plan is future/ordered,
+  // Planned entries fix statusCode to "active" (SHALL), the plan is future/ordered,
   // never a performed "completed" act; the builder never emits a performed status here.
   act.appendChild(el(doc, "statusCode", { code: "active" }));
-  // Planned effectiveTime is SHOULD [0..1]: emitted only when supplied — never
+  // Planned effectiveTime is SHOULD [0..1]: emitted only when supplied, never
   // fabricated with a nullFlavor when a plan carries no date.
   if (p.effectiveTime !== undefined) {
     act.appendChild(
@@ -3937,7 +3937,7 @@ function plannedItemEntry(
     act.appendChild(medicationConsumable(doc, p.code));
   }
   // The Planned Observation MAY carry the expected coded result (value [0..1]);
-  // emitted only when supplied — never invented for the caller.
+  // emitted only when supplied, never invented for the caller.
   if (p.kind === "observation" && p.value !== undefined) {
     act.appendChild(cdValue(doc, p.value, SNOMED_CT));
   }
@@ -3945,7 +3945,7 @@ function plannedItemEntry(
 }
 
 /**
- * The narrative line for a Family History condition — the relative (their
+ * The narrative line for a Family History condition, the relative (their
  * relationship label) plus the coded condition, so the narrative **contains** the
  * observation `value`'s display label and the parser's code↔narrative
  * reconciliation stays quiet. An omitted relationship reads "Relative"; an omitted
@@ -3963,7 +3963,7 @@ function familyHistoryLabel(
 
 /**
  * Build the Family History section from one or more {@link BuildCcdaFamilyHistory}
- * organizers. Only called with a non-empty list (see {@link buildCcda}) — Family
+ * organizers. Only called with a non-empty list (see {@link buildCcda}), Family
  * History is a CCD SHOULD (not SHALL) section, so an unpopulated one is not
  * fabricated. The Family History Section (V3, `…22.2.15`, LOINC `10157-6`, the
  * R2.1 `2015-08-01` stamp) has **no** entries-required variant (`…2.15.1`), so
@@ -4007,7 +4007,7 @@ function familyHistoryEntry(
   id: (prefix: string) => string,
 ): Element {
   // The Family History Organizer SHALL contain at least one Family History
-  // Observation component — an organizer describing a relative with no recorded
+  // Observation component, an organizer describing a relative with no recorded
   // condition is degenerate, so reject it rather than emit a component-less
   // organizer. A caller who means "a condition, but unknown" passes `[{}]` (which
   // becomes value nullFlavor="UNK"); "no known family history" needs the negation
@@ -4026,7 +4026,7 @@ function familyHistoryEntry(
     el(doc, "id", { root: SYNTH_ROOT, extension: id("fhx-org") }),
     // SHALL statusCode [1..1], fixed "completed".
     el(doc, "statusCode", { code: "completed" }),
-    // SHALL subject [1..1] — the family member this organizer describes.
+    // SHALL subject [1..1], the family member this organizer describes.
     familyMemberSubject(doc, h.relative),
   );
   for (const obs of h.observations) {
@@ -4042,16 +4042,16 @@ function familyHistoryEntry(
 }
 
 /**
- * Build the organizer's `subject/relatedSubject` — the family member. The
+ * Build the organizer's `subject/relatedSubject`, the family member. The
  * `relatedSubject/@classCode` is fixed "PRS" (personal relationship). The
  * relationship `code` is emitted from the caller's coded relation (SNOMED CT by
- * default), or `nullFlavor="UNK"` when unknown — never guessed. Gender, birth
+ * default), or `nullFlavor="UNK"` when unknown, never guessed. Gender, birth
  * time, and the `sdtc:deceasedInd` flag are MAY elements, each emitted only when
  * supplied. @internal
  */
 function familyMemberSubject(doc: Document, relative: BuildCcdaFamilyMember): Element {
   const relatedSubject = el(doc, "relatedSubject", { classCode: "PRS" });
-  // SHALL code [1..1] — the coded relation. An omitted relationship is an
+  // SHALL code [1..1], the coded relation. An omitted relationship is an
   // EXPLICIT nullFlavor="UNK", never defaulted to a real relation.
   relatedSubject.appendChild(
     relative.relationship === undefined
@@ -4062,7 +4062,7 @@ function familyMemberSubject(doc: Document, relative: BuildCcdaFamilyMember): El
         }),
   );
   // The relative's demographics live in the nested person <subject>. Emitted only
-  // when at least one is supplied — the whole <subject> is MAY.
+  // when at least one is supplied, the whole <subject> is MAY.
   if (
     relative.gender !== undefined ||
     relative.birthTime !== undefined ||
@@ -4085,7 +4085,7 @@ function familyMemberSubject(doc: Document, relative: BuildCcdaFamilyMember): El
     if (relative.deceased !== undefined) {
       // sdtc:deceasedInd is outside the v3 namespace (an HL7 SDO extension); the
       // parser reads it by local name. Emitted only when the caller supplied the
-      // flag — never fabricated.
+      // flag, never fabricated.
       person.appendChild(sdtcEl(doc, "deceasedInd", { value: String(relative.deceased) }));
     }
     relatedSubject.appendChild(person);
@@ -4097,7 +4097,7 @@ function familyMemberSubject(doc: Document, relative: BuildCcdaFamilyMember): El
  * Build one Family History Observation (`…22.4.46`). Carries the SHALL fixed
  * `code` (SNOMED CT `64572001` "Condition"), a SHALL `statusCode` ("completed"),
  * the SHOULD [0..1] `effectiveTime` (emitted only when supplied), and the SHALL
- * coded `value` — the relative's condition, or `nullFlavor="UNK"` when unknown
+ * coded `value`, the relative's condition, or `nullFlavor="UNK"` when unknown
  * (never guessed). An `ageAtOnset` nests an Age Observation (`…22.4.31`);
  * `causeOfDeath` nests a Family History Death Observation (`…22.4.47`). @internal
  */
@@ -4113,7 +4113,7 @@ function familyHistoryObservation(
     { classCode: "OBS", moodCode: "EVN" },
     el(doc, "templateId", { root: FAMILY_HISTORY_OBSERVATION, extension: R21 }),
     el(doc, "id", { root: SYNTH_ROOT, extension: id("fhx-obs") }),
-    // SHALL code [1..1] — the template-fixed SNOMED CT "Condition"; the specific
+    // SHALL code [1..1], the template-fixed SNOMED CT "Condition"; the specific
     // illness lives in `value`, not here.
     codeEl(doc, "code", {
       ...FAMILY_HISTORY_CONDITION_CODE,
@@ -4124,7 +4124,7 @@ function familyHistoryObservation(
     // SHALL statusCode [1..1], fixed "completed".
     el(doc, "statusCode", { code: "completed" }),
   );
-  // SHOULD effectiveTime [0..1] — the time of the condition. Emitted only when
+  // SHOULD effectiveTime [0..1], the time of the condition. Emitted only when
   // supplied (never fabricated with a nullFlavor when the caller gave no date).
   if (obs.effectiveTime !== undefined) {
     observation.appendChild(
@@ -4138,16 +4138,16 @@ function familyHistoryObservation(
       ),
     );
   }
-  // SHALL value [1..1] — the coded condition. An omitted condition is an EXPLICIT
+  // SHALL value [1..1], the coded condition. An omitted condition is an EXPLICIT
   // nullFlavor="UNK", never defaulted to a real illness.
   observation.appendChild(
     obs.condition === undefined
       ? typedValue(doc, "CD", { nullFlavor: "UNK" })
       : cdValue(doc, obs.condition, SNOMED_CT),
   );
-  // MAY Age Observation [0..1] — the relative's age at onset; emitted only when
+  // MAY Age Observation [0..1], the relative's age at onset; emitted only when
   // supplied. The relationship is SHALL `typeCode="SUBJ"` **and** SHALL
-  // `inversionInd="true"` (the age is the *subject* of the condition, inverted) —
+  // `inversionInd="true"` (the age is the *subject* of the condition, inverted),
   // the same inverted pattern the Severity/Manifestation/Criticality sub-obs use;
   // dropping the attribute defaults it to false and inverts the intended meaning.
   if (obs.ageAtOnset !== undefined) {
@@ -4160,7 +4160,7 @@ function familyHistoryObservation(
       ),
     );
   }
-  // MAY Family History Death Observation [0..1] — marks this condition as the
+  // MAY Family History Death Observation [0..1], marks this condition as the
   // relative's cause of death; emitted only when the caller flagged it.
   if (obs.causeOfDeath === true) {
     observation.appendChild(
@@ -4171,7 +4171,7 @@ function familyHistoryObservation(
 }
 
 /**
- * Build an Age Observation (`…22.4.31`) — the relative's age at onset as a `PQ`
+ * Build an Age Observation (`…22.4.31`), the relative's age at onset as a `PQ`
  * `value` in UCUM years (`a`). The template carries no version `@extension`.
  * @internal
  */
@@ -4192,7 +4192,7 @@ function ageObservation(doc: Document, years: number): Element {
 }
 
 /**
- * Build a Family History Death Observation (`…22.4.47`) — a fixed `ASSERTION`
+ * Build a Family History Death Observation (`…22.4.47`), a fixed `ASSERTION`
  * `code` and the SNOMED CT `419620001` "Death" coded `value`, marking its parent
  * condition as the relative's cause of death. The template carries no version
  * `@extension`. @internal
@@ -4220,7 +4220,7 @@ function deathObservation(doc: Document): Element {
 // C-CDA document *editing* re-emits an already-parsed document with a modified
 // or added section. To keep every SHALL guard, templateId, LOINC code, and
 // narrative/entry agreement identical to a freshly-built document, the editor
-// reuses the very same per-section emitters `buildCcda` uses — it never
+// reuses the very same per-section emitters `buildCcda` uses, it never
 // re-implements a section. These exports expose that machinery (and the
 // identifying template roots the editor matches a source section against)
 // without widening the package's public surface: they are re-exported only into
@@ -4229,7 +4229,7 @@ function deathObservation(doc: Document): Element {
 
 /**
  * The section kinds {@link buildSectionComponent} can emit as a standalone
- * `<component>` — the sections `buildCcda` builds from a single content list.
+ * `<component>`, the sections `buildCcda` builds from a single content list.
  * The compound Functional/Mental Status sections (three content arrays each)
  * and narrative-only sections are intentionally excluded from edit support.
  * @internal
@@ -4249,7 +4249,7 @@ export type EditableSectionKind =
   | "familyHistory";
 
 /**
- * A section edit's `kind` paired with its typed builder content — a
+ * A section edit's `kind` paired with its typed builder content, a
  * discriminated union on `kind`, so a `switch` narrows `content` to the exact
  * `BuildCcda*` shape that kind's emitter accepts.
  * @internal
@@ -4270,7 +4270,7 @@ export type SectionInput =
 
 /**
  * The identifying base `templateId` root + LOINC `code` an editable section
- * carries — used to locate the matching `<section>` in a source document's DOM
+ * carries, used to locate the matching `<section>` in a source document's DOM
  * (by templateId root, primary; LOINC, fallback) so an edit can replace it.
  * @internal
  */

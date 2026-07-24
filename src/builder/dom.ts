@@ -1,11 +1,11 @@
 /**
  * Internal DOM-construction helpers for the `@cosyte/ccda` builder. The builder
- * emits through the **same `@xmldom/xmldom` DOM the parser reads** — it assembles
+ * emits through the **same `@xmldom/xmldom` DOM the parser reads**, it assembles
  * a document with `createElementNS`, serializes it with the shared
  * `serializeDocument`, then hands the text to `parseCcda`. Building the DOM (not
  * concatenating strings) means the serializer performs all XML escaping, so
  * arbitrary text (a patient name, a display label) can never break well-formedness
- * or inject markup — the round-trip-through-parse contract holds by construction.
+ * or inject markup, the round-trip-through-parse contract holds by construction.
  *
  * @packageDocumentation
  */

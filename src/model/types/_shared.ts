@@ -73,7 +73,7 @@ export interface ParseCtx {
    * The optional consumer-supplied {@link TerminologyAdapter}. When present, the
    * code-system recognition layer ({@link checkCodeSlot}) calls it to
    * semantically validate coded values; when absent, recognition falls back to
-   * structural checks only. `@cosyte/ccda` never constructs one — it only calls
+   * structural checks only. `@cosyte/ccda` never constructs one, it only calls
    * the adapter a consumer passed to `parseCcda` / `buildCcda`.
    */
   readonly terminology?: TerminologyAdapter;
@@ -115,9 +115,9 @@ export function parseBooleanValue(value: string | undefined): boolean | undefine
  * canonical CDA R2 / HL7 v3 datatypes literal `YYYYMMDDHHMMSS.UUUU[±ZZzz]` (and
  * ISO 8601, from which it derives, where a decimal fraction and a zone designator
  * attach to a time component, never to a bare date). This rejects the malformed
- * "offset/fraction on a value missing its time-of-day" shapes — e.g. a
+ * "offset/fraction on a value missing its time-of-day" shapes, e.g. a
  * dropped-dash ISO date like `"2026-0721"`, which would otherwise be silently
- * misread as year `2026` carrying a `-07:21` offset — while every legitimate
+ * misread as year `2026` carrying a `-07:21` offset, while every legitimate
  * partial-precision date (`YYYY`, `YYYYMM`, `YYYYMMDD`) still parses.
  *
  * @internal
@@ -131,12 +131,12 @@ const TS_RE =
  * optional `±HHMM` (or `±HH`) timezone offset. Per the CDA R2 / HL7 v3 `TS`
  * literal `YYYYMMDDHHMMSS.UUUU[±ZZzz]`, a fraction or offset is accepted **only
  * on a value that carries the time-of-day** (at least the hour): a fraction or
- * offset hung on a bare `YYYY`/`YYYYMM`/`YYYYMMDD` value — e.g. the dropped-dash
- * `"2026-0721"` — is rejected rather than silently misread. A value with no
+ * offset hung on a bare `YYYY`/`YYYYMM`/`YYYYMMDD` value, e.g. the dropped-dash
+ * `"2026-0721"`, is rejected rather than silently misread. A value with no
  * offset resolves to UTC for determinism; truncated values resolve to the first
  * instant of the stated precision (e.g. `2026` → `2026-01-01T00:00:00Z`).
  * Returns `undefined` when the value does not match the shape or is
- * calendar-invalid — never throws.
+ * calendar-invalid, never throws.
  *
  * @example
  * ```ts

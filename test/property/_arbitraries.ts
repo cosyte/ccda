@@ -1,7 +1,7 @@
 /**
  * Format-specific fast-check arbitraries for the `@cosyte/ccda` property suite.
  * The shared `@cosyte/test-utils` runners own the *invariants*; this module owns
- * the *generators* — synthetic, PHI-free C-CDA XML built from the fixture
+ * the *generators*, synthetic, PHI-free C-CDA XML built from the fixture
  * factory so the round-trip / immutability properties exercise real document
  * shapes (varied document types, record-target counts, and clinical sections)
  * rather than a single hand-written sample.
@@ -36,7 +36,7 @@ const DOC_OIDS: readonly string[] = DOC_TYPES.map((d) => d.oid);
 
 /**
  * Generate a spec-valid, PHI-free C-CDA XML string. Every value parses without
- * a Tier-3 fatal — the document type, record-target count, R2.1 stamp,
+ * a Tier-3 fatal, the document type, record-target count, R2.1 stamp,
  * declaration, and the structured vs. unstructured body all vary so the
  * serializer is exercised across the recognized surface.
  */

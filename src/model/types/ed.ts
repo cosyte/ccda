@@ -1,9 +1,9 @@
 /**
- * ED — HL7 v3 Encapsulated Data. Carries a `mediaType`, a `representation`
+ * ED, HL7 v3 Encapsulated Data. Carries a `mediaType`, a `representation`
  * (`TXT` or `B64`), and either inline content or a `<reference value="...">`.
  *
  * **Base64 quarantine:** when `representation` is `B64`, the inline content is
- * captured verbatim into `value` and **never decoded** here — decoding hostile
+ * captured verbatim into `value` and **never decoded** here, decoding hostile
  * base64 (which may carry images or arbitrary bytes) is out of scope for the
  * parser and a deliberate safety boundary (see `docs/adr/0001-xml-parser.md`).
  */
@@ -64,7 +64,7 @@ export function parseEd(el: Element | undefined, ctx: ParseCtx): ED | undefined 
     if (ref !== undefined) out.reference = ref;
   }
 
-  // Inline content is captured verbatim — base64 is quarantined, not decoded.
+  // Inline content is captured verbatim, base64 is quarantined, not decoded.
   const inline = text(el);
   if (inline !== undefined) out.value = inline;
 

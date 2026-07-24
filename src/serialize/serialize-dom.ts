@@ -10,8 +10,8 @@
  * is safe to re-emit.
  *
  * The output is conservative: a well-formed XML document with a UTF-8
- * declaration. Serialization is a **fixed point** — parsing the output and
- * re-serializing yields an identical string — which is what makes the
+ * declaration. Serialization is a **fixed point**, parsing the output and
+ * re-serializing yields an identical string, which is what makes the
  * round-trip + idempotency conformance invariants hold.
  *
  * @packageDocumentation
@@ -25,7 +25,7 @@ const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>';
 /**
  * Serialize a parsed `@xmldom/xmldom` {@link Document} to spec-clean XML text.
  * Re-emits the document verbatim at the node level (no lossy model
- * reconstruction) and guarantees a leading XML declaration. Pure — never
+ * reconstruction) and guarantees a leading XML declaration. Pure, never
  * mutates the document, never throws for a well-formed tree.
  *
  * @internal

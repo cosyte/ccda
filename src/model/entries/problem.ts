@@ -1,10 +1,10 @@
 /**
- * Problems extraction — the Problem Concern Act (`…22.4.3`) → Problem
+ * Problems extraction, the Problem Concern Act (`…22.4.3`) → Problem
  * Observation (`…22.4.4`) tree. The coded problem lives in the observation's
  * `value xsi:type="CD"` (SNOMED CT or ICD-10-CM); the concern act's
  * `statusCode` plus `effectiveTime` carry the active-vs-resolved state. The
  * concern wrapper is preserved (not flattened) because its status is
- * safety-relevant — an inactive/resolved problem must never read as active.
+ * safety-relevant, an inactive/resolved problem must never read as active.
  */
 
 import { child, positionOf } from "../dom.js";
@@ -33,9 +33,9 @@ export type ProblemStatus = ConcernStatus;
 
 /**
  * A single Problem Observation. `value` is the coded condition (SNOMED CT /
- * ICD-10-CM) — the field most consumers want; `code` is the observation's
+ * ICD-10-CM), the field most consumers want; `code` is the observation's
  * problem-type code. `negated` (from `@negationInd`) and `nullFlavor` are
- * **distinct** — a negated problem ("no chest pain") is not an unknown one.
+ * **distinct**, a negated problem ("no chest pain") is not an unknown one.
  *
  * @example
  * ```ts
@@ -126,7 +126,7 @@ function buildConcern(
 
 /**
  * Build one Problem Observation from its `<observation>` element. Exported so the
- * Past Medical History extractor can reuse it — that section carries bare Problem
+ * Past Medical History extractor can reuse it, that section carries bare Problem
  * Observations (`…22.4.4`) at the entry top level, not wrapped in a concern act.
  * @internal
  */

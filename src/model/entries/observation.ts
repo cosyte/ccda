@@ -1,13 +1,13 @@
 /**
  * Shared observation-value machinery for the discrete-data extractors (Results,
- * Vital Signs). A clinical observation's `value` is polymorphic — its concrete
+ * Vital Signs). A clinical observation's `value` is polymorphic, its concrete
  * HL7 v3 datatype is selected by `xsi:type` (a `PQ` measurement, a `CD`/`CE`
- * coded result, a free-text `ST`, an `IVL_PQ` range) — so this module reads it
+ * coded result, a free-text `ST`, an `IVL_PQ` range), so this module reads it
  * into a discriminated {@link ObservationValue} union, runs the **computable
  * UCUM** unit check on any physical quantity, and reads a result's reference
  * range. The lenient invariant holds throughout: an unrecognized `xsi:type` is
  * preserved as an `unsupported` value (nothing dropped), and a `PQ` with a
- * non-UCUM unit keeps its raw unit string — units are never normalized away.
+ * non-UCUM unit keeps its raw unit string, units are never normalized away.
  */
 
 import { attr, child, positionOf, text, xsiType } from "../dom.js";
@@ -30,10 +30,10 @@ import type { Element } from "@xmldom/xmldom";
  * A parsed observation `value`, discriminated on `kind`. `physicalQuantity`
  * carries a UCUM-checked {@link PQ}; `coded` a {@link CD}; `string` a free-text
  * value; `integer` a count/score (`xsi:type="INT"`, the type C-CDA prefers for
- * an assessment-scale score — units are not allowed on an `INT`); `range` an
+ * an assessment-scale score, units are not allowed on an `INT`); `range` an
  * {@link IVL_PQ}. `unsupported` preserves an `xsi:type` the model does not
  * specialize (with any raw text) so nothing is ever discarded. `integer` keeps
- * `value` and `nullFlavor` distinct — a scored `INT` never collapses into an
+ * `value` and `nullFlavor` distinct, a scored `INT` never collapses into an
  * unknown one, and vice versa.
  *
  * @example
@@ -56,7 +56,7 @@ export type ObservationValue =
 /**
  * A result's reference range. `low`/`high` are the structured numeric bounds (an
  * `IVL_PQ`); `text` is the free-text form (preserved when present). A range with
- * no structured bounds emits `FREE_TEXT_REFERENCE_RANGE` — it cannot be compared
+ * no structured bounds emits `FREE_TEXT_REFERENCE_RANGE`, it cannot be compared
  * numerically against the result value.
  *
  * @example
@@ -75,7 +75,7 @@ export interface ReferenceRange {
  * Validate a {@link PQ}'s `@unit` with the computable UCUM grammar, emitting the
  * appropriate Tier-2 warning: `MISSING_UNIT_ON_PQ` (numeric value, no unit),
  * `UCUM_CASE_SUSPECT` (a letter-case slip of a canonical unit), or
- * `NON_UCUM_UNIT` (not well-formed UCUM). The quantity itself is never mutated —
+ * `NON_UCUM_UNIT` (not well-formed UCUM). The quantity itself is never mutated,
  * the raw unit is always preserved.
  *
  * @example
@@ -137,12 +137,12 @@ export function readObservationValue(
     case "INT": {
       // A count/score (an assessment-scale score, a questionnaire answer). Units
       // are not allowed on an INT, so there is no UCUM check. Value and nullFlavor
-      // are read as distinct fields — an explicit-unknown score (nullFlavor="UNK")
+      // are read as distinct fields, an explicit-unknown score (nullFlavor="UNK")
       // is never collapsed into a real one, nor a real one dropped.
       const raw = attr(valueEl, "value");
       const nullFlavor = attr(valueEl, "nullFlavor");
       if (raw !== undefined) {
-        // Strict numeric parse — reject whitespace-only / non-numeric so a malformed
+        // Strict numeric parse, reject whitespace-only / non-numeric so a malformed
         // INT is never coerced into a fabricated score (e.g. Number(" ") === 0). An
         // un-parseable @value is preserved + flagged (Postel: never a silent drop),
         // exactly as any other unhandled typed value.
@@ -156,7 +156,7 @@ export function readObservationValue(
         if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
         return out;
       }
-      // No @value: an explicit-unknown score (nullFlavor="UNK") or a bare INT — read
+      // No @value: an explicit-unknown score (nullFlavor="UNK") or a bare INT, read
       // as an integer with no number, never a fabricated one, and never a warning
       // (a nullFlavor score is a legitimate, spec-clean "unknown").
       const out: { kind: "integer"; nullFlavor?: string } = { kind: "integer" };

@@ -5,7 +5,7 @@
  * the safety set, and the profile types.
  *
  * The individual built-ins are reached via `ccdaProfiles.smartScorecard` etc.,
- * not as top-level named exports — mirrors the sibling `@cosyte/hl7` `profiles`
+ * not as top-level named exports, mirrors the sibling `@cosyte/hl7` `profiles`
  * namespace convention ("default"/"legacyR11" are too generic for a top-level
  * export).
  */

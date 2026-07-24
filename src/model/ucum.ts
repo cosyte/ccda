@@ -1,17 +1,17 @@
 /**
  * A computable, zero-dependency, license-clean validator for the **Unified Code
- * for Units of Measure** (UCUM) — the unit grammar C-CDA `PQ` values are bound
+ * for Units of Measure** (UCUM), the unit grammar C-CDA `PQ` values are bound
  * to. UCUM's atom + prefix tables are public identifiers (not redistributable
  * licensed *data* like SNOMED/RxNorm), so the suite can ship a grammar without
  * the bring-your-own-terminology dance the coded slots need.
  *
  * This is a **syntactic** validator: it answers "is this a well-formed UCUM
- * unit?" by recursive descent over the case-sensitive (`c/s`) grammar — terms
+ * unit?" by recursive descent over the case-sensitive (`c/s`) grammar, terms
  * joined by `.`/`/`, parenthesized sub-terms, metric prefixes on metric atoms,
  * bracket atoms (`m[Hg]`, `[degF]`), the `10*`/`10^` power atoms, integer
  * exponents, and `{annotations}`. It deliberately does **not** convert or
  * dimension-check units (no mmol↔mg), and the atom set is a curated
- * clinical-relevant subset, not the full UCUM table — enough to validate the
+ * clinical-relevant subset, not the full UCUM table, enough to validate the
  * units that actually appear in lab Results and Vital Signs, and to flag the
  * rest with `NON_UCUM_UNIT` rather than silently trusting them.
  */
@@ -40,7 +40,7 @@ const PREFIXES: readonly string[] = [
   "y",
 ];
 
-/** Metric (prefixable) atom symbols — a curated clinical-relevant subset. @internal */
+/** Metric (prefixable) atom symbols, a curated clinical-relevant subset. @internal */
 const METRIC_ATOMS: readonly string[] = [
   "m[Hg]",
   "m[H2O]",
@@ -73,7 +73,7 @@ const METRIC_ATOMS: readonly string[] = [
   "R",
 ];
 
-/** Non-metric (non-prefixable) atom symbols — curated clinical-relevant subset. @internal */
+/** Non-metric (non-prefixable) atom symbols, curated clinical-relevant subset. @internal */
 const NON_METRIC_ATOMS: readonly string[] = [
   "[arb'U]",
   "[lb_av]",
@@ -251,10 +251,10 @@ function parseTerm(c: Cursor): boolean {
 
 /**
  * Validate a string as a well-formed UCUM unit (case-sensitive). Returns `true`
- * only when the **entire** string parses — `mg/dL`, `mm[Hg]`, `10*3/uL`, `Cel`,
+ * only when the **entire** string parses, `mg/dL`, `mm[Hg]`, `10*3/uL`, `Cel`,
  * `%`, `/min`, `kg/m2`, `1` are valid; `mcg`, `cc`, `mg//dL` and partial garbage
  * are not. This is a grammatical check: a case slip like `Mg/dL` is well-formed
- * UCUM (megagram/deciliter) so it validates here — {@link isUcumCaseSuspect}
+ * UCUM (megagram/deciliter) so it validates here, {@link isUcumCaseSuspect}
  * catches the clinical case-confusion separately. Never throws.
  *
  * @example
@@ -321,7 +321,7 @@ const CANONICAL_LOWER_SET: ReadonlySet<string> = new Set(
 
 /**
  * Detect the case-confusion trap: a unit that is **not** a canonical clinical
- * spelling but whose case-folded form is one — `Mg`/`MG` for `mg`, `ML` for
+ * spelling but whose case-folded form is one, `Mg`/`MG` for `mg`, `ML` for
  * `mL`, `mEq` for `meq`. These are reported as `UCUM_CASE_SUSPECT` (more
  * actionable than `NON_UCUM_UNIT`) because the likely fix is a single
  * letter-case change. A unit already spelled canonically returns `false`.

@@ -12,7 +12,7 @@ import {
   IMMUNIZATIONS_SECTION,
 } from "./__fixtures__/ccda.js";
 
-describe("serializeCcda — round-trip faithfulness", () => {
+describe("serializeCcda, round-trip faithfulness", () => {
   it("re-emits a parsed document and re-parses to the same model", () => {
     const doc = parseCcda(buildCcda({ sections: TRIAD_SECTIONS }));
     const xml = serializeCcda(doc);
@@ -24,7 +24,7 @@ describe("serializeCcda — round-trip faithfulness", () => {
     expect(reparsed.allSections().map((s) => s.key)).toEqual(doc.allSections().map((s) => s.key));
   });
 
-  it("is a fixed point — serialize(parse(serialize(x))) === serialize(x)", () => {
+  it("is a fixed point, serialize(parse(serialize(x))) === serialize(x)", () => {
     const once = serializeCcda(parseCcda(buildCcda({ sections: TRIAD_SECTIONS })));
     const twice = serializeCcda(parseCcda(once));
     expect(twice).toBe(once);
@@ -65,7 +65,7 @@ describe("serializeCcda — round-trip faithfulness", () => {
   });
 });
 
-describe("serializeCcda — declaration handling", () => {
+describe("serializeCcda, declaration handling", () => {
   it("guarantees an XML declaration on the output", () => {
     const doc = parseCcda(buildCcda());
     expect(serializeCcda(doc).startsWith('<?xml version="1.0"')).toBe(true);
@@ -86,7 +86,7 @@ describe("serializeCcda === toString", () => {
   });
 });
 
-describe("CcdaDocument.toString — hand-constructed guard", () => {
+describe("CcdaDocument.toString, hand-constructed guard", () => {
   it("throws when no source document was retained", () => {
     const doc = new CcdaDocument({
       templateIds: [],
@@ -112,7 +112,7 @@ describe("CcdaDocument.toString — hand-constructed guard", () => {
   });
 });
 
-describe("CcdaDocument.withWarnings — structural-sharing copy-with", () => {
+describe("CcdaDocument.withWarnings, structural-sharing copy-with", () => {
   const EXTRA: CcdaWarning = {
     code: "SECTION_PLACEMENT_SUSPECT",
     message: "synthetic annotation",
@@ -147,7 +147,7 @@ describe("CcdaDocument.withWarnings — structural-sharing copy-with", () => {
   });
 });
 
-describe("serializeCcda — golden snapshot", () => {
+describe("serializeCcda, golden snapshot", () => {
   it("emits a stable spec-clean document for the triad fixture", () => {
     const doc = parseCcda(buildCcda({ sections: TRIAD_SECTIONS }));
     expect(serializeCcda(doc)).toMatchSnapshot();
