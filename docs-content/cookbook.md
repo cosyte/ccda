@@ -7,7 +7,7 @@ sidebar_position: 2
 # Cookbook
 
 Task-oriented recipes for the C-CDA jobs you actually get handed. Each one is: here's the problem,
-here's the code, here's what you get back. Every symbol below is a real `@cosyte/ccda` export — no
+here's the code, here's what you get back. Every symbol below is a real `@cosyte/ccda` export: no
 pseudo-API. All sample XML is **synthetic** (an invented patient, obviously-fake OIDs); never paste a
 real clinical document into a doc or a test.
 
@@ -18,7 +18,7 @@ a parsed `CcdaDocument`.
 
 ## 1. Read the active problem list
 
-**The problem:** you have a CCD and want the patient's **active** conditions with their coded values —
+**The problem:** you have a CCD and want the patient's **active** conditions with their coded values,
 not the resolved or inactive ones.
 
 The concern act's `status` is the safety-relevant field: an inactive or resolved problem must never
@@ -78,7 +78,7 @@ const active = doc.getProblems().filter((c) => c.status === "active");
 active.length; // => 1
 active[0]?.problems[0]?.value?.code; // => "59621000"
 
-// The resolved concern is still present — it is just not "active".
+// The resolved concern is still present. It is just not "active".
 doc.getProblems().length; // => 2
 doc.getProblems().map((c) => c.status); // => ["active", "resolved"]
 ```
@@ -87,7 +87,7 @@ doc.getProblems().map((c) => c.status); // => ["active", "resolved"]
 
 ## 2. Respect the code/narrative fail-safe
 
-**The problem:** the structured code and the human-readable narrative can disagree — a real and
+**The problem:** the structured code and the human-readable narrative can disagree, a real and
 dangerous vendor defect. You must never silently trust one over the other.
 
 When a coded value's label disagrees with the narrative it references, the parser surfaces **both** and
@@ -133,7 +133,7 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
 const doc = parseCcda(xml);
 const problem = doc.getProblems()[0]?.problems[0];
 
-// Both views are preserved — the parser picks no winner.
+// Both views are preserved. The parser picks no winner.
 problem?.value?.displayName; // => "Essential hypertension"
 problem?.narrative; // => "Type 2 diabetes mellitus"
 
@@ -144,7 +144,7 @@ conflicted; // => true
 
 ---
 
-## 3. Triage warnings — the lenient, never-throw contract
+## 3. Triage warnings: the lenient, never-throw contract
 
 **The problem:** you want to log or triage every tolerated deviation without your pipeline throwing on
 a vendor quirk. `@cosyte/ccda` is liberal on input: only the seven Tier-3 structural/security errors
@@ -155,7 +155,7 @@ Every warning collects on `doc.warnings`; you can also stream them live via `onW
 ```ts runnable
 import { parseCcda, WARNING_CODES, type CcdaWarning } from "@cosyte/ccda";
 
-// A section with an unrecognized LOINC code — tolerated, retained as narrative-only.
+// A section with an unrecognized LOINC code: tolerated, retained as narrative-only.
 const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <realmCode code="US"/>
@@ -183,9 +183,9 @@ const streamed: CcdaWarning[] = [];
 const doc = parseCcda(xml, {
   onWarning: (w) => {
     streamed.push(w);
-    // w.code — a stable string from WARNING_CODES
-    // w.message — bounded, PHI-free (never echoes names/ids/dates/narrative)
-    // w.position — where in the document it occurred (element path, OID, LOINC)
+    // w.code: a stable string from WARNING_CODES
+    // w.message: bounded, PHI-free (never echoes names/ids/dates/narrative)
+    // w.position: where in the document it occurred (element path, OID, LOINC)
   },
 });
 
@@ -193,19 +193,19 @@ const doc = parseCcda(xml, {
 doc.warnings.some((w) => w.code === WARNING_CODES.UNKNOWN_SECTION_CODE); // => true
 streamed.length > 0; // => true
 
-// Every message is safe to log — no PHI by construction.
+// Every message is safe to log: no PHI by construction.
 doc.warnings.every((w) => typeof w.message === "string"); // => true
 ```
 
 **Escalate when you want strictness.** Pass `{ strict: true }` to turn the first tolerated deviation
-into a thrown `CcdaParseError` carrying the same code — a spec-conformance gate for a trusted sender.
+into a thrown `CcdaParseError` carrying the same code: a spec-conformance gate for a trusted sender.
 
 ---
 
 ## 4. Round-trip a document through the serializer
 
-**The problem:** you parsed a document, and now need spec-clean XML back out — for storage, forwarding,
-or a diff — with a guarantee that nothing was silently lost.
+**The problem:** you parsed a document, and now need spec-clean XML back out (for storage, forwarding,
+or a diff) with a guarantee that nothing was silently lost.
 
 `serializeCcda(doc)` (or `doc.toString()`) re-emits the **parsed** document faithfully: every attribute,
 namespace, `templateId`, and unmodeled element survives, and the result is a fixed point.
@@ -239,14 +239,14 @@ serializeCcda(parseCcda(out)) === out; // => true
 
 > `serializeCcda` re-emits a **parsed** document. To construct one from scratch, use `buildCcda`
 > (below). Editing an existing document, and section/document-type coverage beyond the builder's first
-> slice, are a later increment — see [Troubleshooting](./troubleshooting#whats-not-yet-parsed).
+> slice, are a later increment: see [Troubleshooting](./troubleshooting#whats-not-yet-parsed).
 
 ---
 
 ## 5. Build a spec-clean CCD from scratch
 
 **The problem:** you have structured clinical data (a patient, some problems, some allergies) and need
-a valid C-CDA document to send — without hand-writing XML or memorizing templateIds.
+a valid C-CDA document to send, without hand-writing XML or memorizing templateIds.
 
 `buildCcda(init)` is the emit _factory_ symmetric with `parseCcda`. It emits through the same DOM the
 parser reads, so a built document round-trips by construction and a clean build carries zero warnings.
@@ -278,9 +278,9 @@ parseCcda(out).toString() === out; // => true
 ```
 
 `buildCcda` populates the reconciliation triad (Problems, Allergies, Medications) plus the
-discrete-data families — Results, Vital Signs, and **Immunizations**. A vaccine is coded with CVX;
+discrete-data families: Results, Vital Signs, and **Immunizations**. A vaccine is coded with CVX;
 its dose and route are emitted only when supplied (never guessed), and a **refused** shot is a
-`negationInd` record the parser reads back distinctly — never confused with an "unknown":
+`negationInd` record the parser reads back distinctly, never confused with an "unknown":
 
 ```ts runnable
 import { buildCcda } from "@cosyte/ccda";
@@ -294,7 +294,7 @@ const doc = buildCcda({
       route: { code: "C28161", displayName: "Intramuscular" }, // NCI Thesaurus
       effectiveTime: "20240101",
     },
-    // A refused shot: emitted as negationInd="true", flagged IMMUNIZATION_REFUSED — never an "unknown".
+    // A refused shot: emitted as negationInd="true", flagged IMMUNIZATION_REFUSED, never an "unknown".
     { vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" }, refused: true },
   ],
 });
@@ -305,7 +305,7 @@ doc.warnings.map((w) => w.code).includes("IMMUNIZATION_REFUSED"); // => true
 ```
 
 `buildCcda` also emits **Procedures** and **Encounters** when supplied. A procedure's
-`disposition` sets the performed-vs-planned `moodCode` (`performed` → `EVN`, `planned` → `INT`) — the
+`disposition` sets the performed-vs-planned `moodCode` (`performed` → `EVN`, `planned` → `INT`). The
 parser reads it back distinctly, so a _planned_ procedure is never reported as performed. An
 encounter carries its coded type (CPT by default) and a visit period:
 
@@ -341,7 +341,7 @@ doc.warnings.length; // => 0
 `buildCcda` also emits a **Social History** section carrying **Smoking Status** observations when
 supplied. A known status is a SNOMED CT concept from the Current Smoking Status value set. An
 _unknown_ status is never guessed: omit `value` and the builder emits an explicit `nullFlavor="UNK"`,
-which the parser reads back as `unknown` — absent status is never read as "never smoker":
+which the parser reads back as `unknown`, absent status is never read as "never smoker":
 
 ```ts runnable
 import { buildCcda } from "@cosyte/ccda";
@@ -361,7 +361,7 @@ doc.getSmokingStatus()[1]?.unknown; // => true
 ```
 
 > Current builder scope: `buildCcda` emits a CCD with the US Realm header, the CCD SHALL sections
-> (Problems, Allergies, Medications, Results, Vital Signs — emitted empty as `nullFlavor="NI"` when no
+> (Problems, Allergies, Medications, Results, Vital Signs, emitted empty as `nullFlavor="NI"` when no
 > content is supplied), and **Immunizations**, **Procedures**, **Encounters**, **Social History**
 > (Smoking Status), **Functional Status**, **Mental Status** (each carrying standalone findings,
 > Functional/Mental Status Organizers, and **direct-entry Assessment Scale Observations** `…22.4.69` with
@@ -371,10 +371,10 @@ doc.getSmokingStatus()[1]?.unknown; // => true
 > sections when populated. The remaining builder work (the other eleven document types and a
 > bring-your-own-credentials terminology adapter) is a later increment.
 
-## 6. Edit a parsed document — add or replace a section, keep a revision trail
+## 6. Edit a parsed document: add or replace a section, keep a revision trail
 
 **The problem:** you have a real C-CDA document, and you need to correct one section (add a Problem,
-swap out the Medications) and send the fix — **without** disturbing every other section or losing the
+swap out the Medications) and send the fix, **without** disturbing every other section or losing the
 audit trail that this is a new version of the original.
 
 `editCcda(doc, options)` is the read→edit→write loop. It takes a document from `parseCcda`, rebuilds
@@ -439,7 +439,7 @@ absent (or `"replace"` to require it present); the default `"upsert"` replaces w
 when absent. Pass `revision: false` to edit in place without stamping a new version. Revising a source
 that carries no `ClinicalDocument.id` throws `CcdaEditError` (`SOURCE_MISSING_ID`): the RPLC
 `parentDocument.id` is a CDA R2 SHALL (1..\*) and there is no prior-version id to name, so `editCcda`
-refuses rather than mint a fabricated identifier — edit such a document in place with `revision: false`.
+refuses rather than mint a fabricated identifier. Edit such a document in place with `revision: false`.
 
 > Editing scope: whole-section **add** / **replace** across the twelve single-list section kinds
 > (Problems, Allergies, Medications, Results, Vital Signs, Immunizations, Procedures, Encounters,

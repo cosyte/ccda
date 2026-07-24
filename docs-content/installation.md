@@ -8,16 +8,16 @@ sidebar_position: 1
 
 `@cosyte/ccda` is a TypeScript C-CDA toolkit for Node.js. It ships dual **ESM + CJS** builds with
 per-condition type declarations, so it works from either module system without configuration, and it
-has a **single** exact-pinned runtime dependency — the hardened W3C-DOM substrate `@xmldom/xmldom`
+has a **single** exact-pinned runtime dependency: the hardened W3C-DOM substrate `@xmldom/xmldom`
 (ratified by an ADR for C-CDA's XML; C-CDA is XML, so a DOM is unavoidable).
 
-> **Status:** **published on npm at `0.0.1`** and **public** — still pre-alpha on the cosyte `0.0.x`
+> **Status:** **published on npm at `0.0.1`** and **public**, still pre-alpha on the cosyte `0.0.x`
 > version ladder (`0.0.x` until first alpha). The install command below is live.
 
 ## Prerequisites
 
 - **Node.js >= 22.** The whole `@cosyte/*` suite targets ES2023 / Node 22+.
-- A package manager — `pnpm`, `npm`, or `yarn`.
+- A package manager: `pnpm`, `npm`, or `yarn`.
 - **One runtime dependency.** `@xmldom/xmldom` (exact-pinned) is the only runtime dep; the parser
   caps itself at **≤ 3** justified deps and adds none without an ADR. There is no native build and no
   post-install script.
@@ -30,13 +30,13 @@ npm install @cosyte/ccda
 
 ## Smoke test
 
-Confirm the package resolves and a real entry point is callable — parse the smallest valid US Realm
+Confirm the package resolves and a real entry point is callable. Parse the smallest valid US Realm
 `ClinicalDocument` and read its recognized document type back:
 
 ```ts runnable
 import { parseCcda } from "@cosyte/ccda";
 
-// Synthetic header-only CCD — invented patient, fake OIDs. No real PHI.
+// Synthetic header-only CCD: invented patient, fake OIDs. No real PHI.
 const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <realmCode code="US"/>
@@ -63,7 +63,7 @@ doc.getPatient()?.name?.family; // => "Doe"
 Array.isArray(doc.warnings); // => true
 ```
 
-If that resolves and returns, the install is good — head to the [Quickstart](./quickstart).
+If that resolves and returns, the install is good. Head to the [Quickstart](./quickstart).
 
 ## Module systems
 
@@ -86,9 +86,9 @@ actually load.
 
 ## PHI discipline
 
-Every example in this documentation uses **synthetic** fixtures — an invented patient, obviously-fake
+Every example in this documentation uses **synthetic** fixtures: an invented patient, obviously-fake
 OIDs and MRNs. Do the same in your own tests: a C-CDA document is a clinical record, and a real one
 committed to a repository is a PHI leak the moment it publishes. The parser helps: every warning and
-error message is **PHI-free by construction** — it carries only structural locators (element names,
+error message is **PHI-free by construction**: it carries only structural locators (element names,
 OIDs, LOINC codes, positions), never a patient name, an identifier, or narrative text. See
 [Troubleshooting](./troubleshooting) for the redaction posture.

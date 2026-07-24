@@ -21,28 +21,28 @@ Each family is reached in one call; every safety-critical distinction is **kept 
 | `getProcedures()` | Performed **or** planned procedures, split by `moodCode`. |
 | `getEncounters()` | Encounter Activities → visit type, status, period. |
 | `getSmokingStatus()` | Smoking Status observations → SNOMED value + an explicit `unknown` flag. |
-| `getPlannedItems()` | Plan of Treatment entries — all future/ordered, never performed. |
+| `getPlannedItems()` | Plan of Treatment entries: all future/ordered, never performed. |
 | `getFunctionalStatus()` / `getMentalStatus()` | Functional / Mental Status findings + direct-entry Assessment Scale Observations (`assessmentScale`, with an `INT` score + `supporting` items), domain-tagged so the two never merge. |
-| `getFamilyHistory()` | One entry per relative — structured identity + their conditions. |
+| `getFamilyHistory()` | One entry per relative: structured identity + their conditions. |
 | `getPastMedicalHistory()` | Bare historical Problem Observations (never double-counted as active). |
 
 ## The safety-critical distinctions
 
 These are the reconciliations where a silent guess could harm someone, so the parser refuses to guess:
 
-- **Performed vs planned** (Procedures, Plan of Treatment) — the `moodCode` drives a `disposition` of
+- **Performed vs planned** (Procedures, Plan of Treatment): the `moodCode` drives a `disposition` of
   `"performed"` (`EVN`) vs `"planned"` (`INT`/`RQO`/…). A missing mood is `PLANNED_VS_PERFORMED_AMBIGUOUS`
   and an unrecognized one is `PROCEDURE_MOOD_UNEXPECTED`; both leave `disposition` undefined rather than
   guess. A planned colonoscopy is **never** read as a performed one.
-- **Severity vs criticality** (Allergies) — a reaction's `severity` (how bad this event was) and the
+- **Severity vs criticality** (Allergies): a reaction's `severity` (how bad this event was) and the
   propensity's `criticality` (how dangerous future exposure is) are different axes, kept on different
   fields, never merged.
-- **Negated vs unknown** — "No Known Allergies" (`noKnownAllergy`, from `negationInd`) and a refused
+- **Negated vs unknown**: "No Known Allergies" (`noKnownAllergy`, from `negationInd`) and a refused
   immunization (`refused`) are distinct from a `nullFlavor` "unknown". A refusal is never read as an
   administration.
-- **Code vs narrative** — when a coded value disagrees with the narrative text it references, the
+- **Code vs narrative**: when a coded value disagrees with the narrative text it references, the
   parser surfaces **both** (`CODE_NARRATIVE_MISMATCH`) and picks no winner.
-- **Missing safety fields** — a missing `doseQuantity` / `routeCode` is preserved-as-absent and flagged,
+- **Missing safety fields**: a missing `doseQuantity` / `routeCode` is preserved-as-absent and flagged,
   never defaulted.
 
 The performed-vs-planned split, exercised:
@@ -104,7 +104,7 @@ function doc(x: string) {
 ## Required-section (SHALL) validation
 
 For a recognized document type, an absent required (SHALL) catalog section surfaces a
-`REQUIRED_SECTION_MISSING` **warning** — never a fatal, so a missing section never blocks reading the
+`REQUIRED_SECTION_MISSING` **warning**, never a fatal, so a missing section never blocks reading the
 data that *is* present. The table is **conservative**: it asserts only unconditional, in-catalog,
 high-confidence SHALL constraints and omits choice constraints (`SHALL contain A OR B`), SHOULD/MAY
 sections, and SHALL sections outside the recognized catalog. `requiredSectionKeys(documentType)` and

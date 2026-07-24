@@ -6,12 +6,12 @@ sidebar_position: 1
 
 # Quickstart
 
-This page gives you a first useful result: read a **Continuity of Care Document (CCD)** — the most
-common C-CDA — and pull out who the patient is and their reconciliation triad (Problems, Medications,
+This page gives you a first useful result: read a **Continuity of Care Document (CCD)**, the most
+common C-CDA, and pull out who the patient is and their reconciliation triad (Problems, Medications,
 Allergies), plus a lab result and an immunization, in a few lines. The CCD is what a hospital hands you
 on a transition of care, so it is the fastest way to see the library earn its keep.
 
-The parser is **lenient** — vendor quirks become stable-coded `warnings`, never silent failures — and
+The parser is **lenient** (vendor quirks become stable-coded `warnings`, never silent failures) and
 every coded value is preserved verbatim: a code that disagrees with its narrative surfaces **both** and
 picks no winner (`CODE_NARRATIVE_MISMATCH`); a missing dose or route is flagged, never defaulted.
 
@@ -138,41 +138,41 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
 
 const doc = parseCcda(xml);
 
-// Identity — whose document, what kind.
+// Identity: whose document, what kind.
 doc.documentType; // => "ccd"
 doc.getPatient()?.name?.family; // => "Doe"
 doc.getPatient()?.genderCode?.code; // => "F"
 doc.getPatient()?.birthTime?.raw; // => "19800101"
 doc.getMrn(); // => "MRN-00042"
 
-// Problems — the coded condition (SNOMED CT), and the concern's active/resolved status.
+// Problems: the coded condition (SNOMED CT), and the concern's active/resolved status.
 const concern = doc.getProblems()[0];
 concern?.status; // => "active"
 concern?.problems[0]?.value?.code; // => "59621000"
 
-// Medications — the RxNorm drug and its dose.
+// Medications: the RxNorm drug and its dose.
 const med = doc.getMedications()[0];
 med?.drug?.code; // => "314076"
 med?.dose?.value; // => 10
 med?.dose?.unit; // => "mg"
 
-// Allergies — "No Known Allergies" is a distinct flag, never confused with "unknown".
+// Allergies: "No Known Allergies" is a distinct flag, never confused with "unknown".
 doc.getAllergies()[0]?.allergies[0]?.noKnownAllergy; // => true
 
-// Results — the polymorphic value is UCUM-checked; here a physical quantity.
+// Results: the polymorphic value is UCUM-checked; here a physical quantity.
 const result = doc.getResults()[0]?.results[0];
 result?.code?.code; // => "718-7"
 result?.value?.kind; // => "physicalQuantity"
 result?.interpretation?.code; // => "N"
 
-// Immunizations — the CVX vaccine code.
+// Immunizations: the CVX vaccine code.
 doc.getImmunizations()[0]?.vaccine?.code; // => "140"
 
 // Clean, spec-conformant input: nothing tolerated, nothing flagged.
 doc.warnings.length; // => 0
 ```
 
-The `noKnownAllergy` flag is the safety primitive on the allergy side — a negated "no known allergies"
+The `noKnownAllergy` flag is the safety primitive on the allergy side: a negated "no known allergies"
 assertion is never read as an absent or unknown one. On the medication side, `dose` and `route` are
 preserved-as-absent and flagged (`MISSING_DOSE_QUANTITY` / `MISSING_ROUTE_CODE`) when missing, never
 silently defaulted.
@@ -180,7 +180,7 @@ silently defaulted.
 ## Lenient by default; strict when you want it
 
 A recoverable vendor quirk becomes a stable-coded warning, not a failure. Here an unrecognized section
-LOINC code is tolerated — the section is retained as narrative-only and an `UNKNOWN_SECTION_CODE`
+LOINC code is tolerated. The section is retained as narrative-only and an `UNKNOWN_SECTION_CODE`
 warning is raised:
 
 ```ts runnable
@@ -227,29 +227,29 @@ try {
 typeof escalated; // => "string"
 ```
 
-## Unrecoverable input throws — everything else is a warning
+## Unrecoverable input throws: everything else is a warning
 
-Only unrecoverable structural / hostile input throws a typed `CcdaParseError` — malformed XML, a
+Only unrecoverable structural / hostile input throws a typed `CcdaParseError`: malformed XML, a
 non-`ClinicalDocument` root, or a security tripwire (DTD/XXE, entity-expansion, or size/depth/node
 limits). A well-formed document with vendor quirks never throws; the quirks collect on `.warnings`.
 
 ```ts runnable throws
 import { parseCcda } from "@cosyte/ccda";
 
-// Not a ClinicalDocument at all — a structural fatal, not a tolerated quirk.
+// Not a ClinicalDocument at all: a structural fatal, not a tolerated quirk.
 parseCcda("<Foo>not a clinical document</Foo>"); // throws CcdaParseError (NOT_A_CLINICAL_DOCUMENT)
 ```
 
 ## Next
 
-- [Core Concepts](./spec-notes-model) — the document model, the tolerance tiers, the clinical entry
+- [Core Concepts](./spec-notes-model): the document model, the tolerance tiers, the clinical entry
   layer, and the datatype/code-system machinery.
-- [Cookbook](./cookbook) — recipes: active-problem filtering, the code/narrative fail-safe, the
+- [Cookbook](./cookbook): recipes for active-problem filtering, the code/narrative fail-safe, the
   performed-vs-planned split, warning triage, and the round-trip serializer.
-- [Troubleshooting & known limitations](./troubleshooting) — the fatal codes, the fail-safe rules, and
+- [Troubleshooting & known limitations](./troubleshooting): the fatal codes, the fail-safe rules, and
   the explicit "what's not yet parsed" list.
 
 > **About runnable examples.** The blocks tagged ` ```ts runnable ` above are extracted by the test
-> suite, executed against the built package, and their `// =>` results asserted — so a documented
+> suite, executed against the built package, and their `// =>` results asserted, so a documented
 > example can never silently drift from the code (`docSnippetSuite()`, the documentation analog of the
 > parser conformance runners). Blocks shown as plain ` ```ts ` are illustrative.
