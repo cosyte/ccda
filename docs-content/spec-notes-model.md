@@ -5,7 +5,7 @@ sidebar_label: The document model
 sidebar_position: 1
 ---
 
-# The document model — recognition, header, sections
+# The document model: recognition, header, sections
 
 A C-CDA is a CDA R2 `ClinicalDocument`: a **US Realm header** (who, what kind, when) wrapping a
 **body** that is either a `structuredBody` (a tree of `<section>`s) or a `nonXMLBody` (a wrapped PDF /
@@ -25,7 +25,7 @@ Summary). Recognition is fail-safe:
   `TEMPLATE_EXTENSION_ABSENT`, matched by root alone (it may pre-date R2.1).
 
 The generic US Realm Header / CDA-base templates are deliberately **not** in the type table, so they
-are passed over — only a specific document-type `templateId` resolves a `documentType`.
+are passed over: only a specific document-type `templateId` resolves a `documentType`.
 
 ## The US Realm header
 
@@ -88,14 +88,14 @@ doc.findSection("allergies")?.narrativeText; // => "No known allergies."
 ## Unstructured documents
 
 An Unstructured Document carries a `nonXMLBody` instead of a `structuredBody`. The parser exposes its
-wrapped content on `doc.nonXmlBody` as an `ED` datatype and **leaves any base64 payload inert** — it is
+wrapped content on `doc.nonXmlBody` as an `ED` datatype and **leaves any base64 payload inert**: it is
 never decoded (decoding an arbitrary embedded blob is a needless attack surface and a PHI-handling
 decision the caller owns).
 
 ## Immutability
 
-A `CcdaDocument` is frozen at the model boundary — accessors return the parsed data by reference and
+A `CcdaDocument` is frozen at the model boundary: accessors return the parsed data by reference and
 callers cannot mutate parser output. The one sanctioned copy-with is `doc.withWarnings(extra)`, which
 returns a **new** document with extra warnings appended, sharing every parsed field by reference and
-leaving the original untouched (the foundation the builder — `buildCcda` — and later content-edit
+leaving the original untouched (the foundation the builder `buildCcda` and later content-edit
 increments extend).

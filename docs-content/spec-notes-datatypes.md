@@ -10,42 +10,42 @@ sidebar_position: 4
 ## HL7 v3 datatypes
 
 C-CDA is built on the HL7 v3 abstract datatypes. The parser reads the ones that carry clinical meaning
-into typed shapes: `II` (instance identifier), `ST` (string), `BL` (boolean), `CD` (coded — the
+into typed shapes: `II` (instance identifier), `ST` (string), `BL` (boolean), `CD` (coded: the
 constrained `CE` parses into the same `CD` shape), `PQ` (physical quantity), `IVL_PQ` (quantity
 interval), `TS` (point in time), `IVL_TS` (time interval), and `ED` (encapsulated data). A `TS` supports **variable precision** (year → year-month → … → second) and
 exposes both the verbatim `raw` string and a parsed `date`; a malformed value keeps its `raw` and
 leaves `date` undefined (`MALFORMED_DATETIME`). Following the canonical CDA R2 / HL7 v3 `TS` literal
 `YYYYMMDDHHMMSS.UUUU[±ZZzz]` (and the ISO 8601 it derives from), a fractional-second or `±ZZZZ`
-timezone offset is only accepted once the **time-of-day** (at least the hour) is present — an offset
+timezone offset is only accepted once the **time-of-day** (at least the hour) is present. An offset
 or fraction hung on a bare date, such as the dropped-dash `"2026-0721"`, is a malformed value, not a
 year `2026` with a `-07:21` offset. `@nullFlavor` is preserved verbatim
 throughout, and a value outside the HL7 v3 NullFlavor set is flagged (`INVALID_NULL_FLAVOR`) rather than
 dropped.
 
-On the **emit** side `buildCcda` is symmetric but strict (Postel's Law — conservative on emit): every
+On the **emit** side `buildCcda` is symmetric but strict (Postel's Law, conservative on emit): every
 date it writes into an `<effectiveTime>`/`low`/`high`/`value`/`birthTime` is validated against the same
 v3 TS grammar the parser reads, so a malformed caller input (`"2026-07-21"` with dashes, `"July 2026"`,
 or a calendar-invalid `"20260230"`) **throws a `TypeError` at build time** rather than serializing a
 schema-invalid or clinically-misread timestamp. Legitimate variable precision (`"2026"`, `"202607"`,
 `"20260721"`) is accepted unchanged. The builder never guesses or coerces a date it was given in the
-wrong shape — it fails loud. Everything it does accept round-trips back through `parseCcda` without a
+wrong shape. It fails loud. Everything it does accept round-trips back through `parseCcda` without a
 `MALFORMED_DATETIME` warning.
 
-## Code systems — recognition, not membership
+## Code systems: recognition, not membership
 
 Coded slots are validated **structurally**: `checkCodeSlot` checks that a value's `@codeSystem` OID is
 one expected for its slot (e.g. RxNorm on a medication, SNOMED CT / ICD-10-CM on a problem) and flags a
 deprecated (`DEPRECATED_CODE_SYSTEM`, e.g. ICD-9) or unexpected (`UNEXPECTED_CODE_SYSTEM`) terminology.
-It deliberately does **not** verify that a code is a real member of its system — that needs licensed
+It deliberately does **not** verify that a code is a real member of its system: that needs licensed
 terminology content (SNOMED CT / RxNorm via UMLS) this suite never bundles. The exported OIDs
 (`SNOMED_CT`, `RXNORM`, `ICD10_CM`, `LOINC`, `NDC`, `UNII`, `CVX`, …) are public identifiers, not
-redistributable code-system data — bring your own terminology service for membership checks.
+redistributable code-system data. Bring your own terminology service for membership checks.
 
 ## Computable UCUM units
 
 Every physical quantity (`PQ`) `@unit` is checked against a **computable, zero-dependency UCUM grammar**.
 A non-UCUM unit is flagged `NON_UCUM_UNIT`; a letter-case slip (e.g. `ML` for `mL`) is caught as
-`UCUM_CASE_SUSPECT`. The **raw unit is always preserved — never normalized away**, so a quantity is
+`UCUM_CASE_SUSPECT`. The **raw unit is always preserved, never normalized away**, so a quantity is
 never silently re-dimensioned. The validators are exported for your own use:
 
 ```ts runnable
@@ -58,16 +58,16 @@ isUcumCaseSuspect("ML"); // => true
 isUcumCaseSuspect("mg"); // => false
 ```
 
-The grammar covers a **curated atom subset** — the prefixes and atoms that appear in lab Results and
-Vital Signs — not the full UCUM atom registry. A valid but uncurated atom may read as `NON_UCUM_UNIT`;
+The grammar covers a **curated atom subset** (the prefixes and atoms that appear in lab Results and
+Vital Signs), not the full UCUM atom registry. A valid but uncurated atom may read as `NON_UCUM_UNIT`;
 because the raw unit is preserved, nothing is lost.
 
-## The serializer — spec-clean, round-trip emit
+## The serializer: spec-clean, round-trip emit
 
 `serializeCcda(doc)` (equivalently `doc.toString()`) is the conservative **emit** half of Postel's Law.
 It re-emits a **parsed** document as spec-clean C-CDA XML with a guaranteed UTF-8 declaration. The
 output is snapshotted from the source XML at parse time, not rebuilt from the read-model, so every
-attribute, namespace declaration, `templateId`, and unmodeled element survives — **no silent loss**.
+attribute, namespace declaration, `templateId`, and unmodeled element survives: **no silent loss**.
 Serialization is a **fixed point**: `parseCcda(serializeCcda(doc))` re-serializes to the identical
 string.
 
@@ -97,11 +97,11 @@ const out = serializeCcda(doc);
 
 out === doc.toString(); // => true
 out.startsWith("<?xml"); // => true
-// Serialization is a fixed point — re-parse + re-serialize is byte-identical.
+// Serialization is a fixed point: re-parse + re-serialize is byte-identical.
 serializeCcda(parseCcda(out)) === out; // => true
 ```
 
 > A hand-constructed `CcdaDocument` (not produced by `parseCcda` or `buildCcda`) retains no source XML,
-> so `toString()` throws. To construct a document from scratch, use `buildCcda` — its first slice emits a
+> so `toString()` throws. To construct a document from scratch, use `buildCcda`: its first slice emits a
 > spec-clean CCD (US Realm header + Problems + Allergies). See
 > [Troubleshooting](./troubleshooting) for the full list of what is not yet parsed or built.

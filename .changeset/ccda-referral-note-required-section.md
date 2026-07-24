@@ -2,7 +2,7 @@
 "@cosyte/ccda": patch
 ---
 
-Phase 7 (fifteenth slice) — the Referral Note SHALL set now asserts Reason for Referral (CCDA-P7).
+Phase 7 (fifteenth slice): the Referral Note SHALL set now asserts Reason for Referral (CCDA-P7).
 
 Reconciles the parser's per-document-type required-section (SHALL) table with the section catalog the
 fourteenth slice (Referral Note document type, PR #38) expanded. That slice added a recognized
@@ -14,18 +14,18 @@ omits it is non-conformant and should be flagged.
 **Change.** `requiredSectionKeys("referralNote")` becomes
 `["allergies", "medications", "problems", "reasonForReferral"]`. A Referral Note carrying the
 Problems/Allergies/Medications triad but no Reason for Referral now raises a single
-`REQUIRED_SECTION_MISSING` **warning** for `reasonForReferral` — never a fatal (a missing required section
+`REQUIRED_SECTION_MISSING` **warning** for `reasonForReferral`, never a fatal (a missing required section
 never blocks reading the data that is present), and the section is only ever flagged when the recognized
 catalog key is absent. The builder's own Referral Note (which always emits the section) stays warning-free
 and round-trips fixed-point, unchanged.
 
-**Grounding (firsthand, normative).** Traced to the normative C-CDA R2.1 Schematron — the 1,010,531-byte
+**Grounding (firsthand, normative).** Traced to the normative C-CDA R2.1 Schematron: the 1,010,531-byte
 `HL7/CDA-ccda-2.1` validation `.sch` (the roadmap's cited authority). The Referral Note document pattern
 asserts as SHALL: Problem (CONF:1198-29087), Allergies and Intolerances (CONF:1198-30912), Medications
 (CONF:1198-30923), and Reason for Referral (CONF:1198-30925). Deliberately still omitted, per the table's
 conservative "unconditional, in-catalog, high-confidence SHALL only" design:
 
-- the **Assessment-and-Plan** requirement (CONF:1198-29102 — an Assessment and Plan Section, or an
+- the **Assessment-and-Plan** requirement (CONF:1198-29102, an Assessment and Plan Section, or an
   Assessment Section and a Plan of Treatment Section: a **choice** constraint, so neither half is asserted);
 - **Results** (CONF:1198-29090) and **Plan of Treatment** (CONF:1198-29066), which the Schematron marks
   **SHOULD**, not SHALL. (The build.fhir.org StructureDefinition lists `payers` and `plan` at `min=1`; that

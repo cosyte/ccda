@@ -9,21 +9,21 @@ sidebar_position: 2
 
 `@cosyte/ccda` follows the cosyte parser archetype's **tiered tolerance** model. Real-world C-CDA is
 vendor-quirky; the parser is liberal on input (Postel's Law) so a deviation becomes a **warning you
-triage**, not an exception that halts your pipeline — while a genuinely unrecoverable or hostile
+triage**, not an exception that halts your pipeline, while a genuinely unrecoverable or hostile
 document is a hard failure.
 
 ## The tiers
 
 | Tier | Behavior | Example |
 |---|---|---|
-| **0 / 1** | Accepted silently — conformant or trivially recoverable. | A section recognized by its `templateId`. |
+| **0 / 1** | Accepted silently: conformant or trivially recoverable. | A section recognized by its `templateId`. |
 | **2** | **Warning** with a stable code + PHI-free position; recovery continues. Escalates to a throw under `{ strict: true }`. | An unrecognized section LOINC code, a missing `doseQuantity`, a code/narrative mismatch. |
-| **3** | **Fatal** — a thrown `CcdaParseError`, always (even in lenient mode). | Malformed XML, a non-`ClinicalDocument` root, a security tripwire. |
+| **3** | **Fatal**: a thrown `CcdaParseError`, always (even in lenient mode). | Malformed XML, a non-`ClinicalDocument` root, a security tripwire. |
 
 ## The warning-code model
 
 Every Tier-2 warning carries a **stable string code** (`WARNING_CODES.*`), a PHI-free `message`, and a
-structural `position`. Consumers branch on `w.code` — so **renaming a code is a breaking change**. The
+structural `position`. Consumers branch on `w.code`, so **renaming a code is a breaking change**. The
 message and position interpolate only structural values (element names, OIDs, LOINC codes, positions),
 never a patient name, an identifier, or narrative text: you can log the whole `.warnings` array without
 leaking PHI.
@@ -34,7 +34,7 @@ discovery order:
 ```ts runnable
 import { parseCcda, WARNING_CODES } from "@cosyte/ccda";
 
-// A medication with no doseQuantity and no routeCode — both safety-critical, both flagged.
+// A medication with no doseQuantity and no routeCode: both safety-critical, both flagged.
 const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <realmCode code="US"/>
@@ -84,13 +84,13 @@ collected.length; // => 2
 ## Strict mode
 
 `{ strict: true }` escalates the **first** tolerated Tier-2 deviation to a thrown `CcdaParseError`
-carrying the same code — a spec-conformance gate for a trusted sender. Fail-safe by design: a clean,
+carrying the same code: a spec-conformance gate for a trusted sender. Fail-safe by design: a clean,
 conformant document parses identically in both modes.
 
 ## Fatal codes (always throw)
 
 Seven Tier-3 codes are unrecoverable and throw a `CcdaParseError` regardless of `strict`. The first
-five are **security fatals** raised by the hardened XML substrate before/while building the DOM — the
+five are **security fatals** raised by the hardened XML substrate before/while building the DOM, the
 load-bearing defense against hostile XML:
 
 | Fatal code | Meaning |
@@ -120,4 +120,4 @@ code === FATAL_CODES.NOT_A_CLINICAL_DOCUMENT; // => true
 ```
 
 The safety caps (`maxInputBytes`, `maxDepth`, `maxNodeCount`, `maxEntityExpansions`) have library
-defaults; tighten them — or, at your own risk, loosen them — via `ParseCcdaOptions.limits`.
+defaults; tighten them (or, at your own risk, loosen them) via `ParseCcdaOptions.limits`.
