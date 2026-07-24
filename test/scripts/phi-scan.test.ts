@@ -1,5 +1,5 @@
 /**
- * Unit tests for scripts/phi-scan.ts — the C-CDA PHI commit-gate.
+ * Unit tests for scripts/phi-scan.ts, the C-CDA PHI commit-gate.
  *
  * Positive tests prove the scanner CATCHES real-looking PHI (a weak scanner is
  * worse than none); negative tests prove it PASSES genuinely synthetic,
@@ -88,7 +88,7 @@ afterAll(() => {
 });
 
 // ---------------------------------------------------------------------------
-// Negative tests — genuinely synthetic, allow-listed content PASSES
+// Negative tests, genuinely synthetic, allow-listed content PASSES
 // ---------------------------------------------------------------------------
 
 describe("phi-scan: synthetic / allow-listed content passes (exit 0)", () => {
@@ -100,12 +100,12 @@ describe("phi-scan: synthetic / allow-listed content passes (exit 0)", () => {
   it("the committed corpus (all-mode) is clean", () => {
     const r = runScanner([]);
     expect(r.code, `stderr: ${r.stderr}`).toBe(0);
-    expect(r.stdout).toMatch(/OK — no hits/);
+    expect(r.stdout).toMatch(/OK, no hits/);
   });
 
   it("does not flag a coded value or a template OID equal to the SSN OID", () => {
     // The SSN OID as a templateId root, and a bare-numeric-looking clinical code,
-    // must NOT be read as PHI — the detectors are element-scoped to <id>/names.
+    // must NOT be read as PHI, the detectors are element-scoped to <id>/names.
     const r = scan(
       "coded.xml",
       doc(`<section>
@@ -119,7 +119,7 @@ describe("phi-scan: synthetic / allow-listed content passes (exit 0)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Positive tests — real-looking PHI is CAUGHT
+// Positive tests, real-looking PHI is CAUGHT
 // ---------------------------------------------------------------------------
 
 describe("phi-scan: names", () => {
@@ -207,7 +207,7 @@ describe("phi-scan: identifiers", () => {
 });
 
 // ---------------------------------------------------------------------------
-// File selection — detection must follow content, not the file name / location
+// File selection, detection must follow content, not the file name / location
 // (the two MAJOR refuter findings: a real document must not dodge the scanner by
 // its extension or directory)
 // ---------------------------------------------------------------------------
@@ -226,7 +226,7 @@ describe("phi-scan: a real document is caught regardless of extension", () => {
   });
 
   it("catches a document by content marker even under a non-CDA extension", () => {
-    // A real ClinicalDocument saved as .txt (or any name) must still be parsed —
+    // A real ClinicalDocument saved as .txt (or any name) must still be parsed,
     // detection follows the bytes, not the file name.
     const r = scan("pasted.txt", doc(`<section><family>Kowalski</family></section>`));
     expect(r.code, `stderr: ${r.stderr}`).toBe(1);
@@ -312,7 +312,7 @@ describe("phi-scan: structured scan is not silently bypassed (refuter regression
 
   it("keeps hand-written src-style .ts (no CDA marker) on the text-only pass", () => {
     // A non-fixture file with no CDA marker must not be parsed as CDA even if it
-    // has a <family> literal — only the shape pass (SSN / email) applies.
+    // has a <family> literal, only the shape pass (SSN / email) applies.
     const path = join(dir, "helper.ts");
     writeFileSync(path, 'export const label = "family: Anderson";\n');
     const r = runScanner([path]);
@@ -338,7 +338,7 @@ describe("phi-scan: --allow-fixture override gate", () => {
     const path = join(dir, "override-me.xml");
     writeFileSync(path, doc(`<section><family>Anderson</family></section>`));
     const rel = relative(REPO_ROOT, path).split(sep).join("/");
-    // Sanity: scanned on its own it is a genuine violator — so the override, not
+    // Sanity: scanned on its own it is a genuine violator, so the override, not
     // an empty target set, is what flips the next run to clean.
     expect(runScanner([path]).code).toBe(1);
 

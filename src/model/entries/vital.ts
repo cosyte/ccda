@@ -1,11 +1,11 @@
 /**
- * Vital Signs extraction — the Vital Signs Organizer (`…22.4.26`) → Vital Sign
+ * Vital Signs extraction, the Vital Signs Organizer (`…22.4.26`) → Vital Sign
  * Observation (`…22.4.27`) tree. The organizer clusters one reading event (a set
  * of vitals taken together); each member Vital Sign Observation carries a LOINC
  * `code` (e.g. `8480-6` systolic BP), a `PQ` `value`, an optional
  * `interpretationCode`, and the `effectiveTime` of the reading. Units are
  * safety-critical: a `PQ` is preserved with its raw unit and flagged when the
- * unit is not valid UCUM — never normalized away.
+ * unit is not valid UCUM, never normalized away.
  */
 
 import { child, positionOf } from "../dom.js";

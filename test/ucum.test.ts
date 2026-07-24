@@ -1,5 +1,5 @@
 /**
- * Tests for the computable, zero-dep UCUM grammar validator — both the
+ * Tests for the computable, zero-dep UCUM grammar validator, both the
  * example-driven cases (the units that actually appear in lab Results and Vital
  * Signs) and the property-based invariants (well-formed by construction always
  * validates; the case-suspect detector never fires on a canonical unit). No PHI:
@@ -11,7 +11,7 @@ import fc from "fast-check";
 
 import { isUcumCaseSuspect, isValidUcumUnit } from "../src/model/ucum.js";
 
-describe("isValidUcumUnit — well-formed units", () => {
+describe("isValidUcumUnit, well-formed units", () => {
   it.each([
     "g/dL",
     "mg",
@@ -42,7 +42,7 @@ describe("isValidUcumUnit — well-formed units", () => {
   });
 });
 
-describe("isValidUcumUnit — malformed units", () => {
+describe("isValidUcumUnit, malformed units", () => {
   it.each([
     "grams/dL",
     "GG",
@@ -60,7 +60,7 @@ describe("isValidUcumUnit — malformed units", () => {
   });
 });
 
-describe("isUcumCaseSuspect — letter-case slips", () => {
+describe("isUcumCaseSuspect, letter-case slips", () => {
   it.each([
     ["ML", "mL"],
     ["Mg", "mg"],
@@ -77,7 +77,7 @@ describe("isUcumCaseSuspect — letter-case slips", () => {
   );
 });
 
-describe("UCUM grammar — property invariants", () => {
+describe("UCUM grammar, property invariants", () => {
   // A small alphabet of valid metric atoms + prefixes the grammar must accept in
   // any `prefix?atom(/atom)*` shape.
   const metricAtom = fc.constantFrom("m", "g", "s", "L", "mol", "Hz", "Pa");

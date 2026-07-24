@@ -1,5 +1,5 @@
 /**
- * `defineCcdaProfile()` — the public factory for building immutable
+ * `defineCcdaProfile()`, the public factory for building immutable
  * {@link CcdaProfile} objects with the safety rules enforced and `describe()`
  * attached. Mirrors the sibling `@cosyte/hl7` `defineProfile()` shape (name /
  * lineage / `extends`-merge / `describe`) while modelling C-CDA quirks
@@ -23,7 +23,7 @@ import { validateOptionKeys, validateProfileName, validateTolerations } from "./
 /**
  * Build a frozen {@link CcdaProfile} from a validated options object. Throws
  * {@link CcdaProfileDefinitionError} on a bad name, an unknown option key, or an
- * invalid `tolerate` entry — including the **safety rule**: a profile may never
+ * invalid `tolerate` entry, including the **safety rule**: a profile may never
  * tolerate a safety-critical warning code.
  *
  * `extends` composes profiles: lineage, `tolerate`, `provenance`, and
@@ -64,7 +64,7 @@ export function defineCcdaProfile(opts: DefineCcdaProfileOptions): CcdaProfile {
   const provenance = mergeProvenance(parents, opts.provenance);
   const description = mergeDescription(parents, opts.description);
 
-  // Post-merge re-validation — a safety-critical code inherited from a
+  // Post-merge re-validation, a safety-critical code inherited from a
   // hand-crafted parent is refused here.
   validateTolerations(tolerate, opts.name);
 

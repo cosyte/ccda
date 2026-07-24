@@ -1,6 +1,6 @@
 /**
  * Synthetic, PHI-free C-CDA fixtures for `@cosyte/ccda` tests. Every value here
- * is invented (the canonical synthetic patient "Jane Doe", fake OIDs/IDs) — no
+ * is invented (the canonical synthetic patient "Jane Doe", fake OIDs/IDs), no
  * realistic PHI ever lands in a fixture, per the repo's PHI-by-default rule.
  *
  * `buildCcda` assembles a minimal-but-valid US Realm `ClinicalDocument` from
@@ -94,7 +94,7 @@ export const PROBLEMS_SECTION = `
 /**
  * A Medications section (`…22.2.1.1`) carrying one Medication Activity
  * (`…22.4.16`): RxNorm Lisinopril via `manufacturedMaterial/code`, a scalar
- * `doseQuantity`, an NCI `routeCode`, and the two `effectiveTime` siblings —
+ * `doseQuantity`, an NCI `routeCode`, and the two `effectiveTime` siblings,
  * `IVL_TS` duration + `PIVL_TS` frequency.
  */
 export const MEDICATIONS_SECTION = `
@@ -195,7 +195,7 @@ export const ALLERGY_ENTRY_SECTION = `
       </component>`;
 
 /**
- * An Allergies section asserting **No Known Allergies** — the Allergy-
+ * An Allergies section asserting **No Known Allergies**, the Allergy-
  * Intolerance Observation carries `negationInd="true"` (and no `nullFlavor`),
  * the safety-critical "negated, not unknown" form.
  */
@@ -363,7 +363,7 @@ export const PROCEDURES_SECTION = `
 
 /**
  * A Procedures section carrying one *planned* Procedure Activity Procedure
- * (`moodCode="INT"`) — exercises the planned-vs-performed disposition split so a
+ * (`moodCode="INT"`), exercises the planned-vs-performed disposition split so a
  * planned procedure is never read as performed.
  */
 export const PLANNED_PROCEDURE_SECTION = `
@@ -412,7 +412,7 @@ export const ENCOUNTERS_SECTION = `
       </component>`;
 
 /**
- * A Social History section (`…22.2.17`) carrying one Smoking Status — Meaningful
+ * A Social History section (`…22.2.17`) carrying one Smoking Status, Meaningful
  * Use observation (`…22.4.78`): LOINC `72166-2` `code`, a SNOMED CT "Former
  * smoker" `value` from the Current Smoking Status value set, and an effective
  * time.
@@ -439,7 +439,7 @@ export const SOCIAL_HISTORY_SECTION = `
       </component>`;
 
 /**
- * A Social History section asserting an **explicitly unknown** smoking status —
+ * A Social History section asserting an **explicitly unknown** smoking status,
  * the value is the SNOMED CT "Unknown if ever smoked" concept (`266927001`),
  * the safety-critical "unknown, not never-smoked" form.
  */
@@ -464,7 +464,7 @@ export const SMOKING_UNKNOWN_SECTION = `
 
 /**
  * A Plan of Treatment section (`…22.2.10`, LOINC `18776-5`) carrying one of each
- * planned-entry template — Planned Observation (`…4.44`, `RQO`), Planned Act
+ * planned-entry template, Planned Observation (`…4.44`, `RQO`), Planned Act
  * (`…4.39`, `INT`), Planned Encounter (`…4.40`, `APT`), Planned Procedure
  * (`…4.41`, `INT`), Planned Medication Activity (`…4.42`, `INT`, drug in the
  * consumable), and Planned Supply (`…4.43`, `INT`). Every item is future/ordered,
@@ -589,7 +589,7 @@ export const FUNCTIONAL_STATUS_SECTION = `
 
 /**
  * A Mental Status section (`…22.2.56`, LOINC `10190-7`) carrying a standalone
- * Mental Status Observation (`…4.74`) — a coded cognition finding.
+ * Mental Status Observation (`…4.74`), a coded cognition finding.
  */
 export const MENTAL_STATUS_SECTION = `
       <component>
@@ -613,7 +613,7 @@ export const MENTAL_STATUS_SECTION = `
 
 /**
  * A Mental Status section carrying a **direct-entry Assessment Scale Observation**
- * (`…22.4.69`, the bare-root R2.1 form) — a PHQ-9 depression screen with its INT
+ * (`…22.4.69`, the bare-root R2.1 form), a PHQ-9 depression screen with its INT
  * total score, an `interpretationCode`, an `IVL_INT` reference range, and two
  * Assessment Scale Supporting Observations (`…22.4.86`) each with an INT item
  * score plus a second `CO` coded answer. Mirrors the HL7 C-CDA R2.1 CC0 example
@@ -678,7 +678,7 @@ export const MENTAL_STATUS_ASSESSMENT_SCALE_SECTION = `
 
 /**
  * A Functional Status section carrying a **direct-entry Assessment Scale
- * Observation** (`…22.4.69`, bare root) — a Glasgow Coma total with an INT score,
+ * Observation** (`…22.4.69`, bare root), a Glasgow Coma total with an INT score,
  * no supporting components. Proves the direct-entry scale is read with
  * `domain: "functional"`. All ids/OIDs synthetic.
  */
@@ -716,7 +716,7 @@ export const FAMILY_HISTORY_SECTION = `
           <templateId root="2.16.840.1.113883.10.20.22.2.15"/>
           <code code="10157-6" codeSystem="2.16.840.1.113883.6.1"/>
           <title>Family History</title>
-          <text><content ID="fhx1">Father — heart attack</content></text>
+          <text><content ID="fhx1">Father, heart attack</content></text>
           <entry>
             <organizer classCode="CLUSTER" moodCode="EVN" xmlns:sdtc="urn:hl7-org:sdtc">
               <templateId root="2.16.840.1.113883.10.20.22.4.45" extension="2015-08-01"/>
@@ -766,7 +766,7 @@ export const FAMILY_HISTORY_SECTION = `
 
 /**
  * A Past Medical History section (`…22.2.20`, LOINC `11348-0`) carrying a **bare**
- * Problem Observation (`…4.4`) directly under the `<entry>` — historical, not
+ * Problem Observation (`…4.4`) directly under the `<entry>`, historical, not
  * wrapped in a Problem Concern Act (so it never double-counts with Problems).
  */
 export const PAST_MEDICAL_HISTORY_SECTION = `
@@ -791,7 +791,7 @@ export const PAST_MEDICAL_HISTORY_SECTION = `
       </component>`;
 
 /**
- * A Reason for Referral Section (V2) — the IHE PCC template
+ * A Reason for Referral Section (V2), the IHE PCC template
  * (`1.3.6.1.4.1.19376.1.5.3.1.3.1`, `@extension` `2014-06-09`), LOINC `42349-1`.
  * A narrative-only section (no required entries), so it carries just the
  * referral reason as text. The Referral Note document (`…22.1.14`) SHALL contain
@@ -888,7 +888,7 @@ export function buildCcda(opts: BuildOptions = {}): string {
     xmlDecl = true,
   } = opts;
   // `in` checks so an explicit `undefined` (omit the value) is distinct from an
-  // absent key (use the default) — destructuring defaults can't tell them apart.
+  // absent key (use the default), destructuring defaults can't tell them apart.
   const extension = "extension" in opts ? opts.extension : R21;
   const mrnExtension = "mrnExtension" in opts ? opts.mrnExtension : "MRN001";
 

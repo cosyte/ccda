@@ -50,8 +50,8 @@ const RECOGNIZED_NAMESPACES: ReadonlySet<string> = new Set([V3_NS, XSI_NS, SDTC_
 
 /**
  * Return `true` when a namespace URI is one the parser recognizes
- * (`urn:hl7-org:v3`, the XSI namespace, or `urn:hl7-org:sdtc`). A `null` URI —
- * an element with no namespace at all — counts as unrecognized.
+ * (`urn:hl7-org:v3`, the XSI namespace, or `urn:hl7-org:sdtc`). A `null` URI,
+ * an element with no namespace at all, counts as unrecognized.
  *
  * @example
  * ```ts

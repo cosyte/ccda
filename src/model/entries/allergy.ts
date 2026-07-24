@@ -1,12 +1,12 @@
 /**
- * Allergies extraction — the Allergy Concern Act (`…22.4.30`) →
+ * Allergies extraction, the Allergy Concern Act (`…22.4.30`) →
  * Allergy-Intolerance Observation (`…22.4.7`) tree. The allergen substance is
  * **not** the observation `value` (that is the propensity *type*) but lives at
  * `participant/participantRole/playingEntity/code`. Reactions (`…22.4.9`) carry
  * a manifestation and may nest a **Severity** (`…22.4.8`); **Criticality**
- * (`…22.4.145`) is a separate propensity-level observation — severity and
+ * (`…22.4.145`) is a separate propensity-level observation, severity and
  * criticality are different axes and are never merged. `negationInd="true"` on
- * the observation is the "No Known Allergies" assertion — modeled distinctly
+ * the observation is the "No Known Allergies" assertion, modeled distinctly
  * from a `nullFlavor` (value unknown).
  */
 
@@ -39,7 +39,7 @@ import type { Element } from "@xmldom/xmldom";
 /**
  * One reaction (manifestation) of an allergy. `manifestation` is the coded
  * clinical effect (e.g. hives); `severity` is the reaction's nested Severity
- * Observation value — distinct from the propensity's overall criticality.
+ * Observation value, distinct from the propensity's overall criticality.
  *
  * @example
  * ```ts
@@ -56,7 +56,7 @@ export interface AllergyReaction {
  * An Allergy-Intolerance Observation. `allergen` is the offending substance
  * (RxNorm / UNII / SNOMED) from the playing entity; `type` is the propensity
  * type (the observation `value`). `noKnownAllergy` is the `negationInd="true"`
- * "no known allergies" assertion — **distinct** from `nullFlavor` (substance
+ * "no known allergies" assertion, **distinct** from `nullFlavor` (substance
  * unknown). `criticality` is the propensity criticality; per-reaction severity
  * lives on each {@link AllergyReaction}.
  *

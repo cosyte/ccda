@@ -13,7 +13,7 @@ function codes(warnings: readonly CcdaWarning[]): string[] {
   return warnings.map((w) => w.code);
 }
 
-describe("parseCcda — document recognition", () => {
+describe("parseCcda, document recognition", () => {
   it.each(DOC_TYPES)("recognizes the $key document type", ({ key, oid }) => {
     const doc = parseCcda(buildCcda({ docTypeOid: oid }));
     expect(doc.documentType).toBe(key);
@@ -39,7 +39,7 @@ describe("parseCcda — document recognition", () => {
   });
 });
 
-describe("parseCcda — header + patient", () => {
+describe("parseCcda, header + patient", () => {
   it("extracts document identity fields", () => {
     const doc = parseCcda(buildCcda());
     expect(doc.header.documentId?.extension).toBe("DOC123");
@@ -93,7 +93,7 @@ describe("parseCcda — header + patient", () => {
   });
 });
 
-describe("parseCcda — sections", () => {
+describe("parseCcda, sections", () => {
   it("frames a templateId-recognized section and its subsection", () => {
     const doc = parseCcda(buildCcda());
     const allergies = doc.findSection("allergies");
@@ -118,7 +118,7 @@ describe("parseCcda — sections", () => {
   });
 });
 
-describe("parseCcda — unstructured documents", () => {
+describe("parseCcda, unstructured documents", () => {
   it("captures nonXMLBody content without decoding base64", () => {
     const doc = parseCcda(buildCcda({ docTypeOid: DOC_TYPES[10]?.oid, nonXmlBody: true }));
     expect(doc.documentType).toBe("unstructuredDocument");
@@ -128,7 +128,7 @@ describe("parseCcda — unstructured documents", () => {
   });
 });
 
-describe("parseCcda — encoding", () => {
+describe("parseCcda, encoding", () => {
   it("strips a leading BOM and warns", () => {
     const doc = parseCcda(buildCcda({ withBom: true }));
     expect(doc.documentType).toBe("ccd");
@@ -136,7 +136,7 @@ describe("parseCcda — encoding", () => {
   });
 });
 
-describe("parseCcda — strict mode", () => {
+describe("parseCcda, strict mode", () => {
   it("escalates the first Tier-2 warning to a thrown CcdaParseError", () => {
     expect(() => parseCcda(buildCcda({ recordTargets: 2 }), { strict: true })).toThrow(
       CcdaParseError,
@@ -159,7 +159,7 @@ describe("parseCcda — strict mode", () => {
   });
 });
 
-describe("parseCcda — fatal errors", () => {
+describe("parseCcda, fatal errors", () => {
   it("rejects a declared DTD/DOCTYPE", () => {
     const xml = `<?xml version="1.0"?>\n<!DOCTYPE foo>\n${buildCcda({ xmlDecl: false })}`;
     expect(() => parseCcda(xml)).toThrow(
@@ -209,7 +209,7 @@ describe("parseCcda — fatal errors", () => {
   });
 });
 
-describe("parseCcda — immutability", () => {
+describe("parseCcda, immutability", () => {
   it("freezes the warnings array", () => {
     const doc = parseCcda(buildCcda({ recordTargets: 2 }));
     expect(Object.isFrozen(doc.warnings)).toBe(true);

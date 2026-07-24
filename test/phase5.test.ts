@@ -1,8 +1,8 @@
 /**
- * Phase 5 extraction tests — Procedures (with the safety-critical
+ * Phase 5 extraction tests, Procedures (with the safety-critical
  * performed-vs-planned `moodCode` split), Encounters, Social-History smoking
  * status, and the per-document-type required-section (SHALL) validation. Every
- * fixture is synthetic ("Jane Doe", fake OIDs) — no realistic PHI, per the
+ * fixture is synthetic ("Jane Doe", fake OIDs), no realistic PHI, per the
  * repo's PHI-by-default rule.
  */
 
@@ -151,7 +151,7 @@ const SMOKING_NULLFLAVOR_SECTION = `
         </section>
       </component>`;
 
-describe("procedures — performed vs planned (moodCode)", () => {
+describe("procedures, performed vs planned (moodCode)", () => {
   it("extracts a performed procedure (EVN) with code, status, time, narrative", () => {
     const doc = parseCcda(
       buildCcda({
@@ -229,7 +229,7 @@ describe("procedures — performed vs planned (moodCode)", () => {
   });
 });
 
-describe("encounters — Tier-1 extraction", () => {
+describe("encounters, Tier-1 extraction", () => {
   it("extracts an Encounter Activity with type code, status, and visit period", () => {
     const doc = parseCcda(
       buildCcda({
@@ -260,7 +260,7 @@ describe("encounters — Tier-1 extraction", () => {
   });
 });
 
-describe("social history — smoking status", () => {
+describe("social history, smoking status", () => {
   it("extracts a known smoking-status value, not flagged unknown", () => {
     const doc = parseCcda(
       buildCcda({
@@ -345,7 +345,7 @@ describe("required-section (SHALL) validation", () => {
   it("asserts Reason for Referral in the Referral Note SHALL set (CONF:1198-30925)", () => {
     // Slice 14 made the Reason for Referral Section a recognized catalog key;
     // the Referral Note document (…22.1.14) SHALL contain it per the normative
-    // R2.1 Schematron — so the table now asserts it alongside the triad.
+    // R2.1 Schematron, so the table now asserts it alongside the triad.
     expect(requiredSectionKeys("referralNote")).toEqual([
       "allergies",
       "medications",
@@ -357,7 +357,7 @@ describe("required-section (SHALL) validation", () => {
   it("flags a Referral Note that omits its SHALL Reason for Referral section", () => {
     // A Referral Note carrying the triad (problems + medications + allergies)
     // but no Reason for Referral is now non-conformant and warns for exactly
-    // that section — not the triad, which is present.
+    // that section, not the triad, which is present.
     const triad = `${PROBLEMS_SECTION}${MEDICATIONS_SECTION}${ALLERGY_ENTRY_SECTION}`;
     const doc = parseCcda(buildCcda({ docTypeOid: oidFor("referralNote"), sections: triad }));
     const missing = doc.warnings

@@ -1,5 +1,5 @@
 /**
- * Clinical-entry extraction tests — the Phase 2 reconciliation triad (Problems,
+ * Clinical-entry extraction tests, the Phase 2 reconciliation triad (Problems,
  * Medications, Allergies). Covers Tier-1 happy-path extraction, the
  * safety-critical distinctions (negation vs nullFlavor, code vs narrative, dose/
  * route presence, concern status), and the code-system slot warnings. Every
@@ -23,7 +23,7 @@ function codes(warnings: readonly CcdaWarning[]): string[] {
   return warnings.map((w) => w.code);
 }
 
-describe("clinical entries — Tier-1 extraction", () => {
+describe("clinical entries, Tier-1 extraction", () => {
   it("extracts all three triad members from a clean document", () => {
     const doc = parseCcda(
       buildCcda({
@@ -75,7 +75,7 @@ describe("clinical entries — Tier-1 extraction", () => {
   });
 });
 
-describe("clinical entries — safety-critical distinctions", () => {
+describe("clinical entries, safety-critical distinctions", () => {
   it("models 'No Known Allergies' as negated, never as unknown", () => {
     const doc = parseCcda(buildCcda({ sections: NKA_SECTION }));
     const allergy = doc.getAllergies()[0]?.allergies[0];
@@ -147,7 +147,7 @@ describe("clinical entries — safety-critical distinctions", () => {
   });
 });
 
-describe("clinical entries — code-system + dosing warnings", () => {
+describe("clinical entries, code-system + dosing warnings", () => {
   it("flags a deprecated ICD-9 problem code system", () => {
     const xml = buildCcda({ sections: PROBLEMS_SECTION }).replace(
       'code="59621000" codeSystem="2.16.840.1.113883.6.96"',
@@ -205,7 +205,7 @@ describe("clinical entries — code-system + dosing warnings", () => {
   });
 });
 
-describe("clinical entries — field-level fidelity", () => {
+describe("clinical entries, field-level fidelity", () => {
   it("preserves a negated problem as distinct from an unknown one", () => {
     const xml = buildCcda({ sections: PROBLEMS_SECTION }).replace(
       '<observation classCode="OBS" moodCode="EVN">\n                  <templateId root="2.16.840.1.113883.10.20.22.4.4"',
@@ -214,7 +214,7 @@ describe("clinical entries — field-level fidelity", () => {
     const problem = parseCcda(xml).getProblems()[0]?.problems[0];
     expect(problem?.negated).toBe(true);
     expect(problem?.nullFlavor).toBeUndefined();
-    // The coded value is still carried verbatim — negation is a separate axis.
+    // The coded value is still carried verbatim, negation is a separate axis.
     expect(problem?.value?.code).toBe("59621000");
   });
 
@@ -263,7 +263,7 @@ describe("clinical entries — field-level fidelity", () => {
   });
 });
 
-describe("clinical entries — placement + tolerance", () => {
+describe("clinical entries, placement + tolerance", () => {
   it("flags a triad entry sitting in the wrong section", () => {
     // Drop the Medication Activity into the Problems section.
     const medEntry = MEDICATIONS_SECTION.slice(

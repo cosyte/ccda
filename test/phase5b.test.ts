@@ -1,9 +1,9 @@
 /**
- * Phase 5b extraction tests — the deferred clinical sections: Plan of Treatment
+ * Phase 5b extraction tests, the deferred clinical sections: Plan of Treatment
  * (with the safety-critical performed-vs-planned `moodCode` split applied to
  * every planned-entry template), Functional Status, Mental Status, Family
  * History, and Past Medical History. Every fixture is synthetic ("Jane Doe",
- * fake OIDs) — no realistic PHI, per the repo's PHI-by-default rule.
+ * fake OIDs), no realistic PHI, per the repo's PHI-by-default rule.
  */
 
 import { describe, expect, it } from "vitest";
@@ -163,7 +163,7 @@ const MINIMAL_FAMILY_SECTION = `
         </section>
       </component>`;
 
-describe("plan of treatment — planned entries, never performed", () => {
+describe("plan of treatment, planned entries, never performed", () => {
   it("extracts one planned item per template, each classified planned (never performed)", () => {
     const planned = parseSection(PLAN_OF_TREATMENT_SECTION).getPlannedItems();
     expect(planned.map((p) => p.kind)).toEqual([
@@ -210,7 +210,7 @@ describe("plan of treatment — planned entries, never performed", () => {
     expect(parseCcda(buildCcda()).getPlannedItems()).toEqual([]);
   });
 
-  it("handles bare/edge planned entries — absent mood, negation, value, nullFlavor", () => {
+  it("handles bare/edge planned entries, absent mood, negation, value, nullFlavor", () => {
     const planned = parseSection(MINIMAL_PLAN_SECTION).getPlannedItems();
     expect(planned.map((p) => p.kind)).toEqual(["act", "observation", "supply"]);
     const [act, obs, supply] = planned;
@@ -228,7 +228,7 @@ describe("plan of treatment — planned entries, never performed", () => {
   });
 });
 
-describe("functional status — organizer members + standalone observations", () => {
+describe("functional status, organizer members + standalone observations", () => {
   it("collects the organizer's observation, its assessment scale, and the standalone observation", () => {
     const findings = parseSection(FUNCTIONAL_STATUS_SECTION).getFunctionalStatus();
     expect(findings).toHaveLength(3);
@@ -274,7 +274,7 @@ describe("functional status — organizer members + standalone observations", ()
   });
 });
 
-describe("mental status — domain never conflated with functional", () => {
+describe("mental status, domain never conflated with functional", () => {
   it("extracts a standalone mental status observation tagged mental", () => {
     const findings = parseSection(MENTAL_STATUS_SECTION).getMentalStatus();
     expect(findings).toHaveLength(1);
@@ -296,7 +296,7 @@ describe("mental status — domain never conflated with functional", () => {
   });
 });
 
-describe("assessment scale observation — direct section entry, domain from section", () => {
+describe("assessment scale observation, direct section entry, domain from section", () => {
   it("reads a direct-entry PHQ-9 in Mental Status as a mental assessment scale with its INT score", () => {
     const doc = parseSection(MENTAL_STATUS_ASSESSMENT_SCALE_SECTION);
     const findings = doc.getMentalStatus();
@@ -305,7 +305,7 @@ describe("assessment scale observation — direct section entry, domain from sec
     expect(scale?.domain).toBe("mental");
     expect(scale?.assessmentScale).toBe(true);
     expect(scale?.code?.code).toBe("44249-1");
-    // The total score is an INT value (not a PQ) — units are not allowed on an INT.
+    // The total score is an INT value (not a PQ), units are not allowed on an INT.
     expect(scale?.value?.kind).toBe("integer");
     expect(scale?.value?.kind === "integer" ? scale.value.value : undefined).toBe(12);
     // Reads the real-world structure (interpretationCode, IVL_INT reference range,
@@ -323,7 +323,7 @@ describe("assessment scale observation — direct section entry, domain from sec
     expect(second?.value?.kind === "integer" ? second.value.value : undefined).toBe(1);
   });
 
-  it("reads a direct-entry scale in Functional Status as functional — never conflated", () => {
+  it("reads a direct-entry scale in Functional Status as functional, never conflated", () => {
     const doc = parseSection(FUNCTIONAL_STATUS_ASSESSMENT_SCALE_SECTION);
     const functional = doc.getFunctionalStatus();
     expect(functional).toHaveLength(1);
@@ -333,11 +333,11 @@ describe("assessment scale observation — direct section entry, domain from sec
       9,
     );
     // The functional-section scale must NOT leak into mental status (same template
-    // in both sections — the domain comes from the carrying section, not the OID).
+    // in both sections, the domain comes from the carrying section, not the OID).
     expect(doc.getMentalStatus()).toEqual([]);
   });
 
-  it("never fabricates a score from a malformed/whitespace INT — preserves + flags it", () => {
+  it("never fabricates a score from a malformed/whitespace INT, preserves + flags it", () => {
     // A functional-status direct-entry scale whose INT @value is whitespace-only.
     // Number(" ") === 0 must NOT be read as a real score of 0 (fail-safety); the
     // value is preserved as unsupported and flagged, never a silent/confident 0.
@@ -364,7 +364,7 @@ describe("assessment scale observation — direct section entry, domain from sec
     const doc = parseSection(section);
     const scale = doc.getFunctionalStatus()[0];
     expect(scale?.assessmentScale).toBe(true);
-    // Not a fabricated integer 0 — preserved as an unsupported INT value instead.
+    // Not a fabricated integer 0, preserved as an unsupported INT value instead.
     expect(scale?.value?.kind).not.toBe("integer");
     expect(scale?.value?.kind).toBe("unsupported");
     // And it is flagged, never dropped silently.
@@ -372,7 +372,7 @@ describe("assessment scale observation — direct section entry, domain from sec
   });
 
   it("keeps the two domains separate when both scale sections are present", () => {
-    // Both sections in one document — the same Assessment Scale OID `…4.69` in each;
+    // Both sections in one document, the same Assessment Scale OID `…4.69` in each;
     // each scale must be tagged by its own section's domain, never cross-counted.
     const doc = parseSection(
       MENTAL_STATUS_ASSESSMENT_SCALE_SECTION + FUNCTIONAL_STATUS_ASSESSMENT_SCALE_SECTION,
@@ -388,7 +388,7 @@ describe("assessment scale observation — direct section entry, domain from sec
   });
 });
 
-describe("family history — relative identity + conditions", () => {
+describe("family history, relative identity + conditions", () => {
   it("reads the relative's structured identity (relation, gender, birth, deceased)", () => {
     const history = parseSection(FAMILY_HISTORY_SECTION).getFamilyHistory();
     expect(history).toHaveLength(1);
@@ -434,7 +434,7 @@ describe("family history — relative identity + conditions", () => {
   });
 });
 
-describe("past medical history — bare problem observations, no double-count", () => {
+describe("past medical history, bare problem observations, no double-count", () => {
   it("extracts a bare Problem Observation as a problem", () => {
     const history = parseSection(PAST_MEDICAL_HISTORY_SECTION).getPastMedicalHistory();
     expect(history).toHaveLength(1);
@@ -452,7 +452,7 @@ describe("past medical history — bare problem observations, no double-count", 
   });
 });
 
-describe("required-section (SHALL) — Care Plan", () => {
+describe("required-section (SHALL), Care Plan", () => {
   it("requires Health Concerns + Goals, and NEVER Plan of Treatment (which it SHALL NOT contain)", () => {
     const keys = requiredSectionKeys("carePlan");
     expect(keys).toEqual(["healthConcerns", "goals"]);
@@ -460,7 +460,7 @@ describe("required-section (SHALL) — Care Plan", () => {
   });
 
   it("flags a Care Plan missing its required sections", () => {
-    // The default fixture carries allergies + problems — neither is a Care Plan SHALL.
+    // The default fixture carries allergies + problems, neither is a Care Plan SHALL.
     const doc = parseCcda(buildCcda({ docTypeOid: oidFor("carePlan") }));
     const messaged = doc.warnings
       .filter((w) => w.code === WARNING_CODES.REQUIRED_SECTION_MISSING)

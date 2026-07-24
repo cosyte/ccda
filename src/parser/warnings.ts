@@ -5,7 +5,7 @@
  * warning it emits so that messages, payload shape, and positional context
  * stay consistent across stages.
  *
- * Every message string is **PHI-free by construction** — factories interpolate
+ * Every message string is **PHI-free by construction**, factories interpolate
  * only structural values (OIDs, LOINC codes, element names, namespace
  * prefixes), never attribute values or narrative text from the document.
  */
@@ -15,7 +15,7 @@ import type { CcdaPosition } from "./types.js";
 /**
  * Stable string codes for every Tier-2 warning the parser may emit. The
  * registry is frozen via `as const` so TypeScript infers the exact string
- * literal union for `WarningCode` — there is zero runtime cost and no
+ * literal union for `WarningCode`, there is zero runtime cost and no
  * magic-string comparisons for consumers. Each code is its own value
  * (`key === value`) so the set survives `Object.values(...)` into a snapshot
  * tripwire. Renaming a code is a **breaking change**.
@@ -112,7 +112,7 @@ export interface CcdaWarning {
   readonly position: CcdaPosition;
   /**
    * `true` when an active {@link CcdaProfile} *expected* this deviation and
-   * downgraded it — the warning is retained (never dropped) but flagged so a
+   * downgraded it, the warning is retained (never dropped) but flagged so a
    * consumer can filter known, tolerated noise from novel deviations. In strict
    * mode an `expected` warning does **not** escalate to a thrown error. Absent
    * (not `false`) when no profile touched the warning.
@@ -122,7 +122,7 @@ export interface CcdaWarning {
   readonly profile?: string;
   /**
    * When `code` is {@link WARNING_CODES.PROFILE_QUIRK_APPLIED}, the original
-   * warning code the profile tolerated — so the specific deviation
+   * warning code the profile tolerated, so the specific deviation
    * (`DEPRECATED_LOINC`, `TEMPLATE_EXTENSION_ABSENT`, …) is never lost, only
    * re-badged as expected.
    */
@@ -132,7 +132,7 @@ export interface CcdaWarning {
 /**
  * Build an `UNKNOWN_DOCUMENT_TEMPLATE` warning. Emitted when the document's
  * root `templateId` set contains no OID matching one of the 12 recognized
- * C-CDA R2.1 document types — the document is still parsed as a generic
+ * C-CDA R2.1 document types, the document is still parsed as a generic
  * ClinicalDocument.
  *
  * @example
@@ -151,7 +151,7 @@ export function unknownDocumentTemplate(position: CcdaPosition, observedOid: str
 
 /**
  * Build a `MISSING_TEMPLATE_ID` warning. Emitted when an element that should
- * carry a `templateId` (the ClinicalDocument root or a section) has none —
+ * carry a `templateId` (the ClinicalDocument root or a section) has none,
  * recognition falls back to other signals (e.g. a section's LOINC code).
  *
  * @example
@@ -171,7 +171,7 @@ export function missingTemplateId(position: CcdaPosition, elementName: string): 
 /**
  * Build a `TEMPLATE_EXTENSION_ABSENT` warning. Emitted when a recognized
  * `templateId` root is present but carries no `@extension` (the R2.1 version
- * stamp, e.g. `2015-08-01`) — the template is matched by root alone and may
+ * stamp, e.g. `2015-08-01`), the template is matched by root alone and may
  * be an earlier release.
  *
  * @example
@@ -194,7 +194,7 @@ export function templateExtensionAbsent(position: CcdaPosition, oid: string): Cc
 /**
  * Build an `UNKNOWN_SECTION_CODE` warning. Emitted when a section's LOINC
  * `code` is not one of the recognized C-CDA section codes and no recognized
- * `templateId` identified it either — the section is retained as
+ * `templateId` identified it either, the section is retained as
  * narrative-only.
  *
  * @example
@@ -214,7 +214,7 @@ export function unknownSectionCode(position: CcdaPosition, loincCode: string): C
 /**
  * Build a `SECTION_MATCHED_BY_LOINC_FALLBACK` warning. Emitted when a section
  * carried no recognized `templateId` but its LOINC `code` matched a known
- * C-CDA section — recognition succeeded via the fallback path.
+ * C-CDA section, recognition succeeded via the fallback path.
  *
  * @example
  * ```ts
@@ -236,7 +236,7 @@ export function sectionMatchedByLoincFallback(
 /**
  * Build an `INVALID_NULL_FLAVOR` warning. Emitted when an element's
  * `@nullFlavor` attribute carries a token outside the HL7 v3 NullFlavor code
- * system (`2.16.840.1.113883.5.1008`) — the value is preserved verbatim but
+ * system (`2.16.840.1.113883.5.1008`), the value is preserved verbatim but
  * flagged as non-conforming.
  *
  * @example
@@ -256,7 +256,7 @@ export function invalidNullFlavor(position: CcdaPosition, observed: string): Ccd
 /**
  * Build an `UNKNOWN_NAMESPACE_PREFIX` warning. Emitted when an element or
  * attribute uses a namespace prefix the parser does not recognize (anything
- * outside the default `urn:hl7-org:v3`, `xsi`, and `sdtc` set) — the node is
+ * outside the default `urn:hl7-org:v3`, `xsi`, and `sdtc` set), the node is
  * still retained.
  *
  * @example
@@ -268,7 +268,7 @@ export function invalidNullFlavor(position: CcdaPosition, observed: string): Ccd
 export function unknownNamespacePrefix(position: CcdaPosition, prefix: string): CcdaWarning {
   return {
     code: WARNING_CODES.UNKNOWN_NAMESPACE_PREFIX,
-    message: `Unknown namespace prefix "${prefix}" — not in the recognized v3/xsi/sdtc set; node retained.`,
+    message: `Unknown namespace prefix "${prefix}", not in the recognized v3/xsi/sdtc set; node retained.`,
     position,
   };
 }
@@ -276,7 +276,7 @@ export function unknownNamespacePrefix(position: CcdaPosition, prefix: string): 
 /**
  * Build a `MALFORMED_DATETIME` warning. Emitted when an HL7 v3 `TS` value
  * does not match the `YYYYMMDDHHMMSS[.S][±ZZZZ]` shape (or a recognized
- * truncation of it) — the raw string is preserved and the parsed `Date` is
+ * truncation of it), the raw string is preserved and the parsed `Date` is
  * left `undefined`.
  *
  * @example
@@ -295,7 +295,7 @@ export function malformedDateTime(position: CcdaPosition): CcdaWarning {
 
 /**
  * Build a `MULTIPLE_RECORD_TARGETS` warning. Emitted when a ClinicalDocument
- * carries more than one `recordTarget` (more than one patient) — the parser
+ * carries more than one `recordTarget` (more than one patient), the parser
  * keeps all of them but `getPatient()` resolves the first.
  *
  * @example
@@ -314,7 +314,7 @@ export function multipleRecordTargets(position: CcdaPosition, count: number): Cc
 
 /**
  * Build a `MISSING_ASSIGNING_AUTHORITY` warning. Emitted when a patient
- * identifier `II` has a `@root` but no `@assigningAuthorityName` — the
+ * identifier `II` has a `@root` but no `@assigningAuthorityName`, the
  * identifier is still usable but lacks a human-readable authority label.
  *
  * @example
@@ -352,7 +352,7 @@ export function encodingBomStripped(position: CcdaPosition): CcdaWarning {
 
 /**
  * Build a `NEGATION_VS_NULLFLAVOR_AMBIGUOUS` warning. Emitted when a clinical
- * act carries **both** `@negationInd="true"` and a `@nullFlavor` — two distinct
+ * act carries **both** `@negationInd="true"` and a `@nullFlavor`, two distinct
  * "this did not / is not known" signals at once. The parser never collapses
  * them: both are preserved on the model and this flags the ambiguity.
  *
@@ -376,7 +376,7 @@ export function negationVsNullFlavorAmbiguous(
 /**
  * Build an `ALLERGEN_GRANULARITY_SUSPECT` warning. Emitted when an allergen is
  * coded at a product/branded level (a dose-form or strength is detectable in
- * the RxNorm display) where an ingredient-level concept is expected — the code
+ * the RxNorm display) where an ingredient-level concept is expected, the code
  * is preserved, the granularity is flagged for review.
  *
  * @example
@@ -396,7 +396,7 @@ export function allergenGranularitySuspect(position: CcdaPosition): CcdaWarning 
 /**
  * Build a `CODE_NARRATIVE_MISMATCH` warning. Emitted when a coded entry value
  * and the narrative text it references via `<reference value="#id">` disagree.
- * The parser surfaces **both** and picks no winner — a safety-critical
+ * The parser surfaces **both** and picks no winner, a safety-critical
  * fail-safe so a structured/narrative divergence is never silently resolved.
  *
  * @example
@@ -416,7 +416,7 @@ export function codeNarrativeMismatch(position: CcdaPosition, slot: string): Ccd
 /**
  * Build a `NARRATIVE_REFERENCE_BROKEN` warning. Emitted when an entry's
  * `<reference value="#id">` points at a narrative `ID` that is not present in
- * the section's narrative index — the structured data is kept, the dangling
+ * the section's narrative index, the structured data is kept, the dangling
  * reference is flagged.
  *
  * @example
@@ -460,7 +460,7 @@ export function unexpectedCodeSystem(
 /**
  * Build a `DEPRECATED_CODE_SYSTEM` warning. Emitted when a coded value uses a
  * deprecated code system (ICD-9-CM diagnosis/procedure) where its modern
- * successor (ICD-10-CM/PCS, SNOMED) is expected — the value is preserved.
+ * successor (ICD-10-CM/PCS, SNOMED) is expected, the value is preserved.
  *
  * @example
  * ```ts
@@ -482,7 +482,7 @@ export function deprecatedCodeSystem(
 
 /**
  * Build a `MISSING_DOSE_QUANTITY` warning. Emitted when a Medication Activity
- * carries no `doseQuantity` — a safety-critical field. The dose is preserved as
+ * carries no `doseQuantity`, a safety-critical field. The dose is preserved as
  * absent (never defaulted) and the gap is flagged.
  *
  * @example
@@ -522,7 +522,7 @@ export function missingRouteCode(position: CcdaPosition): CcdaWarning {
  * Build a `MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED` warning. A Medication Activity
  * carries its dosing period (`IVL_TS`) and frequency (`PIVL_TS`) as sibling
  * `effectiveTime` elements distinguished by `xsi:type`. This is emitted when
- * extra `effectiveTime` siblings cannot be classified into those two slots —
+ * extra `effectiveTime` siblings cannot be classified into those two slots,
  * all are preserved, none discarded.
  *
  * @example
@@ -545,7 +545,7 @@ export function multipleEffectiveTimesUnresolved(
 /**
  * Build a `PROBLEM_STATUS_INDETERMINATE` warning. Emitted when a Problem
  * Concern Act's `statusCode` is absent or carries a token outside the
- * recognized `active`/`completed`/`suspended`/`aborted` set — the active vs
+ * recognized `active`/`completed`/`suspended`/`aborted` set, the active vs
  * resolved state cannot be determined, so it is reported as `unknown`.
  *
  * @example
@@ -565,7 +565,7 @@ export function problemStatusIndeterminate(position: CcdaPosition): CcdaWarning 
 /**
  * Build a `SECTION_PLACEMENT_SUSPECT` warning. Emitted when a recognized
  * clinical entry template appears in a section where it does not belong (e.g. a
- * Medication Activity inside the Problems section) — the entry is still
+ * Medication Activity inside the Problems section), the entry is still
  * extracted, but the misplacement is flagged.
  *
  * @example
@@ -589,7 +589,7 @@ export function sectionPlacementSuspect(
 /**
  * Build a `NON_UCUM_UNIT` warning. Emitted when a `PQ` `@unit` is not a
  * well-formed UCUM unit (validated by the computable grammar). The raw unit
- * string and the value are **preserved verbatim** — never normalized away — so
+ * string and the value are **preserved verbatim**, never normalized away, so
  * the quantity is never silently re-dimensioned. The `@unit` is structural
  * metadata, not PHI.
  *
@@ -609,7 +609,7 @@ export function nonUcumUnit(position: CcdaPosition, unit: string): CcdaWarning {
 
 /**
  * Build a `UCUM_CASE_SUSPECT` warning. Emitted when a `PQ` `@unit` differs only
- * in letter case from a canonical clinical UCUM spelling — `ML` for `mL`
+ * in letter case from a canonical clinical UCUM spelling, `ML` for `mL`
  * (megaliter vs milliliter), `Mg` for `mg`, `mEq` for `meq`. The value is
  * preserved; the likely fix is a single case change.
  *
@@ -629,7 +629,7 @@ export function ucumCaseSuspect(position: CcdaPosition, unit: string): CcdaWarni
 
 /**
  * Build a `MISSING_UNIT_ON_PQ` warning. Emitted when a physical-quantity value
- * carries a numeric `@value` but no `@unit` — a dimensionless measurement where
+ * carries a numeric `@value` but no `@unit`, a dimensionless measurement where
  * a unit is expected. The value is preserved; the missing unit is flagged, never
  * defaulted.
  *
@@ -650,7 +650,7 @@ export function missingUnitOnPq(position: CcdaPosition): CcdaWarning {
 /**
  * Build a `FREE_TEXT_REFERENCE_RANGE` warning. Emitted when a result's
  * `referenceRange` carries free text instead of a structured `IVL_PQ`
- * (`low`/`high`) — the text is preserved on the range, but it cannot be compared
+ * (`low`/`high`), the text is preserved on the range, but it cannot be compared
  * numerically against the result value.
  *
  * @example
@@ -671,7 +671,7 @@ export function freeTextReferenceRange(position: CcdaPosition): CcdaWarning {
  * Build a `RESULT_VALUE_TYPE_UNHANDLED` warning. Emitted when a result/vital
  * observation `value` carries an `xsi:type` the model does not specialize
  * (anything beyond `PQ`/`CD`/`CE`/`ST`/`IVL_PQ`). The raw value is preserved as
- * an `unsupported` value so nothing is dropped — only the typed view is absent.
+ * an `unsupported` value so nothing is dropped, only the typed view is absent.
  * The type name is structural metadata, not PHI.
  *
  * @example
@@ -690,7 +690,7 @@ export function resultValueTypeUnhandled(position: CcdaPosition, xsiType: string
 
 /**
  * Build an `IMMUNIZATION_REFUSED` warning. Emitted (informationally) when an
- * Immunization Activity carries `@negationInd="true"` — the vaccine was **not**
+ * Immunization Activity carries `@negationInd="true"`, the vaccine was **not**
  * administered (refused / not given). The negation is modeled distinctly on
  * `refused`; this surfaces it so a refusal is never read as an administration.
  *
@@ -711,7 +711,7 @@ export function immunizationRefused(position: CcdaPosition): CcdaWarning {
 /**
  * Build a `DEPRECATED_LOINC` warning. Emitted when a result/vital observation
  * `code` is a known-deprecated LOINC (e.g. BMI `41909-3`, superseded by
- * `39156-5`) — the code is preserved; the deprecation is flagged for review. The
+ * `39156-5`), the code is preserved; the deprecation is flagged for review. The
  * LOINC code is a structural identifier, not PHI.
  *
  * @example
@@ -730,7 +730,7 @@ export function deprecatedLoinc(position: CcdaPosition, loincCode: string): Ccda
 
 /**
  * Build a `REQUIRED_SECTION_MISSING` warning. Emitted when a recognized
- * document type's required (SHALL) section is absent from the document — a
+ * document type's required (SHALL) section is absent from the document, a
  * conformance gap surfaced as a **warning, never a fatal**, so the document
  * still parses (fail-safe: a missing required section never blocks reading the
  * data that *is* present). `sectionKey` is a structural catalog key, not PHI.
@@ -756,7 +756,7 @@ export function requiredSectionMissing(
 /**
  * Build a `PROCEDURE_MOOD_UNEXPECTED` warning. Emitted when a Procedure entry
  * carries a `@moodCode` outside the recognized performed (`EVN`) or planned
- * (`INT`/`RQO`/`PRMS`/`PRP`/`APT`/`ARQ`) set — the procedure is still extracted,
+ * (`INT`/`RQO`/`PRMS`/`PRP`/`APT`/`ARQ`) set, the procedure is still extracted,
  * but its performed-vs-planned disposition cannot be classified. The `moodCode`
  * token is structural metadata, not PHI.
  *
@@ -776,7 +776,7 @@ export function procedureMoodUnexpected(position: CcdaPosition, moodCode: string
 
 /**
  * Build a `PLANNED_VS_PERFORMED_AMBIGUOUS` warning. Emitted when a Procedure
- * entry carries **no** `@moodCode` at all — the parser cannot tell whether the
+ * entry carries **no** `@moodCode` at all, the parser cannot tell whether the
  * procedure was actually performed (`EVN`) or merely planned/ordered (`INT`).
  * The two are **never conflated**: the procedure is extracted with an undefined
  * disposition and the ambiguity is flagged.
@@ -790,14 +790,14 @@ export function procedureMoodUnexpected(position: CcdaPosition, moodCode: string
 export function plannedVsPerformedAmbiguous(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.PLANNED_VS_PERFORMED_AMBIGUOUS,
-    message: `Procedure entry has no moodCode; performed (EVN) vs planned (INT) is ambiguous — never conflated, left unclassified.`,
+    message: `Procedure entry has no moodCode; performed (EVN) vs planned (INT) is ambiguous, never conflated, left unclassified.`,
     position,
   };
 }
 
 /**
  * Build a `SMOKING_STATUS_UNKNOWN` warning. Emitted when a Smoking Status
- * observation's value is explicitly an "unknown" concept — a `@nullFlavor`, or
+ * observation's value is explicitly an "unknown" concept, a `@nullFlavor`, or
  * one of the SNOMED "unknown if ever smoked" / "current status unknown" codes.
  * The value is preserved; this surfaces that smoking status is recorded as
  * genuinely unknown rather than simply absent.
@@ -819,7 +819,7 @@ export function smokingStatusUnknown(position: CcdaPosition): CcdaWarning {
 /**
  * Build a `SMOKING_STATUS_CODE_UNRECOGNIZED` warning. Emitted when a Smoking
  * Status observation's coded value is not a member of the expected Smoking
- * Status value set (`2.16.840.1.113883.11.20.9.38`) — the code is preserved
+ * Status value set (`2.16.840.1.113883.11.20.9.38`), the code is preserved
  * verbatim, but it falls outside the recognized smoking-status concepts. The
  * SNOMED code is a structural identifier, not PHI.
  *
@@ -840,11 +840,11 @@ export function smokingStatusCodeUnrecognized(position: CcdaPosition, code: stri
 /**
  * Build a `SEMANTIC_CODE_INVALID` warning. Emitted only when a consumer-supplied
  * bring-your-own {@link TerminologyAdapter} reports (via `validateCode`) that a
- * coded value is **not** a valid, active member of its code system — the semantic
+ * coded value is **not** a valid, active member of its code system, the semantic
  * validation tier structural recognition cannot reach without a licensed
  * terminology. The code is **preserved verbatim** (never coerced to a
  * "corrected" value); this surfaces the adapter's negative verdict so a
- * structurally-valid but wrong code — the highest-severity real-world defect — is
+ * structurally-valid but wrong code, the highest-severity real-world defect, is
  * not silently trusted. The message carries only the slot and the code-system
  * OID (both structural identifiers); the specific code and any adapter message
  * are never interpolated, so the warning stays PHI-free.
@@ -868,16 +868,16 @@ export function semanticCodeInvalid(
 }
 
 /**
- * Build a `PROFILE_QUIRK_APPLIED` warning — the downgraded form an active
+ * Build a `PROFILE_QUIRK_APPLIED` warning, the downgraded form an active
  * {@link CcdaProfile} produces from a deviation it *expects*. The original
  * warning is **not dropped**: its code moves to `toleratedCode`, the deviation
  * is re-badged `PROFILE_QUIRK_APPLIED`, `expected` is set, and the tolerating
- * profile is named — so a consumer can filter known, grounded noise while the
+ * profile is named, so a consumer can filter known, grounded noise while the
  * fact of the deviation, and where it was, survive. A profile can only ever
  * reach this path for a **non-safety-critical** code (enforced at profile-
  * definition time); safety-critical warnings can never be tolerated. The
  * original `message` is preserved so the specifics (which OID, which LOINC)
- * are not lost — it is PHI-free by the same construction as every other factory.
+ * are not lost, it is PHI-free by the same construction as every other factory.
  *
  * @example
  * ```ts

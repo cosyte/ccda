@@ -1,16 +1,16 @@
 /**
- * Plan of Treatment extraction — the six planned-entry templates a Plan of
+ * Plan of Treatment extraction, the six planned-entry templates a Plan of
  * Treatment section (`…22.2.10`) can carry: Planned Act (`…22.4.39`), Planned
  * Encounter (`…22.4.40`), Planned Procedure (`…22.4.41`), Planned Medication
  * Activity (`…22.4.42`), Planned Supply (`…22.4.43`), and Planned Observation
- * (`…22.4.44`). They share a shape — a `code`, `statusCode`, `effectiveTime` —
+ * (`…22.4.44`). They share a shape, a `code`, `statusCode`, `effectiveTime`,
  * and differ only in element name + template.
  *
  * **Everything here is future/ordered, never performed.** Each item's
  * `@moodCode` is read into the same performed-vs-planned {@link EventDisposition}
  * the Procedures extractor uses (a planned mood → `"planned"`); the two are
  * **never conflated**. A missing or unrecognized mood leaves the disposition
- * `undefined` (never guessed) — the raw `moodCode` is always preserved so a
+ * `undefined` (never guessed), the raw `moodCode` is always preserved so a
  * consumer can see what the document actually asserted.
  */
 
@@ -180,7 +180,7 @@ function buildPlannedItem(
 }
 
 /**
- * The code element for a planned item — the direct `<code>` for most variants,
+ * The code element for a planned item, the direct `<code>` for most variants,
  * or the `consumable/manufacturedProduct/manufacturedMaterial/code` for a
  * Planned Medication Activity (whose drug lives in the consumable). @internal
  */

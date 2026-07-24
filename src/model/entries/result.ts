@@ -1,11 +1,11 @@
 /**
- * Results extraction — the Result Organizer (`…22.4.1`) → Result Observation
+ * Results extraction, the Result Organizer (`…22.4.1`) → Result Observation
  * (`…22.4.2`) tree. The organizer is the panel/battery (e.g. a CBC); each member
  * Result Observation carries a LOINC test `code`, a polymorphic `value` (a
  * UCUM-checked `PQ`, a coded `CD`, free text, or an `IVL_PQ` range), an optional
  * reference range, and an `interpretationCode` (H/L/N…). Units are
  * safety-critical: a `PQ` is preserved with its raw unit and flagged when the
- * unit is not valid UCUM — never normalized away.
+ * unit is not valid UCUM, never normalized away.
  */
 
 import { child, positionOf } from "../dom.js";

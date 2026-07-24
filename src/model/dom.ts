@@ -6,7 +6,7 @@
  * `nullFlavor` carry no namespace) except `xsi:type`, which is namespace-keyed.
  *
  * Every helper is read-only and PHI-safe in the sense that it returns whatever
- * the document carries — callers are responsible for never routing returned
+ * the document carries, callers are responsible for never routing returned
  * *values* into warning/error message strings (only structural locators).
  */
 
@@ -19,7 +19,7 @@ const ELEMENT_NODE = 1 as const;
 
 /**
  * Read an unprefixed attribute, returning `undefined` (never `null` or `""`)
- * when the attribute is absent or empty — matches the
+ * when the attribute is absent or empty, matches the
  * `exactOptionalPropertyTypes` "omit, don't set undefined" discipline used
  * throughout the model.
  *
@@ -113,7 +113,7 @@ export function childElements(el: Element): readonly Element[] {
 /**
  * Concatenated text content of an element with leading/trailing whitespace
  * trimmed, or `undefined` when there is no non-whitespace text. Does not decode
- * or interpret embedded base64 — base64 stays quarantined as inert text.
+ * or interpret embedded base64, base64 stays quarantined as inert text.
  *
  * @example
  * ```ts
@@ -129,7 +129,7 @@ export function text(el: Element): string | undefined {
 }
 
 /**
- * Build a PHI-free structural position for an element — its local name as a
+ * Build a PHI-free structural position for an element, its local name as a
  * path hint plus the locator line/column `@xmldom/xmldom` recorded (when
  * present). Never includes attribute values or text content.
  *

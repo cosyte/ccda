@@ -1,9 +1,9 @@
 /**
- * II — HL7 v3 Instance Identifier. The universal identifier datatype in CDA:
+ * II, HL7 v3 Instance Identifier. The universal identifier datatype in CDA:
  * `templateId`, document `id`, patient identifiers, and assigned-authority ids
  * are all II. Carries a `root` (an OID or UUID), an optional `extension`
  * (the local id within that root), an optional human-readable
- * `assigningAuthorityName`, and `nullFlavor`. This parser is silent — callers
+ * `assigningAuthorityName`, and `nullFlavor`. This parser is silent, callers
  * that need to flag, e.g., a missing assigning authority do so at their layer.
  */
 

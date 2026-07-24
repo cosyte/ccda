@@ -1,10 +1,10 @@
 /**
- * Immunizations extraction — the Immunization Activity (`…22.4.52`)
+ * Immunizations extraction, the Immunization Activity (`…22.4.52`)
  * `substanceAdministration`. The vaccine is the CVX `code` reached via
  * `consumable/manufacturedProduct/manufacturedMaterial` (Immunization Medication
  * Information `…22.4.54`); `doseQuantity` and `routeCode` are carried when
  * present. `negationInd="true"` means a **refused/not-administered** vaccination
- * — surfaced as `refused` and flagged (`IMMUNIZATION_REFUSED`), never silently
+ *, surfaced as `refused` and flagged (`IMMUNIZATION_REFUSED`), never silently
  * dropped or conflated with a `nullFlavor` "unknown".
  */
 
@@ -33,7 +33,7 @@ import type { Element } from "@xmldom/xmldom";
  * An Immunization Activity. `vaccine` is the CVX coded product; `dose` is the
  * amount administered; `route` is the administration route; `effectiveTime` is
  * when it was given. `refused` is `true` for a `negationInd` not-administered
- * record; `nullFlavor` carries an "unknown" marker — the two are kept distinct.
+ * record; `nullFlavor` carries an "unknown" marker, the two are kept distinct.
  * `moodCode` distinguishes an actual administration (`EVN`) from a planned one.
  *
  * @example

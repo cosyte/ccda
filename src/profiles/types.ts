@@ -12,19 +12,19 @@
  * The two load-bearing safety rules, enforced by `defineCcdaProfile`:
  *
  * 1. **A profile can never tolerate a safety-critical warning code**
- *    (dose/allergen/negation/narrative-mismatch/identity — see
+ *    (dose/allergen/negation/narrative-mismatch/identity, see
  *    `src/profiles/safety.ts`). Tolerating one is a *definition-time throw*, not
  *    a silent relaxation.
  * 2. **A tolerated deviation is downgraded, never dropped.** The parser still
  *    records it (re-coded {@link WARNING_CODES.PROFILE_QUIRK_APPLIED}, flagged
  *    `expected: true`, carrying the original `toleratedCode`) so nothing is
- *    silently hidden — Postel's Law with a receipt.
+ *    silently hidden, Postel's Law with a receipt.
  */
 
 import type { WarningCode } from "../parser/warnings.js";
 
 /**
- * Provenance for a {@link CcdaProfile} — the **real, cited public artifact** a
+ * Provenance for a {@link CcdaProfile}, the **real, cited public artifact** a
  * profile's quirks are grounded in. Per ADR 0018, a quirk is encoded only when a
  * real document (including a public HL7/ONC/IHE sample or a published
  * conformance study) grounds it; this record is where that grounding is stated,
@@ -44,7 +44,7 @@ import type { WarningCode } from "../parser/warnings.js";
 export interface ProfileProvenance {
   /** Short human-readable name of the grounding source (corpus, study, or guide). */
   readonly source: string;
-  /** A citation the grounding can be traced to — a URL, DOI, or repo+commit. */
+  /** A citation the grounding can be traced to, a URL, DOI, or repo+commit. */
   readonly reference: string;
   /** When the grounding was last verified (ISO date) or the pinned commit SHA. */
   readonly retrieved?: string;
@@ -55,7 +55,7 @@ export interface ProfileProvenance {
 /**
  * Optional structural narrowing for a {@link QuirkTolerance}. When present, the
  * tolerance applies only to warnings whose PHI-free {@link CcdaPosition} matches
- * every provided field — so a profile can expect a deviation in one section
+ * every provided field, so a profile can expect a deviation in one section
  * (e.g. deprecated LOINC only within Vital Signs) without blanket-tolerating it
  * everywhere. Matching is on **structural identifiers only** (LOINC section
  * code, template OID); there is no matching on clinical values, by construction.
@@ -92,7 +92,7 @@ export interface QuirkMatch {
 export interface QuirkTolerance {
   /** The existing, non-safety-critical warning code this profile expects. */
   readonly code: WarningCode;
-  /** Why the profile expects this deviation — grounded in its provenance. */
+  /** Why the profile expects this deviation, grounded in its provenance. */
   readonly rationale: string;
   /** Optional structural narrowing (section code / template OID). */
   readonly match?: QuirkMatch;
@@ -102,7 +102,7 @@ export interface QuirkTolerance {
  * A frozen, immutable vendor/conformance profile. Produced by
  * {@link defineCcdaProfile}; consumers pass it to `parseCcda(raw, { profile })`
  * (or register it as the process default). Hand-authoring the object literal is
- * supported but discouraged — the factory validates the safety rules and
+ * supported but discouraged, the factory validates the safety rules and
  * attaches `describe()`.
  *
  * @example
@@ -117,7 +117,7 @@ export interface CcdaProfile {
   readonly name: string;
   /** Optional human-readable description. */
   readonly description?: string;
-  /** Resolved lineage — `[...parents, name]`, first-occurrence deduped. */
+  /** Resolved lineage, `[...parents, name]`, first-occurrence deduped. */
   readonly lineage: readonly string[];
   /** The expected, non-safety-critical deviations this profile tolerates. */
   readonly tolerate: readonly QuirkTolerance[];

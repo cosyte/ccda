@@ -3,10 +3,10 @@
  * Implementation Guide (IG stamp `2015-08-01`) and the HL7 CDA R2 base
  * (`POCD_MT000040`). Two recognition surfaces:
  *
- * - **Document type** — keyed by the root document `templateId` OID. Twelve
+ * - **Document type**, keyed by the root document `templateId` OID. Twelve
  *   document types are recognized; the R2.1 version stamp lives in the
  *   `@extension` (`2015-08-01`) and is checked separately.
- * - **Section** — keyed by section `templateId` root (primary) with a LOINC
+ * - **Section**, keyed by section `templateId` root (primary) with a LOINC
  *   `code` fallback (secondary), per the roadmap's section-framing contract.
  *
  * These tables are pure data; the matching logic that consumes them lives in
@@ -21,7 +21,7 @@ export const R21_EXTENSION = "2015-08-01";
 
 /**
  * Machine keys for the twelve recognized C-CDA R2.1 document types. Stable
- * strings — consumers may branch on `doc.documentType === "ccd"`. Renaming a
+ * strings, consumers may branch on `doc.documentType === "ccd"`. Renaming a
  * key is a breaking change.
  *
  * @example
@@ -200,7 +200,7 @@ const SECTION_CATALOG: readonly SectionInfo[] = [
   {
     // Reason for Referral Section (V2). An IHE PCC template (no C-CDA `…22.2.*`
     // OID); the R2.1 Referral Note document SHALL carry it. Recognized by its
-    // stable IHE root — the version stamp lives in the `@extension`
+    // stable IHE root, the version stamp lives in the `@extension`
     // (`2014-06-09`), tolerated per the roadmap's root-primary contract.
     key: "reasonForReferral",
     title: "Reason for Referral",

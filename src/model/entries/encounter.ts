@@ -1,5 +1,5 @@
 /**
- * Encounters extraction — the Encounter Activity (`…22.4.49`) `<encounter>`.
+ * Encounters extraction, the Encounter Activity (`…22.4.49`) `<encounter>`.
  * Each encounter is one visit/admission: its type `code` (CPT / SNOMED CT / HL7
  * ActEncounterCode), `statusCode`, and the visit period `effectiveTime`
  * (`IVL_TS`). Scope here is the encounter envelope; nested Encounter Diagnosis

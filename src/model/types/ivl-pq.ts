@@ -1,5 +1,5 @@
 /**
- * IVL_PQ — HL7 v3 Interval of Physical Quantity. A range of dimensioned
+ * IVL_PQ, HL7 v3 Interval of Physical Quantity. A range of dimensioned
  * quantities expressed via `<low>` / `<high>` bounds (or `<center>` + `<width>`),
  * each a {@link PQ}. Used for dose ranges and similar bounded measurements.
  */

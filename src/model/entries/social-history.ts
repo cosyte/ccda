@@ -1,5 +1,5 @@
 /**
- * Social History extraction — currently the Smoking Status — Meaningful Use
+ * Social History extraction, currently the Smoking Status, Meaningful Use
  * observation (`…22.4.78`), the safety-relevant social-history fact most
  * consumers ask for. The observation carries a LOINC `code` (`72166-2`,
  * "Tobacco smoking status") and a SNOMED CT `value` drawn from the Current
@@ -7,7 +7,7 @@
  *
  * "Unknown" is modeled explicitly: a `nullFlavor` value, or one of the SNOMED
  * "unknown if ever smoked" / "current status unknown" concepts, sets
- * `unknown: true` and emits `SMOKING_STATUS_UNKNOWN` — never silently dropped
+ * `unknown: true` and emits `SMOKING_STATUS_UNKNOWN`, never silently dropped
  * or read as "never smoked". A coded value outside the value set is preserved
  * verbatim and flagged `SMOKING_STATUS_CODE_UNRECOGNIZED`.
  */
@@ -31,7 +31,7 @@ import type { Element } from "@xmldom/xmldom";
 /**
  * A Smoking Status observation. `value` is the SNOMED CT smoking-status concept;
  * `unknown` is `true` when the status is explicitly unknown (a `nullFlavor` or
- * an "unknown" SNOMED concept) — distinct from simply absent. `effectiveTime` is
+ * an "unknown" SNOMED concept), distinct from simply absent. `effectiveTime` is
  * when the status was recorded.
  *
  * @example
@@ -78,7 +78,7 @@ const UNKNOWN_SMOKING_CODES: ReadonlySet<string> = new Set([
 
 /**
  * Extract every Smoking Status observation from a Social History `<section>`
- * element. Each `<entry>` whose `observation` carries the Smoking Status —
+ * element. Each `<entry>` whose `observation` carries the Smoking Status,
  * Meaningful Use template becomes a {@link SmokingStatus}. Never throws.
  *
  * @example

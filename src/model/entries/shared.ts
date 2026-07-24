@@ -1,7 +1,7 @@
 /**
  * Shared structure for the C-CDA clinical entry extractors (Problems,
  * Medications, Allergies). Holds the entry-template OID roots (matched on root
- * only — the R2.1 IG pins different `@extension` stamps per template), small
+ * only, the R2.1 IG pins different `@extension` stamps per template), small
  * DOM-navigation helpers the extractors share, and the two cross-cutting
  * safety-critical reconciliations: `negationInd`-vs-`nullFlavor` (never
  * collapsed) and coded-value-vs-narrative (both surfaced, no winner picked).
@@ -33,77 +33,77 @@ import type { Element } from "@xmldom/xmldom";
  */
 export type ConcernStatus = "active" | "resolved" | "inactive" | "unknown";
 
-/** Problem Concern Act — wraps one or more Problem Observations. */
+/** Problem Concern Act, wraps one or more Problem Observations. */
 export const PROBLEM_CONCERN_ACT = "2.16.840.1.113883.10.20.22.4.3";
-/** Problem Observation — carries the coded problem in `value xsi:type="CD"`. */
+/** Problem Observation, carries the coded problem in `value xsi:type="CD"`. */
 export const PROBLEM_OBSERVATION = "2.16.840.1.113883.10.20.22.4.4";
-/** Medication Activity — the `substanceAdministration` for one medication. */
+/** Medication Activity, the `substanceAdministration` for one medication. */
 export const MEDICATION_ACTIVITY = "2.16.840.1.113883.10.20.22.4.16";
-/** Medication Information — the `manufacturedMaterial` carrying the RxNorm code. */
+/** Medication Information, the `manufacturedMaterial` carrying the RxNorm code. */
 export const MEDICATION_INFORMATION = "2.16.840.1.113883.10.20.22.4.23";
-/** Allergy Concern Act — wraps one or more Allergy-Intolerance Observations. */
+/** Allergy Concern Act, wraps one or more Allergy-Intolerance Observations. */
 export const ALLERGY_CONCERN_ACT = "2.16.840.1.113883.10.20.22.4.30";
-/** Allergy-Intolerance Observation — the propensity assertion + allergen. */
+/** Allergy-Intolerance Observation, the propensity assertion + allergen. */
 export const ALLERGY_OBSERVATION = "2.16.840.1.113883.10.20.22.4.7";
-/** Reaction Observation — a manifestation of an allergy. */
+/** Reaction Observation, a manifestation of an allergy. */
 export const REACTION_OBSERVATION = "2.16.840.1.113883.10.20.22.4.9";
-/** Severity Observation — nested in a reaction (or the allergy) propensity. */
+/** Severity Observation, nested in a reaction (or the allergy) propensity. */
 export const SEVERITY_OBSERVATION = "2.16.840.1.113883.10.20.22.4.8";
-/** Criticality Observation — the clinical criticality of the propensity. */
+/** Criticality Observation, the clinical criticality of the propensity. */
 export const CRITICALITY_OBSERVATION = "2.16.840.1.113883.10.20.22.4.145";
-/** Result Organizer — the panel/battery wrapper around Result Observations. */
+/** Result Organizer, the panel/battery wrapper around Result Observations. */
 export const RESULT_ORGANIZER = "2.16.840.1.113883.10.20.22.4.1";
-/** Result Observation — a single coded lab/diagnostic result + its value. */
+/** Result Observation, a single coded lab/diagnostic result + its value. */
 export const RESULT_OBSERVATION = "2.16.840.1.113883.10.20.22.4.2";
-/** Vital Signs Organizer — the cluster wrapper around Vital Sign Observations. */
+/** Vital Signs Organizer, the cluster wrapper around Vital Sign Observations. */
 export const VITAL_SIGNS_ORGANIZER = "2.16.840.1.113883.10.20.22.4.26";
-/** Vital Sign Observation — a single coded vital sign + its `PQ` value. */
+/** Vital Sign Observation, a single coded vital sign + its `PQ` value. */
 export const VITAL_SIGN_OBSERVATION = "2.16.840.1.113883.10.20.22.4.27";
-/** Immunization Activity — the `substanceAdministration` for one vaccination. */
+/** Immunization Activity, the `substanceAdministration` for one vaccination. */
 export const IMMUNIZATION_ACTIVITY = "2.16.840.1.113883.10.20.22.4.52";
-/** Immunization Medication Information — the `manufacturedMaterial` carrying the CVX. */
+/** Immunization Medication Information, the `manufacturedMaterial` carrying the CVX. */
 export const IMMUNIZATION_MEDICATION_INFORMATION = "2.16.840.1.113883.10.20.22.4.54";
-/** Procedure Activity Procedure — a `<procedure>` (an altering/operative act). */
+/** Procedure Activity Procedure, a `<procedure>` (an altering/operative act). */
 export const PROCEDURE_ACTIVITY_PROCEDURE = "2.16.840.1.113883.10.20.22.4.14";
-/** Procedure Activity Act — an `<act>` procedure (a non-altering service). */
+/** Procedure Activity Act, an `<act>` procedure (a non-altering service). */
 export const PROCEDURE_ACTIVITY_ACT = "2.16.840.1.113883.10.20.22.4.12";
-/** Procedure Activity Observation — an `<observation>` procedure (an assessment). */
+/** Procedure Activity Observation, an `<observation>` procedure (an assessment). */
 export const PROCEDURE_ACTIVITY_OBSERVATION = "2.16.840.1.113883.10.20.22.4.13";
-/** Encounter Activity — the `<encounter>` for one visit/admission. */
+/** Encounter Activity, the `<encounter>` for one visit/admission. */
 export const ENCOUNTER_ACTIVITY = "2.16.840.1.113883.10.20.22.4.49";
-/** Smoking Status — Meaningful Use observation (current smoking status). */
+/** Smoking Status, Meaningful Use observation (current smoking status). */
 export const SMOKING_STATUS_OBSERVATION = "2.16.840.1.113883.10.20.22.4.78";
-/** Planned Act — a `<act>` planned/ordered service in the Plan of Treatment. */
+/** Planned Act, a `<act>` planned/ordered service in the Plan of Treatment. */
 export const PLANNED_ACT = "2.16.840.1.113883.10.20.22.4.39";
-/** Planned Encounter — a planned `<encounter>` in the Plan of Treatment. */
+/** Planned Encounter, a planned `<encounter>` in the Plan of Treatment. */
 export const PLANNED_ENCOUNTER = "2.16.840.1.113883.10.20.22.4.40";
-/** Planned Procedure — a planned/ordered `<procedure>` in the Plan of Treatment. */
+/** Planned Procedure, a planned/ordered `<procedure>` in the Plan of Treatment. */
 export const PLANNED_PROCEDURE = "2.16.840.1.113883.10.20.22.4.41";
-/** Planned Medication Activity — a planned `<substanceAdministration>` in the Plan. */
+/** Planned Medication Activity, a planned `<substanceAdministration>` in the Plan. */
 export const PLANNED_MEDICATION_ACTIVITY = "2.16.840.1.113883.10.20.22.4.42";
-/** Planned Supply — a planned `<supply>` (device/material) in the Plan of Treatment. */
+/** Planned Supply, a planned `<supply>` (device/material) in the Plan of Treatment. */
 export const PLANNED_SUPPLY = "2.16.840.1.113883.10.20.22.4.43";
-/** Planned Observation — a planned/ordered `<observation>` in the Plan of Treatment. */
+/** Planned Observation, a planned/ordered `<observation>` in the Plan of Treatment. */
 export const PLANNED_OBSERVATION = "2.16.840.1.113883.10.20.22.4.44";
-/** Functional Status Organizer — clusters Functional Status Observations. */
+/** Functional Status Organizer, clusters Functional Status Observations. */
 export const FUNCTIONAL_STATUS_ORGANIZER = "2.16.840.1.113883.10.20.22.4.66";
-/** Functional Status Observation — a single coded functional-status finding + value. */
+/** Functional Status Observation, a single coded functional-status finding + value. */
 export const FUNCTIONAL_STATUS_OBSERVATION = "2.16.840.1.113883.10.20.22.4.67";
-/** Mental Status Organizer — clusters Mental Status Observations. */
+/** Mental Status Organizer, clusters Mental Status Observations. */
 export const MENTAL_STATUS_ORGANIZER = "2.16.840.1.113883.10.20.22.4.75";
-/** Mental Status Observation — a single coded mental-status finding + value. */
+/** Mental Status Observation, a single coded mental-status finding + value. */
 export const MENTAL_STATUS_OBSERVATION = "2.16.840.1.113883.10.20.22.4.74";
-/** Assessment Scale Observation — a scored scale (e.g. PHQ-9, Glasgow Coma) carried as a direct section entry. */
+/** Assessment Scale Observation, a scored scale (e.g. PHQ-9, Glasgow Coma) carried as a direct section entry. */
 export const ASSESSMENT_SCALE_OBSERVATION = "2.16.840.1.113883.10.20.22.4.69";
-/** Assessment Scale Supporting Observation — a scored component (item/question) of an Assessment Scale. */
+/** Assessment Scale Supporting Observation, a scored component (item/question) of an Assessment Scale. */
 export const ASSESSMENT_SCALE_SUPPORTING_OBSERVATION = "2.16.840.1.113883.10.20.22.4.86";
-/** Family History Organizer — one family member + their Family History Observations. */
+/** Family History Organizer, one family member + their Family History Observations. */
 export const FAMILY_HISTORY_ORGANIZER = "2.16.840.1.113883.10.20.22.4.45";
-/** Family History Observation — a relative's condition (coded in `value`). */
+/** Family History Observation, a relative's condition (coded in `value`). */
 export const FAMILY_HISTORY_OBSERVATION = "2.16.840.1.113883.10.20.22.4.46";
-/** Family History Death Observation — marks a condition as the cause of death. */
+/** Family History Death Observation, marks a condition as the cause of death. */
 export const FAMILY_HISTORY_DEATH_OBSERVATION = "2.16.840.1.113883.10.20.22.4.47";
-/** Age Observation — the relative's age (a `PQ` in years) at onset/death. */
+/** Age Observation, the relative's age (a `PQ` in years) at onset/death. */
 export const AGE_OBSERVATION = "2.16.840.1.113883.10.20.22.4.31";
 
 /**
@@ -127,7 +127,7 @@ const PLANNED_MOODS: ReadonlySet<string> = new Set(["INT", "RQO", "PRMS", "PRP",
  * Classify a `@moodCode` into an {@link EventDisposition}, **never guessing**:
  * `EVN` → `"performed"`, a recognized planned mood → `"planned"`, and `undefined`
  * for a missing or unrecognized mood (the caller decides whether to flag it).
- * Pure — emits nothing — so each extractor pairs it with its own warning.
+ * Pure, emits nothing, so each extractor pairs it with its own warning.
  *
  * @example
  * ```ts
@@ -190,7 +190,7 @@ export function templateRoots(el: Element): readonly string[] {
 }
 
 /**
- * True when an element carries the given `templateId` root (extension ignored —
+ * True when an element carries the given `templateId` root (extension ignored,
  * roots match across R2.0/R2.1 mixed-extension documents).
  *
  * @example
@@ -365,7 +365,7 @@ export function resolveNarrative(
  * Reconcile a coded value against its resolved narrative. When both a display
  * label (the code's `displayName`/`originalText`) and a narrative are present
  * and neither contains the other (case-insensitive), emits
- * `CODE_NARRATIVE_MISMATCH` — surfacing the divergence without picking a winner.
+ * `CODE_NARRATIVE_MISMATCH`, surfacing the divergence without picking a winner.
  * Conservative by design: silent when either side is absent.
  *
  * @example
@@ -395,7 +395,7 @@ export function reconcileCode(
  * Resolve a concern act's {@link ConcernStatus} from its `statusCode` (the four
  * Concern Act ActStatus values). `completed` is the only one that ran its course
  * → `"resolved"`; `aborted` (stopped early) and `suspended` (on hold) are both
- * `"inactive"` — neither is collapsed into `"resolved"`, since "cancelled" is not
+ * `"inactive"`, neither is collapsed into `"resolved"`, since "cancelled" is not
  * "ran to resolution". Emits `PROBLEM_STATUS_INDETERMINATE` when the status is
  * absent or outside the recognized set, returning `"unknown"` (never a guessed
  * `"active"`).
@@ -451,8 +451,8 @@ export function childEntries(sectionEl: Element): readonly Element[] {
 }
 
 /**
- * The clinical act inside an `<entry>` — its first `act` /
- * `substanceAdministration` / `observation` / `organizer` child — that carries
+ * The clinical act inside an `<entry>`, its first `act` /
+ * `substanceAdministration` / `observation` / `organizer` child, that carries
  * the given `templateId` root, or `undefined` when the entry holds no such act.
  *
  * @example
@@ -470,7 +470,7 @@ export function entryAct(entry: Element, root: string): Element | undefined {
 }
 
 /**
- * The clinical act inside an `<entry>` regardless of template — its first
+ * The clinical act inside an `<entry>` regardless of template, its first
  * `act` / `substanceAdministration` / `observation` / `organizer` child. Used
  * to inspect an entry's templates for misplacement detection.
  *

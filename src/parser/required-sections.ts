@@ -2,7 +2,7 @@
  * Per-document-type **required-section** (SHALL) tables for C-CDA R2.1, traced
  * to the Implementation Guide's document-level templates. Each of the twelve
  * recognized {@link DocumentType}s maps to the catalog section keys it SHALL
- * contain — used by the parser to emit `REQUIRED_SECTION_MISSING` (a Tier-2
+ * contain, used by the parser to emit `REQUIRED_SECTION_MISSING` (a Tier-2
  * **warning**, never a fatal: a missing required section never blocks reading
  * the data that *is* present).
  *
@@ -10,20 +10,20 @@
  * high-confidence SHALL constraints whose section is in this parser's
  * recognized catalog. It deliberately **omits**:
  *
- * - **Choice constraints** (`SHALL contain A OR B`) — asserting either half as
+ * - **Choice constraints** (`SHALL contain A OR B`), asserting either half as
  *   unconditional would mis-flag conformant documents. The Referral Note's
- *   Assessment-and-Plan requirement (CONF:1198-29102 — an *Assessment and Plan*
+ *   Assessment-and-Plan requirement (CONF:1198-29102, an *Assessment and Plan*
  *   Section, **or** an *Assessment* Section **and** a *Plan of Treatment* Section)
  *   is one such choice, so neither half is asserted here.
- * - **SHOULD / MAY** sections — only SHALL is enforced. (For the Referral Note
+ * - **SHOULD / MAY** sections, only SHALL is enforced. (For the Referral Note
  *   this is why *Results* and *Plan of Treatment* are absent: the normative R2.1
  *   Schematron marks them SHOULD, CONF:1198-29090 / -29066, not SHALL.)
  * - **SHALL sections outside the recognized catalog** (e.g. Hospital Course,
- *   Physical Exam) — the parser cannot recognize them, so it does not pretend to
+ *   Physical Exam), the parser cannot recognize them, so it does not pretend to
  *   validate them.
  *
  * A document type with an **empty** list is therefore *"no unconditional,
- * in-catalog SHALL section is asserted yet"* — **not** *"this type has no
+ * in-catalog SHALL section is asserted yet"*, **not** *"this type has no
  * requirements."* Several types (Consultation Note, Progress Note, Procedure
  * Note, Operative Note, Diagnostic Imaging Report, Unstructured Document) carry
  * an empty list pending per-type verification; broadening them is additive and
@@ -62,7 +62,7 @@ const REQUIRED_SECTIONS: Readonly<Record<DocumentType, readonly string[]>> = {
 /**
  * The catalog section keys a {@link DocumentType} SHALL contain, in a stable
  * order. Returns an empty array when no unconditional in-catalog SHALL section
- * is asserted for that type (see the module note — empty ≠ "no requirements").
+ * is asserted for that type (see the module note, empty ≠ "no requirements").
  *
  * @example
  * ```ts

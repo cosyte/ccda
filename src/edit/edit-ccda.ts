@@ -1,8 +1,8 @@
 /**
- * `editCcda` — the read→edit→write loop for `@cosyte/ccda`, the third emit-side
+ * `editCcda`, the read→edit→write loop for `@cosyte/ccda`, the third emit-side
  * primitive alongside `parseCcda` (read) and `buildCcda` (construct). It takes a
  * document already produced by {@link parseCcda} and re-emits it with a section
- * **added** or **replaced**, then returns the re-parsed {@link CcdaDocument} —
+ * **added** or **replaced**, then returns the re-parsed {@link CcdaDocument},
  * so `parseCcda(editCcda(parseCcda(xml), …).toString())` round-trips.
  *
  * **Byte-faithful on the untouched sections.** The edit is performed as DOM
@@ -10,7 +10,7 @@
  * serialized snapshot every parsed document retains), not by reconstructing XML
  * from the lossy read-model. Every section, entry, attribute, namespace
  * declaration, and even content this library never models survives an edit
- * verbatim — only the one section the caller targeted is rebuilt. The
+ * verbatim, only the one section the caller targeted is rebuilt. The
  * replacement section is emitted through the **same per-section emitters
  * `buildCcda` uses** ({@link buildSectionComponent}), so it carries the identical
  * templateIds, LOINC code, SHALL `effectiveTime`, and narrative/entry agreement
@@ -20,7 +20,7 @@
  * (they are carried by reference), never fabricates a clinical value (an empty
  * content list yields that section's spec-clean `nullFlavor="NI"` shell, never
  * invented entries), and never produces a document that newly violates a
- * per-document-type SHALL required-section rule — such an edit throws a typed
+ * per-document-type SHALL required-section rule, such an edit throws a typed
  * {@link CcdaEditError} instead of emitting an invalid document. Every builder
  * guard the section emitter enforces (a resolved-without-resolution
  * contradiction, an invalid HL7 timestamp) still throws.
@@ -29,7 +29,7 @@
  * the document gets a new `ClinicalDocument.id`, keeps (or, if absent, mints)
  * the `setId` that identifies the version series, increments `versionNumber`,
  * and adds a `relatedDocument typeCode="RPLC"` naming the prior version in its
- * `parentDocument` (with the **same** `setId` and the prior `versionNumber`) —
+ * `parentDocument` (with the **same** `setId` and the prior `versionNumber`),
  * the replacement relationship defined by CDA R2 and shown in the HL7
  * C-CDA-Examples "Parent Document Replace Relationship" sample. Pass
  * `revision: false` to edit in place without stamping a new version.
@@ -59,7 +59,7 @@ const SYNTH_ROOT = "2.16.840.1.113883.19.5.99999";
  * (`POCD_MT000040.ClinicalDocument`), follow `versionNumber`. Inserting `setId`
  * and `versionNumber` immediately before the first of these present in the
  * document lands them at their XSD slot (after `languageCode`) regardless of
- * which optional participations the document carries — a document missing
+ * which optional participations the document carries, a document missing
  * `recordTarget` (or carrying `copyTime`) is still ordered correctly. `component`
  * is mandatory, so at least one anchor is always present. @internal
  */
@@ -174,7 +174,7 @@ export interface EditCcdaOptions {
   /**
    * An optional consumer-supplied bring-your-own {@link TerminologyAdapter},
    * forwarded to the final re-parse of the edited document so it surfaces
-   * `SEMANTIC_CODE_INVALID` for any coded value the adapter rejects — the same
+   * `SEMANTIC_CODE_INVALID` for any coded value the adapter rejects, the same
    * semantic-validation tier `parseCcda` and `buildCcda` already offer, now
    * reaching the edited output. `editCcda` never coerces a code to satisfy the
    * adapter (it emits every value verbatim, byte-faithful on untouched sections
@@ -205,7 +205,7 @@ export type CcdaEditErrorCode =
 
 /**
  * The typed error {@link editCcda} throws when an edit cannot be applied safely
- * — a hand-constructed source with no XML to edit, a structured-body-less
+ *, a hand-constructed source with no XML to edit, a structured-body-less
  * document, an add/replace precondition violation, an edit that would drop a
  * per-document-type SHALL required section, or a revision of a source that
  * carries no `ClinicalDocument.id` (the RPLC link has no prior version to name).
@@ -218,7 +218,7 @@ export type CcdaEditErrorCode =
  *   editCcda(doc, { sections: [{ kind: "problems", mode: "add", content: [] }] });
  * } catch (err) {
  *   if (err instanceof CcdaEditError && err.code === "SECTION_ALREADY_PRESENT") {
- *     // the document already has a Problems section — use "replace" or "upsert"
+ *     // the document already has a Problems section, use "replace" or "upsert"
  *   }
  * }
  * ```
@@ -248,11 +248,11 @@ export class CcdaEditError extends Error {
  * contract.
  *
  * @param source - A document produced by {@link parseCcda} (it must retain its
- *   source XML — a hand-constructed document throws `NO_SOURCE_DOCUMENT`).
+ *   source XML, a hand-constructed document throws `NO_SOURCE_DOCUMENT`).
  * @param options - The section edits to apply, the revision behavior, and an
  *   optional bring-your-own `terminology` adapter forwarded to the final re-parse
  *   so the edited document flags adapter-rejected codes (`SEMANTIC_CODE_INVALID`).
- * @returns A new {@link CcdaDocument} — the re-parse of the edited XML. The
+ * @returns A new {@link CcdaDocument}, the re-parse of the edited XML. The
  *   `source` is never mutated.
  * @throws {@link CcdaEditError} when the source has no retained XML, has no
  *   `structuredBody` to edit, violates an add/replace precondition, would drop a
@@ -279,7 +279,7 @@ export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): C
   const xml = sourceXml(source);
   // Re-parse the retained (already-clean, already-safe) XML into a fresh DOM we
   // can mutate. A no-op emitter: this XML came from our own serializer, so it
-  // carries no Tier-2 deviations to record — and any Tier-3 fatal is impossible.
+  // carries no Tier-2 deviations to record, and any Tier-3 fatal is impossible.
   const dom = parseSecureXml(xml, DEFAULT_LIMITS, () => undefined);
   const root = dom.documentElement;
   if (root === null) {
@@ -298,7 +298,7 @@ export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): C
 
   // Re-parse the edited XML into the returned document. When the caller supplied
   // a terminology adapter, forward it so the edited document reaches the same
-  // semantic-validation tier `parseCcda`/`buildCcda` offer — surfacing
+  // semantic-validation tier `parseCcda`/`buildCcda` offer, surfacing
   // `SEMANTIC_CODE_INVALID` for any coded value the adapter rejects (in a grafted
   // section or an untouched one). The edit still emits every code **verbatim**; the
   // adapter can only ever add a flag, never coerce a value.
@@ -373,14 +373,14 @@ function applyOneSectionEdit(
   if (mode === "add" && existing !== undefined) {
     throw new CcdaEditError(
       "SECTION_ALREADY_PRESENT",
-      `editCcda: a "${edit.kind}" section (${meta.base}) is already present — use ` +
+      `editCcda: a "${edit.kind}" section (${meta.base}) is already present, use ` +
         `mode "replace" or "upsert" to overwrite it.`,
     );
   }
   if (mode === "replace" && existing === undefined) {
     throw new CcdaEditError(
       "SECTION_ABSENT",
-      `editCcda: no "${edit.kind}" section (${meta.base}) is present to replace — use ` +
+      `editCcda: no "${edit.kind}" section (${meta.base}) is present to replace, use ` +
         `mode "add" or "upsert" to add it.`,
     );
   }
@@ -431,7 +431,7 @@ function sectionMatches(section: Element, base: string, loinc: string): boolean 
 
 /**
  * The recognized catalog `key` of every section under a `structuredBody`
- * (top-level and nested), by templateId root then LOINC — the present-section
+ * (top-level and nested), by templateId root then LOINC, the present-section
  * set the SHALL required-section check runs against. @internal
  */
 function sectionKeys(structuredBody: Element): ReadonlySet<string> {
@@ -471,7 +471,7 @@ function recognizeSectionKey(section: Element): string | undefined {
 
 /**
  * A monotonic id generator that never collides with an `ID` attribute already
- * in the document — so a section grafted into a document whose other sections
+ * in the document, so a section grafted into a document whose other sections
  * reuse the same builder id prefixes cannot produce a duplicate narrative `ID`
  * (which would make a `<reference value="#id">` ambiguous). Deterministic: no
  * randomness, so an edit is reproducible. @internal
@@ -526,7 +526,7 @@ function stampRevision(
 
   // CDA R2 (POCD_MT000040.xsd): ClinicalDocument.id is [1..1] SHALL and, on the
   // RPLC revision, ParentDocument.id is [1..*] SHALL. A source with no <id> cannot
-  // be truthfully revised — the relatedDocument/parentDocument exists precisely to
+  // be truthfully revised, the relatedDocument/parentDocument exists precisely to
   // name the version being replaced by its id, and there is none to name. Minting a
   // fresh id here would fabricate a clinical identifier for a document that provably
   // has none, so we refuse rather than emit a SHALL-invalid parentDocument. Callers
@@ -553,11 +553,11 @@ function stampRevision(
   const parentVersion = oldVersion ?? 1;
   const newVersion = init?.versionNumber ?? parentVersion + 1;
 
-  // The new document id — different from the parent's, per CDA R2 (every document
+  // The new document id, different from the parent's, per CDA R2 (every document
   // has a unique ClinicalDocument.id).
   const newDocId = init?.documentId ?? deriveNewDocId(oldIdEl, id);
 
-  // Build the parentDocument (id, code, setId, versionNumber — CDA R2 order) from
+  // Build the parentDocument (id, code, setId, versionNumber, CDA R2 order) from
   // the identity the source carried BEFORE we overwrite it.
   const parentDocument = el(dom, "parentDocument");
   parentDocument.appendChild(idElement(dom, "id", iiFrom(oldIdEl)));
@@ -587,7 +587,7 @@ function stampRevision(
   insertBeforeFirst(root, relatedDocument, AFTER_RELATED_DOCUMENT);
 }
 
-/** A fresh document id different from the parent's — same root, new extension. @internal */
+/** A fresh document id different from the parent's, same root, new extension. @internal */
 function deriveNewDocId(oldIdEl: Element, id: (prefix: string) => string): DocumentIdInit {
   const rootOid = attr(oldIdEl, "root");
   return { root: rootOid ?? SYNTH_ROOT, extension: id("doc") };

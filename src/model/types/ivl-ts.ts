@@ -1,5 +1,5 @@
 /**
- * IVL_TS — HL7 v3 Interval of Point in Time. A time range expressed via
+ * IVL_TS, HL7 v3 Interval of Point in Time. A time range expressed via
  * `<low>` / `<high>` bounds, each a {@link TS}. The canonical use in the C-CDA
  * header is `effectiveTime` on the document and on participations (the service
  * event period, an author time, a patient's coverage window).

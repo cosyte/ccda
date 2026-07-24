@@ -191,7 +191,7 @@ describe("DOM helpers", () => {
   });
 });
 
-describe("warning factory — unknownNamespacePrefix", () => {
+describe("warning factory, unknownNamespacePrefix", () => {
   it("reports the prefix without any clinical value", () => {
     const w = unknownNamespacePrefix({ path: "value" }, "zz");
     expect(w.code).toBe(WARNING_CODES.UNKNOWN_NAMESPACE_PREFIX);

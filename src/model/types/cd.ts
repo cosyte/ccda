@@ -1,5 +1,5 @@
 /**
- * CD / CE — HL7 v3 Concept Descriptor and Coded-with-Equivalents. The coded
+ * CD / CE, HL7 v3 Concept Descriptor and Coded-with-Equivalents. The coded
  * datatype behind `code`, `value xsi:type="CD"`, section codes, and most
  * vocabulary-bound fields. CE is a structural restriction of CD (no
  * `qualifier`); the suite parses both into the same {@link CD} shape. Captures
@@ -41,7 +41,7 @@ export interface CD {
  * Parse a `CD`/`CE` element into a typed {@link CD}. Returns `undefined` when
  * the element is absent. Resolves a child `<originalText>` to its trimmed text
  * and parses each `<translation>` recursively (translations of a translation
- * are ignored — C-CDA does not nest them). Never throws.
+ * are ignored, C-CDA does not nest them). Never throws.
  *
  * @example
  * ```ts

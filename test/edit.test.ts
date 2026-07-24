@@ -1,18 +1,18 @@
 /**
- * Tests for `editCcda` — the read→edit→write loop (CCDA-P7). The contract:
+ * Tests for `editCcda`, the read→edit→write loop (CCDA-P7). The contract:
  *
- *   - **round-trip** — `parseCcda(editCcda(doc, …).toString())` re-parses to the
+ *   - **round-trip**, `parseCcda(editCcda(doc, …).toString())` re-parses to the
  *     edited content, and serialization stays a fixed point;
- *   - **byte-faithful on untouched sections** — every section the edit did not
+ *   - **byte-faithful on untouched sections**, every section the edit did not
  *     target survives verbatim (the exact `<component>` bytes are unchanged),
  *     including content this library never models;
- *   - **add / replace / upsert semantics** — with typed `CcdaEditError`s on a
+ *   - **add / replace / upsert semantics**, with typed `CcdaEditError`s on a
  *     precondition violation, never a silent no-op or duplicate section;
- *   - **fail-safe** — an empty content list yields the section's spec-clean
+ *   - **fail-safe**, an empty content list yields the section's spec-clean
  *     `nullFlavor="NI"` shell (never fabricated entries), an edit never drops a
  *     SHALL required section, and a builder guard (invalid timestamp, resolved
  *     problem without a resolution date) still throws; and
- *   - **CDA R2 revision** — a fresh `id`, a kept/minted `setId`, an incremented
+ *   - **CDA R2 revision**, a fresh `id`, a kept/minted `setId`, an incremented
  *     `versionNumber`, and a `relatedDocument typeCode="RPLC"` naming the prior
  *     version, emitted in XSD sequence order; `revision: false` edits in place.
  */
@@ -76,7 +76,7 @@ function headerOrder(xml: string): readonly string[] {
   return names;
 }
 
-describe("editCcda — round-trip + byte-faithfulness", () => {
+describe("editCcda, round-trip + byte-faithfulness", () => {
   it("replaces a section and round-trips through parseCcda", () => {
     const doc = sampleDoc();
     const revised = editCcda(doc, {
@@ -112,7 +112,7 @@ describe("editCcda — round-trip + byte-faithfulness", () => {
     });
     const after = revised.toString();
 
-    // The Problems section (LOINC 11450-4) was not touched — identical bytes.
+    // The Problems section (LOINC 11450-4) was not touched, identical bytes.
     expect(componentBytes(after, "11450-4")).toBe(componentBytes(before, "11450-4"));
     // The Results (30954-2) and Vital Signs (8716-3) SHALL shells are untouched too.
     expect(componentBytes(after, "30954-2")).toBe(componentBytes(before, "30954-2"));
@@ -159,7 +159,7 @@ describe("editCcda — round-trip + byte-faithfulness", () => {
   });
 });
 
-describe("editCcda — add / replace / upsert semantics", () => {
+describe("editCcda, add / replace / upsert semantics", () => {
   it("throws SECTION_ALREADY_PRESENT on add of an existing section", () => {
     const doc = sampleDoc();
     expect(() =>
@@ -207,14 +207,14 @@ describe("editCcda — add / replace / upsert semantics", () => {
   });
 });
 
-describe("editCcda — fail-safe", () => {
+describe("editCcda, fail-safe", () => {
   it("replacing a SHALL section with empty content keeps a spec-clean NI shell (not dropped)", () => {
     const doc = sampleDoc();
     const revised = editCcda(doc, {
       sections: [{ kind: "medications", mode: "replace", content: [] }],
       revision: false,
     });
-    // Medications is a CCD SHALL section — it must still be present, as nullFlavor="NI".
+    // Medications is a CCD SHALL section, it must still be present, as nullFlavor="NI".
     expect(revised.findSection("medications")).toBeDefined();
     expect(revised.getMedications()).toEqual([]);
     // No REQUIRED_SECTION_MISSING warning on the re-parse.
@@ -268,7 +268,7 @@ describe("editCcda — fail-safe", () => {
   });
 });
 
-describe("editCcda — CDA R2 revision", () => {
+describe("editCcda, CDA R2 revision", () => {
   it("stamps a fresh id, kept/minted setId, incremented versionNumber, and an RPLC relatedDocument", () => {
     const doc = sampleDoc();
     const revised = editCcda(doc, {
@@ -317,7 +317,7 @@ describe("editCcda — CDA R2 revision", () => {
 
     expect(v3.header.versionNumber).toBe(3);
     expect(v3.header.setId?.extension).toBe(v2.header.setId?.extension); // same series
-    // Only one relatedDocument — the source's own parent link is superseded, not accumulated.
+    // Only one relatedDocument, the source's own parent link is superseded, not accumulated.
     expect(v3.header.relatedDocuments).toHaveLength(1);
     expect(v3.header.relatedDocuments[0]?.parentDocument.ids[0]?.extension).toBe(
       v2.header.documentId?.extension,
@@ -353,10 +353,10 @@ describe("editCcda — CDA R2 revision", () => {
   });
 });
 
-describe("editCcda — preserves unmodeled source content", () => {
+describe("editCcda, preserves unmodeled source content", () => {
   it("keeps a header element this library never models across an edit", () => {
     // A hand-authored, spec-clean minimal CCD carrying an <authorization> element
-    // (which the read-model does not surface) — it must survive the edit verbatim.
+    // (which the read-model does not surface), it must survive the edit verbatim.
     const source = buildCcda({
       patient: { given: ["A"], family: "B", mrn: "M1" },
       documentId: "DOC-1",
@@ -439,7 +439,7 @@ function rawCda(opts: {
   );
 }
 
-describe("editCcda — edge-case coverage", () => {
+describe("editCcda, edge-case coverage", () => {
   it("edits a document whose type is unrecognized (no SHALL check)", () => {
     const doc = parseCcda(rawCda({ rootTemplate: "9.9.9.9.9" }));
     expect(doc.documentType).toBeUndefined();
@@ -460,7 +460,7 @@ describe("editCcda — edge-case coverage", () => {
         nestedSubsection: true,
       }),
     );
-    // The Problems section carries no templateId — recognized only by LOINC 11450-4.
+    // The Problems section carries no templateId, recognized only by LOINC 11450-4.
     const revised = editCcda(doc, {
       sections: [
         { kind: "problems", mode: "replace", content: [{ problem: DIABETES, status: "active" }] },
@@ -494,7 +494,7 @@ describe("editCcda — edge-case coverage", () => {
     expect(revised.header.setId?.extension).toBeUndefined();
     expect(revised.header.versionNumber).toBe(2);
     expect(revised.header.relatedDocuments[0]?.parentDocument.versionNumber).toBe(1);
-    // Even with no recordTarget, setId/versionNumber land at their XSD slot —
+    // Even with no recordTarget, setId/versionNumber land at their XSD slot,
     // after languageCode, before the body component (never appended past it).
     const order = headerOrder(revised.toString());
     expect(order.indexOf("setId")).toBeGreaterThan(order.indexOf("title"));
@@ -507,7 +507,7 @@ describe("editCcda — edge-case coverage", () => {
     // A source ClinicalDocument with no <id> (itself a CDA R2 [1..1] SHALL violation).
     // Stamping an RPLC revision would emit a <parentDocument> with no <id>, which
     // violates POCD_MT000040.ParentDocument.id (minOccurs=1). Minting a fake parent id
-    // would fabricate a clinical identifier for a document that has none — so we throw.
+    // would fabricate a clinical identifier for a document that has none, so we throw.
     const doc = parseCcda(rawCda({ problemsByLoincOnly: true }));
     expect(doc.header.documentId).toBeUndefined();
     // The emitted XML never contains a parentDocument (we refuse before serializing).
@@ -600,7 +600,7 @@ describe("editCcda — edge-case coverage", () => {
   });
 });
 
-describe("editCcda — bring-your-own terminology adapter threading", () => {
+describe("editCcda, bring-your-own terminology adapter threading", () => {
   const has = (warnings: readonly CcdaWarning[]): boolean =>
     warnings.some((w) => w.code === WARNING_CODES.SEMANTIC_CODE_INVALID);
 
@@ -633,7 +633,7 @@ describe("editCcda — bring-your-own terminology adapter threading", () => {
     expect(w?.message).not.toContain(DIABETES.code);
   });
 
-  it("also validates an untouched section — the adapter runs on the whole edited output", () => {
+  it("also validates an untouched section, the adapter runs on the whole edited output", () => {
     // Edit only medications; reject the untouched problem's code. The flag proves
     // the adapter reached the section the edit did not target.
     const revised = editCcda(sampleDoc(), {

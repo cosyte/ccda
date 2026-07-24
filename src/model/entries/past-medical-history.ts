@@ -1,5 +1,5 @@
 /**
- * Past Medical History extraction — historical problems a patient no longer has
+ * Past Medical History extraction, historical problems a patient no longer has
  * an active concern about. Unlike the Problems Section (which wraps each problem
  * in a Problem Concern Act, `…22.4.3`), the Past Medical History Section
  * (`…22.2.20`) carries **bare** Problem Observations (`…22.4.4`) directly under
@@ -7,7 +7,7 @@
  * Problem Observation under an `entryRelationship`, so it is not a direct
  * `<entry>` child here, and a bare Problem Observation is not a concern act.
  *
- * The shared {@link buildProblem} builder is reused verbatim — a past problem has
+ * The shared {@link buildProblem} builder is reused verbatim, a past problem has
  * the same coded shape as a current one (the distinction is the section it lives
  * in, surfaced via `getPastMedicalHistory`), so there is no separate model.
  */

@@ -42,12 +42,12 @@ function icd9ProblemCcd(): string {
 }
 
 afterEach(() => {
-  // The only mutable module-scoped state in the subsystem — clear it so a
+  // The only mutable module-scoped state in the subsystem, clear it so a
   // default set in one test cannot bleed into the next.
   setDefaultCcdaProfile(null);
 });
 
-describe("defineCcdaProfile — construction & validation", () => {
+describe("defineCcdaProfile, construction & validation", () => {
   it("builds a frozen profile with lineage = [name] and describe()", () => {
     const p = defineCcdaProfile({ name: "acme", description: "desc" });
     expect(p.name).toBe("acme");
@@ -61,25 +61,25 @@ describe("defineCcdaProfile — construction & validation", () => {
   it("rejects a missing/blank name", () => {
     expect(() => defineCcdaProfile({ name: "" })).toThrow(CcdaProfileDefinitionError);
     expect(() => defineCcdaProfile({ name: "   " })).toThrow(/non-empty string/);
-    // @ts-expect-error — exercise the runtime guard for a non-string name.
+    // @ts-expect-error, exercise the runtime guard for a non-string name.
     expect(() => defineCcdaProfile({ name: 42 })).toThrow(CcdaProfileDefinitionError);
-    // @ts-expect-error — exercise the null-options guard.
+    // @ts-expect-error, exercise the null-options guard.
     expect(() => defineCcdaProfile(null)).toThrow(/options is required/);
   });
 
   it("rejects an unknown option key with a did-you-mean hint", () => {
-    // @ts-expect-error — 'tolerated' is not a known key (near 'tolerate').
+    // @ts-expect-error, 'tolerated' is not a known key (near 'tolerate').
     expect(() => defineCcdaProfile({ name: "x", tolerated: [] })).toThrow(
       /Did you mean 'tolerate'/,
     );
     // A far-off key gets no hint but still throws.
-    // @ts-expect-error — unknown key.
+    // @ts-expect-error, unknown key.
     expect(() => defineCcdaProfile({ name: "x", zzzzzzz: 1 })).toThrow(/unknown option key/);
   });
 
   it("rejects a tolerate entry with an unknown warning code", () => {
     expect(() =>
-      // @ts-expect-error — not a real WarningCode.
+      // @ts-expect-error, not a real WarningCode.
       defineCcdaProfile({ name: "x", tolerate: [{ code: "NOPE", rationale: "r" }] }),
     ).toThrow(/unknown warning code/);
   });
@@ -108,7 +108,7 @@ describe("defineCcdaProfile — construction & validation", () => {
   });
 });
 
-describe("defineCcdaProfile — extends / merge", () => {
+describe("defineCcdaProfile, extends / merge", () => {
   it("merges lineage, tolerate, provenance and description from a single parent", () => {
     const parent = defineCcdaProfile({
       name: "base",
@@ -172,7 +172,7 @@ describe("defineCcdaProfile — extends / merge", () => {
     expect(p.describe?.()).toContain("@section 8716-3");
   });
 
-  it("re-validates the merged set — a rogue parent cannot smuggle a safety-critical code", () => {
+  it("re-validates the merged set, a rogue parent cannot smuggle a safety-critical code", () => {
     const rogue: CcdaProfile = {
       name: "rogue",
       lineage: ["rogue"],
@@ -254,7 +254,7 @@ describe("profileQuirkApplied factory", () => {
   });
 });
 
-describe("applyProfile — pure warning transform", () => {
+describe("applyProfile, pure warning transform", () => {
   it("downgrades a tolerated warning to PROFILE_QUIRK_APPLIED, preserving the original code", () => {
     const w: CcdaWarning = {
       code: WARNING_CODES.DEPRECATED_LOINC,
@@ -355,7 +355,7 @@ describe("end-to-end parse with a profile", () => {
     expect(codes(doc.warnings)).toContain(WARNING_CODES.PROFILE_QUIRK_APPLIED);
   });
 
-  it("a profile NEVER changes extracted clinical values — only warning behaviour", () => {
+  it("a profile NEVER changes extracted clinical values, only warning behaviour", () => {
     const xml = deprecatedLoincCcd();
     const bare = parseCcda(xml);
     const withProfile = parseCcda(xml, { profile: ccdaProfiles.smartScorecard });

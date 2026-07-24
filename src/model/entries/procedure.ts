@@ -1,16 +1,16 @@
 /**
- * Procedures extraction — the three Procedure Activity templates a Procedures
+ * Procedures extraction, the three Procedure Activity templates a Procedures
  * section can carry: an altering/operative `<procedure>` (Procedure Activity
  * Procedure `…22.4.14`), a non-altering `<act>` service (Procedure Activity Act
  * `…22.4.12`), and an `<observation>` assessment (Procedure Activity Observation
- * `…22.4.13`). They share a shape — a procedure `code`, `statusCode`,
- * `effectiveTime` — and differ only in element name + template.
+ * `…22.4.13`). They share a shape, a procedure `code`, `statusCode`,
+ * `effectiveTime`, and differ only in element name + template.
  *
  * **`moodCode` is safety-critical here.** A performed procedure (`EVN`) and a
  * planned/ordered one (`INT`/`RQO`/…) are **never conflated**: the mood is
  * modeled as a `disposition` of `"performed"` vs `"planned"`. A missing mood is
  * `PLANNED_VS_PERFORMED_AMBIGUOUS` (disposition left undefined); an unrecognized
- * mood is `PROCEDURE_MOOD_UNEXPECTED` — both extract the procedure, neither
+ * mood is `PROCEDURE_MOOD_UNEXPECTED`, both extract the procedure, neither
  * guesses its disposition.
  */
 
@@ -39,7 +39,7 @@ import type { Element } from "@xmldom/xmldom";
 
 /**
  * Which of the three Procedure Activity templates an extracted procedure came
- * from — `"procedure"` (altering/operative), `"act"` (non-altering service), or
+ * from, `"procedure"` (altering/operative), `"act"` (non-altering service), or
  * `"observation"` (assessment). Preserved so a consumer can tell an operative
  * act apart from a diagnostic observation without re-reading the DOM.
  *
@@ -54,7 +54,7 @@ export type ProcedureKind = "procedure" | "act" | "observation";
 /**
  * The performed-vs-planned disposition of a procedure, derived from its
  * `@moodCode`: `EVN` → `"performed"`; a planned mood (`INT`/`RQO`/`PRMS`/`PRP`/
- * `APT`/`ARQ`) → `"planned"`. Absent when the mood is missing or unrecognized —
+ * `APT`/`ARQ`) → `"planned"`. Absent when the mood is missing or unrecognized,
  * never guessed, so a planned procedure is never read as performed.
  *
  * @example
@@ -181,7 +181,7 @@ function buildProcedure(
 /**
  * Classify a procedure's `@moodCode` into a {@link ProcedureDisposition}.
  * Emits `PLANNED_VS_PERFORMED_AMBIGUOUS` for a missing mood and
- * `PROCEDURE_MOOD_UNEXPECTED` for an unrecognized one — returning `undefined`
+ * `PROCEDURE_MOOD_UNEXPECTED` for an unrecognized one, returning `undefined`
  * in both cases (disposition is never guessed). @internal
  */
 function classifyMood(

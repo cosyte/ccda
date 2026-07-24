@@ -6,7 +6,7 @@ import { buildCcda } from "./__fixtures__/ccda.js";
 
 const fatalCodes = new Set<string>(Object.values(FATAL_CODES));
 
-describe("secure XML substrate — attack vectors", () => {
+describe("secure XML substrate, attack vectors", () => {
   it("rejects a classic XXE external-entity declaration", () => {
     const xxe = `<?xml version="1.0"?>
 <!DOCTYPE foo [ <!ENTITY xxe SYSTEM "file:///etc/passwd"> ]>
@@ -43,7 +43,7 @@ describe("secure XML substrate — attack vectors", () => {
   });
 });
 
-describe("fuzz — parseCcda never throws a non-fatal", () => {
+describe("fuzz, parseCcda never throws a non-fatal", () => {
   it("survives arbitrary strings (only Tier-3 fatals may escape)", () => {
     fc.assert(
       fc.property(fc.string(), (raw) => {

@@ -20,7 +20,7 @@ export function buildDescribe(p: CcdaProfile): string {
     lines.push(`  description: ${p.description}`);
   }
   // `describe()` is only ever attached by the factory, which always fills
-  // `lineage` with at least the profile's own name — so it is non-empty here.
+  // `lineage` with at least the profile's own name, so it is non-empty here.
   lines.push(`  lineage: ${p.lineage.join(" → ")}`);
   if (p.provenance !== undefined) {
     lines.push(`  grounded in: ${p.provenance.source} (${p.provenance.reference})`);

@@ -1,10 +1,10 @@
 /**
- * `CcdaDocument` — the immutable parsed-document model produced by `parseCcda`.
+ * `CcdaDocument`, the immutable parsed-document model produced by `parseCcda`.
  * It ties the Phase 1 pieces together: the recognized {@link DocumentType}
  * (from the root `templateId` OID, with the R2.1 `@extension` stamp checked),
  * the US Realm {@link CcdaHeader}, the framed top-level {@link CcdaSection}s
  * from a `structuredBody` (or the quarantined `nonXMLBody` content for an
- * unstructured document), and the lenient-parse warnings — frozen at the model
+ * unstructured document), and the lenient-parse warnings, frozen at the model
  * boundary so callers cannot mutate parser output after handoff.
  *
  * Phase 1 frames identity + narrative only; clinical entry extraction is
@@ -100,7 +100,7 @@ export interface CcdaDocumentInit {
   readonly warnings: readonly CcdaWarning[];
   /**
    * The {@link CcdaProfile} applied at parse time (its `name` + resolved
-   * `lineage`), or absent when no profile was active. Attribution only — the
+   * `lineage`), or absent when no profile was active. Attribution only, the
    * profile's effect is already reflected in `warnings` (tolerated deviations
    * re-badged `PROFILE_QUIRK_APPLIED`, flagged `expected`).
    */
@@ -117,7 +117,7 @@ export interface CcdaDocumentInit {
 }
 
 /**
- * PHI-free attribution for the {@link CcdaProfile} a document was parsed under —
+ * PHI-free attribution for the {@link CcdaProfile} a document was parsed under,
  * just the profile's `name` and resolved `lineage`, not the whole profile
  * object. Mirrors the sibling `@cosyte/hl7` `msg.profile` shape.
  *
@@ -135,7 +135,7 @@ export interface ProfileAttribution {
 
 /**
  * The immutable parsed C-CDA document. Carries the recognized identity, the
- * header, the top-level sections (empty for an unstructured document — see
+ * header, the top-level sections (empty for an unstructured document, see
  * `nonXmlBody`), and the frozen lenient-parse warnings.
  *
  * @example
@@ -160,27 +160,27 @@ export class CcdaDocument {
   public readonly medications: readonly Medication[];
   /** Extracted Allergy Concern Acts (across all sections). Empty when none. */
   public readonly allergies: readonly AllergyConcern[];
-  /** Extracted Result Organizers — lab/diagnostic panels (across all sections). Empty when none. */
+  /** Extracted Result Organizers, lab/diagnostic panels (across all sections). Empty when none. */
   public readonly results: readonly ResultOrganizer[];
-  /** Extracted Vital Signs Organizers — vital-reading clusters (across all sections). Empty when none. */
+  /** Extracted Vital Signs Organizers, vital-reading clusters (across all sections). Empty when none. */
   public readonly vitals: readonly VitalSignsOrganizer[];
   /** Extracted Immunization Activities (across all sections). Empty when none. */
   public readonly immunizations: readonly Immunization[];
-  /** Extracted procedures — performed or planned (across all sections). Empty when none. */
+  /** Extracted procedures, performed or planned (across all sections). Empty when none. */
   public readonly procedures: readonly Procedure[];
-  /** Extracted Encounter Activities — visits/admissions (across all sections). Empty when none. */
+  /** Extracted Encounter Activities, visits/admissions (across all sections). Empty when none. */
   public readonly encounters: readonly Encounter[];
   /** Extracted Smoking Status observations from Social History. Empty when none. */
   public readonly smokingStatus: readonly SmokingStatus[];
-  /** Extracted planned items from the Plan of Treatment — all future/ordered (across all sections). Empty when none. */
+  /** Extracted planned items from the Plan of Treatment, all future/ordered (across all sections). Empty when none. */
   public readonly plannedItems: readonly PlannedItem[];
   /** Extracted Functional Status findings (across all sections). Empty when none. */
   public readonly functionalStatus: readonly StatusObservation[];
   /** Extracted Mental Status findings (across all sections). Empty when none. */
   public readonly mentalStatus: readonly StatusObservation[];
-  /** Extracted Family History Organizers — one per relative (across all sections). Empty when none. */
+  /** Extracted Family History Organizers, one per relative (across all sections). Empty when none. */
   public readonly familyHistory: readonly FamilyHistory[];
-  /** Extracted Past Medical History problems — bare historical Problem Observations. Empty when none. */
+  /** Extracted Past Medical History problems, bare historical Problem Observations. Empty when none. */
   public readonly pastMedicalHistory: readonly Problem[];
   /** The quarantined `nonXMLBody` content for an unstructured document (base64 never decoded). */
   public readonly nonXmlBody: ED | undefined;
@@ -224,7 +224,7 @@ export class CcdaDocument {
   }
 
   /**
-   * Serialize this document back to spec-clean C-CDA XML — the conservative
+   * Serialize this document back to spec-clean C-CDA XML, the conservative
    * *emit* half of the Postel's-Law contract. Returns the faithful re-emission
    * of the source the parser read (no silent loss of unmodeled content), with a
    * guaranteed XML declaration. Serialization is a fixed point:
@@ -232,7 +232,7 @@ export class CcdaDocument {
    *
    * @returns The spec-clean XML text.
    * @throws {Error} If this document was hand-constructed (not produced by
-   *   {@link parseCcda}) and so retains no source document to emit — a document
+   *   {@link parseCcda}) and so retains no source document to emit, a document
    *   builder API lands in a later phase.
    * @example
    * ```ts
@@ -254,7 +254,7 @@ export class CcdaDocument {
    * Return a **new** `CcdaDocument` with `additional` warnings appended,
    * structurally sharing every parsed field (header, sections, entries, and the
    * serialized snapshot) with this instance by reference. The original is never
-   * mutated — the immutable copy-with foundation a later builder phase extends
+   * mutated, the immutable copy-with foundation a later builder phase extends
    * to content edits. A downstream pass (e.g. profile-aware validation) uses
    * this to annotate a document without re-parsing.
    *
@@ -335,7 +335,7 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's MRN string — the first `patientRole/id` extension (see
+   * The patient's MRN string, the first `patientRole/id` extension (see
    * {@link pickMrn}). `undefined` when there is no patient or no usable id.
    *
    * @example
@@ -386,7 +386,7 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's Problem Concern Acts — each wrapping one or more coded
+   * The patient's Problem Concern Acts, each wrapping one or more coded
    * problems with an active/resolved status. Empty when the document carries no
    * Problems entries.
    *
@@ -401,7 +401,7 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's Medication Activities — each carrying the RxNorm drug, dose,
+   * The patient's Medication Activities, each carrying the RxNorm drug, dose,
    * route, and timing. Empty when the document carries no Medications entries.
    *
    * @example
@@ -414,7 +414,7 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's Allergy Concern Acts — each wrapping one or more
+   * The patient's Allergy Concern Acts, each wrapping one or more
    * allergy/intolerance observations (including the "No Known Allergies"
    * negated form). Empty when the document carries no Allergies entries.
    *
@@ -428,7 +428,7 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's Result Organizers — lab/diagnostic panels, each carrying its
+   * The patient's Result Organizers, lab/diagnostic panels, each carrying its
    * member Result Observations with UCUM-checked values and reference ranges.
    * Empty when the document carries no Results entries.
    *
@@ -443,7 +443,7 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's Vital Signs Organizers — reading clusters, each carrying its
+   * The patient's Vital Signs Organizers, reading clusters, each carrying its
    * member Vital Sign Observations with UCUM-checked `PQ` values. Empty when the
    * document carries no Vital Signs entries.
    *
@@ -458,7 +458,7 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's Immunization Activities — each carrying the CVX vaccine, dose,
+   * The patient's Immunization Activities, each carrying the CVX vaccine, dose,
    * route, and date (including the `refused` not-administered form). Empty when
    * the document carries no Immunizations entries.
    *
@@ -473,7 +473,7 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's procedures — each carrying its procedure `code`, status, and a
+   * The patient's procedures, each carrying its procedure `code`, status, and a
    * `disposition` of `"performed"` vs `"planned"` derived from `moodCode` (never
    * conflated). Empty when the document carries no Procedures entries.
    *
@@ -488,7 +488,7 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's Encounter Activities — each carrying the encounter type `code`,
+   * The patient's Encounter Activities, each carrying the encounter type `code`,
    * status, and visit period. Empty when the document carries no Encounters
    * entries.
    *
@@ -502,7 +502,7 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's Smoking Status observations (from Social History) — each
+   * The patient's Smoking Status observations (from Social History), each
    * carrying the SNOMED smoking-status `value` and an `unknown` flag for the
    * explicitly-unknown form. Empty when the document records no smoking status.
    *
@@ -517,7 +517,7 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's planned items from the Plan of Treatment — each future/ordered
+   * The patient's planned items from the Plan of Treatment, each future/ordered
    * (never performed), carrying its planned `code`, `kind`, and a `disposition`
    * of `"planned"` derived from `moodCode` (never read as performed). Empty when
    * the document carries no Plan of Treatment entries.
@@ -533,7 +533,7 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's Functional Status findings — ADLs, mobility, and self-care
+   * The patient's Functional Status findings, ADLs, mobility, and self-care
    * observations (plus any scored assessment scales). Empty when the document
    * carries no Functional Status entries.
    *
@@ -548,7 +548,7 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's Mental Status findings — cognition and mood observations (plus
+   * The patient's Mental Status findings, cognition and mood observations (plus
    * any scored assessment scales such as a PHQ-9). Empty when the document
    * carries no Mental Status entries.
    *
@@ -562,7 +562,7 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's Family History — one {@link FamilyHistory} per relative, each
+   * The patient's Family History, one {@link FamilyHistory} per relative, each
    * carrying the relative's structured identity and their recorded conditions.
    * Empty when the document carries no Family History entries.
    *
@@ -577,7 +577,7 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's Past Medical History — historical problems carried as bare
+   * The patient's Past Medical History, historical problems carried as bare
    * Problem Observations (distinct from the active-concern Problems section).
    * Empty when the document carries no Past Medical History entries.
    *
@@ -594,7 +594,7 @@ export class CcdaDocument {
 /**
  * Build the {@link CcdaDocumentInit} parts (everything except `warnings`) from a
  * `ClinicalDocument` root element. Recognizes the document type, parses the
- * header, and frames the body — a `structuredBody` yields sections; a
+ * header, and frames the body, a `structuredBody` yields sections; a
  * `nonXMLBody` yields the quarantined `nonXmlBody` content. Never throws; the
  * orchestrator supplies `warnings` and constructs the {@link CcdaDocument}.
  *
@@ -697,7 +697,7 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
  * the matched type's `templateId` lacks the R2.1 `@extension` stamp, and
  * `UNKNOWN_DOCUMENT_TEMPLATE` when `templateId`s are present but none map to a
  * recognized type. The generic US Realm Header / CDA-base templates are not in
- * the document-type table, so they are naturally passed over — only a specific
+ * the document-type table, so they are naturally passed over, only a specific
  * document-type `templateId` resolves a {@link DocumentType}.
  *
  * @internal

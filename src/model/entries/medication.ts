@@ -1,5 +1,5 @@
 /**
- * Medications extraction — the Medication Activity (`…22.4.16`)
+ * Medications extraction, the Medication Activity (`…22.4.16`)
  * `substanceAdministration`. The drug is the RxNorm `code` reached via
  * `consumable/manufacturedProduct/manufacturedMaterial` (Medication
  * Information `…22.4.23`); `doseQuantity` and `routeCode` are safety-critical
@@ -56,7 +56,7 @@ export interface MedicationFrequency {
  * is the amount per administration; `route` is the administration route;
  * `duration` is the therapy window (`IVL_TS`) and `frequency` the periodic
  * timing (`PIVL_TS`). `moodCode` distinguishes an actual administration (`EVN`)
- * from a planned/ordered one (`INT`/`RQO`) — never conflated.
+ * from a planned/ordered one (`INT`/`RQO`), never conflated.
  *
  * @example
  * ```ts
@@ -208,7 +208,7 @@ function readTiming(
     const isFrequency = t === "PIVL_TS" || t === "EIVL_TS" || periodEl !== undefined;
 
     // A single element matching both axes (e.g. an untyped element carrying both
-    // low/high and a period) is genuinely ambiguous — never silently pick one.
+    // low/high and a period) is genuinely ambiguous, never silently pick one.
     if (isDuration && isFrequency) {
       unresolved += 1;
     } else if (isDuration && duration === undefined) {

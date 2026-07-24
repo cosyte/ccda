@@ -1,5 +1,5 @@
 /**
- * TS — HL7 v3 Point in Time. A timestamp element carrying a `@value` in the
+ * TS, HL7 v3 Point in Time. A timestamp element carrying a `@value` in the
  * variable-precision `YYYYMMDDHHMMSS[.S][±ZZZZ]` form. The composite preserves
  * the raw string and the parsed `Date`; a value that does not match the v3 TS
  * shape is preserved as `raw` with `date` left `undefined` and a
