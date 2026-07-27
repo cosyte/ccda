@@ -653,21 +653,37 @@ export function missingProductCode(position: CcdaPosition): CcdaWarning {
  * `MEDICATION_PRODUCT_ARM_CONFLICT` ({@link medicationProductArmConflict}),
  * which is safety-critical and fires alongside this one.
  *
- * The code is read, not refused, which is Postel's Law on the parse side: the
- * alternate arm is a valid CDA R2 shape carrying the same `CE`, and the
- * previous behaviour of returning `drug: undefined` in silence was strictly
- * worse than reading it and flagging the deviation. The value then flows
- * through the ordinary {@link checkCodeSlot} path, so every code-system and
- * terminology check applies to it unchanged.
+ * **When this warning stands alone, the code is read rather than refused**,
+ * which is Postel's Law on the parse side: the alternate arm is a valid CDA R2
+ * shape carrying the same `CE`, and the previous behaviour of returning
+ * `drug: undefined` in silence was strictly worse than reading it and flagging
+ * the deviation. The selected value then flows through the ordinary
+ * {@link checkCodeSlot} path, so every code-system and terminology check applies
+ * to it unchanged.
+ *
+ * **The one state where that is not true is the conflict, and it is the reason
+ * this code can stay tolerable.** When `MEDICATION_PRODUCT_ARM_CONFLICT` fires
+ * beside this one, **no** product code is selected, so nothing reaches
+ * `checkCodeSlot` and no code-system or terminology check runs for that slot.
+ * The classification below is stated conditionally for that reason: it used to
+ * be argued from "the drug is present and fully checked", full stop, which
+ * stopped being true the moment the conflict state existed.
  *
  * **Provenance:** the two-arm choice is base CDA R2 structure. Whether the
  * C-CDA template *forbids* the alternate arm is a normative question this repo
  * cannot answer without the R2.1 Schematron, so no conformance verb is claimed
- * here, the warning says only that the code came off the arm the templates do
- * not use. That also decides the safety classification: unlike a silently
- * missing drug, the drug is present and fully checked, so this is known,
- * meaning-preserving vendor noise a profile may defensibly tolerate, and it is
- * deliberately **not** in `SAFETY_CRITICAL_CODES`.
+ * here, the warning says only which arm was present. That also decides the
+ * safety classification, and the argument has two halves rather than one.
+ * Wherever this code is the *only* thing fired, a code was selected and fully
+ * checked, so it reports known, meaning-preserving vendor noise a profile may
+ * defensibly tolerate. Wherever a code was **not** selected, this code is by
+ * construction not alone: `MEDICATION_PRODUCT_ARM_CONFLICT` is in
+ * `SAFETY_CRITICAL_CODES`, so no profile may quiet it, and the withheld product
+ * is reported whether or not this code is tolerated. Tolerating this one can
+ * therefore never buy silence about a withheld drug, which is why it is
+ * deliberately **not** in `SAFETY_CRITICAL_CODES`. Its exclusion is unchanged
+ * by that reasoning: it is the justification that was corrected, not the
+ * classification.
  *
  * @example
  * ```ts
@@ -684,18 +700,33 @@ export function medicationProductArmUnexpected(position: CcdaPosition): CcdaWarn
 }
 
 /**
- * Build a `MEDICATION_PRODUCT_ARM_CONFLICT` warning. Emitted when one
- * `manufacturedProduct` carries **both** arms of the CDA R2 choice,
- * `manufacturedMaterial` **and** `manufacturedLabeledDrug`, and **both** name a
- * product that is not the same product: a different `@code`, or one `@code`
- * under two different `@codeSystem`s.
+ * Build a `MEDICATION_PRODUCT_ARM_CONFLICT` warning. Emitted when the arms one
+ * `manufacturedProduct` carries do not agree on a single product: a different
+ * `@code`, or one `@code` under two different `@codeSystem`s.
  *
- * An arm that asserts no `@code` (a `nullFlavor`-only `<code>`, or no `<code>`
- * at all) names no product and therefore never conflicts with one that does,
- * the same rule `contradictsAssertedValue` applies one layer down: only a
- * *value-bearing* assertion can contradict, because in HL7 v3 a `nullFlavor`
- * marks an **exceptional value** rather than a competing one. Such a document
- * is read from whichever arm names the drug.
+ * **Which arms are compared.** Every `manufacturedMaterial/code` and every
+ * `manufacturedLabeledDrug/code` the product carries. That covers **both** arms
+ * of the CDA R2 choice, the shape this code was introduced for, and **repeated**
+ * arms of one kind: two sibling `manufacturedMaterial`s naming different drugs
+ * is the identical silent pick, one arm kind in, and `ManufacturedProduct`
+ * models one participant, so a repeat is already outside the model.
+ *
+ * **What each arm is taken to name.** Every coding it offers: its `<code>`'s own
+ * `@code`, plus each `<translation>` alternate. A `nullFlavor="OTH"` `<code>`
+ * beside a `<translation>` is the documented C-CDA idiom for "not codable in the
+ * bound value set, here is an alternate coding", so on that shape the arm's whole
+ * product identity is in the translation, and a `@code`-only comparison read it
+ * as naming nothing and selected the other arm in silence. Two arms conflict
+ * when **none** of the codings one offers agrees with any the other offers; an
+ * arm whose `<translation>` names the other arm's code is agreeing with it, in
+ * the document's own words, and does not conflict.
+ *
+ * An arm that names no product at all (no `@code` and no `<translation>`
+ * carrying one, e.g. a `nullFlavor`-only `<code>`, or no `<code>` at all) never
+ * conflicts with one that does, the same rule `contradictsAssertedValue` applies
+ * one layer down: only a *value-bearing* assertion can contradict, because in
+ * HL7 v3 a `nullFlavor` marks an **exceptional value** rather than a competing
+ * one. Such a document is read from whichever arm names the drug.
  *
  * **The parser refuses to choose, and the product is withheld.** Two drugs
  * named on one medication is a contradictory document, and picking one is a
@@ -719,12 +750,14 @@ export function medicationProductArmUnexpected(position: CcdaPosition): CcdaWarn
  * it is safety-critical and why it is scoped as narrowly as it is.
  *
  * **Provenance:** stated rather than traced. That `ManufacturedProduct` models
- * its participant as a *choice* (one arm, not both) is base CDA R2 structure,
- * but no conformance verb is claimed here, this repo does not hold the
- * normative R2.1 Schematron and does not invent a SHALL for it. The
- * classification rests on the harm ordering: a silently chosen drug where the
- * document named two is the "silently mis-reads a dose or a code system" harm
- * exactly, so this is safety-critical and no profile may tolerate it.
+ * its participant as a *choice* (one arm, not both, and not a repeated one) is
+ * base CDA R2 structure, and that a `CD`'s `<translation>` carries an alternate
+ * coding *of the same concept* is HL7 v3 datatype semantics. No conformance verb
+ * is claimed here, this repo does not hold the normative R2.1 Schematron and
+ * does not invent a SHALL for it. The classification rests on the harm ordering:
+ * a silently chosen drug where the document named two is the "silently mis-reads
+ * a dose or a code system" harm exactly, so this is safety-critical and no
+ * profile may tolerate it.
  *
  * @example
  * ```ts
@@ -735,7 +768,7 @@ export function medicationProductArmUnexpected(position: CcdaPosition): CcdaWarn
 export function medicationProductArmConflict(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT,
-    message: `manufacturedProduct carries both arms of the CDA R2 choice, manufacturedMaterial and manufacturedLabeledDrug, naming different products; the document contradicts itself and nothing in it ranks the arms, so no product code is selected (both arms survive serialization verbatim).`,
+    message: `manufacturedProduct carries arms (manufacturedMaterial / manufacturedLabeledDrug, including repeated ones) whose codings name different products, counting each arm's <translation> alternates; the document contradicts itself and nothing in it ranks the arms, so no product code is selected (every arm survives serialization verbatim).`,
     position,
   };
 }

@@ -139,22 +139,36 @@ milestone it stopped at.
   copying `root`/`extension` into the `parentDocument` would drop the marking.
 - **A medication or vaccine product is read from either `ManufacturedProduct` arm.**
   `manufacturedMaterial` is silent; `manufacturedLabeledDrug` is read too and flagged
-  `MEDICATION_PRODUCT_ARM_UNEXPECTED` (tolerable by a profile, since the code is present and fully
-  checked). No arm yielding a code is `MISSING_PRODUCT_CODE` and is safety-critical, because dose,
-  route and timing all survive a missing consumable and would otherwise make the record read as a
-  complete medication with no drug. Both apply at all three consumable call sites: a performed
-  Medication Activity, an Immunization Activity, and a Planned Medication Activity. A document that
-  carries **both** arms naming **different** products (a different `@code`, or one `@code` under two
-  different `@codeSystem`s) draws `MEDICATION_PRODUCT_ARM_CONFLICT` (safety-critical) and no product
-  code is selected at all: two drugs on one medication is a contradictory document, nothing in it
-  ranks the arms, and picking one would be the parser inventing an answer. If `med.drug` is
-  `undefined` and you see this code, read `doc.toString()`, both arms survive serialization
-  byte-for-byte. `MISSING_PRODUCT_CODE` is suppressed behind it because "no arm yielded a code"
-  would be false, and so are the code-system checks, since there is no code to check, which is why
-  the conflict warning is safety-critical. Arms naming the **same** product are redundant rather
-  than contradictory, so the material arm is read as before. An arm asserting no symbol at all (a
-  `nullFlavor`-only `<code>`, or no `<code>`) names no product and never conflicts with one that
-  does, so whichever arm names the drug is read.
+  `MEDICATION_PRODUCT_ARM_UNEXPECTED`. That one is tolerable by a profile, and the reason is
+  conditional rather than absolute: wherever it fires **alone** a code was selected and fully
+  checked, and wherever no code was selected it is **not** alone, the safety-critical
+  `MEDICATION_PRODUCT_ARM_CONFLICT` is beside it and no profile may quiet that. So tolerating the
+  presence warning can never buy silence about a withheld drug. No arm yielding a code is
+  `MISSING_PRODUCT_CODE` and is safety-critical, because dose, route and timing all survive a
+  missing consumable and would otherwise make the record read as a complete medication with no drug.
+  Both apply at all three consumable call sites: a performed Medication Activity, an Immunization
+  Activity, and a Planned Medication Activity. A document whose arms name **different** products
+  draws `MEDICATION_PRODUCT_ARM_CONFLICT` (safety-critical) and no product code is selected at all:
+  two drugs on one medication is a contradictory document, nothing in it ranks the arms, and picking
+  one would be the parser inventing an answer. That covers both arms of the choice **and a repeated
+  arm of one kind** (two sibling `manufacturedMaterial`s naming different drugs is the same silent
+  pick). If `med.drug` is `undefined` and you see this code, read `doc.toString()`, every arm
+  survives serialization byte-for-byte. `MISSING_PRODUCT_CODE` is suppressed behind it because "no
+  arm yielded a code" would be false, and so are the code-system checks, since there is no code to
+  check, which is why the conflict warning is safety-critical. Arms naming the **same** product are
+  redundant rather than contradictory, so the material arm is read as before. An arm asserting no
+  symbol at all (a `nullFlavor`-only `<code>` with no `<translation>`, or no `<code>`) names no
+  product and never conflicts with one that does, so whichever arm names the drug is read.
+- **What an arm "names" includes its `<translation>` alternates.** The comparison runs over each
+  arm's whole coding set (its `@code` plus each `<translation>`), not the primary `@code` alone. If
+  you have a `nullFlavor="OTH"` arm whose `<translation>` carries the real RxNorm code, that arm now
+  names a drug: where it disagrees with the other arm you will get `MEDICATION_PRODUCT_ARM_CONFLICT`
+  and `med.drug === undefined` where you previously got the other arm's code in silence. The
+  converse also holds, an arm whose `<translation>` names the code the other arm leads with is
+  agreeing with it, so that combination no longer conflicts. **Selection is separate and unchanged**:
+  the element handed to the code-system and terminology checks is still chosen on the primary
+  `@code`, and a coding is never lifted out of a `<translation>` to stand in as the product, because
+  translations are preserved but not slot-checked.
 - **UCUM validation is grammatical, on a curated atom subset.** The validator checks well-formed UCUM
   against the prefixes/atoms that appear in lab Results and Vital Signs, not the full UCUM registry. A
   valid-but-uncurated atom may read as `NON_UCUM_UNIT`; the raw unit is always preserved. It does not

@@ -110,22 +110,39 @@ surfaces **both** (`CODE_NARRATIVE_MISMATCH`) and picks no winner, and a missing
 The drug (and a vaccine) is read from **either arm** of the CDA R2 `ManufacturedProduct` choice:
 `manufacturedMaterial`, which C-CDA's medication templates are written around, or
 `manufacturedLabeledDrug`, which is read too and flagged `MEDICATION_PRODUCT_ARM_UNEXPECTED`. The
-alternate arm carries the same `CE` and goes through the same code-system checks, so reading it is
-strictly safer than the alternative of returning `drug: undefined` while dose and route survive. If
-no arm yields a code, that is `MISSING_PRODUCT_CODE` (safety-critical), never a silent `undefined`.
+alternate arm carries the same `CE`, and whenever a code is selected it goes through the same
+code-system checks, so reading it is strictly safer than the alternative of returning
+`drug: undefined` while dose and route survive. If no arm yields a code, that is
+`MISSING_PRODUCT_CODE` (safety-critical), never a silent `undefined`.
 
-A document carrying **both** arms is handled on what they say. `MEDICATION_PRODUCT_ARM_UNEXPECTED`
-fires on the presence of the `manufacturedLabeledDrug` arm either way. If only one arm names a
-product (the other asserting a `nullFlavor`-only `<code>`, or no `<code>` at all) the one that names
-it is read, whichever arm that is, because a null value is an exceptional value and not a competing
-one. If both name the **same** product it is redundant, and the material arm is read as before. Only
-when both name **different** products (a different `@code`, or one `@code` under two different
-`@codeSystem`s) does the parser refuse to choose: `MEDICATION_PRODUCT_ARM_CONFLICT`
+A document carrying **more than one arm** is handled on what the arms say. That means both arms of
+the choice, and a **repeated** arm of one kind: two sibling `manufacturedMaterial`s naming different
+drugs is the same silent pick, one arm kind in. `MEDICATION_PRODUCT_ARM_UNEXPECTED` fires on the
+presence of the `manufacturedLabeledDrug` arm either way. If only one arm names a product (the
+others asserting a `nullFlavor`-only `<code>`, or no `<code>` at all) the one that names it is read,
+whichever arm that is, because a null value is an exceptional value and not a competing one. If they
+name the **same** product it is redundant, and the material arm is read as before. Only when they
+name **different** products does the parser refuse to choose: `MEDICATION_PRODUCT_ARM_CONFLICT`
 (safety-critical) fires, `drug` / `vaccine` is `undefined`, and `MISSING_PRODUCT_CODE` is suppressed
 behind it because "no arm yielded a code" would be false. Nothing is lost, `serializeCcda` re-emits
-the parsed DOM, so both arms round-trip byte-for-byte. The cost is stated rather than hidden: with
+the parsed DOM, so every arm round-trips byte-for-byte. The cost is stated rather than hidden: with
 no code selected, the code-system and terminology checks have nothing to run on for that slot, which
-is why the conflict warning is safety-critical and why it is scoped this narrowly.
+is why the conflict warning is safety-critical and why it is scoped this narrowly. It is also why
+`MEDICATION_PRODUCT_ARM_UNEXPECTED` can stay tolerable: wherever no code was selected it is not
+alone, the untolerable conflict code is beside it.
+
+**What "the same product" means is read across each arm's whole coding set**, its `<code>`'s own
+`@code` plus every `<translation>` alternate, not the primary `@code` alone. `nullFlavor="OTH"`
+beside a `<translation>` is the documented C-CDA idiom for "not codable in the bound value set, here
+is an alternate coding", so on that shape the arm's product identity lives in the translation, and a
+primary-only comparison read the arm as naming nothing and picked the other one in silence. It cuts
+the other way too: an arm whose `<translation>` names the code the other arm leads with is agreeing
+with it, in the document's own words, so that is not a conflict. Two arms conflict when **none** of
+the codings one offers agrees with any the other offers. Nothing beyond that is inferred, deciding
+that two codings the document never linked denote one concept is a `TerminologyAdapter`'s job.
+**Selection is a narrower question and stays keyed on the primary `@code`**: a coding is only ever
+handed to the slot checks from the position the document wrote it in, never lifted out of a
+`<translation>` (which this package preserves but never slot-checks).
 
 ## What it extracts: discrete clinical data
 

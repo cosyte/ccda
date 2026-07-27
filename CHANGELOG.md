@@ -1035,6 +1035,53 @@ statusCode, effectiveTime, component+`).
 
 ### Fixed
 
+- **Clinical safety: arm selection now sees a `<translation>` and a repeated arm, and the docstring
+  that justifies `MEDICATION_PRODUCT_ARM_UNEXPECTED`'s classification is no longer arguing from a
+  premise the previous slice falsified.** No new warning code; one behavioural change to
+  `med.drug` / `immunization.vaccine` in both directions.
+  - **A `nullFlavor`-marked arm whose `<translation>` names a different drug is now a conflict.**
+    `namesAProduct` / `namesConflictingProducts` keyed on the primary `@code` alone, so a
+    `manufacturedLabeledDrug` carrying `<code nullFlavor="OTH"><translation code="…"/></code>` named
+    no product as far as arm selection was concerned, and the `manufacturedMaterial` arm's drug was
+    selected in silence. `nullFlavor="OTH"` beside a `<translation>` is the documented C-CDA idiom
+    for "not codable in the bound value set, here is an alternate coding", which this package
+    already treats as coherent rather than contradictory, so on that shape the arm's whole product
+    identity is in the translation. It is the same "quietly picks between two drugs" failure the
+    previous slice closed, one level down. Each arm is now read across its whole coding set (its
+    `@code` plus each `<translation>`), and two arms conflict when **none** of the codings one
+    offers agrees with any the other offers.
+  - **The comparison also runs the other way, and that is a narrowing.** An arm whose
+    `<translation>` names the code the other arm leads with is _agreeing_ with it, in the document's
+    own words, since a `<translation>` is by definition an alternate coding of the same concept. A
+    document whose `manufacturedMaterial` leads with an NDC and translates to the RxNorm code the
+    `manufacturedLabeledDrug` carries used to draw `MEDICATION_PRODUCT_ARM_CONFLICT` and lose its
+    drug; it now reads the material arm's primary coding and stays quiet. No terminology equivalence
+    beyond the document's own link is inferred, deciding that two codings the document never linked
+    denote one concept is a `TerminologyAdapter`'s job.
+  - **Selection is deliberately _not_ translation-aware.** Which `<code>` element is handed to
+    `checkCodeSlot` is still decided by primary `@code` alone. The stated boundary of this package
+    is that slot checks apply to a slot's primary coding and `<translation>` alternates are
+    preserved but never slot-checked, so selecting an arm on the strength of a translation would
+    hand `checkCodeSlot` a `nullFlavor` primary and validate nothing, or require synthesizing a
+    coding the document never wrote in that position. Translations settle whether the arms
+    _disagree_; they never manufacture a reading.
+  - **Two sibling `manufacturedMaterial` arms with different codes no longer read the first
+    silently.** The previous slice compared `manufacturedMaterial` against `manufacturedLabeledDrug`
+    only, so one arm kind repeated slipped past it, and `ManufacturedProduct` models one participant
+    so a repeat is already outside the model. The conflict check now runs over every
+    `manufacturedMaterial/code` and every `manufacturedLabeledDrug/code` the product carries.
+  - **`MEDICATION_PRODUCT_ARM_UNEXPECTED`'s exclusion from `SAFETY_CRITICAL_CODES` is unchanged; its
+    justification is corrected.** The docstring asserted unconditionally that the alternate arm's
+    code "is read, not refused" and that "every code-system and terminology check applies to it
+    unchanged", and argued the classification from exactly that. That was true until
+    `MEDICATION_PRODUCT_ARM_CONFLICT` existed: in the conflict state no code is selected at all, so
+    nothing reaches `checkCodeSlot`. The claim is now stated conditionally in both places it lived
+    (`src/parser/warnings.ts` and `docs-content/troubleshooting.md`), and the classification rests on
+    the argument that actually holds: wherever this code fires alone a code was selected and fully
+    checked, and wherever no code was selected it is by construction not alone, because the
+    safety-critical conflict code fires beside it and no profile may quiet that. Tolerating the
+    presence warning can therefore never buy silence about a withheld drug.
+
 - **Clinical safety: the two residuals the `nullFlavor` slice named and did not close, a patient
   identifier read out of a null-marked `<id>`, and a medication naming two different drugs.** One
   new stable warning code, safety-critical, and one behavioural change to `getMrn()` / `pickMrn`.

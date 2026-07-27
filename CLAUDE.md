@@ -73,19 +73,36 @@ immutability + explicit mutation, and the profile system.
     choice, at all three consumable call sites (Medication Activity, Immunization Activity, Planned
     Medication Activity). The **presence** of a `manufacturedLabeledDrug` arm is flagged
     `MEDICATION_PRODUCT_ARM_UNEXPECTED` (deliberately tolerable; keyed to the arm, not its `<code>`,
-    so a name-only `LabeledDrug` is reported too). No arm yielding a code is
-    `MISSING_PRODUCT_CODE`, safety-critical, never a silent `undefined`. With **both** arms present
-    the treatment is decided by what they say: only one naming a product means that one is read
-    whichever arm it is (a null value is an _exceptional_ value, not a competing one, so there is
-    nothing to refuse, and this is the direction the old behaviour silently lost a real RxNorm code
-    in); both naming the **same** product means the material arm is read as before; both naming
-    **different** products (different `@code`, or one `@code` under two `@codeSystem`s) is
+    so a name-only `LabeledDrug` is reported too). **Its tolerability is argued conditionally, and
+    must stay that way:** wherever it fires _alone_ a code was selected and fully checked, and
+    wherever no code was selected it is not alone, the untolerable conflict code below is beside it.
+    Do not restore the older, simpler claim that the alternate arm's code "is read, not refused" and
+    that every check "applies to it unchanged" full stop; that was true before the conflict state
+    existed and is false in it. No arm yielding a code is `MISSING_PRODUCT_CODE`, safety-critical,
+    never a silent `undefined`. With **more than one arm** present the treatment is decided by what
+    they say: only one naming a product means that one is read whichever arm it is (a null value is
+    an _exceptional_ value, not a competing one, so there is nothing to refuse, and this is the
+    direction the old behaviour silently lost a real RxNorm code in); naming the **same** product
+    means the material arm is read as before; naming **different** products is
     `MEDICATION_PRODUCT_ARM_CONFLICT` (safety-critical) and **no code is selected**, because nothing
     in the document ranks the arms so any pick would be manufactured. `MISSING_PRODUCT_CODE` is
     suppressed behind it (it would assert the false "no arm yielded a code") and `checkCodeSlot` has
     nothing to check, which makes the conflict code the lone signal by construction and is why it is
     safety-critical and scoped this narrowly. Nothing is lost, `serializeCcda` re-emits the parsed
-    DOM so both arms round-trip byte-for-byte.
+    DOM so every arm round-trips byte-for-byte.
+  - **Disagreement is read across every arm and every coding; selection is not.** The conflict check
+    covers both arms of the choice **and repeated arms of one kind** (two sibling
+    `manufacturedMaterial`s naming different drugs is the same silent pick), and it compares whole
+    coding sets: an arm's own `@code` plus each `<translation>` alternate. `nullFlavor="OTH"` beside
+    a `<translation>` is the documented C-CDA idiom, so on that shape the arm's product identity is
+    in the translation. Two arms conflict when **none** of the codings one offers agrees with any the
+    other offers, which both raises the conflict where a translation is an arm's only statement of
+    its drug and withholds it where one arm's translation names the other's code (the document's own
+    assertion that they denote one concept). **Which element is handed to `checkCodeSlot` is decided
+    by primary `@code` alone**, deliberately: this package's stated boundary is that slot checks
+    apply to a slot's primary coding and translations are preserved but never slot-checked, so
+    selecting on a translation would validate a `nullFlavor` primary against nothing or synthesize a
+    coding the document never wrote there.
   - `SAFETY_CRITICAL_CODES` is a frozen read-only view, not a `Set` instance: every read operation
     works (including spread), but `instanceof Set` is `false`.
   - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`
