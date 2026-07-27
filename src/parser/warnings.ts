@@ -47,6 +47,7 @@ export const WARNING_CODES = {
   NARRATIVE_REFERENCE_BROKEN: "NARRATIVE_REFERENCE_BROKEN",
   UNEXPECTED_CODE_SYSTEM: "UNEXPECTED_CODE_SYSTEM",
   DEPRECATED_CODE_SYSTEM: "DEPRECATED_CODE_SYSTEM",
+  MISSING_CODE_SYSTEM: "MISSING_CODE_SYSTEM",
   MISSING_DOSE_QUANTITY: "MISSING_DOSE_QUANTITY",
   MISSING_ROUTE_CODE: "MISSING_ROUTE_CODE",
   MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED: "MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED",
@@ -476,6 +477,40 @@ export function deprecatedCodeSystem(
   return {
     code: WARNING_CODES.DEPRECATED_CODE_SYSTEM,
     message: `Code system OID "${observedOid}" is deprecated for the ${slot} slot; prefer its modern successor. Value preserved.`,
+    position,
+  };
+}
+
+/**
+ * Build a `MISSING_CODE_SYSTEM` warning. Emitted when a coded value at a
+ * recognized {@link CodeSlot} asserts a `@code` but carries **no**
+ * `@codeSystem`, so nothing names the terminology the symbol belongs to. A code
+ * without its system is not a code: `250.00` is diabetes in ICD-9-CM and an
+ * unrelated concept elsewhere, so the symbol cannot be read, cannot be checked
+ * against the slot's expected systems, and cannot be handed to a
+ * {@link TerminologyAdapter} (which validates a `system` + `code` pair). The
+ * value is preserved verbatim and **no system is ever inferred**, not from the
+ * slot's expected list and not from a `@codeSystemName` label, which is display
+ * text rather than an identifier.
+ *
+ * **Provenance:** this is a parser-safety warning, not a traced schema
+ * violation. The CD datatype leaves `@codeSystem` optional (a `nullFlavor`-only
+ * CD is well-formed), so no normative SHALL is cited here and none should be
+ * invented. The rule rests on the datatype's own semantics, a `@code` is a
+ * symbol defined *by* a code system, so the pair is what carries meaning, and on
+ * the parser's stated promise at these slots: a coded clinical value is either
+ * recognised or flagged, never silently accepted.
+ *
+ * @example
+ * ```ts
+ * import { missingCodeSystem } from "@cosyte/ccda";
+ * const w = missingCodeSystem({ path: "value" }, "problem");
+ * ```
+ */
+export function missingCodeSystem(position: CcdaPosition, slot: string): CcdaWarning {
+  return {
+    code: WARNING_CODES.MISSING_CODE_SYSTEM,
+    message: `Coded ${slot} value has a @code but no @codeSystem, so the symbol names no terminology; value preserved verbatim, system never inferred, and terminology validation is impossible for it.`,
     position,
   };
 }

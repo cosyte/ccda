@@ -22,6 +22,7 @@ describe("code surface stability", () => {
         "INVALID_NULL_FLAVOR",
         "MALFORMED_DATETIME",
         "MISSING_ASSIGNING_AUTHORITY",
+        "MISSING_CODE_SYSTEM",
         "MISSING_DOSE_QUANTITY",
         "MISSING_ROUTE_CODE",
         "MISSING_TEMPLATE_ID",

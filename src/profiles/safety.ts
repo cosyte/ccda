@@ -54,6 +54,20 @@ export const SAFETY_CRITICAL_CODES: ReadonlySet<WarningCode> = Object.freeze(
     // DEPRECATED_CODE_SYSTEM (a *known* legacy system with preserved meaning,
     // which is defensibly tolerable), this is an *unexpected/wrong* one.
     WARNING_CODES.UNEXPECTED_CODE_SYSTEM,
+    // No code system at all on an asserted code, strictly worse than
+    // UNEXPECTED_CODE_SYSTEM: there the system is wrong but known, so a reader
+    // can still tell what was meant; here the symbol names no terminology, and
+    // "250.00" is diabetes in ICD-9-CM and something else elsewhere. It is also
+    // the *lone* signal, exactly the MALFORMED_DATETIME argument: with no
+    // system the value can never reach a TerminologyAdapter (which validates a
+    // system + code pair), so SEMANTIC_CODE_INVALID can never fire behind it.
+    // Tolerating it would restore the silent-pass defect it exists to fix.
+    // Provenance, stated so it is not mistaken for a traced constraint: no
+    // normative SHALL is cited (the CD datatype leaves @codeSystem optional).
+    // The classification rests on the harm ordering above, which is what this
+    // set has always encoded, per the "when clinical bearing is ambiguous it
+    // belongs here" rule in this file's header.
+    WARNING_CODES.MISSING_CODE_SYSTEM,
     // A malformed HL7 v3 datetime, medication timing / problem active-vs-
     // resolved (effectiveTime) is safety-critical, and the parsed date is
     // *already dropped* on malformation, so this warning is the only surviving
