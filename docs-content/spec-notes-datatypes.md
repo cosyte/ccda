@@ -39,7 +39,10 @@ deprecated (`DEPRECATED_CODE_SYSTEM`, e.g. ICD-9) or unexpected (`UNEXPECTED_COD
 It deliberately does **not** verify that a code is a real member of its system: that needs licensed
 terminology content (SNOMED CT / RxNorm via UMLS) this suite never bundles. The exported OIDs
 (`SNOMED_CT`, `RXNORM`, `ICD10_CM`, `LOINC`, `NDC`, `UNII`, `CVX`, …) are public identifiers, not
-redistributable code-system data. Bring your own terminology service for membership checks.
+redistributable code-system data. For membership checks, bring your own: pass a `TerminologyAdapter`
+to `parseCcda` or `buildCcda` and it is consulted at the five recognized coded slots (`problem`,
+`medication`, `allergen`, `route`, `vaccine`). A code your adapter rejects is flagged
+`SEMANTIC_CODE_INVALID` and preserved **verbatim**, never rewritten.
 
 ## Computable UCUM units
 
@@ -102,6 +105,7 @@ serializeCcda(parseCcda(out)) === out; // => true
 ```
 
 > A hand-constructed `CcdaDocument` (not produced by `parseCcda` or `buildCcda`) retains no source XML,
-> so `toString()` throws. To construct a document from scratch, use `buildCcda`: its first slice emits a
-> spec-clean CCD (US Realm header + Problems + Allergies). See
-> [Troubleshooting](./troubleshooting) for the full list of what is not yet parsed or built.
+> so `toString()` throws. To construct a document from scratch, use `buildCcda`: it emits a spec-clean
+> CCD or Referral Note with a US Realm header and the clinical sections you supply. See
+> [Troubleshooting](./troubleshooting) for exactly what the parser, builder, and editor do and do not
+> do today.

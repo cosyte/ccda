@@ -247,7 +247,7 @@ parseCcda("<Foo>not a clinical document</Foo>"); // throws CcdaParseError (NOT_A
 - [Cookbook](./cookbook): recipes for active-problem filtering, the code/narrative fail-safe, the
   performed-vs-planned split, warning triage, and the round-trip serializer.
 - [Troubleshooting & known limitations](./troubleshooting): the fatal codes, the fail-safe rules, and
-  the explicit "what's not yet parsed" list.
+  exactly what the parser, builder, and editor do and do not do today.
 
 > **About runnable examples.** The blocks tagged ` ```ts runnable ` above are extracted by the test
 > suite, executed against the built package, and their `// =>` results asserted, so a documented

@@ -1445,7 +1445,8 @@ export type BuildCcdaPlannedItem =
  * empty, in which case its section is emitted as a spec-clean empty
  * `nullFlavor="NI"` section. `immunizations` is optional, its section is emitted
  * only when populated (Immunizations is not a CCD SHALL section). `documentType`
- * is `"ccd"` in this slice.
+ * is `"ccd"` (the default) or `"referralNote"`; the other ten C-CDA R2.1
+ * document types are not implemented.
  *
  * @example
  * ```ts

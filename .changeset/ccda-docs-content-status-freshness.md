@@ -11,5 +11,3 @@ document, plus a bring-your-own terminology adapter). The status banners in `int
 and the "Scope (non-goals)" note in `troubleshooting.md` now state published on npm at `0.0.1`, public,
 still pre-alpha on the cosyte `0.0.x` ladder, with the install command live and the builder capability
 mirroring the corrected README. Documentation only, no code, public-API, or warning-code change.
-</content>
-</invoke>

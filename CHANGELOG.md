@@ -39,6 +39,40 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Documentation
 
+- **`docs-content/` capability claims rewritten as a capability doc, not a phase log (CCDA-P7
+  documentation residual).** `troubleshooting.md` opened its boundary list with "As of **Phase 5b**",
+  a stamp no installer of `0.0.1` can resolve, and the list under it had drifted three slices behind
+  the code: it described the builder as emitting "a CCD with five discrete-data sections", and named
+  "editing an existing document" and "a bring-your-own-credentials terminology adapter" as future
+  work when `editCcda` and `TerminologyAdapter` both ship. That section is now **"What it does, and
+  does not do, today"**, split into Reading / Building / Editing, with every claim checked against
+  the shipped source: all twelve document types recognized and fourteen entry families decoded;
+  `buildCcda` emitting a CCD **or** a Referral Note (two of twelve) with its exact always-emitted and
+  populated-only section sets; `<translation>` alternates wired at the problem, allergen, medication
+  drug + route, and vaccine + route slots and nowhere else; `editCcda` limited to whole-section
+  add/replace across twelve kinds, with no entry-level append, no section removal, `RPLC` only, and
+  validation-but-not-translation on that path (Functional/Mental Status are buildable but **not**
+  editable, a boundary the docs had never stated). The boundaries that are genuinely open are stated
+  as open rather than resolved in the reader's favor: a built document is expected-but-not-proven to
+  pass an external IG validator, six of twelve required-section (SHALL) tables assert nothing pending
+  per-type verification, and the UCUM atom set is curated rather than complete. The same drift is
+  corrected across the rest of `docs-content/`:
+  `cookbook.md` claimed editing was future work 130 lines above its own `editCcda` recipe and
+  undercounted the remaining document types as eleven; `spec-notes-datatypes.md` still described the
+  builder's "first slice" as header + Problems + Allergies and omitted the shipped adapter hook;
+  `spec-notes-model.md` called content editing a later increment; `intro.md` labeled five shipped
+  extractors "deferred"; and `README.md`, the npm front page, still said "the remaining ten document
+  types **and editing an existing document** are a later increment" roughly 200 lines below its own
+  "Edit a document" section, while listing only eight of the builder's fourteen CCD sections. The
+  rewrite also states three boundaries the page had never stated: the terminology adapter is
+  consulted at five coded slots **only**, so a clean run is not a verified document; six of the
+  twelve required-section (SHALL) tables assert nothing, so those types under-warn; and
+  Functional/Mental Status are buildable but not editable. Two public JSDoc comments carrying the
+  same stale claim are fixed with them (`serializeCcda`'s "a builder API lands in a later phase",
+  `BuildCcdaInit`'s "`documentType` is `"ccd"` in this slice"), since the generated API reference is
+  user-facing too. Also strips leaked
+  tool-call markup (`</content></invoke>`) from the tail of a prior changeset, which would otherwise
+  have landed in a published changelog. No code, public-API, or warning-code change.
 - **`docs-content/` publish-status + capability drift corrected (README-ORG-SWEEP, wave 2).** The
   user-facing docs pages (rendered on docs.cosyte.com) still claimed `@cosyte/ccda` was "not yet
   published to npm" / "gated on the coordinated public launch", and `intro.md` still described the

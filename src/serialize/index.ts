@@ -18,9 +18,10 @@ import type { CcdaDocument } from "../model/document.js";
  *
  * @param doc - A document produced by {@link parseCcda}.
  * @returns The spec-clean XML text.
- * @throws {Error} If `doc` was hand-constructed (not produced by `parseCcda`)
- *   and therefore retains no source document to emit, a builder API lands in a
- *   later phase.
+ * @throws {Error} If `doc` was hand-constructed (neither produced by
+ *   `parseCcda` nor by `buildCcda`) and therefore retains no source document to
+ *   emit. To construct a document from scratch, use `buildCcda`, whose result is
+ *   the parse of the XML it emitted and so serializes normally.
  * @example
  * ```ts
  * import { parseCcda, serializeCcda } from "@cosyte/ccda";

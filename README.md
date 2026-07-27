@@ -465,11 +465,13 @@ never rewritten to satisfy it.
 - **Serializer re-emits a parsed document; the builder constructs one**: `serializeCcda` / `toString()`
   faithfully re-emit a _parsed_ document (the spec-clean emit half of Postel's Law). To construct a
   document from scratch, `buildCcda` emits a spec-clean **CCD** or **Referral Note**
-  (`documentType: "referralNote"`) with the US Realm header + **Problems,
-  Allergies, Medications, Results, Vital Signs, Immunizations, Procedures, and Encounters** (the last
-  three emitted only when populated, since none is a CCD SHALL section); a Referral Note additionally
-  specializes the header and emits its own SHALL set (Reason for Referral, Assessment, Plan of Treatment);
-  the remaining ten document types and editing an existing document are a later increment. "Spec-clean" here means well-formed,
+  (`documentType: "referralNote"`) with the US Realm header + **Problems, Allergies, Medications,
+  Results, and Vital Signs**, plus **Immunizations, Procedures, Encounters, Social History, Functional
+  Status, Mental Status, Past Medical History, Plan of Treatment, and Family History** emitted only
+  when populated (none is a CCD SHALL section); a Referral Note additionally
+  specializes the header and emits its own SHALL set (Reason for Referral, Assessment, Plan of Treatment).
+  To change a section of a document you already parsed, use `editCcda`. The remaining ten document
+  types are not implemented. "Spec-clean" here means well-formed,
   correctly-templated, and **round-tripping** through `parseCcda` with zero warnings. Every entry now
   emits the `SHALL`-cardinality `effectiveTime` its C-CDA R2.1 template requires: the Problems/Allergies
   concern acts + observations, the Medication Activity `IVL_TS` duration, and the Results/Vital Signs
