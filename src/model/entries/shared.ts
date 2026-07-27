@@ -240,10 +240,11 @@ export function chain(el: Element | undefined, ...names: readonly string[]): Ele
  * Postel's-Law call, and the safer one: the previous behaviour returned
  * `drug: undefined` in complete silence while dose, route and timing survived,
  * so the record read as a well-formed medication that simply had no drug.
- * Whenever a code *is* selected it flows through the ordinary `checkCodeSlot`
- * path, so every code-system and terminology check applies to it unchanged. The
- * one state in which no code is selected is the conflict below, which says so
- * in its own safety-critical warning.
+ * Whenever a code *is* selected the caller reads it exactly as it would have
+ * read a single-arm document's, so nothing about the arm changes what the entry
+ * does with the code. The two states in which none is selected each carry a
+ * safety-critical warning of their own: the conflict below, and
+ * `MISSING_PRODUCT_CODE` when no arm carried a `<code>` at all.
  *
  * **A document carrying both arms is handled on what they say, not on which one
  * the templates prefer.** A `choice` means one arm, so two is already outside
@@ -288,15 +289,17 @@ export function chain(el: Element | undefined, ...names: readonly string[]): Ele
  *   slot, which is exactly why the conflict code is safety-critical and no
  *   profile may quiet it.
  *
- * **Disagreement is read across every arm and every coding, selection is not.**
- * The conflict check runs over *all* the `<code>` elements the
- * `manufacturedProduct` offers, both arm kinds and repeated arms of one kind
- * (two sibling `manufacturedMaterial`s naming different drugs is the same
- * silent pick, one arm kind in), and it compares whole coding sets: an arm's own
- * `@code` plus each `<translation>` alternate. Which element is then handed to
- * `checkCodeSlot` is decided by primary `@code` alone, exactly as before. That
- * split is deliberate. A `<translation>` is the document's own assertion that
- * two codings denote one concept, which is enough to settle whether the arms
+ * **Disagreement is read across every arm, selection is not.** The conflict
+ * check runs over *all* the `<code>` elements the `manufacturedProduct` carries,
+ * both arm kinds and repeated arms of one kind (two sibling
+ * `manufacturedMaterial`s naming different drugs is the same silent pick, one
+ * arm kind in). An arm names its `@code` when it asserts one, and **otherwise**
+ * the codings its `<translation>` alternates assert, a fallback rather than an
+ * addition, so widening what an arm names can only make the conflict fire more,
+ * never less (see {@link productCodingsOf}). Which element is then handed to the
+ * slot checks is decided by primary `@code` alone, exactly as before. That split
+ * is deliberate. A `<translation>` under a `<code>` that asserts no symbol is
+ * where that arm states its drug, which is enough to settle whether the arms
  * *disagree*; it is not enough to *select* a reading, because this package's
  * stated boundary is that slot checks apply to a slot's primary coding and
  * translations are preserved but never slot-checked. Selecting an arm on the
@@ -541,7 +544,9 @@ function selectableCode(codes: readonly Element[]): Element | undefined {
  * run over *distinct* codings rather than raw arms so that a document repeating
  * one arm N times costs N rather than N squared, and it short-circuits on the
  * first disagreement, which is the case a hostile input would have to avoid to
- * be expensive at all.
+ * be expensive at all. The dedup key is `JSON.stringify`d rather than joined on
+ * a separator, so a `@code` or `@codeSystem` containing the separator cannot
+ * collide two arms into one and drop the disagreement the discarded one carried.
  * @internal
  */
 function offersConflictingProducts(
@@ -553,7 +558,7 @@ function offersConflictingProducts(
   for (const code of [...materials, ...labeled]) {
     const codings = productCodingsOf(code);
     if (codings.length === 0) continue;
-    const key = codings.map((c) => `${c.symbol}|${c.system ?? ""}`).join(",");
+    const key = JSON.stringify(codings.map((c) => [c.symbol, c.system ?? null]));
     if (seen.has(key)) continue;
     seen.add(key);
     named.push(codings);

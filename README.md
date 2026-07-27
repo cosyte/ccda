@@ -129,7 +129,9 @@ the parsed DOM, so every arm round-trips byte-for-byte. The cost is stated rathe
 no code selected, the code-system and terminology checks have nothing to run on for that slot, which
 is why the conflict warning is safety-critical and why it is scoped this narrowly. It is also why
 `MEDICATION_PRODUCT_ARM_UNEXPECTED` can stay tolerable: wherever no code was selected it is not
-alone, the untolerable conflict code is beside it.
+alone, because either `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed) or
+`MISSING_PRODUCT_CODE` (no arm carried a `<code>` at all, which is what a name-only `LabeledDrug`
+produces) is beside it, and both are safety-critical and unquietable by a profile.
 
 **What an arm names is its `<code>`'s own `@code`, or, when it asserts none, its `<translation>`
 alternates.** `nullFlavor="OTH"` beside a `<translation>` is the documented C-CDA idiom for "not

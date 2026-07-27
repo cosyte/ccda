@@ -74,11 +74,15 @@ immutability + explicit mutation, and the profile system.
     Medication Activity). The **presence** of a `manufacturedLabeledDrug` arm is flagged
     `MEDICATION_PRODUCT_ARM_UNEXPECTED` (deliberately tolerable; keyed to the arm, not its `<code>`,
     so a name-only `LabeledDrug` is reported too). **Its tolerability is argued conditionally, and
-    must stay that way:** wherever it fires _alone_ a code was selected and fully checked, and
-    wherever no code was selected it is not alone, the untolerable conflict code below is beside it.
-    Do not restore the older, simpler claim that the alternate arm's code "is read, not refused" and
-    that every check "applies to it unchanged" full stop; that was true before the conflict state
-    existed and is false in it. No arm yielding a code is `MISSING_PRODUCT_CODE`, safety-critical,
+    must stay that way:** wherever it fires _alone_ a `<code>` element was selected and read exactly
+    as a single-arm document's would have been, and wherever **none** was selected it is not alone,
+    because either `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed) or `MISSING_PRODUCT_CODE`
+    (no arm carried a `<code>` at all, the shape a name-only `LabeledDrug` produces) fires beside it,
+    and **both** are safety-critical and unquietable. Naming only the conflict code is the same
+    mistake one size smaller: it leaves the name-only `LabeledDrug` state unaccounted for. Do not
+    restore the older, simpler claim that the alternate arm's code "is read, not refused" and that
+    every check "applies to it unchanged" full stop; that was true before the conflict state existed
+    and is false in it. No arm yielding a code is `MISSING_PRODUCT_CODE`, safety-critical,
     never a silent `undefined`. With **more than one arm** present the treatment is decided by what
     they say: only one naming a product means that one is read whichever arm it is (a null value is
     an _exceptional_ value, not a competing one, so there is nothing to refuse, and this is the

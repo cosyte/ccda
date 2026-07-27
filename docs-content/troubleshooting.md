@@ -140,10 +140,12 @@ milestone it stopped at.
 - **A medication or vaccine product is read from either `ManufacturedProduct` arm.**
   `manufacturedMaterial` is silent; `manufacturedLabeledDrug` is read too and flagged
   `MEDICATION_PRODUCT_ARM_UNEXPECTED`. That one is tolerable by a profile, and the reason is
-  conditional rather than absolute: wherever it fires **alone** a code was selected and fully
-  checked, and wherever no code was selected it is **not** alone, the safety-critical
-  `MEDICATION_PRODUCT_ARM_CONFLICT` is beside it and no profile may quiet that. So tolerating the
-  presence warning can never buy silence about a withheld drug. No arm yielding a code is
+  conditional rather than absolute: wherever it fires **alone** a `<code>` element was selected and
+  read exactly as a single-arm document's would have been, and wherever **none** was selected it is
+  **not** alone, because either `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed) or
+  `MISSING_PRODUCT_CODE` (no arm carried a `<code>` at all, which is what a name-only `LabeledDrug`
+  produces) fires beside it, and both are safety-critical and unquietable by a profile. So tolerating
+  the presence warning can never buy silence about an absent or withheld drug. No arm yielding a code is
   `MISSING_PRODUCT_CODE` and is safety-critical, because dose, route and timing all survive a
   missing consumable and would otherwise make the record read as a complete medication with no drug.
   Both apply at all three consumable call sites: a performed Medication Activity, an Immunization

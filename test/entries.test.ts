@@ -1060,7 +1060,7 @@ describe("clinical entries, arm disagreement through <translation> and repeated 
   /** The fixture's drug, Lisinopril 10 MG Oral Tablet. */
   const LISINOPRIL = "314076";
   /** Lisinopril 20 MG Oral Tablet: a different strength, so a different product. */
-  const LISINOPRIL_20MG = "197361";
+  const LISINOPRIL_20MG = "314077";
   /** The lisinopril INGREDIENT concept, coarser than either strength above. */
   const LISINOPRIL_INGREDIENT = "29046";
   const MATERIAL_CODE = `<code code="${LISINOPRIL}" codeSystem="${RXNORM}" displayName="Lisinopril 10 MG Oral Tablet"/>`;
@@ -1347,6 +1347,39 @@ describe("clinical entries, arm disagreement through <translation> and repeated 
     expect(repeatedOut).toContain(`code="${ASPIRIN}"`);
     expect(repeatedOut).toContain(`code="${LISINOPRIL}"`);
     expect(parseCcda(repeatedOut).toString()).toBe(repeatedOut);
+  });
+
+  it("keeps a safety-critical companion beside the presence warning when nothing is selected", () => {
+    // Pins the argument that lets MEDICATION_PRODUCT_ARM_UNEXPECTED stay out of
+    // SAFETY_CRITICAL_CODES. A name-only manufacturedLabeledDrug selects
+    // nothing, and the companion here is MISSING_PRODUCT_CODE rather than the
+    // conflict code, so the argument has to name both: naming only the conflict
+    // code leaves exactly this state unaccounted for.
+    const nameOnly = MEDICATIONS_SECTION.replace(
+      /<manufacturedMaterial>[\s\S]*?<\/manufacturedMaterial>/u,
+      "<manufacturedLabeledDrug/>",
+    );
+    const warned = codes(parseCcda(buildCcda({ sections: nameOnly })).warnings);
+    expect(warned).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED);
+    expect(warned).toContain(WARNING_CODES.MISSING_PRODUCT_CODE);
+    expect(warned).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+  });
+
+  it("does not let a separator inside a code collapse two disagreeing arms", () => {
+    // The arms are deduped before the pairwise comparison, so the key has to be
+    // injective. With a delimiter-joined key, `code="1191|"` and
+    // `code="1191" codeSystem="…"` could collide and one arm's disagreement
+    // would be discarded silently.
+    const doc = parseCcda(
+      buildCcda({
+        sections: withSecondMaterial(
+          materialCode(`<code code="${ASPIRIN}|${RXNORM}"/>`),
+          `<code code="${ASPIRIN}" codeSystem="${RXNORM}|"/>`,
+        ),
+      }),
+    );
+    expect(doc.getMedications()[0]?.drug).toBeUndefined();
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
   });
 
   // The negatives, so the widened comparison cannot become "no drug for anyone".

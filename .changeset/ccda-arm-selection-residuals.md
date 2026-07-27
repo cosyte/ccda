@@ -54,7 +54,7 @@ Translations settle whether the arms _disagree_. They never decide which element
 `checkCodeSlot`, which is still chosen on primary `@code` alone. The stated boundary of this package
 is that slot checks apply to a slot's primary coding while `<translation>` alternates are preserved
 but never slot-checked, so selecting an arm on the strength of a translation would either hand
-`checkCodeSlot` a `nullFlavor` primary and validate nothing, or require synthesizing a coding the
+the slot checks a `nullFlavor` primary and validate nothing, or require synthesizing a coding the
 document never wrote in that position. A document where neither arm's primary names a product is
 therefore read exactly as it was before, translation or no translation, so `MISSING_CODE_VALUE`,
 `MISSING_CODE_SYSTEM` and `UNEXPECTED_CODE_SYSTEM` keep seeing the element they always saw.
@@ -91,16 +91,22 @@ all, and left them standing. The same claim sat in `docs-content/troubleshooting
 Saying so explicitly matters more than the edit: a docstring that argues a classification from a
 false premise is exactly what a later reader trusts, and the honest repair is to state the argument
 that actually holds rather than quietly delete the sentence that stopped holding. That argument has
-two halves. Wherever this code fires **alone**, a `<code>` element **was** selected and went through
-`checkCodeSlot` unchanged, so the slot was examined exactly as a single-arm document's would have
-been, and this reports known, meaning-preserving vendor noise a profile may defensibly tolerate.
-Wherever **no** element was selected, this code is by construction **not** alone: either
-`MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed) or `MISSING_PRODUCT_CODE` (no arm carried a
-`<code>` at all, the shape a name-only `LabeledDrug` produces) fires beside it, **both** of which are
-in `SAFETY_CRITICAL_CODES` and neither of which any profile may quiet. Tolerating this one can
-therefore never buy silence about an absent or withheld drug. The safety outcome was never at risk;
-the reasoning was. The runtime message string carried the same too-narrow claim, naming only the
-conflict code, and is corrected with it.
+two halves. Wherever this code fires **alone**, a `<code>` element **was** selected, and it is read
+exactly as the same document would have been read with one arm: whatever the call site does with a
+product code, it does unchanged. So this reports known, meaning-preserving vendor noise a profile may
+defensibly tolerate. Wherever **no** element was selected, this code is by construction **not**
+alone: either `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed) or `MISSING_PRODUCT_CODE` (no
+arm carried a `<code>` at all, the shape a name-only `LabeledDrug` produces) fires beside it,
+**both** of which are in `SAFETY_CRITICAL_CODES` and neither of which any profile may quiet.
+Tolerating this one can therefore never buy silence about an absent or withheld drug. The safety
+outcome was never at risk; the reasoning was.
+
+**Naming only the conflict code is the same mistake one size smaller**, and it is why the corrected
+argument names both companions in **every** place the argument is made: the JSDoc, the runtime
+message string, `docs-content/troubleshooting.md`, `README.md` and `CLAUDE.md`. The claim "a code was
+selected and _fully checked_" is also narrowed rather than restated, because a Planned Medication
+Activity reconciles its product code against the narrative instead of running `checkCodeSlot`, so
+"fully checked" was never true at all three call sites.
 
 **Nothing is lost.** `serializeCcda` re-emits the parsed DOM, so a translated arm and a repeated arm
 both round-trip byte-for-byte, and a caller who needs a withheld one can read it off

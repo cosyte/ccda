@@ -1085,10 +1085,11 @@ statusCode, effectiveTime, component+`).
     code "is read, not refused" and that "every code-system and terminology check applies to it
     unchanged", and argued the classification from exactly that. That was true until
     `MEDICATION_PRODUCT_ARM_CONFLICT` existed: in the conflict state no code is selected at all, so
-    nothing reaches `checkCodeSlot`. The claim is now stated conditionally in both places it lived
-    (`src/parser/warnings.ts` and `docs-content/troubleshooting.md`), and the classification rests on
-    the argument that actually holds: wherever this code fires alone an element was selected and went
-    through `checkCodeSlot` unchanged, and wherever none was selected it is by construction not
+    nothing reaches `checkCodeSlot`. The claim is now stated conditionally everywhere it is made
+    (`src/parser/warnings.ts` and its runtime message, `docs-content/troubleshooting.md`,
+    `README.md`, `CLAUDE.md`), and the classification rests on the argument that actually holds:
+    wherever this code fires alone an element was selected and read exactly as the same document
+    would have been read with one arm, and wherever none was selected it is by construction not
     alone, because either `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed) or
     `MISSING_PRODUCT_CODE` (no arm carried a `<code>` at all, the shape a name-only `LabeledDrug`
     produces) fires beside it, both safety-critical and neither quietable by a profile. Tolerating

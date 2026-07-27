@@ -128,8 +128,9 @@ export const SAFETY_CRITICAL_CODES: ReadonlySet<WarningCode> = immutableSet<Warn
   // make the record look complete. Never tolerable.
   WARNING_CODES.MISSING_PRODUCT_CODE,
   // One manufacturedProduct whose arms name different drugs: both arms of the
-  // CDA R2 choice, or a repeated arm of one kind, with each arm read across
-  // every coding it offers (its @code plus its <translation> alternates).
+  // CDA R2 choice, or a repeated arm of one kind. An arm names its @code when it
+  // asserts one, and otherwise the codings its <translation> alternates assert
+  // (a fallback, never an addition, so this can only fire more, never less).
   // Worse than MISSING_PRODUCT_CODE in one respect:
   // there the drug is absent, here the document names two and nothing in it
   // ranks them, so any pick the parser makes is a coin flip presented as a

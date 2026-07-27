@@ -222,10 +222,14 @@ describe("safety set", () => {
     expect(isSafetyCriticalCode(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR)).toBe(true);
     expect(isSafetyCriticalCode(WARNING_CODES.MISSING_CODE_VALUE)).toBe(true);
     expect(isSafetyCriticalCode(WARNING_CODES.MISSING_PRODUCT_CODE)).toBe(true);
-    // Deliberately tolerable: the alternate ManufacturedProduct arm is read and
-    // fully checked, so this flags known vendor shape, not lost clinical data.
+    // Deliberately tolerable, and the reason is conditional rather than
+    // absolute: where this fires alone the alternate arm's code was selected and
+    // read as any single-arm document's would be, so it flags known vendor shape
+    // rather than lost clinical data; and where NO code was selected it is not
+    // alone, because one of the two codes below fires beside it and neither is
+    // tolerable. Tolerating this one can never buy silence about a missing drug.
     expect(isSafetyCriticalCode(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED)).toBe(false);
-    // Its sibling is not tolerable: both arms naming different drugs means the
+    // Its sibling is not tolerable: arms naming different drugs means the
     // product is withheld, and MISSING_PRODUCT_CODE is suppressed behind this,
     // so a profile quieting it would restore a fully silent drop.
     expect(isSafetyCriticalCode(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT)).toBe(true);

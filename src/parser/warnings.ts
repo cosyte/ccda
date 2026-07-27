@@ -676,10 +676,12 @@ export function missingProductCode(position: CcdaPosition): CcdaWarning {
  * here, the warning says only which arm was present. That also decides the
  * safety classification, and the argument has two halves rather than one.
  * Wherever this code is the *only* thing fired, a `<code>` element **was**
- * selected and went through {@link checkCodeSlot} unchanged, so the slot was
- * examined exactly as a single-arm document's would have been, and this code
- * reports known, meaning-preserving vendor noise a profile may defensibly
- * tolerate. Wherever **no** element was selected, this code is by construction
+ * selected, and it is read exactly as the same document would have been read
+ * with one arm: whatever the call site does with a product code (a Medication
+ * Activity and an Immunization Activity run it through {@link checkCodeSlot}; a
+ * Planned Medication Activity reconciles it against the narrative instead) it
+ * does unchanged. So this code reports known, meaning-preserving vendor noise a
+ * profile may defensibly tolerate. Wherever **no** element was selected, this code is by construction
  * not alone: either `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed) or
  * `MISSING_PRODUCT_CODE` (no arm carried a `<code>` at all, the shape a
  * name-only `LabeledDrug` produces) fires beside it, **both** of which are in
