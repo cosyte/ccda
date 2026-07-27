@@ -149,7 +149,8 @@ immutability + explicit mutation, and the profile system.
   `hl7`/`x12`/`ncpdp`/`dicom`/`mllp`/`ccda` at once but needs `admin:org`; or add a
   repository-level ruleset here, which is what `pathways`, `docs`, `website` and `iac` already do.
   Deliberately not attempted from a slice that ships files. `hl7`, `x12`, `ncpdp`, `dicom` and
-  `mllp` sit behind the same gap, and `fhir` has no ruleset or branch protection at all. So the
+  `mllp` sit behind the same gap. (`fhir` had no ruleset or branch protection at all when this
+  was written; a repository-level one was added 2026-07-27.) So the
   true claim is that a violation is **visible on every PR**, not that it is impossible. It scans
   **both** halves the
   rule covers: every tracked file **except the script itself**, **and** the PR title, body, and

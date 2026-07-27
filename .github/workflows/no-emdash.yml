@@ -34,8 +34,9 @@ name: Em-dash gate
 # Either way it is out of scope for a slice that ships files, and it is deliberately not
 # attempted here. Until one of them happens, the honest claim is that this gate makes a
 # violation VISIBLE on every PR, not that it makes one impossible. hl7, x12, ncpdp, dicom
-# and mllp carry the same gap under the same org ruleset, and `fhir` has no ruleset and no
-# branch protection at all. The overstatement was this port's, so this port corrects it.
+# and mllp carry the same gap under the same org ruleset. (`fhir` had no ruleset and no
+# branch protection at all when this was written; a repository-level one was added
+# 2026-07-27, after this commit.) The overstatement was this port's, so this port corrects it.
 #
 # That hazard is written down in this ecosystem already, and it is worth naming here so the
 # next reader does not have to rediscover it: `docs/CLAUDE.md` records that moving a gate

@@ -123,9 +123,8 @@
 #   git ls-files | grep -vxF 'scripts/…' | xargs grep -Ind skip -nP "$PATTERN" || true
 # That is every fail-open route this header names, in one place. `pathways` partitions on
 # `git check-attr binary`; `website` and `mllp` partition on the NUL byte; the remainder are
-# the text-only shape, of which only ncpdp, dicom and this copy carry the `sed -z` stage. Do
-# not
-# patch them in this copy alone: a divergent variant is worse than a known shared
+# the text-only shape, of which only ncpdp, dicom and this copy carry the `sed -z` stage.
+# Do not patch them in this copy alone: a divergent variant is worse than a known shared
 # limit, EXCEPT where the shape is outright wrong rather than merely bounded.
 # (Two things ARE already fixed in the shape this copy was taken from, because each
 # defeats this gate's central promise, and they defeat it in different ways: the `-`

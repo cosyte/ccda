@@ -22,7 +22,8 @@ character can still merge with this job red. Closing that is a GitHub settings c
 a file change: add the context to the org ruleset `parser-ci-required-checks`, or add a
 repository-level ruleset here as `pathways`, `docs`, `website` and `iac` already do. Out of
 scope for a slice that ships files. `hl7`, `x12`, `ncpdp`, `dicom` and `mllp` sit behind the
-same gap, and `fhir` has no ruleset at all. Stated rather than implied, because a gate
+same gap. (`fhir` had no ruleset at all when this was written; one was added 2026-07-27,
+after this commit.) Stated rather than implied, because a gate
 described as enforcing something it does not enforce is worse than no gate.
 
 **One character of content changed.** `src/profiles/merge.ts` held the only em dash in the
@@ -43,9 +44,9 @@ The script is the text-only variant, taken from `ncpdp` (PR #34, `39212bb`) rath
 older `knowledgebase` copy, so it carries `ncpdp`'s two fixes for routes that printed OK
 without reading their input (a tracked file named `-` read as stdin, and `-d skip` passing a
 tracked symlink to a directory). Its pipeline code is byte-identical to `ncpdp`'s: the known
-limits are one cross-repo fix across the nine copies on `main` (seven of this shape, plus
-`website`'s NUL-partition variant and `docs`), and a divergent variant is worse than a
-shared known limit. Dropping `grep -I` is deliberate and is the load-bearing choice here,
+limits are one cross-repo fix across every copy on `main`, and a divergent variant is worse
+than a shared known limit. Enumerate them at carry-back time rather than trusting a
+count. Dropping `grep -I` is deliberate and is the load-bearing choice here,
 since `-I` (and `website`'s NUL-partition variant) would silently exempt `merge.ts` from a
 ban that has no exceptions, which is exactly the accident PR #52 made once already.
 
