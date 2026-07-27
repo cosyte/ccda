@@ -840,6 +840,10 @@ interface BuildOptions {
   readonly genderNullFlavor?: string;
   readonly mrnExtension?: string | undefined;
   readonly mrnAssigningAuthority?: boolean;
+  /** A `@nullFlavor` on the first `patientRole/id` (the MRN slot). */
+  readonly mrnNullFlavor?: string;
+  /** Raw `<id .../>` XML appended after the first `patientRole/id`. */
+  readonly extraPatientIds?: string;
   readonly sections?: string;
   readonly nonXmlBody?: boolean;
   readonly withBom?: boolean;
@@ -851,6 +855,7 @@ function recordTarget(opts: BuildOptions): string {
   const idAttrs = [`root="2.16.840.1.113883.19.5"`];
   if (opts.mrnExtension !== undefined) idAttrs.push(`extension="${opts.mrnExtension}"`);
   if (opts.mrnAssigningAuthority === true) idAttrs.push(`assigningAuthorityName="Test Hospital"`);
+  if (opts.mrnNullFlavor !== undefined) idAttrs.push(`nullFlavor="${opts.mrnNullFlavor}"`);
   const gender =
     opts.genderNullFlavor !== undefined
       ? `<administrativeGenderCode nullFlavor="${opts.genderNullFlavor}"/>`
@@ -858,7 +863,7 @@ function recordTarget(opts: BuildOptions): string {
   return `
   <recordTarget>
     <patientRole>
-      <id ${idAttrs.join(" ")}/>
+      <id ${idAttrs.join(" ")}/>${opts.extraPatientIds ?? ""}
       <patient>
         <name><prefix>Ms</prefix><given>Jane</given><given>Q</given><family>Doe</family><suffix>Jr</suffix></name>
         ${gender}

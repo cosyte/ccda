@@ -37,11 +37,41 @@ export interface II {
  *
  * A `@nullFlavor` declared beside an `@extension` emits
  * `CONTRADICTORY_NULL_FLAVOR`: the element says both "this identifier is
- * unknown" and "this identifier is 12345", and a consumer pulling an MRN out of
- * it would get the second reading. Only `@extension` counts as the contradicted
- * assertion; a `@root` alone is a namespace without a local identifier, so no
- * identifier value is produced and the shape stays silent. The `@extension`
- * itself is **kept**, it is the document's own text (see {@link parsePq}).
+ * unknown" and "this identifier is 12345". Only `@extension` counts as the
+ * contradicted assertion; a `@root` alone is a namespace without a local
+ * identifier, so no identifier value is produced and the shape stays silent.
+ *
+ * The `@extension` itself is **kept**. It is the document's own text, with no
+ * second copy the way `PQ.raw` sits beside `PQ.value`, so withholding it here
+ * would delete what the document said rather than decline to embellish it (see
+ * {@link parsePq} for the rule and its limit). Nor is there a derived reading
+ * to withhold: at this layer `extension` *is* the datum, not something the
+ * parser manufactured from it.
+ *
+ * **Where the withholding happens instead.** The dangerous act is not reporting
+ * an `II` whole, with its `nullFlavor` attached, it is *selecting* one and
+ * handing back a naked `string` that no longer carries the marking. This model
+ * does that in exactly one place, {@link pickMrn} (behind `getMrn()`), and that
+ * is where a null-marked identifier is declined. The identity slots,
+ * `ClinicalDocument.id`, `setId`, `relatedDocument/parentDocument/id` and every
+ * entry-level `<id>`, are only ever reported as the whole datatype beside the
+ * warning, so the `nullFlavor` never goes missing and there is nothing to
+ * withhold. The emit side is guarded separately: `editCcda` refuses to build an
+ * `RPLC` `parentDocument` out of a null-marked source `<id>`, because copying
+ * `root`/`extension` forward would launder a disowned identifier into an
+ * asserted one.
+ *
+ * **`templateId` is the stated exception, and it is deliberate.** Document- and
+ * section-type recognition *does* derive a reading from `templateId.@root`, so
+ * `<templateId root="…22.1.2" nullFlavor="NA"/>` still resolves the document
+ * type and its required-section SHALL set. That is left alone on purpose: a
+ * `templateId` is a conformance assertion about the *document's shape*, not an
+ * identifier for a person or a record, so a mis-read costs a spurious or
+ * missing `REQUIRED_SECTION_MISSING` rather than a misattributed clinical fact.
+ * Declining to recognize would also make the parser less informative, not
+ * safer, replacing a working document type with `UNKNOWN_DOCUMENT_TEMPLATE`.
+ * Note too that the shape stays silent here by the rule above: `@root` is not
+ * the contradicted assertion, only `@extension` is.
  *
  * @example
  * ```ts

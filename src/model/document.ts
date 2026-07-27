@@ -335,8 +335,15 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's MRN string, the first `patientRole/id` extension (see
-   * {@link pickMrn}). `undefined` when there is no patient or no usable id.
+   * The patient's MRN string, the **first** `patientRole/id` extension (see
+   * {@link pickMrn}). `undefined` when there is no patient, when that id has no
+   * `extension`, or when it carries a `nullFlavor`: the document disowned that
+   * identifier, and a bare `string` return has nowhere to carry the marking that
+   * qualified it. It withholds rather than falling through to the next `<id>`,
+   * since nothing in a C-CDA ranks `patientRole/id` entries and the next one is
+   * as likely to be an account or member number. The verbatim value is still
+   * reachable at `getPatient()?.identifiers`, where the `nullFlavor` travels
+   * with it.
    *
    * @example
    * ```ts

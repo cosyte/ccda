@@ -127,6 +127,20 @@ export const SAFETY_CRITICAL_CODES: ReadonlySet<WarningCode> = immutableSet<Warn
   // drug; this loses *which drug*, while dose, route and timing survive and
   // make the record look complete. Never tolerable.
   WARNING_CODES.MISSING_PRODUCT_CODE,
+  // One manufacturedProduct carrying BOTH arms of the CDA R2 choice, each
+  // naming a different drug. Worse than MISSING_PRODUCT_CODE in one respect:
+  // there the drug is absent, here the document names two and nothing in it
+  // ranks them, so any pick the parser makes is a coin flip presented as a
+  // reading. It is the lone signal, by construction, MISSING_PRODUCT_CODE is
+  // suppressed behind it (it would assert the false "no arm yielded a code")
+  // and the withheld product means checkCodeSlot has nothing to check, so no
+  // code-system or terminology warning can fire in its place. Tolerating it
+  // would restore the silent drop of one of two named drugs. Provenance,
+  // stated so it is not mistaken for a traced constraint: no normative SHALL
+  // is cited; that ManufacturedProduct models one participant rather than two
+  // is base CDA R2 structure, and the classification rests on the harm
+  // ordering.
+  WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT,
   // A nullFlavor asserted beside a populated value, e.g. a doseQuantity that
   // says both "unknown" and "10 mg". The document contradicts itself, and of
   // the two readings the reassuring one is the one that can hurt a patient,

@@ -225,6 +225,10 @@ describe("safety set", () => {
     // Deliberately tolerable: the alternate ManufacturedProduct arm is read and
     // fully checked, so this flags known vendor shape, not lost clinical data.
     expect(isSafetyCriticalCode(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED)).toBe(false);
+    // Its sibling is not tolerable: both arms naming different drugs means the
+    // product is withheld, and MISSING_PRODUCT_CODE is suppressed behind this,
+    // so a profile quieting it would restore a fully silent drop.
+    expect(isSafetyCriticalCode(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT)).toBe(true);
   });
 
   /**

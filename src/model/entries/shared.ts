@@ -15,6 +15,7 @@ import type { ParseCtx } from "../types/_shared.js";
 import type { CcdaPosition } from "../../parser/types.js";
 import {
   codeNarrativeMismatch,
+  medicationProductArmConflict,
   medicationProductArmUnexpected,
   narrativeReferenceBroken,
   negationVsNullFlavorAmbiguous,
@@ -242,15 +243,56 @@ export function chain(el: Element | undefined, ...names: readonly string[]): Ele
  * the code is read it flows through the ordinary `checkCodeSlot` path, so every
  * code-system and terminology check applies to it unchanged.
  *
+ * **A document carrying both arms is handled on what they say, not on which one
+ * the templates prefer.** A `choice` means one arm, so two is already outside
+ * the model, and the question is only whether the parser can still read a
+ * determinate product out of it. The `manufacturedLabeledDrug` arm's mere
+ * presence always draws `MEDICATION_PRODUCT_ARM_UNEXPECTED` (it is the arm the
+ * templates are not written around, whether or not it carries a `<code>`), and
+ * then:
+ *
+ * - **Only one arm names a product** (the other asserts no `@code`, e.g. a
+ *   `nullFlavor`-only `<code>`, or carries no `<code>` at all): the one that
+ *   names it is read, whichever arm it is. When *neither* names one the
+ *   `manufacturedMaterial` arm is read, exactly as before this rule existed, so
+ *   `MISSING_CODE_VALUE` / `MISSING_CODE_SYSTEM` / `UNEXPECTED_CODE_SYSTEM` keep
+ *   seeing the element they used to. There is no contradiction to resolve,
+ *   a null value is an *exceptional* value rather than a competing one, so
+ *   withholding here would discard a determinate drug the document does name.
+ *   This is also the direction the previous behaviour lost data in, a
+ *   `nullFlavor`-only `manufacturedMaterial` used to win over a
+ *   `manufacturedLabeledDrug` naming a real RxNorm concept, in silence.
+ * - **Both name the same product**: redundant, not contradictory.
+ *   `manufacturedMaterial` is read, exactly as before.
+ * - **Both name different products** (different `@code`, or one `@code` under
+ *   two different `@codeSystem`s): the document names two drugs on one
+ *   medication, and *nothing in it ranks the arms*. Preferring
+ *   `manufacturedMaterial` here would not be reporting what the document said,
+ *   it would be manufacturing a choice the document declined to make, and
+ *   handing a naive consumer one of two contradictory drugs with the other
+ *   silently dropped. So no code is selected, `MEDICATION_PRODUCT_ARM_CONFLICT`
+ *   (safety-critical) fires, and `conflicted` tells the caller to suppress its
+ *   `MISSING_PRODUCT_CODE` backstop, which would otherwise say the false thing
+ *   ("no arm yielded a code") in place of the true one. This is the
+ *   `CONTRADICTORY_NULL_FLAVOR` resolution applied to a structural
+ *   contradiction rather than a datatype one: warn, withhold the manufactured
+ *   reading, preserve everything verbatim. It is preserved: `serializeCcda`
+ *   re-emits the parsed DOM, so both arms round-trip byte-for-byte. The cost is
+ *   named rather than hidden: with no code selected `checkCodeSlot` has nothing
+ *   to check, so the code-system and terminology warnings cannot fire for that
+ *   slot, which is exactly why the conflict code is safety-critical and no
+ *   profile may quiet it.
+ *
  * Returns `undefined` when neither arm carries a code; the caller decides what
  * that means for its entry type (a Medication Activity and an Immunization
  * Activity both flag it, `MISSING_PRODUCT_CODE`).
  *
  * **Provenance:** the two-arm choice is base CDA R2 structure. Whether the
- * C-CDA template *forbids* the alternate arm is a normative question this repo
- * cannot settle without the R2.1 Schematron, so nothing here claims a
- * conformance verb, and the warning says only that the code came off the arm
- * the templates do not use.
+ * C-CDA template *forbids* the alternate arm, or forbids both together, is a
+ * normative question this repo cannot settle without the R2.1 Schematron, so
+ * nothing here claims a conformance verb. The warnings say only which arms were
+ * present and whether they agreed; the safety classification rests on the harm
+ * ordering.
  *
  * @example
  * ```ts
@@ -261,17 +303,88 @@ export function chain(el: Element | undefined, ...names: readonly string[]): Ele
 export function consumableProductCode(
   sbadm: Element,
   ctx: ParseCtx,
-): { readonly el?: Element; readonly product?: Element } {
+): { readonly el?: Element; readonly product?: Element; readonly conflicted?: boolean } {
   const product = chain(sbadm, "consumable", "manufacturedProduct");
   if (product === undefined) return {};
+  // The presence warning keys off the ARM, not its <code>: a
+  // manufacturedLabeledDrug carrying only a <name> is still the arm the C-CDA
+  // templates are not written around, and flagging it on the code alone made
+  // markup shape rather than meaning decide whether the deviation was reported.
+  const labeledArm = chain(product, "manufacturedLabeledDrug");
+  if (labeledArm !== undefined) ctx.emit(medicationProductArmUnexpected(positionOf(product)));
+
   const material = chain(product, "manufacturedMaterial", "code");
-  if (material !== undefined) return { el: material, product };
-  const labeled = chain(product, "manufacturedLabeledDrug", "code");
-  if (labeled !== undefined) {
-    ctx.emit(medicationProductArmUnexpected(positionOf(product)));
+  const labeled = chain(labeledArm, "code");
+
+  if (
+    material !== undefined &&
+    labeled !== undefined &&
+    namesConflictingProducts(material, labeled)
+  ) {
+    ctx.emit(medicationProductArmConflict(positionOf(product)));
+    return { product, conflicted: true };
+  }
+  // Only one arm can name a product now, or they name the same one, so the pick
+  // is the document's rather than the parser's. The labeled arm is read in
+  // exactly one situation: it names a product and the material arm does not.
+  // That is the gap this rule exists to close, a material arm asserting no
+  // symbol used to win over a labeled arm naming a real drug, in silence.
+  // Everything else reads `manufacturedMaterial`, including the case where
+  // NEITHER arm names a symbol, so the empty-slot machinery
+  // (MISSING_CODE_VALUE, MISSING_CODE_SYSTEM, UNEXPECTED_CODE_SYSTEM) still
+  // sees exactly the element it saw before this rule existed.
+  if (material === undefined) return labeled === undefined ? { product } : { el: labeled, product };
+  if (labeled !== undefined && !namesAProduct(material) && namesAProduct(labeled)) {
     return { el: labeled, product };
   }
-  return { product };
+  return { el: material, product };
+}
+
+/** The trimmed `@code` of a `<code>` element, or `undefined` when it asserts no symbol. @internal */
+function symbolOf(el: Element): string | undefined {
+  const symbol = attr(el, "code")?.trim();
+  return symbol === undefined || symbol === "" ? undefined : symbol;
+}
+
+/** Whether a `<code>` element names a product at all (asserts a non-empty `@code`). @internal */
+function namesAProduct(el: Element): boolean {
+  return symbolOf(el) !== undefined;
+}
+
+/**
+ * Whether two `<code>` elements name **different** products, the only shape on
+ * which the parser refuses to pick an arm.
+ *
+ * An element that asserts no `@code` names no product, so it never conflicts
+ * with one that does. That is not leniency, it is the same rule
+ * `contradictsAssertedValue` already applies one layer down: only a
+ * *value-bearing* assertion can contradict, and in HL7 v3 a `nullFlavor` marks
+ * an **exceptional value**, one with no proper value, rather than a competing
+ * one. A `nullFlavor`-only `<code>` is a complete statement that the concept is
+ * unknown, which is precisely what `MISSING_CODE_VALUE` was scoped around, and
+ * treating it as a rival drug would discard the RxNorm code the document does
+ * name (and with it every `checkCodeSlot` check on that code) to protect
+ * against a contradiction that is not there.
+ *
+ * Given two symbols, they conflict when the symbols differ, or when both arms
+ * name a `@codeSystem` and those differ (one symbol under two terminologies is
+ * two concepts). An arm that omits `@codeSystem` is not treated as a
+ * disagreement: `MISSING_CODE_SYSTEM` already covers that shape and firing here
+ * instead would withhold the product and make the parser *quieter* about it,
+ * the exact direction this rule exists to reverse. No terminology equivalence
+ * is attempted either: deciding that two different codes denote one concept is
+ * a `TerminologyAdapter`'s job, and guessing it in the parser would be the same
+ * manufactured reading this check refuses.
+ * @internal
+ */
+function namesConflictingProducts(a: Element, b: Element): boolean {
+  const symbolA = symbolOf(a);
+  const symbolB = symbolOf(b);
+  if (symbolA === undefined || symbolB === undefined) return false;
+  if (symbolA !== symbolB) return true;
+  const systemA = attr(a, "codeSystem")?.trim();
+  const systemB = attr(b, "codeSystem")?.trim();
+  return systemA !== undefined && systemB !== undefined && systemA !== systemB;
 }
 
 /** Breadth-first search for the first descendant with the given local name. @internal */

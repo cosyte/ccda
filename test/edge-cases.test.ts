@@ -338,3 +338,82 @@ describe("header / section / document structural edge cases", () => {
     expect(doc.warnings.map((w) => w.code)).toContain(WARNING_CODES.UNKNOWN_DOCUMENT_TEMPLATE);
   });
 });
+
+/**
+ * The residual `#56` argued rather than closed: `CONTRADICTORY_NULL_FLAVOR`
+ * warns on an `<id nullFlavor="UNK" extension="X"/>`, but `pickMrn` still
+ * handed `X` back as the patient's MRN. A misfiled patient identifier is the
+ * third harm `CLAUDE.md` names, and unlike a wrong dose it is silent,
+ * persistent, and contaminates everything downstream.
+ *
+ * The resolution keeps the datatype honest and moves the refusal to the layer
+ * that manufactures a reading: `II.extension` is the document's own bytes and
+ * stays, `pickMrn`'s **selection** is derived and declines. Each positive below
+ * reproduces on the base commit.
+ */
+describe("identifiers, a nullFlavor asserted on a patientRole/id", () => {
+  it("does not hand back an MRN the document disowned", () => {
+    // Before: doc.getMrn() === "MRN001", warned but reassuring.
+    const doc = parseCcda(buildCcda({ mrnNullFlavor: "UNK" }));
+    expect(doc.getMrn()).toBeUndefined();
+    expect(doc.warnings.map((w) => w.code)).toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+  });
+
+  it("keeps the verbatim extension reachable beside its nullFlavor", () => {
+    // The whole point of refusing at the selection layer rather than in
+    // `parseIi`: nothing the document said is lost, it just stops arriving as a
+    // naked string with the marking stripped off.
+    const id = parseCcda(buildCcda({ mrnNullFlavor: "UNK" })).getPatient()?.identifiers[0];
+    expect(id?.extension).toBe("MRN001");
+    expect(id?.nullFlavor).toBe("UNK");
+    expect(id?.root).toBe("2.16.840.1.113883.19.5");
+  });
+
+  it("withholds rather than substituting the next authority's number", () => {
+    // The tempting move, and the worse one. CDA R2 makes patientRole/id 1..* and
+    // nothing in the document ranks the entries, so the second id is not another
+    // MRN, it is whatever the sending system listed second. Falling through would
+    // answer the MRN question confidently from a different assigning authority
+    // with no signal naming the substitution.
+    const doc = parseCcda(
+      buildCcda({
+        mrnNullFlavor: "MSK",
+        extraPatientIds:
+          '\n      <id root="2.16.840.1.113883.19.5.99999.7" extension="SYNTH-ACCT-9"/>',
+      }),
+    );
+    expect(doc.getMrn()).toBeUndefined();
+    // Both ids are still reported in full, so a caller who knows their own
+    // authority OIDs can resolve it themselves.
+    expect(doc.getPatient()?.identifiers.map((i) => i.extension)).toEqual([
+      "MRN001",
+      "SYNTH-ACCT-9",
+    ]);
+  });
+
+  // The negatives: the shapes that must keep behaving exactly as before, so the
+  // refusal cannot quietly become "no MRN for anyone".
+  it("is unchanged on a clean id, an absent id, and a root-only id", () => {
+    expect(parseCcda(buildCcda()).getMrn()).toBe("MRN001");
+    expect(parseCcda(buildCcda({ mrnExtension: undefined })).getMrn()).toBeUndefined();
+    const noPatient = buildCcda().replace(/<recordTarget>[\s\S]*?<\/recordTarget>/u, "");
+    expect(parseCcda(noPatient).getMrn()).toBeUndefined();
+  });
+
+  it("leaves every other II slot reporting the document verbatim", () => {
+    // The distinction that decides the whole design: these slots are only ever
+    // handed back as the whole datatype, with the nullFlavor attached and
+    // CONTRADICTORY_NULL_FLAVOR in warnings, so there is no naked-string
+    // affordance to close and nothing is withheld.
+    const xml = buildCcda()
+      .replace('<id root="2.16.840.1.113883.19.5.99999.1" extension="DOC123"/>', "")
+      .replace(
+        '<code code="34133-9"',
+        '<id root="2.16.840.1.113883.19.5.99999.1" extension="DOC123" nullFlavor="UNK"/>\n  <code code="34133-9"',
+      );
+    const doc = parseCcda(xml);
+    expect(doc.header.documentId?.extension).toBe("DOC123");
+    expect(doc.header.documentId?.nullFlavor).toBe("UNK");
+    expect(doc.warnings.map((w) => w.code)).toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+  });
+});

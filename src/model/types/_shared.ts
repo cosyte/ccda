@@ -125,7 +125,12 @@ export function readNullFlavor(el: Element, ctx: ParseCtx): string | undefined {
  * The two halves of the response are separate on purpose. The **warning** is
  * class-wide: every v3 datatype in this model routes through here, so the
  * contradiction can never be silent wherever it appears. The **withholding** is
- * not, and is decided by each datatype, see {@link parsePq}.
+ * not, and is decided by each datatype, see {@link parsePq}. The test is
+ * whether the reading being withheld was *manufactured* beside a surviving
+ * verbatim copy (`PQ.value` from `PQ.raw`), never whether the field looks
+ * dangerous. Where the datatype's field is the document's own bytes the
+ * withholding moves up to whatever layer manufactures a reading from it, which
+ * in this model is {@link pickMrn} selecting one `<id>` out of a list.
  *
  * @internal
  */

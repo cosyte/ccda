@@ -201,7 +201,10 @@ function plannedCodeElement(
   // gap. The other planned kinds are left alone, their code is optional and an
   // absence there is not a lost drug.
   if (kind !== "medicationActivity") return undefined;
-  const productEl = consumableProductCode(el, ctx).el;
-  if (productEl === undefined) ctx.emit(missingProductCode(positionOf(el)));
+  const { el: productEl, conflicted } = consumableProductCode(el, ctx);
+  // A product withheld because both arms named different drugs already drew the
+  // stronger `MEDICATION_PRODUCT_ARM_CONFLICT`; "no arm yielded a code" would be
+  // false there, so the backstop stands down.
+  if (productEl === undefined && conflicted !== true) ctx.emit(missingProductCode(positionOf(el)));
   return productEl;
 }

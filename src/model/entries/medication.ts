@@ -121,13 +121,16 @@ function buildMedication(
   const { negated, nullFlavor } = readNegation(sbadm, ctx);
   const statusCode = statusCodeOf(sbadm);
 
-  const { el: drugEl } = consumableProductCode(sbadm, ctx);
+  const { el: drugEl, conflicted } = consumableProductCode(sbadm, ctx);
   const drug = parseCd(drugEl, ctx);
   const drugPos = drugEl === undefined ? positionOf(sbadm) : positionOf(drugEl);
   // A medication with no coded product on any arm is never left silent: dose,
   // route and timing can all survive a missing consumable, so without this the
-  // entry would read as a well-formed medication that simply has no drug.
-  if (drugEl === undefined) ctx.emit(missingProductCode(positionOf(sbadm)));
+  // entry would read as a well-formed medication that simply has no drug. The
+  // one exception is a withheld product, where both arms named a drug and
+  // disagreed: `MEDICATION_PRODUCT_ARM_CONFLICT` already fired and is the
+  // stronger, truer statement, while "no arm yielded a code" would be false.
+  if (drugEl === undefined && conflicted !== true) ctx.emit(missingProductCode(positionOf(sbadm)));
   checkCodeSlot(drug, "medication", drugPos, ctx);
 
   const { dose, doseRange } = readDose(sbadm, ctx);

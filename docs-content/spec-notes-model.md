@@ -31,7 +31,12 @@ are passed over: only a specific document-type `templateId` resolves a `document
 
 `getPatient()` returns the first `recordTarget` patient (a document with more than one emits
 `MULTIPLE_RECORD_TARGETS` and this resolves the first); `getMrn()` returns the patient's medical record
-number (the first `patientRole/id` extension, via `pickMrn`). The header also carries the document
+number, the **first** `patientRole/id` extension, via `pickMrn`, and `undefined` when that id
+carries a `nullFlavor`: reading it out would be a selection rather than a report, and a bare
+`string` has nowhere to carry the marking that qualified it. It withholds rather than falling
+through to the next id, since nothing in a C-CDA ranks `patientRole/id` entries and the next one is
+as likely to be an account or member number. The verbatim value is still on
+`getPatient()?.identifiers`, with its `nullFlavor` beside it. The header also carries the document
 `code`, `title`, `effectiveTime`, `confidentialityCode`, and `languageCode`.
 
 ## Section framing
