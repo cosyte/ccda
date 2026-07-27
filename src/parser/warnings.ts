@@ -654,21 +654,22 @@ export function missingProductCode(position: CcdaPosition): CcdaWarning {
  * which is safety-critical and fires alongside this one.
  *
  * **When this warning stands alone, the arm's `<code>` is read rather than
- * refused**,
- * which is Postel's Law on the parse side: the alternate arm is a valid CDA R2
- * shape carrying the same `CE`, and the previous behaviour of returning
- * `drug: undefined` in silence was strictly worse than reading it and flagging
- * the deviation. The selected value then flows through the ordinary
- * {@link checkCodeSlot} path, so every code-system and terminology check applies
- * to it unchanged.
+ * refused**, which is Postel's Law on the parse side: the alternate arm is a
+ * valid CDA R2 shape carrying the same `CE`, and the previous behaviour of
+ * returning `drug: undefined` in silence was strictly worse than reading it and
+ * flagging the deviation. The selected element is then handed to whatever the
+ * call site does with a product code, unchanged by which arm it came off.
  *
- * **The one state where that is not true is the conflict, and it is the reason
- * this code can stay tolerable.** When `MEDICATION_PRODUCT_ARM_CONFLICT` fires
- * beside this one, **no** product code is selected, so nothing reaches
- * `checkCodeSlot` and no code-system or terminology check runs for that slot.
- * The classification below is stated conditionally for that reason: it used to
- * be argued from "the drug is present and fully checked", full stop, which
- * stopped being true the moment the conflict state existed.
+ * **There are two states in which nothing is selected at all, and neither is
+ * this warning's to carry.** In the first, `MEDICATION_PRODUCT_ARM_CONFLICT`
+ * fires beside this one: the arms disagreed, so no product code is selected and
+ * no code-system or terminology check runs for that slot. In the second, no arm
+ * carried a `<code>` at all (the shape a name-only `LabeledDrug` produces) and
+ * `MISSING_PRODUCT_CODE` fires beside this one instead. The classification below
+ * is stated conditionally for that reason: it used to be argued from "the drug
+ * is present and fully checked", full stop, which stopped being true the moment
+ * the conflict state existed, and which was never true of the second state
+ * either.
  *
  * **Provenance:** the two-arm choice is base CDA R2 structure. Whether the
  * C-CDA template *forbids* the alternate arm is a normative question this repo
@@ -677,11 +678,13 @@ export function missingProductCode(position: CcdaPosition): CcdaWarning {
  * safety classification, and the argument has two halves rather than one.
  * Wherever this code is the *only* thing fired, a `<code>` element **was**
  * selected, and it is read exactly as the same document would have been read
- * with one arm: whatever the call site does with a product code (a Medication
- * Activity and an Immunization Activity run it through {@link checkCodeSlot}; a
- * Planned Medication Activity reconciles it against the narrative instead) it
- * does unchanged. So this code reports known, meaning-preserving vendor noise a
- * profile may defensibly tolerate. Wherever **no** element was selected, this code is by construction
+ * with one arm: whatever the call site does with a product code, it does
+ * unchanged. (That differs by call site, which is why this says "unchanged"
+ * rather than "fully checked": a Medication Activity and an Immunization
+ * Activity run the code through {@link checkCodeSlot} *and* reconcile it against
+ * the narrative, while a Planned Medication Activity only reconciles.) So this
+ * code reports known, meaning-preserving vendor noise a profile may defensibly
+ * tolerate. Wherever **no** element was selected, this code is by construction
  * not alone: either `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed) or
  * `MISSING_PRODUCT_CODE` (no arm carried a `<code>` at all, the shape a
  * name-only `LabeledDrug` produces) fires beside it, **both** of which are in

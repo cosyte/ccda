@@ -226,8 +226,11 @@ describe("safety set", () => {
     // absolute: where this fires alone the alternate arm's code was selected and
     // read as any single-arm document's would be, so it flags known vendor shape
     // rather than lost clinical data; and where NO code was selected it is not
-    // alone, because one of the two codes below fires beside it and neither is
-    // tolerable. Tolerating this one can never buy silence about a missing drug.
+    // alone, because either MEDICATION_PRODUCT_ARM_CONFLICT (the arms disagreed)
+    // or MISSING_PRODUCT_CODE (no arm carried a <code> at all, the shape a
+    // name-only LabeledDrug produces) fires beside it, and both are asserted
+    // untolerable here. Tolerating this one can never buy silence about a
+    // missing drug.
     expect(isSafetyCriticalCode(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED)).toBe(false);
     // Its sibling is not tolerable: arms naming different drugs means the
     // product is withheld, and MISSING_PRODUCT_CODE is suppressed behind this,
