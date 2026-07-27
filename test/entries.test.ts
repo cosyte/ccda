@@ -935,6 +935,25 @@ describe("clinical entries, both ManufacturedProduct arms on one product", () =>
     expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
   });
 
+  it("keeps reading the material arm when neither arm names a symbol", () => {
+    // The fall-through that must NOT change: with both arms present and neither
+    // naming a product, the material arm is still the one read, so the empty-slot
+    // machinery sees exactly the element it saw before this rule existed. Reading
+    // the labeled arm instead would drop the material arm's @codeSystem from the
+    // model and take MISSING_CODE_VALUE / UNEXPECTED_CODE_SYSTEM down with it.
+    const systemOnlyMaterial = MEDICATIONS_SECTION.replace(
+      '<code code="314076" codeSystem="2.16.840.1.113883.6.88" displayName="Lisinopril 10 MG Oral Tablet"/>',
+      '<code codeSystem="2.16.840.1.113883.6.96"/>',
+    );
+    const doc = parseCcda(
+      buildCcda({ sections: bothArms(systemOnlyMaterial, 'nullFlavor="UNK"') }),
+    );
+    expect(doc.getMedications()[0]?.drug?.codeSystem).toBe("2.16.840.1.113883.6.96");
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MISSING_CODE_VALUE);
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.UNEXPECTED_CODE_SYSTEM);
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+  });
+
   it("does not treat a missing codeSystem on one arm as a different product", () => {
     // Same symbol, one arm unqualified: MISSING_CODE_SYSTEM already covers that
     // shape, and withholding instead would swap a loud warning for a quiet one.

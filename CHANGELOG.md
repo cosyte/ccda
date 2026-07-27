@@ -1099,7 +1099,9 @@ statusCode, effectiveTime, component+`).
   - **An arm that asserts no symbol names no product, so it never conflicts with one that does.** A
     `nullFlavor`-only `<code>`, or an arm with no `<code>` at all, is an _exceptional value_ under
     HL7 v3 rather than a competing one, the same rule `contradictsAssertedValue` applies one layer
-    down. Whichever arm names the drug is read, and this is also the direction the previous
+    down. Whichever arm names the drug is read, and when neither names one the
+    `manufacturedMaterial` arm is read exactly as before, so the empty-slot and code-system checks
+    keep seeing the element they always saw. This is also the direction the previous
     behaviour lost data in: a `nullFlavor`-only `manufacturedMaterial` used to win over a
     `manufacturedLabeledDrug` naming a real RxNorm concept, in silence. Arms naming the **same**
     product are redundant rather than contradictory, so the material arm is read as before.

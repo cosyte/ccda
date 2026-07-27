@@ -678,7 +678,7 @@ export function missingProductCode(position: CcdaPosition): CcdaWarning {
 export function medicationProductArmUnexpected(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED,
-    message: `manufacturedProduct carries the manufacturedLabeledDrug arm; C-CDA's medication templates are written around manufacturedMaterial, so the product code is read and checked as usual but the arm is flagged.`,
+    message: `manufacturedProduct carries the manufacturedLabeledDrug arm, which C-CDA's medication templates are not written around; the arm is flagged, and unless a companion MEDICATION_PRODUCT_ARM_CONFLICT says otherwise the product code was read and checked as usual.`,
     position,
   };
 }

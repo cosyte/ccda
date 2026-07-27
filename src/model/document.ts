@@ -335,13 +335,15 @@ export class CcdaDocument {
   }
 
   /**
-   * The patient's MRN string, the extension of the first `patientRole/id` the
-   * document actually asserts (see {@link pickMrn}). An `<id>` carrying a
-   * `nullFlavor` is skipped: the document disowned that identifier, and a bare
-   * `string` return has nowhere to carry the `nullFlavor` that qualified it.
-   * `undefined` when there is no patient, when every id is marked null, or when
-   * the chosen id has no `extension`. The verbatim value is still reachable at
-   * `getPatient()?.identifiers`, where the `nullFlavor` travels with it.
+   * The patient's MRN string, the **first** `patientRole/id` extension (see
+   * {@link pickMrn}). `undefined` when there is no patient, when that id has no
+   * `extension`, or when it carries a `nullFlavor`: the document disowned that
+   * identifier, and a bare `string` return has nowhere to carry the marking that
+   * qualified it. It withholds rather than falling through to the next `<id>`,
+   * since nothing in a C-CDA ranks `patientRole/id` entries and the next one is
+   * as likely to be an account or member number. The verbatim value is still
+   * reachable at `getPatient()?.identifiers`, where the `nullFlavor` travels
+   * with it.
    *
    * @example
    * ```ts

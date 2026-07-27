@@ -253,7 +253,10 @@ export function chain(el: Element | undefined, ...names: readonly string[]): Ele
  *
  * - **Only one arm names a product** (the other asserts no `@code`, e.g. a
  *   `nullFlavor`-only `<code>`, or carries no `<code>` at all): the one that
- *   names it is read, whichever arm it is. There is no contradiction to resolve,
+ *   names it is read, whichever arm it is. When *neither* names one the
+ *   `manufacturedMaterial` arm is read, exactly as before this rule existed, so
+ *   `MISSING_CODE_VALUE` / `MISSING_CODE_SYSTEM` / `UNEXPECTED_CODE_SYSTEM` keep
+ *   seeing the element they used to. There is no contradiction to resolve,
  *   a null value is an *exceptional* value rather than a competing one, so
  *   withholding here would discard a determinate drug the document does name.
  *   This is also the direction the previous behaviour lost data in, a
@@ -322,17 +325,19 @@ export function consumableProductCode(
     return { product, conflicted: true };
   }
   // Only one arm can name a product now, or they name the same one, so the pick
-  // is the document's rather than the parser's. Prefer the arm that actually
-  // names something (a material arm asserting no symbol beside a labeled arm
-  // that names a drug used to drop the drug in silence, which is the gap this
-  // whole rule exists to close); otherwise fall back to the arm C-CDA's
-  // templates use, so the empty-slot machinery (MISSING_CODE_VALUE,
-  // MISSING_CODE_SYSTEM) sees exactly what it saw before.
-  if (material !== undefined && (namesAProduct(material) || labeled === undefined)) {
-    return { el: material, product };
+  // is the document's rather than the parser's. The labeled arm is read in
+  // exactly one situation: it names a product and the material arm does not.
+  // That is the gap this rule exists to close, a material arm asserting no
+  // symbol used to win over a labeled arm naming a real drug, in silence.
+  // Everything else reads `manufacturedMaterial`, including the case where
+  // NEITHER arm names a symbol, so the empty-slot machinery
+  // (MISSING_CODE_VALUE, MISSING_CODE_SYSTEM, UNEXPECTED_CODE_SYSTEM) still
+  // sees exactly the element it saw before this rule existed.
+  if (material === undefined) return labeled === undefined ? { product } : { el: labeled, product };
+  if (labeled !== undefined && !namesAProduct(material) && namesAProduct(labeled)) {
+    return { el: labeled, product };
   }
-  if (labeled !== undefined) return { el: labeled, product };
-  return { product };
+  return { el: material, product };
 }
 
 /** The trimmed `@code` of a `<code>` element, or `undefined` when it asserts no symbol. @internal */

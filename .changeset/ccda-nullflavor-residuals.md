@@ -108,7 +108,10 @@ why the rule is scoped as narrowly as it is.
 **An arm that asserts no symbol names no product, so it never conflicts with one that does.** A
 `nullFlavor`-only `<code>`, or an arm with no `<code>` at all, is an _exceptional value_ under HL7
 v3 rather than a competing one, which is the same rule `contradictsAssertedValue` applies one layer
-down: only a value-bearing assertion can contradict. Whichever arm names the drug is read. This
+down: only a value-bearing assertion can contradict. Whichever arm names the drug is read, and
+when neither arm names one the `manufacturedMaterial` arm is read exactly as before, so
+`MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM` and `UNEXPECTED_CODE_SYSTEM` keep seeing the element
+they always saw. This
 matters in both directions. Refusing here would discard an RxNorm code the document names exactly
 once, and take every `checkCodeSlot` check on it down with it, which is the "parser got quieter
 about a wrong code system" regression this whole line of work exists to reverse. And it is also the
