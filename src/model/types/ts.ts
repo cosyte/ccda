@@ -7,7 +7,12 @@
  */
 
 import { attr, positionOf } from "../dom.js";
-import { parseV3DateTime, readNullFlavor, type ParseCtx } from "./_shared.js";
+import {
+  contradictsAssertedValue,
+  parseV3DateTime,
+  readNullFlavor,
+  type ParseCtx,
+} from "./_shared.js";
 import { malformedDateTime } from "../../parser/warnings.js";
 import type { Element } from "@xmldom/xmldom";
 
@@ -33,6 +38,14 @@ export interface TS {
  * element is absent. Emits `MALFORMED_DATETIME` (and omits `date`) when a
  * non-empty `@value` does not parse. Never throws.
  *
+ * A `@nullFlavor` declared beside a populated `@value` is a contradiction:
+ * `CONTRADICTORY_NULL_FLAVOR` is emitted, `raw` and `nullFlavor` are preserved
+ * verbatim, and the derived `date` is withheld. That is the same treatment
+ * `MALFORMED_DATETIME` already gives an unparseable value, and the same rule
+ * {@link parsePq} applies to `value`: the parser declines to manufacture a
+ * computable reading it has been told is not the document's value, while never
+ * dropping the document's own bytes.
+ *
  * @example
  * ```ts
  * import { parseTs } from "@cosyte/ccda";
@@ -44,8 +57,11 @@ export function parseTs(el: Element | undefined, ctx: ParseCtx): TS | undefined 
   if (el === undefined) return undefined;
   const out: { raw?: string; date?: Date; nullFlavor?: string } = {};
   const raw = attr(el, "value");
-  if (raw !== undefined) {
-    out.raw = raw;
+  if (raw !== undefined) out.raw = raw;
+  const nullFlavor = readNullFlavor(el, ctx);
+  if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
+  const contradicted = contradictsAssertedValue(el, "TS", nullFlavor, raw !== undefined, ctx);
+  if (raw !== undefined && !contradicted) {
     const date = parseV3DateTime(raw);
     if (date !== undefined) {
       out.date = date;
@@ -53,7 +69,17 @@ export function parseTs(el: Element | undefined, ctx: ParseCtx): TS | undefined 
       ctx.emit(malformedDateTime(positionOf(el)));
     }
   }
-  const nullFlavor = readNullFlavor(el, ctx);
-  if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
   return out;
+}
+
+/**
+ * Strip the derived `date` from an already-parsed {@link TS}, keeping every
+ * verbatim field. Used when the *containing* interval declares itself null.
+ *
+ * @internal
+ */
+export function tsWithoutDerivedValue(ts: TS): TS {
+  if (ts.date === undefined) return ts;
+  const { date: _dropped, ...rest } = ts;
+  return rest;
 }

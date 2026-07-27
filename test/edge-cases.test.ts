@@ -97,16 +97,34 @@ describe("datatype nullFlavor / absent-field branches", () => {
     expect(parseBl(el(`<value nullFlavor="NI"/>`), ctx())?.nullFlavor).toBe("NI");
   });
 
-  it("IVL_PQ captures center + width + nullFlavor", () => {
+  it("IVL_PQ captures center + width", () => {
+    const c = ctx();
+    const ivl = parseIvlPq(
+      el(`<value><center value="5" unit="mg"/><width value="2" unit="mg"/></value>`),
+      c,
+    );
+    expect(ivl?.center?.value).toBe(5);
+    expect(ivl?.width?.value).toBe(2);
+    expect(c.warnings).toHaveLength(0);
+  });
+
+  it("IVL_PQ keeps a nullFlavor but withholds bound values it contradicts", () => {
+    const c = ctx();
     const ivl = parseIvlPq(
       el(
         `<value nullFlavor="OTH"><center value="5" unit="mg"/><width value="2" unit="mg"/></value>`,
       ),
-      ctx(),
+      c,
     );
-    expect(ivl?.center?.value).toBe(5);
-    expect(ivl?.width?.value).toBe(2);
     expect(ivl?.nullFlavor).toBe("OTH");
+    // Verbatim preserved, derived numbers withheld: the interval declared
+    // itself null, so the parser does not manufacture a magnitude for it.
+    expect(ivl?.center?.raw).toBe("5");
+    expect(ivl?.center?.unit).toBe("mg");
+    expect(ivl?.center?.value).toBeUndefined();
+    expect(ivl?.width?.raw).toBe("2");
+    expect(ivl?.width?.value).toBeUndefined();
+    expect(c.warnings.map((w) => w.code)).toEqual([WARNING_CODES.CONTRADICTORY_NULL_FLAVOR]);
   });
 
   it("TS captures a nullFlavor", () => {

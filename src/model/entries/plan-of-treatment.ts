@@ -19,6 +19,7 @@ import { parseCd, type CD } from "../types/cd.js";
 import type { II } from "../types/ii.js";
 import { parseIvlTs, type IVL_TS } from "../types/ivl-ts.js";
 import type { ParseCtx } from "../types/_shared.js";
+import { missingProductCode } from "../../parser/warnings.js";
 import {
   PLANNED_ACT,
   PLANNED_ENCOUNTER,
@@ -26,9 +27,9 @@ import {
   PLANNED_OBSERVATION,
   PLANNED_PROCEDURE,
   PLANNED_SUPPLY,
-  chain,
   childEntries,
   classifyDisposition,
+  consumableProductCode,
   entryAct,
   idsOf,
   readNegation,
@@ -147,7 +148,7 @@ function buildPlannedItem(
   const { negated, nullFlavor } = readNegation(el, ctx);
   const statusCode = statusCodeOf(el);
 
-  const codeEl = plannedCodeElement(el, kind);
+  const codeEl = plannedCodeElement(el, kind, ctx);
   const code = parseCd(codeEl, ctx);
   const value = kind === "observation" ? readObservationValue(child(el, "value"), ctx) : undefined;
   const effectiveTime = parseIvlTs(child(el, "effectiveTime"), ctx);
@@ -181,14 +182,26 @@ function buildPlannedItem(
 
 /**
  * The code element for a planned item, the direct `<code>` for most variants,
- * or the `consumable/manufacturedProduct/manufacturedMaterial/code` for a
- * Planned Medication Activity (whose drug lives in the consumable). @internal
+ * or the `consumable/manufacturedProduct` product code for a Planned Medication
+ * Activity (whose drug lives in the consumable, on either arm of the CDA R2
+ * `ManufacturedProduct` choice). @internal
  */
-function plannedCodeElement(el: Element, kind: PlannedItemKind): Element | undefined {
+function plannedCodeElement(
+  el: Element,
+  kind: PlannedItemKind,
+  ctx: ParseCtx,
+): Element | undefined {
   const direct = child(el, "code");
   if (direct !== undefined) return direct;
-  if (kind === "medicationActivity") {
-    return chain(el, "consumable", "manufacturedProduct", "manufacturedMaterial", "code");
-  }
-  return undefined;
+  // Only a planned medication reads the consumable, so only it can trip the
+  // alternate-arm warning; the other planned kinds never reach this helper. A
+  // planned medication with neither a direct <code> nor a product code on any
+  // arm has no drug at all, which is flagged here for the same reason it is on a
+  // performed Medication Activity: a planned dose of nothing is not a lesser
+  // gap. The other planned kinds are left alone, their code is optional and an
+  // absence there is not a lost drug.
+  if (kind !== "medicationActivity") return undefined;
+  const productEl = consumableProductCode(el, ctx).el;
+  if (productEl === undefined) ctx.emit(missingProductCode(positionOf(el)));
+  return productEl;
 }

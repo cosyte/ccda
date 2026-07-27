@@ -9,7 +9,7 @@
  */
 
 import { attr, child, text } from "../dom.js";
-import { readNullFlavor, type ParseCtx } from "./_shared.js";
+import { contradictsAssertedValue, readNullFlavor, type ParseCtx } from "./_shared.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
@@ -35,6 +35,11 @@ export interface ED {
  * Parse an `ED` element into a typed {@link ED}. Returns `undefined` when the
  * element is absent. Captures inline content verbatim (base64 is not decoded)
  * and resolves a child `<reference>`'s `@value`. Never throws.
+ *
+ * A `@nullFlavor` declared beside inline content or a `<reference>` emits
+ * `CONTRADICTORY_NULL_FLAVOR`; a `@mediaType` or `@representation` alone
+ * describes a null value rather than contradicting it and stays silent. Content
+ * and reference are **kept** verbatim (see {@link parsePq}).
  *
  * @example
  * ```ts
@@ -70,5 +75,12 @@ export function parseEd(el: Element | undefined, ctx: ParseCtx): ED | undefined 
 
   const nullFlavor = readNullFlavor(el, ctx);
   if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
+  contradictsAssertedValue(
+    el,
+    "ED",
+    nullFlavor,
+    out.value !== undefined || out.reference !== undefined,
+    ctx,
+  );
   return out;
 }

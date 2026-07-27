@@ -15,6 +15,7 @@ import type { ParseCtx } from "../types/_shared.js";
 import type { CcdaPosition } from "../../parser/types.js";
 import {
   codeNarrativeMismatch,
+  medicationProductArmUnexpected,
   narrativeReferenceBroken,
   negationVsNullFlavorAmbiguous,
   problemStatusIndeterminate,
@@ -220,6 +221,57 @@ export function chain(el: Element | undefined, ...names: readonly string[]): Ele
     current = child(current, name);
   }
   return current;
+}
+
+/**
+ * Resolve the coded product of a `substanceAdministration`'s `consumable`,
+ * across **both** arms of the CDA R2 `ManufacturedProduct` choice.
+ *
+ * CDA R2 models `ManufacturedProduct` with a choice of participant:
+ * `manufacturedMaterial` (a `Material`) or `manufacturedLabeledDrug` (a
+ * `LabeledDrug`). Both carry the product's `CE` on a child `<code>`. C-CDA's
+ * Medication Information and Immunization Medication Information templates are
+ * written around `manufacturedMaterial`, so that arm is preferred and read
+ * silently; the `manufacturedLabeledDrug` arm is read too, with
+ * `MEDICATION_PRODUCT_ARM_UNEXPECTED`.
+ *
+ * Reading the alternate arm rather than warning-and-ignoring it is the
+ * Postel's-Law call, and the safer one: the previous behaviour returned
+ * `drug: undefined` in complete silence while dose, route and timing survived,
+ * so the record read as a well-formed medication that simply had no drug. Once
+ * the code is read it flows through the ordinary `checkCodeSlot` path, so every
+ * code-system and terminology check applies to it unchanged.
+ *
+ * Returns `undefined` when neither arm carries a code; the caller decides what
+ * that means for its entry type (a Medication Activity and an Immunization
+ * Activity both flag it, `MISSING_PRODUCT_CODE`).
+ *
+ * **Provenance:** the two-arm choice is base CDA R2 structure. Whether the
+ * C-CDA template *forbids* the alternate arm is a normative question this repo
+ * cannot settle without the R2.1 Schematron, so nothing here claims a
+ * conformance verb, and the warning says only that the code came off the arm
+ * the templates do not use.
+ *
+ * @example
+ * ```ts
+ * import { consumableProductCode } from "@cosyte/ccda";
+ * const drugEl = consumableProductCode(sbadm, ctx);
+ * ```
+ */
+export function consumableProductCode(
+  sbadm: Element,
+  ctx: ParseCtx,
+): { readonly el?: Element; readonly product?: Element } {
+  const product = chain(sbadm, "consumable", "manufacturedProduct");
+  if (product === undefined) return {};
+  const material = chain(product, "manufacturedMaterial", "code");
+  if (material !== undefined) return { el: material, product };
+  const labeled = chain(product, "manufacturedLabeledDrug", "code");
+  if (labeled !== undefined) {
+    ctx.emit(medicationProductArmUnexpected(positionOf(product)));
+    return { el: labeled, product };
+  }
+  return { product };
 }
 
 /** Breadth-first search for the first descendant with the given local name. @internal */

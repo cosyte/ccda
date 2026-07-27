@@ -39,7 +39,27 @@ immutability + explicit mutation, and the profile system.
     Within the five, the checks cover the slot's primary coding; `<translation>` alternates are
     preserved but not slot-checked. A `@code` with no `@codeSystem` reaches no adapter (there is no
     system to validate against) and is flagged `MISSING_CODE_SYSTEM` rather than passing silently,
-    a safety-critical code no profile may tolerate.
+    a safety-critical code no profile may tolerate. The mirror shape, a slot present but asserting no
+    usable `@code` and no `@nullFlavor`, is `MISSING_CODE_VALUE`, also safety-critical.
+  - **A `nullFlavor` asserted beside a value is a contradiction, not a refinement.** Every v3 datatype
+    flags it `CONTRADICTORY_NULL_FLAVOR` (safety-critical), including the `INT`/`ST` arms of
+    `readObservationValue`, which are parsed inline rather than through `src/model/types/` and must be
+    wired by hand. Where a verbatim copy survives beside a derived reading the derived one is
+    **withheld**: `PQ.value`, `TS.date`, and the `integer` observation value's `value` (which now
+    carries `raw`, mirroring `PQ`). On `CD`/`II`/`ST`/`ED`/`BL` the field is the document's own text
+    with no second copy, so it is kept and the warning is the signal. Metadata beside a `nullFlavor`
+    (a `@unit` with no `@value`, an `@root` with no `@extension`, a `CD`'s `originalText` or
+    `<translation>`) is coherent and stays silent. **If you add a datatype or an inline value arm,
+    route it through `contradictsAssertedValue` or this claim stops being true.**
+  - A medication/vaccine product is read from **either** arm of the CDA R2 `ManufacturedProduct`
+    choice, at all three consumable call sites (Medication Activity, Immunization Activity, Planned
+    Medication Activity); the `manufacturedLabeledDrug` arm is flagged
+    `MEDICATION_PRODUCT_ARM_UNEXPECTED` (deliberately tolerable, the code is present and fully
+    checked). No arm yielding a code is `MISSING_PRODUCT_CODE`, safety-critical, never a silent
+    `undefined`. A document carrying **both** arms with different codes still silently prefers
+    `manufacturedMaterial` and drops the other, a pre-existing gap this slice did not close.
+  - `SAFETY_CRITICAL_CODES` is a frozen read-only view, not a `Set` instance: every read operation
+    works (including spread), but `instanceof Set` is `false`.
   - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`
     assert nothing (Consultation Note, Progress Note, Procedure Note, Operative Note, Diagnostic
     Imaging Report, Unstructured Document). Empty means "no unconditional in-catalog SHALL section

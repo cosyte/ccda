@@ -1,9 +1,10 @@
 /**
  * Medications extraction, the Medication Activity (`…22.4.16`)
  * `substanceAdministration`. The drug is the RxNorm `code` reached via
- * `consumable/manufacturedProduct/manufacturedMaterial` (Medication
- * Information `…22.4.23`); `doseQuantity` and `routeCode` are safety-critical
- * (their absence is flagged, never defaulted). Timing is carried as **two
+ * `consumable/manufacturedProduct` (Medication Information `…22.4.23`), on
+ * either arm of the CDA R2 `ManufacturedProduct` choice, see
+ * `consumableProductCode`. The product, `doseQuantity` and `routeCode` are all
+ * safety-critical (their absence is flagged, never defaulted). Timing is carried as **two
  * sibling `effectiveTime` elements distinguished by `xsi:type`**: an `IVL_TS`
  * duration (the therapy window) and a `PIVL_TS` periodic frequency.
  */
@@ -18,13 +19,14 @@ import { parseIvlTs, type IVL_TS } from "../types/ivl-ts.js";
 import { parseBooleanValue, type ParseCtx } from "../types/_shared.js";
 import {
   missingDoseQuantity,
+  missingProductCode,
   missingRouteCode,
   multipleEffectiveTimesUnresolved,
 } from "../../parser/warnings.js";
 import {
   MEDICATION_ACTIVITY,
-  chain,
   childEntries,
+  consumableProductCode,
   entryAct,
   idsOf,
   reconcileCode,
@@ -119,9 +121,13 @@ function buildMedication(
   const { negated, nullFlavor } = readNegation(sbadm, ctx);
   const statusCode = statusCodeOf(sbadm);
 
-  const drugEl = chain(sbadm, "consumable", "manufacturedProduct", "manufacturedMaterial", "code");
+  const { el: drugEl } = consumableProductCode(sbadm, ctx);
   const drug = parseCd(drugEl, ctx);
   const drugPos = drugEl === undefined ? positionOf(sbadm) : positionOf(drugEl);
+  // A medication with no coded product on any arm is never left silent: dose,
+  // route and timing can all survive a missing consumable, so without this the
+  // entry would read as a well-formed medication that simply has no drug.
+  if (drugEl === undefined) ctx.emit(missingProductCode(positionOf(sbadm)));
   checkCodeSlot(drug, "medication", drugPos, ctx);
 
   const { dose, doseRange } = readDose(sbadm, ctx);

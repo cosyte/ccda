@@ -14,7 +14,7 @@ import { attr, child, positionOf, text, xsiType } from "../dom.js";
 import { parseCd, type CD } from "../types/cd.js";
 import { parsePq, type PQ } from "../types/pq.js";
 import { parseIvlPq, type IVL_PQ } from "../types/ivl-pq.js";
-import type { ParseCtx } from "../types/_shared.js";
+import { contradictsAssertedValue, type ParseCtx } from "../types/_shared.js";
 import { isUcumCaseSuspect, isValidUcumUnit } from "../ucum.js";
 import type { CcdaPosition } from "../../parser/types.js";
 import {
@@ -36,6 +36,14 @@ import type { Element } from "@xmldom/xmldom";
  * `value` and `nullFlavor` distinct, a scored `INT` never collapses into an
  * unknown one, and vice versa.
  *
+ * `integer` and `string` carry a `nullFlavor` beside their content for the same
+ * reason every v3 datatype does, and `integer` mirrors `PQ` exactly: `raw` is
+ * the verbatim `@value` token and `value` the parsed number, so when a
+ * `nullFlavor` contradicts the score the parser withholds `value` and keeps
+ * `raw` (see {@link parsePq}). These two arms are parsed inline here rather
+ * than through `src/model/types/`, so they route through the shared
+ * contradiction check explicitly.
+ *
  * @example
  * ```ts
  * import type { ObservationValue } from "@cosyte/ccda";
@@ -48,8 +56,13 @@ import type { Element } from "@xmldom/xmldom";
 export type ObservationValue =
   | { readonly kind: "physicalQuantity"; readonly quantity: PQ }
   | { readonly kind: "coded"; readonly code: CD }
-  | { readonly kind: "string"; readonly value: string }
-  | { readonly kind: "integer"; readonly value?: number; readonly nullFlavor?: string }
+  | { readonly kind: "string"; readonly value: string; readonly nullFlavor?: string }
+  | {
+      readonly kind: "integer";
+      readonly value?: number;
+      readonly raw?: string;
+      readonly nullFlavor?: string;
+    }
   | { readonly kind: "range"; readonly range: IVL_PQ }
   | { readonly kind: "unsupported"; readonly xsiType?: string; readonly raw?: string };
 
@@ -132,7 +145,16 @@ export function readObservationValue(
     }
     case "ST": {
       const value = text(valueEl);
-      return value === undefined ? undefined : { kind: "string", value };
+      if (value === undefined) return undefined;
+      // Parsed inline rather than through `parseSt`, so the contradiction check
+      // is wired explicitly. The text is kept (it is the document's own content,
+      // with no verbatim copy behind it) and the nullFlavor now travels with it
+      // instead of being dropped from the model.
+      const nullFlavor = attr(valueEl, "nullFlavor");
+      contradictsAssertedValue(valueEl, "ST", nullFlavor, true, ctx);
+      return nullFlavor === undefined
+        ? { kind: "string", value }
+        : { kind: "string", value, nullFlavor };
     }
     case "INT": {
       // A count/score (an assessment-scale score, a questionnaire answer). Units
@@ -141,6 +163,16 @@ export function readObservationValue(
       // is never collapsed into a real one, nor a real one dropped.
       const raw = attr(valueEl, "value");
       const nullFlavor = attr(valueEl, "nullFlavor");
+      // A nullFlavor asserted beside a score is the same contradiction a
+      // doseQuantity carries, on the slot that holds assessment-scale scores, so
+      // it gets the same answer: flag it, keep `raw`, withhold the number.
+      const contradicted = contradictsAssertedValue(
+        valueEl,
+        "INT",
+        nullFlavor,
+        raw !== undefined,
+        ctx,
+      );
       if (raw !== undefined) {
         // Strict numeric parse, reject whitespace-only / non-numeric so a malformed
         // INT is never coerced into a fabricated score (e.g. Number(" ") === 0). An
@@ -149,10 +181,11 @@ export function readObservationValue(
         const trimmed = raw.trim();
         const n = trimmed === "" ? Number.NaN : Number(trimmed);
         if (!Number.isFinite(n)) return readUnsupported(valueEl, "INT", position, ctx);
-        const out: { kind: "integer"; value: number; nullFlavor?: string } = {
+        const out: { kind: "integer"; value?: number; raw?: string; nullFlavor?: string } = {
           kind: "integer",
-          value: n,
+          raw,
         };
+        if (!contradicted) out.value = n;
         if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
         return out;
       }

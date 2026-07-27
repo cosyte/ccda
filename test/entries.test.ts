@@ -16,7 +16,10 @@ import {
   MEDICATIONS_SECTION,
   ALLERGY_ENTRY_SECTION,
   IMMUNIZATIONS_SECTION,
+  MENTAL_STATUS_ASSESSMENT_SCALE_SECTION,
   NKA_SECTION,
+  PLAN_OF_TREATMENT_SECTION,
+  RESULTS_SECTION,
   TRIAD_SECTIONS,
 } from "./__fixtures__/ccda.js";
 
@@ -336,6 +339,388 @@ describe("clinical entries, a code asserted with no code system", () => {
     // The code itself is preserved verbatim, never coerced to a guessed system.
     expect(doc.getProblems()[0]?.problems[0]?.value?.code).toBe("59621000");
     expect(doc.getProblems()[0]?.problems[0]?.value?.codeSystem).toBeUndefined();
+  });
+});
+
+/**
+ * One defect class: **the parser got quieter the more broken the document
+ * was.** Each case below reproduced on `main` with zero warnings, and each is
+ * pinned here alongside the negative that keeps the fix from becoming noisy.
+ */
+describe("clinical entries, a nullFlavor asserted beside a populated value", () => {
+  it("does not hand back a dose the document declared unknown", () => {
+    // The one that matters most: `MISSING_DOSE_QUANTITY` cannot fire, because
+    // the element IS present. Before the fix this parsed to
+    // `{value:10, unit:"mg", nullFlavor:"UNK"}` with no warning at all, so a
+    // consumer reading `med.dose.value` got 10 mg for an unknown dose.
+    const xml = buildCcda({ sections: MEDICATIONS_SECTION }).replace(
+      '<doseQuantity value="10" unit="mg"/>',
+      '<doseQuantity nullFlavor="UNK" value="10" unit="mg"/>',
+    );
+    const doc = parseCcda(xml);
+    const dose = doc.getMedications()[0]?.dose;
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+    // What a naive consumer sees: no number.
+    expect(dose?.value).toBeUndefined();
+    // Nothing the document said is lost, only the reading the parser would
+    // have manufactured from it.
+    expect(dose?.raw).toBe("10");
+    expect(dose?.unit).toBe("mg");
+    expect(dose?.nullFlavor).toBe("UNK");
+  });
+
+  it("does not hand back a dose RANGE bound the interval declared unknown", () => {
+    const xml = buildCcda({ sections: MEDICATIONS_SECTION }).replace(
+      '<doseQuantity value="10" unit="mg"/>',
+      '<doseQuantity nullFlavor="UNK"><low value="5" unit="mg"/><high value="10" unit="mg"/></doseQuantity>',
+    );
+    const doc = parseCcda(xml);
+    const range = doc.getMedications()[0]?.doseRange;
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+    expect(range?.low?.value).toBeUndefined();
+    expect(range?.high?.value).toBeUndefined();
+    expect(range?.low?.raw).toBe("5");
+    expect(range?.high?.raw).toBe("10");
+  });
+
+  it("withholds the parsed date from a contradicted effectiveTime", () => {
+    const xml = buildCcda({ sections: MEDICATIONS_SECTION }).replace(
+      '<low value="20210101"/>',
+      '<low nullFlavor="UNK" value="20210101"/>',
+    );
+    const doc = parseCcda(xml);
+    const low = doc.getMedications()[0]?.duration?.low;
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+    expect(low?.date).toBeUndefined();
+    expect(low?.raw).toBe("20210101");
+  });
+
+  it("flags a contradicted coded value but keeps the code, which is the document's own text", () => {
+    const xml = buildCcda({ sections: MEDICATIONS_SECTION }).replace(
+      '<routeCode code="C38288"',
+      '<routeCode nullFlavor="UNK" code="C38288"',
+    );
+    const doc = parseCcda(xml);
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+    // Stated limit: `CD` keeps its `@code` (there is no verbatim copy to fall
+    // back on), so the signal here is the warning plus the co-located nullFlavor.
+    expect(doc.getMedications()[0]?.route?.code).toBe("C38288");
+    expect(doc.getMedications()[0]?.route?.nullFlavor).toBe("UNK");
+  });
+
+  it("flags a contradicted patient identifier but keeps the extension", () => {
+    const xml = buildCcda({ sections: MEDICATIONS_SECTION }).replace(
+      '<id root="2.16.840.1.113883.19.5.99999.3" extension="med-1"/>',
+      '<id nullFlavor="NI" root="2.16.840.1.113883.19.5.99999.3" extension="med-1"/>',
+    );
+    const doc = parseCcda(xml);
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+    expect(doc.getMedications()[0]?.ids[0]?.extension).toBe("med-1");
+  });
+
+  // ---- the negatives: shapes that must stay silent ----
+
+  it("stays silent for a legitimately absent value", () => {
+    const xml = buildCcda({ sections: MEDICATIONS_SECTION }).replace(
+      '<doseQuantity value="10" unit="mg"/>',
+      "",
+    );
+    const warned = codes(parseCcda(xml).warnings);
+    expect(warned).toContain(WARNING_CODES.MISSING_DOSE_QUANTITY);
+    expect(warned).not.toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+  });
+
+  it("stays silent for a nullFlavor-only element, which asserts nothing to contradict", () => {
+    const xml = buildCcda({ sections: MEDICATIONS_SECTION }).replace(
+      '<doseQuantity value="10" unit="mg"/>',
+      '<doseQuantity nullFlavor="UNK"/>',
+    );
+    const doc = parseCcda(xml);
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+    expect(doc.getMedications()[0]?.dose?.nullFlavor).toBe("UNK");
+  });
+
+  it("stays silent for a nullFlavor beside a unit, a dimension without a magnitude", () => {
+    const xml = buildCcda({ sections: MEDICATIONS_SECTION }).replace(
+      '<doseQuantity value="10" unit="mg"/>',
+      '<doseQuantity nullFlavor="UNK" unit="mg"/>',
+    );
+    expect(codes(parseCcda(xml).warnings)).not.toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+  });
+
+  it("stays silent for the nullFlavor + originalText idiom, which C-CDA documents use", () => {
+    // "Not codable in the bound value set, here is the source text" is a
+    // coherent statement, not a contradiction. Flagging it would make the
+    // parser noisy on conforming documents.
+    const xml = buildCcda({ sections: MEDICATIONS_SECTION }).replace(
+      '<routeCode code="C38288" codeSystem="2.16.840.1.113883.3.26.1.1" displayName="Oral"/>',
+      '<routeCode nullFlavor="OTH"><originalText>by mouth after meals</originalText></routeCode>',
+    );
+    expect(codes(parseCcda(xml).warnings)).not.toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+  });
+
+  it("stays silent for a nullFlavor beside a root with no extension", () => {
+    const xml = buildCcda({ sections: MEDICATIONS_SECTION }).replace(
+      '<id root="2.16.840.1.113883.19.5.99999.3" extension="med-1"/>',
+      '<id nullFlavor="NI" root="2.16.840.1.113883.19.5.99999.3"/>',
+    );
+    expect(codes(parseCcda(xml).warnings)).not.toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+  });
+
+  it("leaves a clean document completely silent", () => {
+    const doc = parseCcda(
+      buildCcda({ docTypeOid: NO_REQUIRED_SECTIONS_DOC_OID, sections: TRIAD_SECTIONS }),
+    );
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+  });
+
+  // `readObservationValue` parses the INT and ST arms inline rather than through
+  // `src/model/types/`, so "every v3 datatype" is only true if these are wired
+  // too. This is the slot that carries assessment-scale scores.
+
+  it("does not hand back an assessment-scale score the document declared unknown", () => {
+    const xml = buildCcda({ sections: MENTAL_STATUS_ASSESSMENT_SCALE_SECTION }).replace(
+      '<value xsi:type="INT" value="12"/>',
+      '<value xsi:type="INT" nullFlavor="UNK" value="12"/>',
+    );
+    const doc = parseCcda(xml);
+    const scale = doc.getMentalStatus().find((o) => o.assessmentScale === true);
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+    expect(scale?.value?.kind).toBe("integer");
+    if (scale?.value?.kind === "integer") {
+      expect(scale.value.value).toBeUndefined();
+      expect(scale.value.raw).toBe("12");
+      expect(scale.value.nullFlavor).toBe("UNK");
+    }
+  });
+
+  it("keeps a clean INT score, and its raw token, unwarned", () => {
+    const doc = parseCcda(buildCcda({ sections: MENTAL_STATUS_ASSESSMENT_SCALE_SECTION }));
+    const value = doc.getMentalStatus().find((o) => o.assessmentScale === true)?.value;
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+    expect(value?.kind).toBe("integer");
+    if (value?.kind === "integer") {
+      expect(value.value).toBe(12);
+      expect(value.raw).toBe("12");
+    }
+  });
+
+  it("stays silent for a nullFlavor-only INT, a legitimately unknown score", () => {
+    const xml = buildCcda({ sections: MENTAL_STATUS_ASSESSMENT_SCALE_SECTION }).replace(
+      '<value xsi:type="INT" value="12"/>',
+      '<value xsi:type="INT" nullFlavor="UNK"/>',
+    );
+    expect(codes(parseCcda(xml).warnings)).not.toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+  });
+
+  it("flags a contradicted ST value and no longer drops its nullFlavor", () => {
+    const xml = buildCcda({ sections: RESULTS_SECTION }).replace(
+      '<value xsi:type="PQ" value="13.5" unit="g/dL"/>',
+      '<value xsi:type="ST" nullFlavor="UNK">Positive</value>',
+    );
+    const doc = parseCcda(xml);
+    const value = doc.getResults()[0]?.results[0]?.value;
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+    expect(value?.kind).toBe("string");
+    if (value?.kind === "string") {
+      // The text is the document's own content, so it is kept; what changed is
+      // that the nullFlavor now travels with it instead of vanishing.
+      expect(value.value).toBe("Positive");
+      expect(value.nullFlavor).toBe("UNK");
+    }
+  });
+});
+
+/**
+ * CDA R2's `ManufacturedProduct` is a **choice**: `manufacturedMaterial` or
+ * `manufacturedLabeledDrug`. The parser hard-coded the first arm, so the second
+ * yielded `drug: undefined` with zero warnings while dose and route survived,
+ * and the record read as a well-formed medication that simply had no drug.
+ */
+describe("clinical entries, the ManufacturedProduct choice", () => {
+  const labeledDrug = (section: string): string =>
+    section
+      .replace("<manufacturedMaterial>", "<manufacturedLabeledDrug>")
+      .replace("</manufacturedMaterial>", "</manufacturedLabeledDrug>");
+
+  it("reads the drug off the manufacturedLabeledDrug arm and flags the arm", () => {
+    const doc = parseCcda(buildCcda({ sections: labeledDrug(MEDICATIONS_SECTION) }));
+    const med = doc.getMedications()[0];
+    expect(med?.drug?.code).toBe("314076");
+    expect(med?.drug?.codeSystem).toBe("2.16.840.1.113883.6.88");
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED);
+    // Dose and route are unaffected: the point is that the drug is no longer
+    // the one field that silently vanishes.
+    expect(med?.dose?.value).toBe(10);
+    expect(med?.route?.code).toBe("C38288");
+  });
+
+  it("puts an alternate-arm code through the ordinary code-system checks", () => {
+    // The arm is read, not trusted: strip the RxNorm system and the existing
+    // MISSING_CODE_SYSTEM check must still fire on it.
+    const xml = labeledDrug(MEDICATIONS_SECTION).replace(
+      '<code code="314076" codeSystem="2.16.840.1.113883.6.88"',
+      '<code code="314076"',
+    );
+    expect(codes(parseCcda(buildCcda({ sections: xml })).warnings)).toContain(
+      WARNING_CODES.MISSING_CODE_SYSTEM,
+    );
+  });
+
+  it("reads a vaccine off the alternate arm too", () => {
+    const doc = parseCcda(buildCcda({ sections: labeledDrug(IMMUNIZATIONS_SECTION) }));
+    expect(doc.getImmunizations()[0]?.vaccine?.code).toBe("140");
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED);
+  });
+
+  it("flags a medication whose consumable carries no product code on any arm", () => {
+    const xml = MEDICATIONS_SECTION.replace(
+      '<code code="314076" codeSystem="2.16.840.1.113883.6.88" displayName="Lisinopril 10 MG Oral Tablet"/>',
+      "",
+    );
+    const doc = parseCcda(buildCcda({ sections: xml }));
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MISSING_PRODUCT_CODE);
+    expect(doc.getMedications()[0]?.drug).toBeUndefined();
+  });
+
+  it("flags a medication with no consumable at all", () => {
+    const xml = MEDICATIONS_SECTION.replace(/<consumable>[\s\S]*?<\/consumable>/, "");
+    expect(codes(parseCcda(buildCcda({ sections: xml })).warnings)).toContain(
+      WARNING_CODES.MISSING_PRODUCT_CODE,
+    );
+  });
+
+  it("stays silent on the manufacturedMaterial arm", () => {
+    const warned = codes(parseCcda(buildCcda({ sections: MEDICATIONS_SECTION })).warnings);
+    expect(warned).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED);
+    expect(warned).not.toContain(WARNING_CODES.MISSING_PRODUCT_CODE);
+  });
+
+  it("flags a PLANNED medication with no product code, the third consumable call site", () => {
+    const xml = PLAN_OF_TREATMENT_SECTION.replace(
+      '<code code="314076" codeSystem="2.16.840.1.113883.6.88" displayName="Lisinopril 10 MG Oral Tablet"/>',
+      "",
+    );
+    expect(codes(parseCcda(buildCcda({ sections: xml })).warnings)).toContain(
+      WARNING_CODES.MISSING_PRODUCT_CODE,
+    );
+  });
+
+  it("reads a planned drug off the alternate arm, and stays quiet on a clean plan", () => {
+    const alt = PLAN_OF_TREATMENT_SECTION.replace(
+      "<manufacturedMaterial>",
+      "<manufacturedLabeledDrug>",
+    ).replace("</manufacturedMaterial>", "</manufacturedLabeledDrug>");
+    const doc = parseCcda(buildCcda({ sections: alt }));
+    const planned = doc.getPlannedItems().find((p) => p.kind === "medicationActivity");
+    expect(planned?.code?.code).toBe("314076");
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED);
+
+    const clean = codes(parseCcda(buildCcda({ sections: PLAN_OF_TREATMENT_SECTION })).warnings);
+    expect(clean).not.toContain(WARNING_CODES.MISSING_PRODUCT_CODE);
+    expect(clean).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED);
+  });
+});
+
+/**
+ * The mirror of `MISSING_CODE_SYSTEM`, which `#55` scoped out and left silent:
+ * a wired slot whose `CD` is present but names no symbol and declares no
+ * `nullFlavor` to say why.
+ */
+describe("clinical entries, a coded slot present but asserting no code", () => {
+  it("flags a system-only problem value", () => {
+    const xml = buildCcda({ sections: PROBLEMS_SECTION }).replace(
+      '<value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96" displayName="Essential hypertension"/>',
+      '<value xsi:type="CD" codeSystem="2.16.840.1.113883.6.96"/>',
+    );
+    expect(codes(parseCcda(xml).warnings)).toContain(WARNING_CODES.MISSING_CODE_VALUE);
+  });
+
+  it("flags an empty @code, which names no symbol", () => {
+    const xml = buildCcda({ sections: ALLERGY_ENTRY_SECTION }).replace(
+      '<code code="7980"',
+      '<code code=""',
+    );
+    expect(codes(parseCcda(xml).warnings)).toContain(WARNING_CODES.MISSING_CODE_VALUE);
+  });
+
+  it("flags a whitespace-only @code", () => {
+    const xml = buildCcda({ sections: MEDICATIONS_SECTION }).replace(
+      '<routeCode code="C38288"',
+      '<routeCode code="  "',
+    );
+    expect(codes(parseCcda(xml).warnings)).toContain(WARNING_CODES.MISSING_CODE_VALUE);
+  });
+
+  it("stays silent for a nullFlavor-only value, a complete statement of unknown", () => {
+    const xml = buildCcda({ sections: PROBLEMS_SECTION }).replace(
+      '<value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96" displayName="Essential hypertension"/>',
+      '<value xsi:type="CD" nullFlavor="UNK"/>',
+    );
+    const warned = codes(parseCcda(xml).warnings);
+    expect(warned).not.toContain(WARNING_CODES.MISSING_CODE_VALUE);
+    expect(warned).not.toContain(WARNING_CODES.MISSING_CODE_SYSTEM);
+  });
+
+  it("stays silent for an absent value, where there is no element to judge", () => {
+    const xml = buildCcda({ sections: PROBLEMS_SECTION }).replace(
+      '<value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96" displayName="Essential hypertension"/>',
+      "",
+    );
+    expect(codes(parseCcda(xml).warnings)).not.toContain(WARNING_CODES.MISSING_CODE_VALUE);
+  });
+
+  it("stays silent on a clean triad", () => {
+    const doc = parseCcda(
+      buildCcda({ docTypeOid: NO_REQUIRED_SECTIONS_DOC_OID, sections: TRIAD_SECTIONS }),
+    );
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MISSING_CODE_VALUE);
+  });
+
+  /**
+   * The slot's system is still judged when no symbol is asserted. Adding
+   * `MISSING_CODE_VALUE` must not make the parser *quieter* about a wrong or
+   * deprecated terminology than it was before, which is the direction this whole
+   * item exists to reverse.
+   */
+  it("still flags an unexpected code system on a nullFlavor-only value", () => {
+    const xml = buildCcda({ sections: PROBLEMS_SECTION }).replace(
+      '<value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96" displayName="Essential hypertension"/>',
+      '<value xsi:type="CD" nullFlavor="UNK" codeSystem="2.16.840.1.113883.6.1"/>',
+    );
+    const warned = codes(parseCcda(xml).warnings);
+    expect(warned).toContain(WARNING_CODES.UNEXPECTED_CODE_SYSTEM);
+    // Silent about the missing code itself, the nullFlavor declared it.
+    expect(warned).not.toContain(WARNING_CODES.MISSING_CODE_VALUE);
+  });
+
+  it("still flags a deprecated code system on a nullFlavor-only value", () => {
+    const xml = buildCcda({ sections: PROBLEMS_SECTION }).replace(
+      '<value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96" displayName="Essential hypertension"/>',
+      '<value xsi:type="CD" nullFlavor="UNK" codeSystem="2.16.840.1.113883.6.103"/>',
+    );
+    expect(codes(parseCcda(xml).warnings)).toContain(WARNING_CODES.DEPRECATED_CODE_SYSTEM);
+  });
+
+  it("flags both the empty slot and its unexpected system when no nullFlavor explains it", () => {
+    const xml = buildCcda({ sections: PROBLEMS_SECTION }).replace(
+      '<value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96" displayName="Essential hypertension"/>',
+      '<value xsi:type="CD" codeSystem="2.16.840.1.113883.6.1"/>',
+    );
+    const warned = codes(parseCcda(xml).warnings);
+    expect(warned).toContain(WARNING_CODES.MISSING_CODE_VALUE);
+    expect(warned).toContain(WARNING_CODES.UNEXPECTED_CODE_SYSTEM);
+  });
+
+  it("stays silent for a nullFlavor-only value with no system at all", () => {
+    const xml = buildCcda({ sections: PROBLEMS_SECTION }).replace(
+      '<value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96" displayName="Essential hypertension"/>',
+      '<value xsi:type="CD" nullFlavor="UNK"/>',
+    );
+    const warned = codes(parseCcda(xml).warnings);
+    expect(warned).not.toContain(WARNING_CODES.MISSING_CODE_SYSTEM);
+    expect(warned).not.toContain(WARNING_CODES.MISSING_CODE_VALUE);
+    expect(warned).not.toContain(WARNING_CODES.UNEXPECTED_CODE_SYSTEM);
   });
 });
 

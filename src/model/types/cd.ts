@@ -8,7 +8,7 @@
  */
 
 import { attr, child, children, text } from "../dom.js";
-import { readNullFlavor, type ParseCtx } from "./_shared.js";
+import { contradictsAssertedValue, readNullFlavor, type ParseCtx } from "./_shared.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
@@ -42,6 +42,19 @@ export interface CD {
  * the element is absent. Resolves a child `<originalText>` to its trimmed text
  * and parses each `<translation>` recursively (translations of a translation
  * are ignored, C-CDA does not nest them). Never throws.
+ *
+ * A `@nullFlavor` declared beside a populated `@code` emits
+ * `CONTRADICTORY_NULL_FLAVOR`: the element says both "this concept is unknown"
+ * and "this concept is X". Only `@code` counts as the contradicting assertion.
+ * A `nullFlavor` beside `originalText`, a `<translation>`, a `displayName` or a
+ * bare `@codeSystem` is the documented C-CDA idiom for "not codable in the
+ * bound value set, here is the source text or an alternate coding", which is
+ * coherent rather than contradictory and stays silent.
+ *
+ * Unlike `PQ`/`TS`, the `code` is **kept**: it is the document's own text
+ * rather than a reading this parser manufactured, and there is no verbatim copy
+ * to fall back on, so withholding it would delete what the document said. See
+ * {@link parsePq} for the full argument.
  *
  * @example
  * ```ts
@@ -84,7 +97,19 @@ export function parseCd(el: Element | undefined, ctx: ParseCtx): CD | undefined 
 
   const nullFlavor = readNullFlavor(el, ctx);
   if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
+  contradictsAssertedValue(el, "CD", nullFlavor, assertsConcept(code), ctx);
   return out;
+}
+
+/**
+ * True when a `@code` names an actual symbol. An absent, empty, or
+ * whitespace-only `@code` asserts no concept, so it neither contradicts a
+ * `nullFlavor` nor counts as a code at a wired slot.
+ *
+ * @internal
+ */
+export function assertsConcept(code: string | undefined): boolean {
+  return code !== undefined && code.trim() !== "";
 }
 
 /** Parse a coded element without descending into nested translations. @internal */
@@ -106,6 +131,7 @@ function parseCdShallow(el: Element, ctx: ParseCtx): CD | undefined {
   if (displayName !== undefined) out.displayName = displayName;
   const nullFlavor = readNullFlavor(el, ctx);
   if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
+  contradictsAssertedValue(el, "CD", nullFlavor, assertsConcept(code), ctx);
   if (Object.keys(out).length === 0) return undefined;
   return out;
 }
