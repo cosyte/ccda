@@ -134,6 +134,30 @@ immutability + explicit mutation, and the profile system.
   DOM round-trip + a hardenable (XXE-safe) posture. The parse layer configures and consumes
   it; do **not** add a _second_ XML library. Reuse this one (and coordinate `@cosyte/ncpdp` onto the
   same substrate).
+- **Em-dash brand gate armed.** `scripts/check-no-emdash.sh` (`pnpm check:no-emdash`) plus
+  `.github/workflows/no-emdash.yml` enforce the founder directive banning `U+2014` outright
+  (`knowledgebase/06-brand/voice-and-tone.md`, "No em dashes. Ever."). It scans **both** halves the
+  rule covers: every tracked file, **and** the PR title, body, and commit messages, on the
+  non-default `edited` trigger so retitling a PR re-checks it (this repo squash-merges, so the PR
+  title and body are the message that lands). When it goes red the fix is never to re-encode the
+  character: rewrite with a period, colon, comma, or parentheses.
+  - **It is the text-only script variant, and dropping `grep -I` is the load-bearing part here.**
+    `src/profiles/merge.ts` uses two raw NULs as the separator in `toleranceKey`'s composite key.
+    The byte is the feature and cannot be removed, so grep classifies that file as binary. Under
+    `-I`, or under `website`'s NUL-partition variant, it would be **silently exempt** from a ban
+    that has no exceptions. Without `-I` it is a loud red instead: a match in it lands on stderr and
+    trips `refuse_if_incomplete`. That is not theoretical. PR #52's "remove em dashes from source +
+    config" sweep skipped this exact file for this exact reason and left a live character behind,
+    which this gate caught on its first run.
+  - **Do not swap in `website`'s variant** (it would re-make that exemption on purpose), and do not
+    reach for `pathways`' preferred `git check-attr binary` partition without first adding a
+    `.gitattributes`, which is deferred to the cross-repo "what is a text file" rule.
+  - Known limits are written down in the script header and are shared across every copy
+    (`knowledgebase`, `hl7`, `fhir`, `pathways`, `x12`, `ncpdp`, `dicom`), so fix them there, not
+    here. The pipeline code in this copy is byte-identical to `ncpdp`'s on purpose: a divergent
+    variant is worse than a known shared limit.
+  - Scope, stated honestly: the gate covers new text only. It does not rewrite history, and 113 em
+    dashes are already in commit messages on `main`, PR #52's subject line among them.
 
 ## Tech Stack (the shared `@cosyte/*` standard)
 

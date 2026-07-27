@@ -14,6 +14,22 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Tooling
 
+- **Em-dash brand gate (`scripts/check-no-emdash.sh`, `pnpm check:no-emdash`, plus
+  `.github/workflows/no-emdash.yml`).** Enforces the founder directive banning `U+2014` outright
+  (`knowledgebase/06-brand/voice-and-tone.md`, "No em dashes. Ever.") over both halves the rule
+  names: every tracked file, and the PR title, body, and commit messages. The workflow carries the
+  non-default `edited` pull-request activity type, so retitling a PR re-checks it, which matters
+  because this repo squash-merges and the PR title and body are the message that lands on `main`.
+  Its own workflow rather than a job in `ci.yml`, so a PR-description typo does not re-run the Node
+  22 + 24 matrix. Ported from `ncpdp` (PR #34, `39212bb`), the text-only variant, with the pipeline
+  code kept byte-identical: known limits are one cross-repo fix across every copy, not one per repo.
+  **One character of content changed**, in a JSDoc comment in `src/profiles/merge.ts`, where an em
+  dash became a colon. That file had survived PR #52's remediation sweep because two functional NUL
+  bytes (the separator in `toleranceKey`'s composite key, which cannot be removed) make grep
+  classify first-party TypeScript as binary and skip it. Dropping `grep -I` is what makes the file a
+  loud red instead of a silent exemption, and is why `website`'s NUL-partition variant would be
+  wrong here. No runtime, public-API, warning-code, or parse-behavior change; the two NUL bytes are
+  untouched.
 - **PHI commit-scanner (`scripts/phi-scan.ts`, `pnpm phi-scan`).** A zero-dependency, C-CDA-shape-aware
   scanner refuses any committed/staged file carrying real-looking PHI in a C-CDA document, recognized
   by a native extension (`.cda`/`.ccda`/`.xml`) or a C-CDA marker, so a real clinical document can
