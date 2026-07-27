@@ -238,8 +238,9 @@ serializeCcda(parseCcda(out)) === out; // => true
 ```
 
 > `serializeCcda` re-emits a **parsed** document. To construct one from scratch, use `buildCcda`
-> (below). Editing an existing document, and section/document-type coverage beyond the builder's first
-> slice, are a later increment: see [Troubleshooting](./troubleshooting#whats-not-yet-parsed).
+> (recipe 5 below); to change a section of a document you already parsed, use `editCcda` (recipe 6).
+> For exactly which document types and sections each one covers, see
+> [Troubleshooting](./troubleshooting#building-a-document).
 
 ---
 
@@ -360,7 +361,8 @@ doc.getSmokingStatus()[0]?.unknown; // => false
 doc.getSmokingStatus()[1]?.unknown; // => true
 ```
 
-> Current builder scope: `buildCcda` emits a CCD with the US Realm header, the CCD SHALL sections
+> Current builder scope: `buildCcda` emits a **CCD** (the default) or a **Referral Note**
+> (`documentType: "referralNote"`). A CCD carries the US Realm header, the CCD SHALL sections
 > (Problems, Allergies, Medications, Results, Vital Signs, emitted empty as `nullFlavor="NI"` when no
 > content is supplied), and **Immunizations**, **Procedures**, **Encounters**, **Social History**
 > (Smoking Status), **Functional Status**, **Mental Status** (each carrying standalone findings,
@@ -368,8 +370,10 @@ doc.getSmokingStatus()[1]?.unknown; // => true
 > their Supporting Observations `…22.4.86` and an `INT` score), **Past Medical History**, **Plan of
 > Treatment** (planned entries, never conflated with performed), and **Family History** (a Family
 > History Organizer per relative, with conditions carrying optional age-at-onset + cause-of-death)
-> sections when populated. The remaining builder work (the other eleven document types and a
-> bring-your-own-credentials terminology adapter) is a later increment.
+> sections when populated. A Referral Note specializes the header and always emits Problems,
+> Allergies, Medications, **Reason for Referral**, **Assessment**, and Plan of Treatment, which makes
+> Results and Vital Signs populated-only. Both accept an optional bring-your-own `terminology`
+> adapter. The other ten C-CDA R2.1 document types are not implemented.
 
 ## 6. Edit a parsed document: add or replace a section, keep a revision trail
 
@@ -443,7 +447,8 @@ refuses rather than mint a fabricated identifier. Edit such a document in place 
 
 > Editing scope: whole-section **add** / **replace** across the twelve single-list section kinds
 > (Problems, Allergies, Medications, Results, Vital Signs, Immunizations, Procedures, Encounters,
-> Social History, Past Medical History, Plan of Treatment, Family History). Entry-level append that
-> byte-preserves a section's other entries (supply the full entry set via a `replace` instead), the
-> Functional/Mental Status and narrative-only sections as edit targets, section removal, and the
-> addendum (`APND`) / transform (`XFRM`) relationships are a later increment.
+> Social History, Past Medical History, Plan of Treatment, Family History). Four things are **not
+> supported**: entry-level append that byte-preserves a section's other entries (supply the full entry
+> set via a `replace` instead, which rebuilds that section from your input), the Functional/Mental
+> Status and narrative-only sections as edit targets, section removal, and the addendum (`APND`) /
+> transform (`XFRM`) relationships.

@@ -18,14 +18,16 @@ configured XXE-safe.
 > document recognition (all 12 US Realm types), the US Realm header + patient demographics, section
 > framing, the reconciliation triad (Problems / Medications / Allergies), the discrete-data families
 > (Results / Vital Signs / Immunizations) with a computable UCUM unit check, Procedures / Encounters /
-> Social-History smoking status, the deferred clinical sections (Plan of Treatment / Functional Status /
-> Mental Status / Family History / Past Medical History), per-document-type required-section (SHALL)
+> Social-History smoking status, the care-planning and history families (Plan of Treatment /
+> Functional Status / Mental Status / Family History / Past Medical History), per-document-type
+> required-section (SHALL)
 > validation, and a **round-trip serializer** (`serializeCcda` / `toString()`). A document **builder**
 > (`buildCcda`) emits a spec-clean **CCD** or **Referral Note**, a document **editor** (`editCcda`)
 > re-emits a parsed document with a section added or replaced (every untouched section byte-preserved),
 > and a **bring-your-own terminology adapter** semantically validates coded values against your own
-> licensed service. The other ten document types land in a later increment: see
-> [Troubleshooting](./troubleshooting) for the exact "what's not yet parsed" list.
+> licensed service. The builder emits two of the twelve document types; the other ten are not
+> implemented. See [Troubleshooting](./troubleshooting) for exactly what the parser, builder, and
+> editor do and do not do today.
 
 ## Install
 
@@ -134,7 +136,7 @@ non-`ClinicalDocument` root) always throws.
 - **[Core Concepts](./spec-notes-model)**: the document model, the tolerance tiers, the clinical entry
   layer, and the datatype/code-system machinery.
 - **[Cookbook](./cookbook)**: task-oriented recipes.
-- **[Troubleshooting & known limitations](./troubleshooting)**: the error model and the explicit
-  "what's not yet parsed" list.
+- **[Troubleshooting & known limitations](./troubleshooting)**: the error model and exactly what the
+  parser, builder, and editor do and do not do today.
 - The **API reference** for every export is generated from source by the docs site (TypeDoc), not
   hand-authored here.
