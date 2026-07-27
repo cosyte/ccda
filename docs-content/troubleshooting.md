@@ -47,7 +47,7 @@ non-UCUM unit) is a warning you triage, not an exception you catch.
 | Symptom                                         | Likely cause                                                                        | What to do                                                                                                                |
 | ----------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `documentType` is `undefined`                   | The root `templateId` set contains no recognized document-type OID (or none at all) | Check for `UNKNOWN_DOCUMENT_TEMPLATE` / `MISSING_TEMPLATE_ID`; the document still parsed as a generic `ClinicalDocument`. |
-| A section has `key: undefined`                  | Its `templateId` and LOINC `code` matched nothing in the catalog                    | `UNKNOWN_SECTION_CODE` was raised; the section is retained as narrative-only: read `section.narrativeText`.              |
+| A section has `key: undefined`                  | Its `templateId` and LOINC `code` matched nothing in the catalog                    | `UNKNOWN_SECTION_CODE` was raised; the section is retained as narrative-only: read `section.narrativeText`.               |
 | `getMedications()[0].dose` is `undefined`       | The Medication Activity carried no `doseQuantity`                                   | `MISSING_DOSE_QUANTITY` was raised; the value is preserved-as-absent, never defaulted.                                    |
 | A procedure's `disposition` is `undefined`      | The entry had no `moodCode`, or an unrecognized one                                 | `PLANNED_VS_PERFORMED_AMBIGUOUS` / `PROCEDURE_MOOD_UNEXPECTED` was raised; performed and planned are never conflated.     |
 | A `CODE_NARRATIVE_MISMATCH` warning             | A coded value and its referenced narrative disagree                                 | Both are preserved and no winner is chosen; route the record to human review.                                             |
@@ -99,8 +99,10 @@ milestone it stopped at.
   warning. With no adapter, behavior is recognition-only. A value at one of those slots that asserts
   a `@code` with **no** `@codeSystem` is flagged `MISSING_CODE_SYSTEM` and is never handed to your
   adapter (which validates a system + code pair): the parser flags it rather than inferring a system,
-  because a code without its system is not a code. A value asserting no code at all (absent, or a
-  `nullFlavor`) is silent, there is nothing to judge.
+  because a code without its system is not a code. The mirror shape, a slot that is present but asserts
+  no usable `@code` **and** declares no `@nullFlavor`, is flagged `MISSING_CODE_VALUE`. A
+  `nullFlavor`-only value stays silent (a complete statement of "unknown"), and so does an absent
+  element, there is nothing to judge.
   **Those five slots are the whole of it, so read a silent document carefully.** Every other coded
   value is never handed to your adapter and therefore can never raise `SEMANTIC_CODE_INVALID`: the
   Results and Vital Signs LOINC codes, the procedure, encounter, planned-item, and family-history
@@ -109,6 +111,27 @@ milestone it stopped at.
   checks apply to the slot's **primary** coding; alternate codings carried in `<translation>` are
   preserved and re-serialized but are not themselves slot-checked. A clean run means the five checked
   slots passed, not that the document's terminology was verified.
+- **A `nullFlavor` beside a value is a contradiction, and the parser resolves it against the number.**
+  `<doseQuantity nullFlavor="UNK" value="10" unit="mg"/>` asserts both "unknown" and "10 mg". Every v3
+  datatype flags this `CONTRADICTORY_NULL_FLAVOR` (safety-critical, so no profile can quiet it),
+  including the `INT` and `ST` arms of an observation `<value>`, and on `PQ`, `TS` and an `integer`
+  observation value the derived reading is **withheld**: `dose.value` is `undefined`, while `dose.raw`
+  (`"10"`), `dose.unit` and `dose.nullFlavor` are all preserved. If you were reading `.value` and now
+  see `undefined`, that is the fix, and the document is telling you the value is unknown. On `CD`,
+  `II`, `ST`, `ED` and `BL` the field is the document's own text with no verbatim copy behind it, so it
+  is **kept** and the warning is the signal, read `doc.warnings`. Metadata beside a `nullFlavor` (a
+  `@unit` with no `@value`, an `@root` with no `@extension`, a `CD`'s `originalText` / `<translation>`)
+  is coherent, not contradictory, and stays silent, and a `nullFlavor`-only coded slot is still checked
+  for a wrong or deprecated `@codeSystem`.
+- **A medication or vaccine product is read from either `ManufacturedProduct` arm.**
+  `manufacturedMaterial` is silent; `manufacturedLabeledDrug` is read too and flagged
+  `MEDICATION_PRODUCT_ARM_UNEXPECTED` (tolerable by a profile, since the code is present and fully
+  checked). No arm yielding a code is `MISSING_PRODUCT_CODE` and is safety-critical, because dose,
+  route and timing all survive a missing consumable and would otherwise make the record read as a
+  complete medication with no drug. Both apply at all three consumable call sites: a performed
+  Medication Activity, an Immunization Activity, and a Planned Medication Activity. A document that
+  carries **both** arms with different codes is a known gap: the `manufacturedMaterial` one wins and
+  the other is dropped without a warning.
 - **UCUM validation is grammatical, on a curated atom subset.** The validator checks well-formed UCUM
   against the prefixes/atoms that appear in lab Results and Vital Signs, not the full UCUM registry. A
   valid-but-uncurated atom may read as `NON_UCUM_UNIT`; the raw unit is always preserved. It does not

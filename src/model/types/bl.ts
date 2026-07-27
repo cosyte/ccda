@@ -7,7 +7,12 @@
  */
 
 import { attr } from "../dom.js";
-import { parseBooleanValue, readNullFlavor, type ParseCtx } from "./_shared.js";
+import {
+  contradictsAssertedValue,
+  parseBooleanValue,
+  readNullFlavor,
+  type ParseCtx,
+} from "./_shared.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
@@ -30,6 +35,11 @@ export interface BL {
  * Parse a `BL` element (one carrying a `@value`) into a typed {@link BL}.
  * Returns `undefined` when the element is absent. Never throws.
  *
+ * A `@nullFlavor` declared beside a `@value` emits
+ * `CONTRADICTORY_NULL_FLAVOR`. The parsed boolean is **kept**: `BL` retains no
+ * verbatim copy of its token, so withholding `value` would delete the
+ * assertion rather than decline to embellish it (see {@link parsePq}).
+ *
  * @example
  * ```ts
  * import { parseBl } from "@cosyte/ccda";
@@ -40,10 +50,12 @@ export interface BL {
 export function parseBl(el: Element | undefined, ctx: ParseCtx): BL | undefined {
   if (el === undefined) return undefined;
   const out: { value?: boolean; nullFlavor?: string } = {};
-  const value = parseBooleanValue(attr(el, "value"));
+  const raw = attr(el, "value");
+  const value = parseBooleanValue(raw);
   if (value !== undefined) out.value = value;
   const nullFlavor = readNullFlavor(el, ctx);
   if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
+  contradictsAssertedValue(el, "BL", nullFlavor, raw !== undefined, ctx);
   return out;
 }
 

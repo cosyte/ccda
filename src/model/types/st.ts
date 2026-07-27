@@ -5,7 +5,7 @@
  * embedded markup is not interpreted.
  */
 
-import { readNullFlavor, type ParseCtx } from "./_shared.js";
+import { contradictsAssertedValue, readNullFlavor, type ParseCtx } from "./_shared.js";
 import { text } from "../dom.js";
 import type { Element } from "@xmldom/xmldom";
 
@@ -29,6 +29,11 @@ export interface ST {
  * Parse an `ST` element into a typed {@link ST}. Returns `undefined` when the
  * element is absent. Never throws.
  *
+ * A `@nullFlavor` declared beside non-empty text emits
+ * `CONTRADICTORY_NULL_FLAVOR`. The text is **kept**: it is the document's own
+ * content with no verbatim copy elsewhere, so withholding it would delete what
+ * the document said (see {@link parsePq}).
+ *
  * @example
  * ```ts
  * import { parseSt } from "@cosyte/ccda";
@@ -43,5 +48,6 @@ export function parseSt(el: Element | undefined, ctx: ParseCtx): ST | undefined 
   if (value !== undefined) out.value = value;
   const nullFlavor = readNullFlavor(el, ctx);
   if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
+  contradictsAssertedValue(el, "ST", nullFlavor, value !== undefined, ctx);
   return out;
 }

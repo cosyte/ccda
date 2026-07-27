@@ -6,8 +6,13 @@
  */
 
 import { attr, child, positionOf } from "../dom.js";
-import { parseTs, type TS } from "./ts.js";
-import { parseV3DateTime, readNullFlavor, type ParseCtx } from "./_shared.js";
+import { parseTs, tsWithoutDerivedValue, type TS } from "./ts.js";
+import {
+  contradictsAssertedValue,
+  parseV3DateTime,
+  readNullFlavor,
+  type ParseCtx,
+} from "./_shared.js";
 import { malformedDateTime } from "../../parser/warnings.js";
 import type { Element } from "@xmldom/xmldom";
 
@@ -35,6 +40,11 @@ export interface IVL_TS {
  * when the element is absent. Handles both the `<low>`/`<high>` bound form and
  * the degenerate `@value` point form. Never throws.
  *
+ * A `@nullFlavor` on the interval beside its own `@value` or a bound that
+ * carries one is a contradiction: `CONTRADICTORY_NULL_FLAVOR` is emitted once,
+ * every `raw` is preserved, and the derived `date` is withheld from the point
+ * value and from each bound. See {@link parsePq} for the rule and its limits.
+ *
  * @example
  * ```ts
  * import { parseIvlTs } from "@cosyte/ccda";
@@ -46,22 +56,31 @@ export function parseIvlTs(el: Element | undefined, ctx: ParseCtx): IVL_TS | und
   if (el === undefined) return undefined;
   const out: { low?: TS; high?: TS; value?: TS; nullFlavor?: string } = {};
   const low = parseTs(child(el, "low"), ctx);
-  if (low !== undefined) out.low = low;
   const high = parseTs(child(el, "high"), ctx);
-  if (high !== undefined) out.high = high;
-
   const rawValue = attr(el, "value");
+  const nullFlavor = readNullFlavor(el, ctx);
+  if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
+
+  const asserted = rawValue !== undefined || low?.raw !== undefined || high?.raw !== undefined;
+  const contradicted = contradictsAssertedValue(el, "IVL_TS", nullFlavor, asserted, ctx);
+
   if (rawValue !== undefined) {
-    const date = parseV3DateTime(rawValue);
-    if (date !== undefined) {
-      out.value = { raw: rawValue, date };
-    } else {
-      ctx.emit(malformedDateTime(positionOf(el)));
+    if (contradicted) {
       out.value = { raw: rawValue };
+    } else {
+      const date = parseV3DateTime(rawValue);
+      if (date !== undefined) {
+        out.value = { raw: rawValue, date };
+      } else {
+        ctx.emit(malformedDateTime(positionOf(el)));
+        out.value = { raw: rawValue };
+      }
     }
   }
 
-  const nullFlavor = readNullFlavor(el, ctx);
-  if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
+  const keptLow = low === undefined || !contradicted ? low : tsWithoutDerivedValue(low);
+  if (keptLow !== undefined) out.low = keptLow;
+  const keptHigh = high === undefined || !contradicted ? high : tsWithoutDerivedValue(high);
+  if (keptHigh !== undefined) out.high = keptHigh;
   return out;
 }

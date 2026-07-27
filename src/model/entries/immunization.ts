@@ -1,8 +1,9 @@
 /**
  * Immunizations extraction, the Immunization Activity (`…22.4.52`)
  * `substanceAdministration`. The vaccine is the CVX `code` reached via
- * `consumable/manufacturedProduct/manufacturedMaterial` (Immunization Medication
- * Information `…22.4.54`); `doseQuantity` and `routeCode` are carried when
+ * `consumable/manufacturedProduct` (Immunization Medication
+ * Information `…22.4.54`), on either arm of the CDA R2 `ManufacturedProduct`
+ * choice; `doseQuantity` and `routeCode` are carried when
  * present. `negationInd="true"` means a **refused/not-administered** vaccination
  *, surfaced as `refused` and flagged (`IMMUNIZATION_REFUSED`), never silently
  * dropped or conflated with a `nullFlavor` "unknown".
@@ -15,11 +16,11 @@ import type { II } from "../types/ii.js";
 import { parsePq, type PQ } from "../types/pq.js";
 import { parseIvlTs, type IVL_TS } from "../types/ivl-ts.js";
 import type { ParseCtx } from "../types/_shared.js";
-import { immunizationRefused } from "../../parser/warnings.js";
+import { immunizationRefused, missingProductCode } from "../../parser/warnings.js";
 import {
   IMMUNIZATION_ACTIVITY,
-  chain,
   childEntries,
+  consumableProductCode,
   entryAct,
   idsOf,
   readNegation,
@@ -95,15 +96,12 @@ function buildImmunization(
   const statusCode = statusCodeOf(sbadm);
   if (negated === true) ctx.emit(immunizationRefused(positionOf(sbadm)));
 
-  const vaccineEl = chain(
-    sbadm,
-    "consumable",
-    "manufacturedProduct",
-    "manufacturedMaterial",
-    "code",
-  );
+  const { el: vaccineEl } = consumableProductCode(sbadm, ctx);
   const vaccine = parseCd(vaccineEl, ctx);
   const vaccinePos = vaccineEl === undefined ? positionOf(sbadm) : positionOf(vaccineEl);
+  // Same rule as a Medication Activity: an immunization with no coded vaccine
+  // on any arm is a safety-critical absence, never a silent `undefined`.
+  if (vaccineEl === undefined) ctx.emit(missingProductCode(positionOf(sbadm)));
   checkCodeSlot(vaccine, "vaccine", vaccinePos, ctx);
 
   const dose = parsePq(child(sbadm, "doseQuantity"), ctx);

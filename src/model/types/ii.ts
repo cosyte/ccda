@@ -8,7 +8,7 @@
  */
 
 import { attr } from "../dom.js";
-import { readNullFlavor, type ParseCtx } from "./_shared.js";
+import { contradictsAssertedValue, readNullFlavor, type ParseCtx } from "./_shared.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
@@ -35,6 +35,14 @@ export interface II {
  * element itself is absent. Never throws; omits any field the element does not
  * carry.
  *
+ * A `@nullFlavor` declared beside an `@extension` emits
+ * `CONTRADICTORY_NULL_FLAVOR`: the element says both "this identifier is
+ * unknown" and "this identifier is 12345", and a consumer pulling an MRN out of
+ * it would get the second reading. Only `@extension` counts as the contradicted
+ * assertion; a `@root` alone is a namespace without a local identifier, so no
+ * identifier value is produced and the shape stays silent. The `@extension`
+ * itself is **kept**, it is the document's own text (see {@link parsePq}).
+ *
  * @example
  * ```ts
  * import { parseIi } from "@cosyte/ccda";
@@ -58,5 +66,6 @@ export function parseIi(el: Element | undefined, ctx: ParseCtx): II | undefined 
   if (authority !== undefined) out.assigningAuthorityName = authority;
   const nullFlavor = readNullFlavor(el, ctx);
   if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
+  contradictsAssertedValue(el, "II", nullFlavor, extension !== undefined, ctx);
   return out;
 }

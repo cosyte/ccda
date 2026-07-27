@@ -17,6 +17,7 @@ import {
   wrapEmitterWithProfile,
   type CcdaProfile,
   type CcdaWarning,
+  type WarningCode,
 } from "../src/index.js";
 import {
   buildCcda,
@@ -215,6 +216,55 @@ describe("safety set", () => {
     expect(isSafetyCriticalCode(WARNING_CODES.DEPRECATED_LOINC)).toBe(false);
     expect(SAFETY_CRITICAL_CODES.has(WARNING_CODES.CODE_NARRATIVE_MISMATCH)).toBe(true);
     expect(Object.isFrozen(SAFETY_CRITICAL_CODES)).toBe(true);
+  });
+
+  it("classifies the silent-clinical-data codes", () => {
+    expect(isSafetyCriticalCode(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR)).toBe(true);
+    expect(isSafetyCriticalCode(WARNING_CODES.MISSING_CODE_VALUE)).toBe(true);
+    expect(isSafetyCriticalCode(WARNING_CODES.MISSING_PRODUCT_CODE)).toBe(true);
+    // Deliberately tolerable: the alternate ManufacturedProduct arm is read and
+    // fully checked, so this flags known vendor shape, not lost clinical data.
+    expect(isSafetyCriticalCode(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED)).toBe(false);
+  });
+
+  /**
+   * `Object.freeze(new Set(...))` seals own properties but leaves
+   * `Set.prototype.delete` free to mutate the internal slot, so the old
+   * `Object.isFrozen` assertion above proved nothing about the contents of the
+   * set that guards every safety-critical code. These assertions do.
+   */
+  it("refuses every mutation of the safety set at runtime", () => {
+    // The cast is the point of the test: it is exactly what a caller trying to
+    // smuggle a code past the gate would write.
+    const escaped = SAFETY_CRITICAL_CODES as unknown as Set<WarningCode>;
+    expect(() => escaped.delete(WARNING_CODES.MISSING_CODE_SYSTEM)).toThrow(TypeError);
+    expect(() => escaped.add(WARNING_CODES.DEPRECATED_LOINC)).toThrow(TypeError);
+    expect(() => escaped.clear()).toThrow(TypeError);
+    // Nor can a mutator be bolted on to the frozen view.
+    expect(() => {
+      escaped.delete = () => true;
+    }).toThrow(TypeError);
+
+    // The guarantee that matters: the guarded codes are all still in there, and
+    // a tolerable one is still absent.
+    expect(SAFETY_CRITICAL_CODES.has(WARNING_CODES.MISSING_CODE_SYSTEM)).toBe(true);
+    expect(SAFETY_CRITICAL_CODES.has(WARNING_CODES.DEPRECATED_LOINC)).toBe(false);
+    expect(isSafetyCriticalCode(WARNING_CODES.MISSING_CODE_SYSTEM)).toBe(true);
+  });
+
+  it("still reads as a set: size, iteration, and the rest of the read surface", () => {
+    expect(SAFETY_CRITICAL_CODES.size).toBeGreaterThan(20);
+    expect([...SAFETY_CRITICAL_CODES]).toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+    expect([...SAFETY_CRITICAL_CODES.values()]).toEqual([...SAFETY_CRITICAL_CODES.keys()]);
+    expect([...SAFETY_CRITICAL_CODES.entries()][0]?.[0]).toBe(
+      WARNING_CODES.MISSING_ASSIGNING_AUTHORITY,
+    );
+    const seen: WarningCode[] = [];
+    SAFETY_CRITICAL_CODES.forEach((v, _v2, set) => {
+      seen.push(v);
+      expect(set).toBe(SAFETY_CRITICAL_CODES);
+    });
+    expect(seen).toHaveLength(SAFETY_CRITICAL_CODES.size);
   });
 });
 

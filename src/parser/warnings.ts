@@ -36,6 +36,7 @@ export const WARNING_CODES = {
   UNKNOWN_SECTION_CODE: "UNKNOWN_SECTION_CODE",
   SECTION_MATCHED_BY_LOINC_FALLBACK: "SECTION_MATCHED_BY_LOINC_FALLBACK",
   INVALID_NULL_FLAVOR: "INVALID_NULL_FLAVOR",
+  CONTRADICTORY_NULL_FLAVOR: "CONTRADICTORY_NULL_FLAVOR",
   UNKNOWN_NAMESPACE_PREFIX: "UNKNOWN_NAMESPACE_PREFIX",
   MALFORMED_DATETIME: "MALFORMED_DATETIME",
   MULTIPLE_RECORD_TARGETS: "MULTIPLE_RECORD_TARGETS",
@@ -48,8 +49,11 @@ export const WARNING_CODES = {
   UNEXPECTED_CODE_SYSTEM: "UNEXPECTED_CODE_SYSTEM",
   DEPRECATED_CODE_SYSTEM: "DEPRECATED_CODE_SYSTEM",
   MISSING_CODE_SYSTEM: "MISSING_CODE_SYSTEM",
+  MISSING_CODE_VALUE: "MISSING_CODE_VALUE",
   MISSING_DOSE_QUANTITY: "MISSING_DOSE_QUANTITY",
   MISSING_ROUTE_CODE: "MISSING_ROUTE_CODE",
+  MISSING_PRODUCT_CODE: "MISSING_PRODUCT_CODE",
+  MEDICATION_PRODUCT_ARM_UNEXPECTED: "MEDICATION_PRODUCT_ARM_UNEXPECTED",
   MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED: "MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED",
   PROBLEM_STATUS_INDETERMINATE: "PROBLEM_STATUS_INDETERMINATE",
   SECTION_PLACEMENT_SUSPECT: "SECTION_PLACEMENT_SUSPECT",
@@ -250,6 +254,54 @@ export function invalidNullFlavor(position: CcdaPosition, observed: string): Ccd
   return {
     code: WARNING_CODES.INVALID_NULL_FLAVOR,
     message: `nullFlavor "${observed}" is not in the HL7 v3 NullFlavor code system; preserved verbatim.`,
+    position,
+  };
+}
+
+/**
+ * Build a `CONTRADICTORY_NULL_FLAVOR` warning. Emitted when an HL7 v3 datatype
+ * element declares a `@nullFlavor` **and** asserts a value in the same breath,
+ * e.g. `<doseQuantity nullFlavor="UNK" value="10" unit="mg"/>`. The document
+ * says two incompatible things about one field: "this quantity is unknown" and
+ * "this quantity is 10 mg".
+ *
+ * `datatype` is the v3 datatype that read the element (`PQ`, `TS`, `CD`, ...)
+ * and `observed` is the `nullFlavor` token; both are structural, so the message
+ * stays PHI-free. The contradicting content is **never** interpolated.
+ *
+ * **What the parser does with it.** Nothing is coerced and nothing verbatim is
+ * dropped: `PQ.raw`, `PQ.unit`, `CD.code`, `II.extension` and friends are all
+ * still carried on the returned value, beside the `nullFlavor`. What the parser
+ * declines to do is *manufacture* a computable reading it has been told is not
+ * the document's value: on `PQ` the parsed `value` number and on `TS` the
+ * resolved `date` are withheld, exactly as `MALFORMED_DATETIME` already
+ * withholds `TS.date`, since in both cases the verbatim `raw` survives beside
+ * the omission so the caller loses nothing. See {@link parsePq} for the full
+ * rule and its argued limits.
+ *
+ * **Provenance:** no normative SHALL is cited here and none should be invented.
+ * The CDA R2 schema declares `nullFlavor` and the value-bearing attributes
+ * independently, so this shape is schema-valid. The rule rests on the v3
+ * datatype semantics the whole model is built on, `nullFlavor` is a property of
+ * `ANY` marking the instance as an *exceptional value*, i.e. one with no proper
+ * value, so a proper value asserted beside it is a contradiction rather than a
+ * refinement, and on the harm ordering: of the two readings, the reassuring one
+ * (`10 mg`) is the one that can hurt a patient.
+ *
+ * @example
+ * ```ts
+ * import { contradictoryNullFlavor } from "@cosyte/ccda";
+ * const w = contradictoryNullFlavor({ path: "doseQuantity" }, "PQ", "UNK");
+ * ```
+ */
+export function contradictoryNullFlavor(
+  position: CcdaPosition,
+  datatype: string,
+  observed: string,
+): CcdaWarning {
+  return {
+    code: WARNING_CODES.CONTRADICTORY_NULL_FLAVOR,
+    message: `${datatype} element declares nullFlavor "${observed}" and asserts a value at the same time; the document contradicts itself, so the value is preserved verbatim but never read as the field's value.`,
     position,
   };
 }
@@ -511,6 +563,114 @@ export function missingCodeSystem(position: CcdaPosition, slot: string): CcdaWar
   return {
     code: WARNING_CODES.MISSING_CODE_SYSTEM,
     message: `Coded ${slot} value has a @code but no @codeSystem, so the symbol names no terminology; value preserved verbatim, system never inferred, and terminology validation is impossible for it.`,
+    position,
+  };
+}
+
+/**
+ * Build a `MISSING_CODE_VALUE` warning. Emitted when a coded value at a
+ * recognized {@link CodeSlot} is **present** as an element but asserts no
+ * usable `@code` (absent, empty, or whitespace) **and** declares no
+ * `@nullFlavor` to explain the gap, e.g. a system-only
+ * `<value codeSystem="2.16.840.1.113883.6.96"/>`.
+ *
+ * This is the mirror of {@link missingCodeSystem}: there a symbol names no
+ * terminology, here a terminology names no symbol. Neither half alone
+ * identifies a concept. The distinction that keeps this quiet on well-formed
+ * documents is the `nullFlavor`: a `CD` that says `nullFlavor="UNK"` and
+ * nothing else is a *complete* statement ("this concept is unknown") and stays
+ * silent, while one that says nothing at all leaves a reader unable to tell
+ * whether the concept was absent in the source or lost in transformation.
+ *
+ * **Provenance:** no normative SHALL is cited and none is invented. The CD
+ * datatype leaves `@code` optional, which is exactly why a `nullFlavor`-only CD
+ * is well-formed. The warning rests on the parser's stated promise at these
+ * five slots, a coded clinical value is either recognised or flagged, and on
+ * the same harm ordering that puts `MISSING_DOSE_QUANTITY` in
+ * `SAFETY_CRITICAL_CODES`: an undeclared absence at a safety-critical slot.
+ *
+ * @example
+ * ```ts
+ * import { missingCodeValue } from "@cosyte/ccda";
+ * const w = missingCodeValue({ path: "value" }, "problem");
+ * ```
+ */
+export function missingCodeValue(position: CcdaPosition, slot: string): CcdaWarning {
+  return {
+    code: WARNING_CODES.MISSING_CODE_VALUE,
+    message: `Coded ${slot} value is present but asserts no @code and no @nullFlavor, so nothing distinguishes an absent concept from a lost one; value preserved verbatim, no code inferred.`,
+    position,
+  };
+}
+
+/**
+ * Build a `MISSING_PRODUCT_CODE` warning. Emitted when a `substanceAdministration`
+ * carries a `consumable` whose `manufacturedProduct` yields **no** product code
+ * on any arm the parser reads, so the drug or vaccine identity is absent.
+ *
+ * This is the backstop that makes "no product" loud rather than a `undefined`
+ * field on an otherwise well-formed record: dose, route and timing can all
+ * survive a missing consumable, so without this warning the entry reads as a
+ * complete medication that simply has no drug. It fires for a missing
+ * `consumable` entirely, an empty `manufacturedProduct`, and any arm the parser
+ * does not read.
+ *
+ * **Provenance:** stated rather than traced. The C-CDA Medication Information
+ * and Immunization Medication Information templates are written around a coded
+ * product, but the exact conformance verb and CONF id are not cited here
+ * because this repo does not hold the normative R2.1 Schematron. The warning
+ * rests on the harm ordering instead, and is classified alongside
+ * `MISSING_DOSE_QUANTITY` for the same reason: an absent safety-critical field
+ * on a medication is never defaulted and never silent.
+ *
+ * @example
+ * ```ts
+ * import { missingProductCode } from "@cosyte/ccda";
+ * const w = missingProductCode({ path: "substanceAdministration" });
+ * ```
+ */
+export function missingProductCode(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.MISSING_PRODUCT_CODE,
+    message: `Substance administration has no coded product on any manufacturedProduct arm the parser reads; the product is preserved as absent, never inferred from narrative or from the entry's other fields.`,
+    position,
+  };
+}
+
+/**
+ * Build a `MEDICATION_PRODUCT_ARM_UNEXPECTED` warning. CDA R2 models
+ * `ManufacturedProduct` with a **choice** of participant: `manufacturedMaterial`
+ * (a `Material`) or `manufacturedLabeledDrug` (a `LabeledDrug`). C-CDA's
+ * Medication Information and Immunization Medication Information templates are
+ * written around the `manufacturedMaterial` arm, so this fires when the product
+ * code was read from `manufacturedLabeledDrug` instead.
+ *
+ * The code is read, not refused, which is Postel's Law on the parse side: the
+ * alternate arm is a valid CDA R2 shape carrying the same `CE`, and the
+ * previous behaviour of returning `drug: undefined` in silence was strictly
+ * worse than reading it and flagging the deviation. The value then flows
+ * through the ordinary {@link checkCodeSlot} path, so every code-system and
+ * terminology check applies to it unchanged.
+ *
+ * **Provenance:** the two-arm choice is base CDA R2 structure. Whether the
+ * C-CDA template *forbids* the alternate arm is a normative question this repo
+ * cannot answer without the R2.1 Schematron, so no conformance verb is claimed
+ * here, the warning says only that the code came off the arm the templates do
+ * not use. That also decides the safety classification: unlike a silently
+ * missing drug, the drug is present and fully checked, so this is known,
+ * meaning-preserving vendor noise a profile may defensibly tolerate, and it is
+ * deliberately **not** in `SAFETY_CRITICAL_CODES`.
+ *
+ * @example
+ * ```ts
+ * import { medicationProductArmUnexpected } from "@cosyte/ccda";
+ * const w = medicationProductArmUnexpected({ path: "consumable" });
+ * ```
+ */
+export function medicationProductArmUnexpected(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED,
+    message: `Product code read from the manufacturedLabeledDrug arm of manufacturedProduct; C-CDA's medication templates are written around manufacturedMaterial, so the code is read and checked as usual but the arm is flagged.`,
     position,
   };
 }

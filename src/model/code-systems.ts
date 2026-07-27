@@ -14,13 +14,14 @@
  * that names a code system), not the code-system content itself.
  */
 
-import type { CD } from "./types/cd.js";
+import { assertsConcept, type CD } from "./types/cd.js";
 import type { ParseCtx } from "./types/_shared.js";
 import type { TerminologyCoding } from "./terminology.js";
 import {
   deprecatedCodeSystem,
   deprecatedLoinc,
   missingCodeSystem,
+  missingCodeValue,
   semanticCodeInvalid,
   unexpectedCodeSystem,
 } from "../parser/warnings.js";
@@ -87,9 +88,20 @@ const SLOT_BINDINGS: Readonly<Record<CodeSlot, SlotBinding>> = {
  * read nor checked. No system is ever inferred for it (not from the slot's
  * expected list, not from a `@codeSystemName` label), and it is therefore never
  * handed to a {@link TerminologyAdapter}, which validates a `system` + `code`
- * pair. An **absent** value, and a `CD` that carries no `@code` at all (the
- * `nullFlavor`-only shape), assert no concept and stay silent, there is nothing
- * to judge. The value is preserved verbatim in every case.
+ * pair.
+ *
+ * The mirror shape emits `MISSING_CODE_VALUE`: a `CD` that is **present** but
+ * asserts no usable `@code` (absent, empty, or whitespace) **and** declares no
+ * `@nullFlavor`, e.g. a system-only `<value codeSystem="…6.96"/>`. A code
+ * system without a symbol identifies a concept no better than a symbol without
+ * a system does. The `nullFlavor` is what separates the two cases: a
+ * `nullFlavor`-only `CD` is a *complete* statement ("this concept is unknown")
+ * and stays silent, while a `CD` that says nothing at all leaves a reader
+ * unable to tell an absent concept from one lost in transformation. An
+ * **absent** value stays silent too, there is no element to judge.
+ *
+ * The value is preserved verbatim in every case, and no code, system, or
+ * `nullFlavor` is ever inferred.
  *
  * @example
  * ```ts
@@ -104,19 +116,32 @@ export function checkCodeSlot(
   ctx: ParseCtx,
 ): void {
   if (code === undefined) return;
+  const namesConcept = assertsConcept(code.code);
+  // The element is here but names no symbol. A declared `@nullFlavor` makes that
+  // a complete statement ("unknown"), which is a conforming way to fill the slot
+  // and stays silent. With no `nullFlavor` the document has simply gone quiet at
+  // a safety-critical slot, and a reader cannot tell an absent concept from one
+  // dropped in transformation, so it is flagged.
+  if (!namesConcept && code.nullFlavor === undefined) ctx.emit(missingCodeValue(position, slot));
   const oid = code.codeSystem;
   if (oid === undefined) {
     // A code symbol with no system is uninterpretable, and the semantic tier
     // cannot be reached either (an adapter validates a system + code pair), so
-    // this warning is the only signal the value will ever get. A `CD` with no
-    // `@code` asserts no concept and is left alone. Within this branch a
+    // this warning is the only signal the value will ever get. Here a
     // `@nullFlavor` alongside a `@code` does not buy silence: the symbol is
     // still asserted, still unreadable, and an exceptional-value marker must not
-    // become the escape hatch that re-hides it. (A `@nullFlavor` beside a fully
-    // coded value is a separate shape this check does not judge.)
-    if (code.code !== undefined) ctx.emit(missingCodeSystem(position, slot));
+    // become the escape hatch that re-hides it. (The contradiction itself is
+    // flagged upstream by the datatype layer, `CONTRADICTORY_NULL_FLAVOR`.) With
+    // no symbol either, there is no half of a concept to complain about: the
+    // slot is empty, which `MISSING_CODE_VALUE` above has already judged.
+    if (namesConcept) ctx.emit(missingCodeSystem(position, slot));
     return;
   }
+  // The structural tier runs on the system even when no symbol is asserted. A
+  // `nullFlavor`-only `CD` still names a terminology, and naming the wrong or a
+  // deprecated one is worth the same warning it has always drawn; skipping it
+  // here would have made the parser *quieter* than before this slice, which is
+  // the exact direction this slice exists to reverse.
   const binding = SLOT_BINDINGS[slot];
   if (binding.deprecated.includes(oid)) {
     ctx.emit(deprecatedCodeSystem(position, oid, slot));

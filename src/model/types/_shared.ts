@@ -8,7 +8,11 @@
  * which `src/index.ts` re-exports.
  */
 
-import { invalidNullFlavor, type CcdaWarning } from "../../parser/warnings.js";
+import {
+  contradictoryNullFlavor,
+  invalidNullFlavor,
+  type CcdaWarning,
+} from "../../parser/warnings.js";
 import { attr, positionOf } from "../dom.js";
 import type { TerminologyAdapter } from "../terminology.js";
 import type { Element } from "@xmldom/xmldom";
@@ -92,6 +96,49 @@ export function readNullFlavor(el: Element, ctx: ParseCtx): string | undefined {
   if (nf === undefined) return undefined;
   if (!isNullFlavor(nf)) ctx.emit(invalidNullFlavor(positionOf(el), nf));
   return nf;
+}
+
+/**
+ * Decide whether an element's `@nullFlavor` contradicts a value asserted on the
+ * same element, emitting `CONTRADICTORY_NULL_FLAVOR` when it does, and
+ * returning `true` so the caller can withhold a derived reading.
+ *
+ * **What counts as "asserted" is deliberately narrow: the datatype's own
+ * value-bearing assertion**, the field a consumer reads as *the* value.
+ * `PQ.@value`, `TS.@value`, `BL.@value`, `CD.@code`, `II.@extension`, an `ST`'s
+ * text, an `ED`'s inline content or `<reference>`, and for the interval types a
+ * bound that itself carries a value.
+ *
+ * Metadata that merely *describes or qualifies a null value* is **not**
+ * content, and stays silent, because those shapes are coherent rather than
+ * contradictory and flagging them would make the parser noisy on conforming
+ * documents:
+ *
+ * - a `PQ.@unit` with no `@value`, a dimension without a magnitude;
+ * - a `CD`'s `originalText`, `translation`, `displayName` or `@codeSystem`
+ *   beside a `nullFlavor`, which is the documented C-CDA idiom for "this is not
+ *   codable in the bound value set, here is the source text or an alternate
+ *   coding" and must keep working;
+ * - an `II.@root` with no `@extension`, a namespace without a local identifier,
+ *   so no identifier value is produced for a consumer to misread.
+ *
+ * The two halves of the response are separate on purpose. The **warning** is
+ * class-wide: every v3 datatype in this model routes through here, so the
+ * contradiction can never be silent wherever it appears. The **withholding** is
+ * not, and is decided by each datatype, see {@link parsePq}.
+ *
+ * @internal
+ */
+export function contradictsAssertedValue(
+  el: Element,
+  datatype: string,
+  nullFlavor: string | undefined,
+  asserted: boolean,
+  ctx: ParseCtx,
+): boolean {
+  if (nullFlavor === undefined || !asserted) return false;
+  ctx.emit(contradictoryNullFlavor(positionOf(el), datatype, nullFlavor));
+  return true;
 }
 
 /**

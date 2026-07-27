@@ -107,6 +107,13 @@ Two safety-critical reconciliations stay conservative: a coded value that disagr
 surfaces **both** (`CODE_NARRATIVE_MISMATCH`) and picks no winner, and a missing `doseQuantity` /
 `routeCode` is preserved-as-absent and flagged, never silently defaulted.
 
+The drug (and a vaccine) is read from **either arm** of the CDA R2 `ManufacturedProduct` choice:
+`manufacturedMaterial`, which C-CDA's medication templates are written around, or
+`manufacturedLabeledDrug`, which is read too and flagged `MEDICATION_PRODUCT_ARM_UNEXPECTED`. The
+alternate arm carries the same `CE` and goes through the same code-system checks, so reading it is
+strictly safer than the alternative of returning `drug: undefined` while dose and route survive. If
+no arm yields a code, that is `MISSING_PRODUCT_CODE` (safety-critical), never a silent `undefined`.
+
 ## What it extracts: discrete clinical data
 
 - **Results**: Result Organizers via `getResults()`: the LOINC-coded analyte, the polymorphic
@@ -456,8 +463,59 @@ A coded value at one of those slots that asserts a `@code` with **no** `@codeSys
 adapter, which validates a system + code pair. It is flagged `MISSING_CODE_SYSTEM` instead, and the
 system is **never inferred**, not from the slot's expected list and not from a `@codeSystemName` label,
 which is display text rather than an identifier. A code without its system is not a code: `250.00` is
-diabetes in ICD-9-CM and an unrelated concept elsewhere. A value asserting no code at all (absent, or
-a `nullFlavor`) is silent, there is nothing to judge.
+diabetes in ICD-9-CM and an unrelated concept elsewhere.
+
+The mirror shape is flagged too: a slot that is **present** but asserts no usable `@code` (absent,
+empty, or whitespace) **and** declares no `@nullFlavor` raises `MISSING_CODE_VALUE`. A system without
+a symbol identifies a concept no better than a symbol without a system. The `@nullFlavor` is what
+separates the two cases, and a `nullFlavor`-only value stays silent: it is a _complete_ statement
+("this concept is unknown"), while a value that says nothing at all leaves you unable to tell an
+absent concept from one lost in transformation. An absent element is silent too, there is nothing
+there to judge.
+
+### A `nullFlavor` asserted beside a value
+
+`<doseQuantity nullFlavor="UNK" value="10" unit="mg"/>` says two incompatible things: this quantity is
+unknown, and this quantity is 10 mg. The parser flags it `CONTRADICTORY_NULL_FLAVOR` (safety-critical,
+so no profile can tolerate it) and **resolves the contradiction against the number**:
+
+```ts
+const dose = doc.getMedications()[0]?.dose;
+dose?.value; // undefined  ← not 10
+dose?.raw; // "10"
+dose?.unit; // "mg"
+dose?.nullFlavor; // "UNK"
+```
+
+Nothing the document said is lost. What is withheld is the reading the parser would have
+_manufactured_ from it: `value` is a `number` derived from `raw`, and `raw` is still right there. This
+is the same rule `MALFORMED_DATETIME` already applies one datatype over, where `TS` keeps `raw` and
+drops the parsed `date`.
+
+The warning itself is **class-wide**: `PQ`, `TS`, `IVL_PQ`, `IVL_TS`, `CD`, `II`, `ST`, `ED` and `BL`
+all route their `nullFlavor` through one check, as do the `INT` and `ST` arms of an observation
+`<value>` (the slot that carries lab values and assessment-scale scores), which are parsed inline
+rather than through the datatype layer.
+
+**Where the withholding applies, and where it does not.** `PQ.value`, `TS.date`, and an `integer`
+observation value's `value` are withheld, because they are the places in the model where a verbatim
+copy survives beside a derived reading (the `integer` value carries `raw` for exactly this reason, as
+`PQ` does). On `CD`, `II`, `ST`, `ED` and `BL` the value-bearing field **is** the document's own text
+(`@code`, `@extension`, the element's content) with no second copy, so withholding it would delete
+what the document said rather than decline to embellish it. Those keep the field: a contradicted
+`allergy.allergen.code` still returns the code, with `nullFlavor` on the same object and the warning
+in `doc.warnings`.
+
+Only a _value-bearing_ assertion contradicts. Metadata that qualifies a null value is coherent and
+stays silent: a `PQ` `@unit` with no `@value` (a dimension without a magnitude), an `II` `@root` with
+no `@extension` (a namespace without a local identifier), and a `CD`'s `originalText`,
+`<translation>`, `displayName` or bare `@codeSystem`, which is the documented C-CDA idiom for "not
+codable in the bound value set, here is the source text or an alternate coding".
+
+**Provenance:** no normative SHALL is cited for this, and none is invented. The CDA R2 schema declares
+`nullFlavor` and the value attributes independently, so the shape is schema-valid. The rule rests on
+HL7 v3 datatype semantics, where `nullFlavor` marks an _exceptional value_, one with no proper value,
+and on the harm ordering: of the two readings, the reassuring one is the one that can hurt a patient.
 
 The interface also declares an optional `translate` (`$translate`) method. `buildCcda` consults it at
 the same five slots (problem value, allergen, medication drug and route, vaccine and route) and emits

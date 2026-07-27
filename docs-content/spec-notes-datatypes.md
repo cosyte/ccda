@@ -22,6 +22,41 @@ year `2026` with a `-07:21` offset. `@nullFlavor` is preserved verbatim
 throughout, and a value outside the HL7 v3 NullFlavor set is flagged (`INVALID_NULL_FLAVOR`) rather than
 dropped.
 
+### A `nullFlavor` asserted beside a value
+
+In v3, `nullFlavor` is a property of `ANY` marking the instance as an **exceptional value**, one with
+no proper value. So `<doseQuantity nullFlavor="UNK" value="10" unit="mg"/>` is a document contradicting
+itself: this quantity is unknown, and this quantity is 10 mg. The CDA R2 schema declares the attributes
+independently, so the shape is schema-valid and no normative SHALL is cited here (none is invented
+either); the parser's response rests on the datatype semantics above and on the harm ordering.
+
+Every v3 datatype flags it as `CONTRADICTORY_NULL_FLAVOR`, which is **safety-critical**, so no vendor
+profile can tolerate it back into silence. That includes the `INT` and `ST` arms of an observation
+`<value>`, the slot carrying lab values and assessment-scale scores, which are parsed inline rather
+than through the datatype layer. The contradiction is then resolved **against the derived reading**:
+`PQ.value`, `TS.date` and an `integer` observation value's `value` are withheld, while `raw`, `unit`
+and the `nullFlavor` are all preserved. A caller reading `med.dose.value` gets `undefined` rather than
+`10`, and one reading a contradicted PHQ-9 score gets `undefined` rather than `12`. This is exactly
+what
+`MALFORMED_DATETIME` already does to `TS.date`, a second reason not to trust an interpretation rather
+than a new rule, and it costs nothing because `value`/`date` are readings the parser manufactured from
+a `raw` that survives.
+
+Withholding stops there, deliberately. `PQ`, `TS` and the `integer` observation value are the only
+shapes in this model that keep both a verbatim string and a parsed interpretation. On `CD`, `II`,
+`ST`, `ED` and `BL` the value-bearing field **is** the document's own text, with no second copy, so it
+is kept and the warning plus the co-located `nullFlavor` is the signal.
+
+One thing the check deliberately does **not** do is short-circuit the rest of the slot's validation. A
+`nullFlavor`-only `CD` still names a terminology, so a wrong or deprecated `@codeSystem` on it still
+draws `UNEXPECTED_CODE_SYSTEM` / `DEPRECATED_CODE_SYSTEM` exactly as before.
+
+Only a value-bearing assertion contradicts. A `PQ` `@unit` with no `@value` (a dimension without a
+magnitude), an `II` `@root` with no `@extension` (a namespace without a local identifier), and a `CD`'s
+`originalText` / `<translation>` / `displayName` / bare `@codeSystem` (the documented C-CDA idiom for
+"not codable in the bound value set, here is the source text or an alternate coding") all describe a
+null value rather than contradicting it, and stay silent.
+
 On the **emit** side `buildCcda` is symmetric but strict (Postel's Law, conservative on emit): every
 date it writes into an `<effectiveTime>`/`low`/`high`/`value`/`birthTime` is validated against the same
 v3 TS grammar the parser reads, so a malformed caller input (`"2026-07-21"` with dashes, `"July 2026"`,
@@ -40,7 +75,10 @@ A value that asserts a `@code` with **no** `@codeSystem` at all is flagged `MISS
 without its system is not a code (`250.00` is diabetes in ICD-9-CM and an unrelated concept elsewhere),
 so it is preserved verbatim and no system is ever inferred for it, neither from the slot's expected
 list nor from a `@codeSystemName` label, which is display text rather than an identifier. A value that
-asserts no code at all (absent, or a `nullFlavor`) is silent, there is nothing to judge.
+is **present** but asserts no usable `@code` and declares no `@nullFlavor` to say why is flagged
+`MISSING_CODE_VALUE`, the mirror shape: a system without a symbol names a concept no better than a
+symbol without a system. A `nullFlavor`-only value stays silent, it is a complete statement ("this
+concept is unknown"), and so does an absent element, there is nothing there to judge.
 It deliberately does **not** verify that a code is a real member of its system: that needs licensed
 terminology content (SNOMED CT / RxNorm via UMLS) this suite never bundles. The exported OIDs
 (`SNOMED_CT`, `RXNORM`, `ICD10_CM`, `LOINC`, `NDC`, `UNII`, `CVX`, …) are public identifiers, not
