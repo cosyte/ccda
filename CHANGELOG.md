@@ -1035,6 +1035,45 @@ statusCode, effectiveTime, component+`).
 
 ### Fixed
 
+- **Clinical safety: a `@code` asserted with no `@codeSystem` no longer passes silently
+  (`MISSING_CODE_SYSTEM`).** `checkCodeSlot` opened with `if (code?.codeSystem === undefined) return;`,
+  so a `CD` carrying a `@code` but no `@codeSystem` reached **neither** the structural tier
+  (`SLOT_BINDINGS` deprecated / expected checks) **nor** the bring-your-own `TerminologyAdapter`, and
+  emitted no warning of any kind. A document built with an adapter configured to reject everything
+  produced zero warnings and never consulted the adapter. That is the dangerous direction: a code
+  without its system is not a code (`250.00` is diabetes in ICD-9-CM and an unrelated concept
+  elsewhere), and the parser got quieter the more broken the input was.
+  - The new stable warning code **`MISSING_CODE_SYSTEM`** fires at all five wired `CodeSlot`s
+    (`problem`, `medication`, `allergen`, `route`, `vaccine`, so at all six call sites, medication and
+    immunization each contributing a route).
+  - **Nothing is inferred.** No system is guessed from the slot's expected list or from a
+    `@codeSystemName` label (display text, not an identifier), and the value is preserved verbatim. The
+    adapter is still not consulted, correctly: it validates a system + code pair, and there is no
+    system, which is precisely why the structural warning is the only signal such a value can get.
+  - **Absence stays silent.** An absent value, and a `CD` that asserts no `@code` at all (the
+    `nullFlavor`-only shape), warn nothing, there is no concept being asserted. Within this check a
+    `nullFlavor` alongside an asserted `@code` does **not** buy silence: the symbol is still
+    unreadable, and an exceptional-value marker must not become the escape hatch that re-hides the
+    deviation. (A `nullFlavor` beside a fully coded value is a separate shape, unchanged here and
+    still unflagged.)
+  - **`MISSING_CODE_SYSTEM` is safety-critical** (`SAFETY_CRITICAL_CODES`), so no vendor profile may
+    tolerate it. It is strictly worse than `UNEXPECTED_CODE_SYSTEM` (already in the set): there the
+    system is wrong but known, so a reader can still tell what was meant; here the symbol names no
+    terminology at all. It is also the _lone_ signal, the `MALFORMED_DATETIME` argument, since
+    `SEMANTIC_CODE_INVALID` can never fire behind it. Tolerating it would restore the exact silent
+    pass this fixes. **Provenance:** no normative SHALL is cited and none is invented, the CD datatype
+    leaves `@codeSystem` optional. Both the warning and its safety classification rest on the
+    datatype's own semantics (a `@code` is a symbol defined _by_ a code system) and on the harm
+    ordering `SAFETY_CRITICAL_CODES` has always encoded.
+  - The shipped sentence "a clean run means those five slots passed" was **false** for this shape and
+    is no longer, which is why the fix is upstream rather than a doc hedge. The docs are updated with
+    it, and now also state the two remaining precisions rather than leaving them implied: within the
+    five slots the checks cover the **primary** coding (alternate codings in `<translation>` are
+    preserved and re-serialized but not themselves slot-checked), and a slot asserting no code at all
+    is not judged, there is nothing there to check.
+  - Adding a warning code is a public-surface change on the `0.0.x` ladder: a consumer switching
+    exhaustively on `WarningCode` will see the new member.
+
 - **Phase 7 (twenty-second slice): `editCcda` no longer emits an id-less RPLC `parentDocument` (CDA R2
   SHALL fix).** `stampRevision` appended the parent `<id>` only when the source `ClinicalDocument`
   carried one, while `deriveNewDocId` always minted the new document's id, so revising a source with no

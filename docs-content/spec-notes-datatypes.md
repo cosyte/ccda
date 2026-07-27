@@ -36,13 +36,20 @@ wrong shape. It fails loud. Everything it does accept round-trips back through `
 Coded slots are validated **structurally**: `checkCodeSlot` checks that a value's `@codeSystem` OID is
 one expected for its slot (e.g. RxNorm on a medication, SNOMED CT / ICD-10-CM on a problem) and flags a
 deprecated (`DEPRECATED_CODE_SYSTEM`, e.g. ICD-9) or unexpected (`UNEXPECTED_CODE_SYSTEM`) terminology.
+A value that asserts a `@code` with **no** `@codeSystem` at all is flagged `MISSING_CODE_SYSTEM`: a code
+without its system is not a code (`250.00` is diabetes in ICD-9-CM and an unrelated concept elsewhere),
+so it is preserved verbatim and no system is ever inferred for it, neither from the slot's expected
+list nor from a `@codeSystemName` label, which is display text rather than an identifier. A value that
+asserts no code at all (absent, or a `nullFlavor`) is silent, there is nothing to judge.
 It deliberately does **not** verify that a code is a real member of its system: that needs licensed
 terminology content (SNOMED CT / RxNorm via UMLS) this suite never bundles. The exported OIDs
 (`SNOMED_CT`, `RXNORM`, `ICD10_CM`, `LOINC`, `NDC`, `UNII`, `CVX`, …) are public identifiers, not
 redistributable code-system data. For membership checks, bring your own: pass a `TerminologyAdapter`
 to `parseCcda` or `buildCcda` and it is consulted at the five recognized coded slots (`problem`,
 `medication`, `allergen`, `route`, `vaccine`). A code your adapter rejects is flagged
-`SEMANTIC_CODE_INVALID` and preserved **verbatim**, never rewritten.
+`SEMANTIC_CODE_INVALID` and preserved **verbatim**, never rewritten. A code with no `@codeSystem`
+cannot reach the adapter at all (it validates a system + code pair), which is why the structural
+`MISSING_CODE_SYSTEM` above is the signal for it.
 
 ## Computable UCUM units
 

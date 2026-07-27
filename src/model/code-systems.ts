@@ -3,8 +3,9 @@
  * each coded slot to a small set of expected terminologies, a Problem value to
  * SNOMED CT or ICD-10-CM, a medication to RxNorm, an allergen to RxNorm/UNII,
  * a route to the NCI Thesaurus. This module is **structural recognition only**:
- * it checks that a coded value's `@codeSystem` OID is one expected for its slot
- * and flags deprecated systems (ICD-9). It deliberately does **not** validate
+ * it checks that a coded value's `@codeSystem` OID is one expected for its slot,
+ * flags deprecated systems (ICD-9), and flags a `@code` asserted with no
+ * `@codeSystem` at all. It deliberately does **not** validate
  * that a code is a real member of its system, that needs a licensed
  * terminology (SNOMED CT / RxNorm via UMLS), which the suite never bundles. See
  * the package README "Code systems & provenance" for the bring-your-own path.
@@ -19,6 +20,7 @@ import type { TerminologyCoding } from "./terminology.js";
 import {
   deprecatedCodeSystem,
   deprecatedLoinc,
+  missingCodeSystem,
   semanticCodeInvalid,
   unexpectedCodeSystem,
 } from "../parser/warnings.js";
@@ -78,9 +80,16 @@ const SLOT_BINDINGS: Readonly<Record<CodeSlot, SlotBinding>> = {
 /**
  * Validate a coded value's `@codeSystem` against the terminologies expected for
  * its {@link CodeSlot}. Emits `DEPRECATED_CODE_SYSTEM` for a known-deprecated
- * system (ICD-9) and `UNEXPECTED_CODE_SYSTEM` for any other unexpected OID. A
- * value with no `@codeSystem` (or a `nullFlavor`-only `CD`) is left unchecked,
- * there is nothing to judge, and the value is always preserved verbatim.
+ * system (ICD-9) and `UNEXPECTED_CODE_SYSTEM` for any other unexpected OID.
+ *
+ * A `CD` that asserts a `@code` with **no** `@codeSystem` emits
+ * `MISSING_CODE_SYSTEM`: the symbol names no terminology, so it can be neither
+ * read nor checked. No system is ever inferred for it (not from the slot's
+ * expected list, not from a `@codeSystemName` label), and it is therefore never
+ * handed to a {@link TerminologyAdapter}, which validates a `system` + `code`
+ * pair. An **absent** value, and a `CD` that carries no `@code` at all (the
+ * `nullFlavor`-only shape), assert no concept and stay silent, there is nothing
+ * to judge. The value is preserved verbatim in every case.
  *
  * @example
  * ```ts
@@ -94,10 +103,20 @@ export function checkCodeSlot(
   position: { readonly path?: string; readonly line?: number; readonly column?: number },
   ctx: ParseCtx,
 ): void {
-  // A guard on `code?.codeSystem` narrows `code` to a defined `CD` with a defined
-  // `codeSystem` for the rest of the function.
-  if (code?.codeSystem === undefined) return;
+  if (code === undefined) return;
   const oid = code.codeSystem;
+  if (oid === undefined) {
+    // A code symbol with no system is uninterpretable, and the semantic tier
+    // cannot be reached either (an adapter validates a system + code pair), so
+    // this warning is the only signal the value will ever get. A `CD` with no
+    // `@code` asserts no concept and is left alone. Within this branch a
+    // `@nullFlavor` alongside a `@code` does not buy silence: the symbol is
+    // still asserted, still unreadable, and an exceptional-value marker must not
+    // become the escape hatch that re-hides it. (A `@nullFlavor` beside a fully
+    // coded value is a separate shape this check does not judge.)
+    if (code.code !== undefined) ctx.emit(missingCodeSystem(position, slot));
+    return;
+  }
   const binding = SLOT_BINDINGS[slot];
   if (binding.deprecated.includes(oid)) {
     ctx.emit(deprecatedCodeSystem(position, oid, slot));

@@ -36,6 +36,10 @@ immutability + explicit mutation, and the profile system.
   - A `TerminologyAdapter` is consulted at the **five `CodeSlot`s only** (`problem`, `medication`,
     `allergen`, `route`, `vaccine`). Every other coded value is never handed to the adapter, so a
     clean run means those five slots passed, **not** that the document was terminology-verified.
+    Within the five, the checks cover the slot's primary coding; `<translation>` alternates are
+    preserved but not slot-checked. A `@code` with no `@codeSystem` reaches no adapter (there is no
+    system to validate against) and is flagged `MISSING_CODE_SYSTEM` rather than passing silently,
+    a safety-critical code no profile may tolerate.
   - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`
     assert nothing (Consultation Note, Progress Note, Procedure Note, Operative Note, Diagnostic
     Imaging Report, Unstructured Document). Empty means "no unconditional in-catalog SHALL section

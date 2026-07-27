@@ -99,6 +99,7 @@ describe("defineCcdaProfile, construction & validation", () => {
       "MISSING_ASSIGNING_AUTHORITY",
       "REQUIRED_SECTION_MISSING",
       "UNEXPECTED_CODE_SYSTEM",
+      "MISSING_CODE_SYSTEM",
       "MALFORMED_DATETIME",
     ] as const) {
       expect(() =>

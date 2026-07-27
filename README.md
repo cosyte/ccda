@@ -448,8 +448,16 @@ opinion" (silent).
 > raise `SEMANTIC_CODE_INVALID`: the Results and Vital Signs LOINC codes, the procedure, encounter,
 > planned-item and family-history codes, the smoking-status, functional-status and mental-status
 > observation values, the allergy propensity type, and the reaction, severity and criticality
-> observations. **A clean run means those five slots passed, not that the document's terminology was
-> verified.**
+> observations. Within the five, the checks apply to the slot's **primary** coding; alternate codings
+> carried in `<translation>` are preserved and re-serialized but are not themselves slot-checked.
+> **A clean run means those five slots passed, not that the document's terminology was verified.**
+
+A coded value at one of those slots that asserts a `@code` with **no** `@codeSystem` never reaches the
+adapter, which validates a system + code pair. It is flagged `MISSING_CODE_SYSTEM` instead, and the
+system is **never inferred**, not from the slot's expected list and not from a `@codeSystemName` label,
+which is display text rather than an identifier. A code without its system is not a code: `250.00` is
+diabetes in ICD-9-CM and an unrelated concept elsewhere. A value asserting no code at all (absent, or
+a `nullFlavor`) is silent, there is nothing to judge.
 
 The interface also declares an optional `translate` (`$translate`) method. `buildCcda` consults it at
 the same five slots (problem value, allergen, medication drug and route, vaccine and route) and emits
@@ -500,8 +508,10 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
 - **A terminology adapter is consulted at five coded slots only**: `problem`, `medication`, `allergen`,
   `route`, `vaccine`. Results/Vital Signs LOINC codes, procedure, encounter, planned-item and
   family-history codes, the smoking/functional/mental status values, the allergy propensity type, and
-  the reaction/severity/criticality observations are never handed to it. A clean run means those five
-  slots passed, **not** that the document was terminology-verified.
+  the reaction/severity/criticality observations are never handed to it. Within the five, the checks
+  apply to the slot's primary coding; alternate codings in `<translation>` are preserved but not
+  slot-checked. A clean run means those five slots passed, **not** that the document was
+  terminology-verified.
 - **Required-section (SHALL) validation under-warns, and six of the twelve tables assert nothing**:
   Consultation Note, Progress Note, Procedure Note, Operative Note, Diagnostic Imaging Report, and
   Unstructured Document assert no unconditional in-catalog SHALL section yet, so a document of one of

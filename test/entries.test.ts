@@ -15,6 +15,7 @@ import {
   PROBLEMS_SECTION,
   MEDICATIONS_SECTION,
   ALLERGY_ENTRY_SECTION,
+  IMMUNIZATIONS_SECTION,
   NKA_SECTION,
   TRIAD_SECTIONS,
 } from "./__fixtures__/ccda.js";
@@ -202,6 +203,139 @@ describe("clinical entries, code-system + dosing warnings", () => {
     const doc = parseCcda(xml);
     expect(doc.getAllergies()[0]?.allergies[0]?.allergenLevelSuspect).toBe(true);
     expect(codes(doc.warnings)).toContain(WARNING_CODES.ALLERGEN_GRANULARITY_SUSPECT);
+  });
+});
+
+/**
+ * A code with no system is not a code: `250.00` is diabetes in ICD-9-CM and an
+ * unrelated concept elsewhere. Before this suite existed, `checkCodeSlot`
+ * returned early on a missing `@codeSystem`, so such a value reached neither the
+ * structural tier nor the bring-your-own terminology adapter and produced **no
+ * warning at all**, the parser got quieter the more broken the input was. These
+ * cases pin the fix at every wired `CodeSlot`, and pin the values that must stay
+ * silent (a genuinely absent value, and a `nullFlavor` that asserts no code).
+ */
+describe("clinical entries, a code asserted with no code system", () => {
+  it("flags a problem value carrying @code with no @codeSystem", () => {
+    const xml = buildCcda({ sections: PROBLEMS_SECTION }).replace(
+      '<value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96"',
+      '<value xsi:type="CD" code="59621000"',
+    );
+    expect(codes(parseCcda(xml).warnings)).toContain(WARNING_CODES.MISSING_CODE_SYSTEM);
+  });
+
+  it("flags a medication drug code with no @codeSystem", () => {
+    const xml = buildCcda({ sections: MEDICATIONS_SECTION }).replace(
+      '<code code="314076" codeSystem="2.16.840.1.113883.6.88"',
+      '<code code="314076"',
+    );
+    expect(codes(parseCcda(xml).warnings)).toContain(WARNING_CODES.MISSING_CODE_SYSTEM);
+  });
+
+  it("flags a medication routeCode with no @codeSystem", () => {
+    const xml = buildCcda({ sections: MEDICATIONS_SECTION }).replace(
+      '<routeCode code="C38288" codeSystem="2.16.840.1.113883.3.26.1.1"',
+      '<routeCode code="C38288"',
+    );
+    const doc = parseCcda(xml);
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MISSING_CODE_SYSTEM);
+    // The route is still extracted verbatim; the warning never drops the value.
+    expect(doc.getMedications()[0]?.route?.code).toBe("C38288");
+    expect(doc.getMedications()[0]?.route?.codeSystem).toBeUndefined();
+  });
+
+  it("flags an allergen code with no @codeSystem", () => {
+    const xml = buildCcda({ sections: ALLERGY_ENTRY_SECTION }).replace(
+      '<code code="7980" codeSystem="2.16.840.1.113883.6.88"',
+      '<code code="7980"',
+    );
+    expect(codes(parseCcda(xml).warnings)).toContain(WARNING_CODES.MISSING_CODE_SYSTEM);
+  });
+
+  it("flags a vaccine code with no @codeSystem", () => {
+    const xml = buildCcda({ sections: IMMUNIZATIONS_SECTION }).replace(
+      '<code code="140" codeSystem="2.16.840.1.113883.12.292"',
+      '<code code="140"',
+    );
+    expect(codes(parseCcda(xml).warnings)).toContain(WARNING_CODES.MISSING_CODE_SYSTEM);
+  });
+
+  it("flags an immunization routeCode with no @codeSystem", () => {
+    const xml = buildCcda({ sections: IMMUNIZATIONS_SECTION }).replace(
+      '<routeCode code="C28161" codeSystem="2.16.840.1.113883.3.26.1.1"',
+      '<routeCode code="C28161"',
+    );
+    expect(codes(parseCcda(xml).warnings)).toContain(WARNING_CODES.MISSING_CODE_SYSTEM);
+  });
+
+  it("stays silent for a nullFlavor value that asserts no code", () => {
+    const xml = buildCcda({ sections: PROBLEMS_SECTION }).replace(
+      '<value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96" displayName="Essential hypertension"/>',
+      '<value xsi:type="CD" nullFlavor="UNK"/>',
+    );
+    expect(codes(parseCcda(xml).warnings)).not.toContain(WARNING_CODES.MISSING_CODE_SYSTEM);
+  });
+
+  it("stays silent for an absent value", () => {
+    const xml = buildCcda({ sections: PROBLEMS_SECTION }).replace(
+      '<value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96" displayName="Essential hypertension"/>',
+      "",
+    );
+    expect(codes(parseCcda(xml).warnings)).not.toContain(WARNING_CODES.MISSING_CODE_SYSTEM);
+  });
+
+  it("stays silent for an absent routeCode (MISSING_ROUTE_CODE covers that gap)", () => {
+    const xml = buildCcda({ sections: MEDICATIONS_SECTION }).replace(
+      '<routeCode code="C38288" codeSystem="2.16.840.1.113883.3.26.1.1" displayName="Oral"/>',
+      "",
+    );
+    const warned = codes(parseCcda(xml).warnings);
+    expect(warned).toContain(WARNING_CODES.MISSING_ROUTE_CODE);
+    expect(warned).not.toContain(WARNING_CODES.MISSING_CODE_SYSTEM);
+  });
+
+  it("stays silent for a clean, fully-stamped triad", () => {
+    const xml = buildCcda({
+      docTypeOid: NO_REQUIRED_SECTIONS_DOC_OID,
+      sections: TRIAD_SECTIONS,
+      mrnAssigningAuthority: true,
+    });
+    expect(codes(parseCcda(xml).warnings)).not.toContain(WARNING_CODES.MISSING_CODE_SYSTEM);
+  });
+
+  it("still flags when a nullFlavor sits beside the asserted code", () => {
+    // A nullFlavor is not an escape hatch: the @code is still asserted and still
+    // unreadable without its system, so the deviation must not go quiet.
+    const xml = buildCcda({ sections: PROBLEMS_SECTION }).replace(
+      '<value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96"',
+      '<value xsi:type="CD" nullFlavor="UNK" code="59621000"',
+    );
+    expect(codes(parseCcda(xml).warnings)).toContain(WARNING_CODES.MISSING_CODE_SYSTEM);
+  });
+
+  it("never infers a system, so the adapter is not consulted for such a value", () => {
+    // The adapter rejects everything it is shown. A system-less code must not be
+    // handed to it under a guessed system, and must still be flagged.
+    let consulted = 0;
+    const xml = buildCcda({ sections: PROBLEMS_SECTION }).replace(
+      '<value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96"',
+      '<value xsi:type="CD" code="59621000"',
+    );
+    const doc = parseCcda(xml, {
+      terminology: {
+        validateCode: () => {
+          consulted += 1;
+          return { result: false };
+        },
+      },
+    });
+    const warned = codes(doc.warnings);
+    expect(warned).toContain(WARNING_CODES.MISSING_CODE_SYSTEM);
+    expect(warned).not.toContain(WARNING_CODES.SEMANTIC_CODE_INVALID);
+    expect(consulted).toBe(0);
+    // The code itself is preserved verbatim, never coerced to a guessed system.
+    expect(doc.getProblems()[0]?.problems[0]?.value?.code).toBe("59621000");
+    expect(doc.getProblems()[0]?.problems[0]?.value?.codeSystem).toBeUndefined();
   });
 });
 

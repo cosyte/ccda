@@ -96,13 +96,19 @@ milestone it stopped at.
   at the five recognized coded slots (`problem`, `medication`, `allergen`, `route`, `vaccine`). A
   code the adapter rejects is surfaced **verbatim** and flagged `SEMANTIC_CODE_INVALID`, never
   rewritten to a "corrected" value; an adapter returning `undefined` has no opinion and produces no
-  warning. With no adapter, behavior is recognition-only.
+  warning. With no adapter, behavior is recognition-only. A value at one of those slots that asserts
+  a `@code` with **no** `@codeSystem` is flagged `MISSING_CODE_SYSTEM` and is never handed to your
+  adapter (which validates a system + code pair): the parser flags it rather than inferring a system,
+  because a code without its system is not a code. A value asserting no code at all (absent, or a
+  `nullFlavor`) is silent, there is nothing to judge.
   **Those five slots are the whole of it, so read a silent document carefully.** Every other coded
   value is never handed to your adapter and therefore can never raise `SEMANTIC_CODE_INVALID`: the
   Results and Vital Signs LOINC codes, the procedure, encounter, planned-item, and family-history
   codes, the smoking-status, functional-status, and mental-status observation values, the allergy
-  propensity type, and the reaction, severity, and criticality observations. A clean run means the
-  five checked slots passed, not that the document's terminology was verified.
+  propensity type, and the reaction, severity, and criticality observations. Within the five, the
+  checks apply to the slot's **primary** coding; alternate codings carried in `<translation>` are
+  preserved and re-serialized but are not themselves slot-checked. A clean run means the five checked
+  slots passed, not that the document's terminology was verified.
 - **UCUM validation is grammatical, on a curated atom subset.** The validator checks well-formed UCUM
   against the prefixes/atoms that appear in lab Results and Vital Signs, not the full UCUM registry. A
   valid-but-uncurated atom may read as `NON_UCUM_UNIT`; the raw unit is always preserved. It does not
@@ -114,7 +120,8 @@ milestone it stopped at.
   `setDefaultCcdaProfile`) applies a `CcdaProfile` that downgrades the non-safety-critical deviations it
   expects to `PROFILE_QUIRK_APPLIED` (flagged `expected`, carrying the original `toleratedCode`). It
   never drops a warning and never touches an extracted value. A profile **cannot** tolerate a
-  safety-critical warning (dose, unit, allergen, identity, wrong code system, malformed datetime, …);
+  safety-critical warning (dose, unit, allergen, identity, wrong or missing code system, malformed
+  datetime, …);
   `defineCcdaProfile()` throws if you try. Built-ins: `ccdaProfiles.smartScorecard` (deprecated
   terminology) and `ccdaProfiles.legacyR11` (R1.1-origin structural tolerance), each with cited
   provenance, plus `ccdaProfiles.default`, which tolerates nothing and is identical to passing no
