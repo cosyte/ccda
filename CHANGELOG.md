@@ -28,10 +28,12 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
   required status check: `cosyte/ccda` is governed by org-level rulesets whose required contexts are
   `ci / verify (22, ubuntu-latest)`, `ci / verify (24, ubuntu-latest)` and `ci / actionlint`, and
   `Em-dash gate / no-emdash` is not among them, so a PR carrying a live character can still
-  auto-merge. Making it blocking is an org-level `cosyte/.github` ruleset change, out of this repo's
-  reach. Ported from `ncpdp` (PR #34, `39212bb`), the text-only variant, with the pipeline
-  code kept byte-identical: the known limits are one cross-repo fix across the nine copies on `main`
-  (seven of this shape, plus `website`'s NUL-partition variant and `docs`), not one fix per repo.
+  auto-merge. Making it blocking is a GitHub **settings** change rather than a file change (no repo
+  defines these rulesets): either add the context to the org ruleset `parser-ci-required-checks`,
+  or add a repository-level ruleset here as `pathways`, `docs`, `website` and `iac` already do.
+  Ported from `ncpdp` (PR #34, `39212bb`), the text-only variant, with the pipeline
+  code kept byte-identical: the known limits are one cross-repo fix across the whole fleet of
+  copies, not one fix per repo. Enumerate them at carry-back time rather than trusting a count.
   **One character of content changed**, in a JSDoc comment in `src/profiles/merge.ts`, where an em
   dash became a colon. That file had survived PR #52's remediation sweep because two functional NUL
   bytes (the separator in `toleranceKey`'s composite key, which cannot be removed) make grep

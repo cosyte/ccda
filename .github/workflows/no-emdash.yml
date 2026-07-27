@@ -14,13 +14,28 @@ name: Em-dash gate
 # `ci / actionlint`. This job's context is `Em-dash gate / no-emdash`, which is not among
 # them, and `allow_auto_merge` is true with zero required approvals. So a PR carrying a live
 # character in its title or in a tracked file CAN auto-merge while this job is red or still
-# running. Nothing in this repo can change that: the ruleset is org-sourced, and the repo
-# token cannot edit it. Closing it means adding `Em-dash gate / no-emdash` to
-# `parser-ci-required-checks` at the org level, which is a `cosyte/.github` change and is
-# deliberately not attempted from here. Until then the honest claim is that this gate makes
-# a violation VISIBLE on every PR, not that it makes one impossible. ncpdp and dicom carry
-# the same gap under the same ruleset; the overstatement was this port's, so this port
-# corrects it.
+# running.
+#
+# CLOSING IT IS A GITHUB SETTINGS CHANGE, NOT A FILE CHANGE, and being exact about that is
+# the point of this paragraph. There is nothing to edit in any repo. Rulesets live at
+# `orgs/cosyte/rulesets` and `repos/cosyte/<repo>/rulesets`; the `cosyte/.github` repo holds
+# reusable workflows and community-health files and defines no ruleset anywhere, so "make a
+# `cosyte/.github` change" would send the next reader into a submodule with nothing in it to
+# change. Two real routes, and rulesets stack additively so either works:
+#   * add `Em-dash gate / no-emdash` to the ORG ruleset `parser-ci-required-checks`. That
+#     covers every parser it governs in one edit (hl7, x12, ncpdp, dicom, mllp and this
+#     repo), and as of 2026-07-27 all of them carry a workflow named `Em-dash gate` with a
+#     job named `no-emdash`, so the context resolves everywhere it would be required. It
+#     needs `admin:org`, which the management token does not have today.
+#   * or add a REPOSITORY-level ruleset on `cosyte/ccda`. That is not hypothetical: it is
+#     exactly what `pathways`, `docs` and `website` do (`ci-required-checks`), and `iac`
+#     (`baseline-and-ci-required-checks`). It needs no org permission and covers only this
+#     repo.
+# Either way it is out of scope for a slice that ships files, and it is deliberately not
+# attempted here. Until one of them happens, the honest claim is that this gate makes a
+# violation VISIBLE on every PR, not that it makes one impossible. hl7, x12, ncpdp, dicom
+# and mllp carry the same gap under the same org ruleset, and `fhir` has no ruleset and no
+# branch protection at all. The overstatement was this port's, so this port corrects it.
 #
 # That hazard is written down in this ecosystem already, and it is worth naming here so the
 # next reader does not have to rediscover it: `docs/CLAUDE.md` records that moving a gate

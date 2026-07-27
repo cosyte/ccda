@@ -112,14 +112,19 @@
 #
 # ---------------------------------------------------------------------------
 # DISCLOSED RESIDUALS. These are inherited from the shared shape knowingly. They are
-# ONE cross-repo fix, not one fix per repo, so they are not fixed here. Count the copies
-# properly before carrying anything back, because the usual list is short by two. On main
-# there are NINE: the seven same-shape copies (knowledgebase, hl7, fhir, pathways, x12,
-# ncpdp, dicom, plus this one makes eight of that family) and website's NUL-partition
-# variant, and `docs`, which is routinely left out and is the weakest in the fleet. Its
-# whole scan is one line with no -z / -0 / -r / -- / -e, and with BOTH -I and -d skip:
+# ONE cross-repo fix, not one fix per repo, so they are not fixed here. ENUMERATE THE COPIES
+# WHEN YOU CARRY BACK; do not trust a count, including any count that was once in this
+# comment. The fleet grows with every port, so a number here is stale the day after it is
+# written, which is exactly the kind of claim this gate exists to refuse. From the meta-repo:
+# `ls */scripts/check-no-emdash.sh`, and remember that `crew` VENDORS knowledgebase's copy
+# under `knowledgebase/scripts/`, so it goes stale silently and is missed by that glob.
+# What is durable is which shapes differ. `docs` is the weakest in the fleet, its whole scan
+# being one line with no -z / -0 / -r / -- / -e and with BOTH -I and -d skip:
 #   git ls-files | grep -vxF 'scripts/…' | xargs grep -Ind skip -nP "$PATTERN" || true
-# That is every fail-open route this header names, in one place. Do not
+# That is every fail-open route this header names, in one place. `pathways` partitions on
+# `git check-attr binary`; `website` and `mllp` partition on the NUL byte; the remainder are
+# the text-only shape, of which only ncpdp, dicom and this copy carry the `sed -z` stage. Do
+# not
 # patch them in this copy alone: a divergent variant is worse than a known shared
 # limit, EXCEPT where the shape is outright wrong rather than merely bounded.
 # (Two things ARE already fixed in the shape this copy was taken from, because each

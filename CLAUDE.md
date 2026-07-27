@@ -143,11 +143,15 @@ immutability + explicit mutation, and the profile system.
   `ci / verify (22, ubuntu-latest)`, `ci / verify (24, ubuntu-latest)` and `ci / actionlint`. This
   job's context, `Em-dash gate / no-emdash`, is not among them, and `allow_auto_merge` is on with
   zero required approvals, so a PR carrying a live character can auto-merge while this job is red.
-  Nothing in this repo can fix that: the ruleset is org-sourced and the repo token cannot edit it.
-  Closing it is a `cosyte/.github` change (add the context to `parser-ci-required-checks`) and is
-  deliberately not attempted from here. `ncpdp` and `dicom` sit behind the same gap. So the true
-  claim is that a violation is **visible on every PR**, not that it is impossible. It scans **both**
-  halves the
+  **Closing it is a GitHub settings change, not a file change** (there is nothing to edit in any
+  repo, and in particular not in `cosyte/.github`, which defines no ruleset). Rulesets stack, so
+  either route works: add the context to the org ruleset `parser-ci-required-checks`, which covers
+  `hl7`/`x12`/`ncpdp`/`dicom`/`mllp`/`ccda` at once but needs `admin:org`; or add a
+  repository-level ruleset here, which is what `pathways`, `docs`, `website` and `iac` already do.
+  Deliberately not attempted from a slice that ships files. `hl7`, `x12`, `ncpdp`, `dicom` and
+  `mllp` sit behind the same gap, and `fhir` has no ruleset or branch protection at all. So the
+  true claim is that a violation is **visible on every PR**, not that it is impossible. It scans
+  **both** halves the
   rule covers: every tracked file **except the script itself**, **and** the PR title, body, and
   commit messages. The script is self-excluded because it has to name the encodings it bans, so it
   is the one file nothing checks; keep it free of the literal character. The workflow uses the
@@ -170,15 +174,20 @@ immutability + explicit mutation, and the profile system.
     `.gitattributes`, which is deferred to the cross-repo "what is a text file" rule.
   - Known limits are written down in the script header, and the fix for each is cross-repo rather
     than local, so do not patch one here. **Which copies share which limit is not uniform**, and the
-    header is the precise statement. There are **nine** copies on `main`, not seven: the seven
-    "same shape" ones (`knowledgebase`, `hl7`, `fhir`, `pathways`, `x12`, `ncpdp`, `dicom`) plus
-    `website` (the NUL-partition variant) and **`docs`**, which is the weakest in the fleet and is
-    the one most often left out of the census. The literal encoded-form matching and the
-    contents-not-names gap are shared by all nine. The stderr-capture residual's `sed -z` half
-    exists only in `ncpdp`, `dicom` and here, because the older copies have no `sed` stage. The
-    NUL-classification residual does not apply to `pathways`, which partitions on
-    `git check-attr binary` instead. The pipeline code in this copy is byte-identical to `ncpdp`'s
-    on purpose: a divergent variant is worse than a known shared limit.
+    header is the precise statement. **Do not trust a copy count written down anywhere, including
+    here.** The fleet grows every time a repo is ported, and a count in a comment is stale the day
+    after it is written, which is the same failure this gate exists to refuse. Enumerate at
+    carry-back time: `ls */scripts/check-no-emdash.sh` from the meta-repo, and remember `crew`
+    vendors `knowledgebase`'s copy under `knowledgebase/scripts/`, so it goes stale silently. What
+    is durable is which shapes differ, and that is worth knowing before carrying anything: `docs`
+    is the weakest (one line, no `-z`/`-0`/`-r`/`--`/`-e`, and both `-I` and `-d skip`);
+    `pathways` partitions on `git check-attr binary`; `website` and `mllp` partition on the NUL
+    byte; the rest are the text-only shape, of which only `ncpdp`, `dicom` and this one carry the
+    `sed -z` stage. That last point matters for the residuals: the encoded-form and
+    contents-not-names gaps are in every copy, the `sed` half of the stderr residual is only in
+    those three, and the NUL-classification residual does not apply to `pathways` at all. The
+    pipeline code in this copy is byte-identical to `ncpdp`'s on purpose: a divergent variant is
+    worse than a known shared limit.
   - Scope, stated honestly: the gate covers new text only. It does not rewrite history, and 113 em
     dashes are already in commit messages on `main`, PR #52's subject line among them.
 

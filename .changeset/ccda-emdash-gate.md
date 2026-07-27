@@ -18,10 +18,12 @@ because only squash merge is allowed here and the subject comes from the PR titl
 is governed by org-level rulesets requiring exactly `ci / verify (22, ubuntu-latest)`,
 `ci / verify (24, ubuntu-latest)` and `ci / actionlint`, and `Em-dash gate / no-emdash` is
 not among them, so with auto-merge on and zero required approvals a PR carrying a live
-character can still merge with this job red. Adding the context to
-`parser-ci-required-checks` is an org-level `cosyte/.github` change and is out of this
-repo's reach; `ncpdp` and `dicom` sit behind the same gap. Stated rather than implied,
-because a gate described as enforcing something it does not enforce is worse than no gate.
+character can still merge with this job red. Closing that is a GitHub settings change, not
+a file change: add the context to the org ruleset `parser-ci-required-checks`, or add a
+repository-level ruleset here as `pathways`, `docs`, `website` and `iac` already do. Out of
+scope for a slice that ships files. `hl7`, `x12`, `ncpdp`, `dicom` and `mllp` sit behind the
+same gap, and `fhir` has no ruleset at all. Stated rather than implied, because a gate
+described as enforcing something it does not enforce is worse than no gate.
 
 **One character of content changed.** `src/profiles/merge.ts` held the only em dash in the
 tree, in a JSDoc sentence about caller responsibility for safety-critical codes; it is now
