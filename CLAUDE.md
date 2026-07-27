@@ -73,19 +73,44 @@ immutability + explicit mutation, and the profile system.
     choice, at all three consumable call sites (Medication Activity, Immunization Activity, Planned
     Medication Activity). The **presence** of a `manufacturedLabeledDrug` arm is flagged
     `MEDICATION_PRODUCT_ARM_UNEXPECTED` (deliberately tolerable; keyed to the arm, not its `<code>`,
-    so a name-only `LabeledDrug` is reported too). No arm yielding a code is
-    `MISSING_PRODUCT_CODE`, safety-critical, never a silent `undefined`. With **both** arms present
-    the treatment is decided by what they say: only one naming a product means that one is read
-    whichever arm it is (a null value is an _exceptional_ value, not a competing one, so there is
-    nothing to refuse, and this is the direction the old behaviour silently lost a real RxNorm code
-    in); both naming the **same** product means the material arm is read as before; both naming
-    **different** products (different `@code`, or one `@code` under two `@codeSystem`s) is
+    so a name-only `LabeledDrug` is reported too). **Its tolerability is argued conditionally, and
+    must stay that way:** wherever it fires _alone_ a `<code>` element was selected and read exactly
+    as a single-arm document's would have been, and wherever **none** was selected it is not alone,
+    because either `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed) or `MISSING_PRODUCT_CODE`
+    (no arm carried a `<code>` at all, the shape a name-only `LabeledDrug` produces) fires beside it,
+    and **both** are safety-critical and unquietable. Naming only the conflict code is the same
+    mistake one size smaller: it leaves the name-only `LabeledDrug` state unaccounted for. Do not
+    restore the older, simpler claim that the alternate arm's code "is read, not refused" and that
+    every check "applies to it unchanged" full stop; that was true before the conflict state existed
+    and is false in it. No arm yielding a code is `MISSING_PRODUCT_CODE`, safety-critical,
+    never a silent `undefined`. With **more than one arm** present the treatment is decided by what
+    they say: only one naming a product means that one is read whichever arm it is (a null value is
+    an _exceptional_ value, not a competing one, so there is nothing to refuse, and this is the
+    direction the old behaviour silently lost a real RxNorm code in); naming the **same** product
+    means the material arm is read as before; naming **different** products is
     `MEDICATION_PRODUCT_ARM_CONFLICT` (safety-critical) and **no code is selected**, because nothing
     in the document ranks the arms so any pick would be manufactured. `MISSING_PRODUCT_CODE` is
     suppressed behind it (it would assert the false "no arm yielded a code") and `checkCodeSlot` has
     nothing to check, which makes the conflict code the lone signal by construction and is why it is
     safety-critical and scoped this narrowly. Nothing is lost, `serializeCcda` re-emits the parsed
-    DOM so both arms round-trip byte-for-byte.
+    DOM so every arm round-trips byte-for-byte.
+  - **Disagreement is read across every arm and every coding; selection is not.** The conflict check
+    covers both arms of the choice **and repeated arms of one kind** (two sibling
+    `manufacturedMaterial`s naming different drugs is the same silent pick). An arm names its
+    `<code>`'s own `@code`, or, when it asserts none, the codings its `<translation>` alternates
+    assert: `nullFlavor="OTH"` beside a `<translation>` is the documented C-CDA idiom, so on that
+    shape the arm's product identity is in the translation. **The translations are a fallback, never
+    an addition, and that asymmetry is load-bearing.** Two arms that both assert a `@code` are
+    compared on those alone, so reading translations can only make the conflict fire _more_, never
+    less. Do not "improve" this into a set-intersection rule where a shared translation withdraws a
+    conflict: a shared translation is routinely coarser than either primary (an RxNorm ingredient, a
+    local formulary id, an NDC spanning presentations), `A = Z` and `B = Z` does not give `A = B`,
+    and the failure mode is handing back one strength of a document that names two. **Which element
+    is handed to `checkCodeSlot` is decided by primary `@code` alone**, deliberately: this package's
+    stated boundary is that slot checks apply to a slot's primary coding and translations are
+    preserved but never slot-checked, so selecting on a translation would validate a `nullFlavor`
+    primary against nothing or synthesize a coding the document never wrote there. Among repeated
+    arms of one kind, the first that names a product is the one selected.
   - `SAFETY_CRITICAL_CODES` is a frozen read-only view, not a `Set` instance: every read operation
     works (including spread), but `instanceof Set` is `false`.
   - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`

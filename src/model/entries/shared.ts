@@ -239,9 +239,12 @@ export function chain(el: Element | undefined, ...names: readonly string[]): Ele
  * Reading the alternate arm rather than warning-and-ignoring it is the
  * Postel's-Law call, and the safer one: the previous behaviour returned
  * `drug: undefined` in complete silence while dose, route and timing survived,
- * so the record read as a well-formed medication that simply had no drug. Once
- * the code is read it flows through the ordinary `checkCodeSlot` path, so every
- * code-system and terminology check applies to it unchanged.
+ * so the record read as a well-formed medication that simply had no drug.
+ * Whenever a code *is* selected the caller reads it exactly as it would have
+ * read a single-arm document's, so nothing about the arm changes what the entry
+ * does with the code. The two states in which none is selected each carry a
+ * safety-critical warning of their own: the conflict below, and
+ * `MISSING_PRODUCT_CODE` when no arm carried a `<code>` at all.
  *
  * **A document carrying both arms is handled on what they say, not on which one
  * the templates prefer.** A `choice` means one arm, so two is already outside
@@ -263,9 +266,12 @@ export function chain(el: Element | undefined, ...names: readonly string[]): Ele
  *   `nullFlavor`-only `manufacturedMaterial` used to win over a
  *   `manufacturedLabeledDrug` naming a real RxNorm concept, in silence.
  * - **Both name the same product**: redundant, not contradictory.
- *   `manufacturedMaterial` is read, exactly as before.
- * - **Both name different products** (different `@code`, or one `@code` under
- *   two different `@codeSystem`s): the document names two drugs on one
+ *   `manufacturedMaterial` is read, exactly as before. "The same product" is
+ *   read off every coding an arm offers, its own `@code` and each
+ *   `<translation>` alternate, so arms that agree in a different terminology
+ *   than the one they lead with agree here too.
+ * - **Both name different products** (no coding either arm offers coincides
+ *   with one the other offers): the document names two drugs on one
  *   medication, and *nothing in it ranks the arms*. Preferring
  *   `manufacturedMaterial` here would not be reporting what the document said,
  *   it would be manufacturing a choice the document declined to make, and
@@ -283,16 +289,36 @@ export function chain(el: Element | undefined, ...names: readonly string[]): Ele
  *   slot, which is exactly why the conflict code is safety-critical and no
  *   profile may quiet it.
  *
- * Returns `undefined` when neither arm carries a code; the caller decides what
+ * **Disagreement is read across every arm, selection is not.** The conflict
+ * check runs over *all* the `<code>` elements the `manufacturedProduct` carries,
+ * both arm kinds and repeated arms of one kind (two sibling
+ * `manufacturedMaterial`s naming different drugs is the same silent pick, one
+ * arm kind in). An arm names its `@code` when it asserts one, and **otherwise**
+ * the codings its `<translation>` alternates assert, a fallback rather than an
+ * addition, so widening what an arm names can only make the conflict fire more,
+ * never less (see {@link productCodingsOf}). Which element is then handed to the
+ * slot checks is decided by primary `@code` alone, exactly as before. That split
+ * is deliberate. A `<translation>` under a `<code>` that asserts no symbol is
+ * where that arm states its drug, which is enough to settle whether the arms
+ * *disagree*; it is not enough to *select* a reading, because this package's
+ * stated boundary is that slot checks apply to a slot's primary coding and
+ * translations are preserved but never slot-checked. Selecting an arm on the
+ * strength of a translation would hand `checkCodeSlot` a `<code>` whose primary
+ * is a `nullFlavor` and validate nothing, or require synthesizing a coding the
+ * document never wrote in that position, which is the manufactured reading this
+ * whole rule refuses.
+ *
+ * Returns `undefined` when no arm carries a code; the caller decides what
  * that means for its entry type (a Medication Activity and an Immunization
  * Activity both flag it, `MISSING_PRODUCT_CODE`).
  *
- * **Provenance:** the two-arm choice is base CDA R2 structure. Whether the
- * C-CDA template *forbids* the alternate arm, or forbids both together, is a
- * normative question this repo cannot settle without the R2.1 Schematron, so
- * nothing here claims a conformance verb. The warnings say only which arms were
- * present and whether they agreed; the safety classification rests on the harm
- * ordering.
+ * **Provenance:** the two-arm choice is base CDA R2 structure, and that a `CD`'s
+ * `<translation>` carries an alternate coding *of the same concept* is HL7 v3
+ * datatype semantics. Whether the C-CDA template *forbids* the alternate arm, or
+ * forbids both together, or forbids a repeated one, is a normative question this
+ * repo cannot settle without the R2.1 Schematron, so nothing here claims a
+ * conformance verb. The warnings say only which arms were present and whether
+ * they agreed; the safety classification rests on the harm ordering.
  *
  * @example
  * ```ts
@@ -310,20 +336,25 @@ export function consumableProductCode(
   // manufacturedLabeledDrug carrying only a <name> is still the arm the C-CDA
   // templates are not written around, and flagging it on the code alone made
   // markup shape rather than meaning decide whether the deviation was reported.
-  const labeledArm = chain(product, "manufacturedLabeledDrug");
-  if (labeledArm !== undefined) ctx.emit(medicationProductArmUnexpected(positionOf(product)));
+  if (chain(product, "manufacturedLabeledDrug") !== undefined) {
+    ctx.emit(medicationProductArmUnexpected(positionOf(product)));
+  }
 
-  const material = chain(product, "manufacturedMaterial", "code");
-  const labeled = chain(labeledArm, "code");
+  const materialCodes = armCodes(product, "manufacturedMaterial");
+  const labeledCodes = armCodes(product, "manufacturedLabeledDrug");
 
-  if (
-    material !== undefined &&
-    labeled !== undefined &&
-    namesConflictingProducts(material, labeled)
-  ) {
+  // Disagreement is read across everything the product carries: both arm kinds,
+  // repeated arms of one kind, and (for an arm whose <code> asserts no symbol)
+  // its <translation> alternates. A pick between two named drugs is the same
+  // harm whichever markup shape hides it.
+  if (offersConflictingProducts(materialCodes, labeledCodes)) {
     ctx.emit(medicationProductArmConflict(positionOf(product)));
     return { product, conflicted: true };
   }
+
+  const material = selectableCode(materialCodes);
+  const labeled = selectableCode(labeledCodes);
+
   // Only one arm can name a product now, or they name the same one, so the pick
   // is the document's rather than the parser's. The labeled arm is read in
   // exactly one situation: it names a product and the material arm does not.
@@ -346,18 +377,101 @@ function symbolOf(el: Element): string | undefined {
   return symbol === undefined || symbol === "" ? undefined : symbol;
 }
 
-/** Whether a `<code>` element names a product at all (asserts a non-empty `@code`). @internal */
+/**
+ * Whether a `<code>` element is **selectable** as the product coding: it asserts
+ * a non-empty primary `@code`.
+ *
+ * Primary-only, deliberately, and not the same question
+ * {@link namesConflictingProducts} asks. This one decides which element is handed
+ * to `checkCodeSlot`, and the slot checks read a slot's primary coding, so an
+ * arm whose only symbol sits in a `<translation>` is not selectable: choosing it
+ * would validate a `nullFlavor` primary against nothing.
+ * @internal
+ */
 function namesAProduct(el: Element): boolean {
   return symbolOf(el) !== undefined;
 }
 
+/** One coding an arm offers: a symbol, with the terminology it was asserted under. @internal */
+interface ProductCoding {
+  readonly symbol: string;
+  readonly system?: string;
+}
+
+/** One `<code>` or `<translation>` element read as a coding, or `undefined` when it names nothing. @internal */
+function codingOf(el: Element): ProductCoding | undefined {
+  const symbol = symbolOf(el);
+  if (symbol === undefined) return undefined;
+  const system = attr(el, "codeSystem")?.trim();
+  return system === undefined || system === "" ? { symbol } : { symbol, system };
+}
+
 /**
- * Whether two `<code>` elements name **different** products, the only shape on
- * which the parser refuses to pick an arm.
+ * What a product arm's `<code>` **names**: its own `@code` when it asserts one,
+ * and otherwise the codings its direct `<translation>` alternates assert. Empty
+ * when the arm names no product at all.
  *
- * An element that asserts no `@code` names no product, so it never conflicts
- * with one that does. That is not leniency, it is the same rule
- * `contradictsAssertedValue` already applies one layer down: only a
+ * **The translations are a fallback, never an addition, and that asymmetry is
+ * the safety property.** Falling back closes the blind spot a `@code`-only check
+ * leaves: `nullFlavor="OTH"` beside a `<translation>` is the documented C-CDA
+ * idiom for "not codable in the bound value set, here is an alternate coding",
+ * which this package already treats as coherent rather than contradictory, so on
+ * that shape the arm's whole product identity lives in the translation. Keying
+ * only on `@code` made such an arm name *no* product, and a labeled arm whose
+ * translation named a different RxNorm drug never reached the conflict rule: the
+ * material arm was selected in silence, which is the same "quietly picks between
+ * two drugs" failure the rule exists to refuse.
+ *
+ * **Adding them to a `@code` that already asserts one would be strictly
+ * dangerous, and is deliberately not done.** It would let a coding shared by two
+ * arms *withdraw* a conflict the primaries assert, and a shared translation is
+ * routinely **coarser** than either primary: an RxNorm ingredient, a local
+ * formulary id, an NDC spanning presentations. Two arms reading "Lisinopril
+ * 10 MG" and "Lisinopril 20 MG" that both translate to the lisinopril ingredient
+ * would agree, and the parser would hand back one strength of a document that
+ * names two. The document asserts each translation is an alternate coding of
+ * *its own* concept, which is a statement about that arm, not an equation
+ * between arms; concluding `A = B` from `A = Z` and `B = Z` is a transitive
+ * closure the document never wrote, and it is false exactly when `Z` is coarser.
+ * So this function can only ever make the conflict rule fire **more** than the
+ * primaries alone would, never less.
+ *
+ * Nested translations are not descended into, matching `parseCd`: C-CDA does not
+ * nest them.
+ * @internal
+ */
+function productCodingsOf(el: Element): readonly ProductCoding[] {
+  const primary = codingOf(el);
+  if (primary !== undefined) return [primary];
+  return children(el, "translation")
+    .map(codingOf)
+    .filter((coding): coding is ProductCoding => coding !== undefined);
+}
+
+/**
+ * Whether two codings name the same product: the same symbol, and not that
+ * symbol under two different terminologies.
+ *
+ * A coding that omits `@codeSystem` is not treated as a disagreement:
+ * `MISSING_CODE_SYSTEM` already covers that shape and refusing here would
+ * withhold the product and make the parser *quieter* about it, the exact
+ * direction this rule exists to reverse.
+ * @internal
+ */
+function codingsAgree(a: ProductCoding, b: ProductCoding): boolean {
+  if (a.symbol !== b.symbol) return false;
+  return a.system === undefined || b.system === undefined || a.system === b.system;
+}
+
+/**
+ * Whether two arms name **different** products, the shape on which the parser
+ * refuses to pick an arm. Each side is the arm's coding set from
+ * {@link productCodingsOf}.
+ *
+ * An arm that names no product (no `@code` and no `<translation>` carrying one)
+ * has an empty set and never conflicts with one that does. That is not leniency,
+ * it is the same
+ * rule `contradictsAssertedValue` already applies one layer down: only a
  * *value-bearing* assertion can contradict, and in HL7 v3 a `nullFlavor` marks
  * an **exceptional value**, one with no proper value, rather than a competing
  * one. A `nullFlavor`-only `<code>` is a complete statement that the concept is
@@ -366,25 +480,90 @@ function namesAProduct(el: Element): boolean {
  * name (and with it every `checkCodeSlot` check on that code) to protect
  * against a contradiction that is not there.
  *
- * Given two symbols, they conflict when the symbols differ, or when both arms
- * name a `@codeSystem` and those differ (one symbol under two terminologies is
- * two concepts). An arm that omits `@codeSystem` is not treated as a
- * disagreement: `MISSING_CODE_SYSTEM` already covers that shape and firing here
- * instead would withhold the product and make the parser *quieter* about it,
- * the exact direction this rule exists to reverse. No terminology equivalence
- * is attempted either: deciding that two different codes denote one concept is
- * a `TerminologyAdapter`'s job, and guessing it in the parser would be the same
+ * Two arms that both name a product conflict when **none** of the codings one
+ * names agrees with any the other names. Because {@link productCodingsOf} reads
+ * translations only as a *fallback* for an arm whose `<code>` asserts no symbol,
+ * two arms that both assert one are compared exactly as they were before
+ * translations were read at all: symbol against symbol, system against system.
+ * The set form can therefore only ever add conflicts, never remove one. That
+ * direction is deliberate, see {@link productCodingsOf} for why the other
+ * direction is unsound. No terminology equivalence is inferred: deciding that
+ * two codings the document never linked denote one concept is a
+ * `TerminologyAdapter`'s job, and guessing it in the parser would be the same
  * manufactured reading this check refuses.
  * @internal
  */
-function namesConflictingProducts(a: Element, b: Element): boolean {
-  const symbolA = symbolOf(a);
-  const symbolB = symbolOf(b);
-  if (symbolA === undefined || symbolB === undefined) return false;
-  if (symbolA !== symbolB) return true;
-  const systemA = attr(a, "codeSystem")?.trim();
-  const systemB = attr(b, "codeSystem")?.trim();
-  return systemA !== undefined && systemB !== undefined && systemA !== systemB;
+function namesConflictingProducts(
+  a: readonly ProductCoding[],
+  b: readonly ProductCoding[],
+): boolean {
+  if (a.length === 0 || b.length === 0) return false;
+  return !a.some((x) => b.some((y) => codingsAgree(x, y)));
+}
+
+/** Every `<code>` element the arms of the given kind carry, in document order. @internal */
+function armCodes(product: Element, arm: string): readonly Element[] {
+  return children(product, arm)
+    .map((el) => child(el, "code"))
+    .filter((code): code is Element => code !== undefined);
+}
+
+/**
+ * The `<code>` of the arm of one kind that the product code is selected from:
+ * the first that **names** a product, else the first there is.
+ *
+ * Preferring the first arm that names one is the same rule already applied
+ * *across* arm kinds, applied within one: with only one arm naming a product the
+ * pick is the document's rather than the parser's, so reading the null-marked
+ * sibling instead would drop a drug the document names exactly once, in silence.
+ * Falling back to the first arm when none names a product keeps the empty-slot
+ * machinery (`MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM`)
+ * seeing exactly the element it saw before repeated arms were considered.
+ * Selection is only ever reached when the arms do not conflict.
+ * @internal
+ */
+function selectableCode(codes: readonly Element[]): Element | undefined {
+  return codes.find(namesAProduct) ?? codes[0];
+}
+
+/**
+ * Whether the `<code>` elements a `manufacturedProduct` carries fail to agree on
+ * one product.
+ *
+ * The candidates are every `manufacturedMaterial/code` and every
+ * `manufacturedLabeledDrug/code`, so **repeated arms of one kind** are compared
+ * too. Two sibling `manufacturedMaterial`s naming different drugs is the
+ * identical silent pick to the two-arm case, only one arm kind in: the first was
+ * read and the second dropped without a word. `ManufacturedProduct` models one
+ * participant, so a repeated arm is already outside the model, and the parser's
+ * job on it is the same as on any contradiction it cannot rank, refuse and say
+ * so.
+ *
+ * Agreement is not transitive (an arm omitting `@codeSystem` agrees with the
+ * same symbol under any system), so the comparison is genuinely pairwise. It is
+ * run over *distinct* codings rather than raw arms so that a document repeating
+ * one arm N times costs N rather than N squared, and it short-circuits on the
+ * first disagreement, which is the case a hostile input would have to avoid to
+ * be expensive at all. The dedup key is `JSON.stringify`d rather than joined on
+ * a separator, so a `@code` or `@codeSystem` containing the separator cannot
+ * collide two arms into one and drop the disagreement the discarded one carried.
+ * @internal
+ */
+function offersConflictingProducts(
+  materials: readonly Element[],
+  labeled: readonly Element[],
+): boolean {
+  const seen = new Set<string>();
+  const named: (readonly ProductCoding[])[] = [];
+  for (const code of [...materials, ...labeled]) {
+    const codings = productCodingsOf(code);
+    if (codings.length === 0) continue;
+    const key = JSON.stringify(codings.map((c) => [c.symbol, c.system ?? null]));
+    if (seen.has(key)) continue;
+    seen.add(key);
+    named.push(codings);
+  }
+  return named.some((a, i) => named.slice(i + 1).some((b) => namesConflictingProducts(a, b)));
 }
 
 /** Breadth-first search for the first descendant with the given local name. @internal */
