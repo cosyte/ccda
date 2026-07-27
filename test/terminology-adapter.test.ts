@@ -53,6 +53,17 @@ const RXNORM = "2.16.840.1.113883.6.88";
 const HYPERTENSION = "38341003";
 
 const INIT: BuildCcdaInit = {
+  // Pinned, because four assertions in this file build the document TWICE and
+  // compare the two serializations byte-for-byte. Left to default, each
+  // `buildCcda` stamps its own `new Date()` at second resolution, so whenever
+  // the two builds straddle a second boundary the documents differ by their
+  // `effectiveTime` and the assertion fails on a race rather than on a defect.
+  // The window is tens of milliseconds under a plain run and wider under
+  // coverage instrumentation, which is why CI reddened here intermittently, on
+  // a different one of the four each time. Nothing under test reads this value:
+  // these tests are about whether an adapter injects `<translation>`, and a
+  // fixed stamp is what makes "byte-identical" mean what it says.
+  effectiveTime: "20240101120000+0000",
   patient: { mrn: "MRN001", given: ["Jane"], family: "Doe", gender: "F" },
   problems: [
     { problem: { code: HYPERTENSION, displayName: "Hypertensive disorder" }, status: "active" },

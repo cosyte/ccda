@@ -173,7 +173,51 @@ milestone it stopped at.
   make the warning fire more, never less. **Selection is separate and unchanged**: the element handed
   to the code-system and terminology checks is still chosen on the primary `@code`, and a coding is
   never lifted out of a `<translation>` to stand in as the product, because translations are
-  preserved but not slot-checked.
+  preserved but not slot-checked. **Where BOTH arms fall back to translations, sharing one coding is
+  not always enough to agree**: that is the one pairing where a shared coarser coding can still hold
+  together two arms naming two products, so they also conflict when each names a coding the other
+  does not and two of those unshared codings are in the same code system under different symbols. An
+  arm that merely offers an extra alternate the other stayed quiet about (an NDC beside the RxNorm
+  concept both share) is elaborating its own concept, not denying the other's, and is not a conflict;
+  codings in different code systems are never compared, because that is terminology work. That last
+  test is a parser's reading rather than something the document asserts, and it deliberately
+  over-fires: two NDC package codes can describe one drug, and an RxNorm branded drug and its
+  clinical equivalent are one product at two granularities, but telling those apart is the
+  terminology work above. Over-firing costs a withheld product beside a loud code; under-firing
+  costs one of two strengths handed back in silence. **On the newly-refused shapes `med.drug` is
+  `undefined` with the conflict code beside it.** If the two fallback arms were the only ones you
+  previously got the first arm's `nullFlavor` `CD` and that arm's translations, and `med.drug?.code`
+  was `undefined` either way. If a **third** arm asserts a primary the two fallback arms disagree
+  behind, you previously got that arm's fully coded `CD`, so a code you were reading does go away:
+  the document names one product in a primary and two others in translations, and the parser now
+  declines to pick. Read `doc.toString()` for every arm verbatim.
+- **A product named only in a `<translation>` now says so
+  (`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`, safety-critical).** If no arm asserts a primary
+  `@code` and one of them carries the real coding in a `<translation>`, you get this code and
+  `med.drug?.code === undefined`. That is not a change of reading, it is the same reading with the
+  silence removed. **Where to find the coding depends on which arm holds it, and the warning's
+  message and `position` tell you.** Only one arm ever becomes `med.drug`: when that is the arm
+  carrying the translation, search `med.drug?.translation` for it, beside the `nullFlavor` the
+  document wrote; do not just read `[0]`, since a `<code>` may carry several `<translation>`s and the
+  first can be `nullFlavor`-marked or in a code system you did not want. When it is not (two arms,
+  neither asserting a primary, the translation on the one that was not selected), `med.drug` is the
+  other arm's `CD` and no product-naming coding is on it, so read `doc.toString()`, which re-emits
+  every arm byte-for-byte. No profile may quiet it: on the
+  `nullFlavor`-marked idiom nothing else fires at all (`MISSING_PRODUCT_CODE` would be false, an arm
+  did carry a `<code>`, and the code-system checks are silent by design on a slot whose only
+  assertion is a `nullFlavor`), and on the variant that asserts neither a symbol nor a `nullFlavor`
+  the companion is `MISSING_CODE_VALUE`, which is itself safety-critical. Behind
+  `MEDICATION_PRODUCT_ARM_CONFLICT` it stands down, the same way `MISSING_PRODUCT_CODE` does.
+- **A repeated arm is reported even when the repeats agree
+  (`MEDICATION_PRODUCT_ARM_REPEATED`).** `ManufacturedProduct` models a choice of one participant, so
+  two `manufacturedMaterial`s (or two `manufacturedLabeledDrug`s) is outside the model whatever they
+  say. Disagreeing repeats are still refused; agreeing repeats used to be reduced to one silently, so
+  a document asserting the same product three times looked exactly like one asserting it once. It is
+  keyed to the arms rather than to their codings, so an arm with no `<code>` counts, and it is
+  tolerable by a profile: where it fires alone a `<code>` was selected and read exactly as any
+  single-arm document's would be, and each state where that would not be enough carries an
+  unquietable companion (`MEDICATION_PRODUCT_ARM_CONFLICT`, `MISSING_PRODUCT_CODE`, or
+  `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`).
 - **UCUM validation is grammatical, on a curated atom subset.** The validator checks well-formed UCUM
   against the prefixes/atoms that appear in lab Results and Vital Signs, not the full UCUM registry. A
   valid-but-uncurated atom may read as `NON_UCUM_UNIT`; the raw unit is always preserved. It does not

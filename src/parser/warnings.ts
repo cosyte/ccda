@@ -55,6 +55,8 @@ export const WARNING_CODES = {
   MISSING_PRODUCT_CODE: "MISSING_PRODUCT_CODE",
   MEDICATION_PRODUCT_ARM_UNEXPECTED: "MEDICATION_PRODUCT_ARM_UNEXPECTED",
   MEDICATION_PRODUCT_ARM_CONFLICT: "MEDICATION_PRODUCT_ARM_CONFLICT",
+  MEDICATION_PRODUCT_ARM_REPEATED: "MEDICATION_PRODUCT_ARM_REPEATED",
+  MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY: "MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
   MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED: "MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED",
   PROBLEM_STATUS_INDETERMINATE: "PROBLEM_STATUS_INDETERMINATE",
   SECTION_PLACEMENT_SUSPECT: "SECTION_PLACEMENT_SUSPECT",
@@ -740,6 +742,30 @@ export function medicationProductArmUnexpected(position: CcdaPosition): CcdaWarn
  * what an arm names can therefore only make this warning fire **more**, never
  * less.
  *
+ * **When BOTH arms fall back to translations, sharing one coding is not always
+ * enough to agree.** That pairing is the one place the transitive closure above
+ * could still hide a disagreement, because neither arm asserts a primary to be
+ * compared: two arms translating to a shared coarser concept plus two different
+ * strengths agree on the coarse coding while naming two products. So they also
+ * conflict when each names a coding the other does not **and** two of those
+ * unshared codings are in the same code system under different symbols.
+ *
+ * **That last test is a parser's reading, not a fact the document asserts, and
+ * it is deliberately the fail-safe one.** Two different symbols in one code
+ * system usually are two products, but not always: two NDC package codes can
+ * describe one drug, and an RxNorm branded drug and its clinical equivalent are
+ * one product at two granularities. Deciding which is which is terminology work
+ * this parser refuses to do (it is a `TerminologyAdapter`'s job), so the choice
+ * is between over-firing and under-firing, and this rule over-fires. The cost is
+ * a withheld product beside a loud safety-critical code; the alternative cost is
+ * handing back one of two strengths in silence. An arm that merely
+ * offers an *extra* alternate the other stayed quiet about (an NDC beside the
+ * RxNorm concept both share) is elaborating its own concept, which HL7 v3 says a
+ * `<translation>` does, and is deliberately **not** a conflict: a shorter list is
+ * not a denial. Codings in different code systems are never compared, since
+ * deciding whether an NDC and an RxNorm concept denote one product is
+ * terminology work rather than parsing.
+ *
  * An arm that names no product at all (no `@code` and no `<translation>`
  * carrying one, e.g. a `nullFlavor`-only `<code>`, or no `<code>` at all) never
  * conflicts with one that does, the same rule `contradictsAssertedValue` applies
@@ -763,8 +789,9 @@ export function medicationProductArmUnexpected(position: CcdaPosition): CcdaWarn
  * more specific statement, the same substitution `CONTRADICTORY_NULL_FLAVOR`
  * makes for `MISSING_UNIT_ON_PQ` on a withheld quantity. The other cost is
  * named rather than hidden: with no code selected, {@link checkCodeSlot} has
- * nothing to check, so `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM`,
- * `DEPRECATED_CODE_SYSTEM` and `SEMANTIC_CODE_INVALID` cannot fire for that
+ * nothing to check, so `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`,
+ * `UNEXPECTED_CODE_SYSTEM`, `DEPRECATED_CODE_SYSTEM` and `SEMANTIC_CODE_INVALID`
+ * cannot fire for that
  * slot either. This warning is the lone signal by construction, which is why
  * it is safety-critical and why it is scoped as narrowly as it is.
  *
@@ -787,7 +814,148 @@ export function medicationProductArmUnexpected(position: CcdaPosition): CcdaWarn
 export function medicationProductArmConflict(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT,
-    message: `manufacturedProduct carries arms (manufacturedMaterial / manufacturedLabeledDrug, including repeated ones) whose codings name different products, counting each arm's <translation> alternates; the document contradicts itself and nothing in it ranks the arms, so no product code is selected (every arm survives serialization verbatim).`,
+    message: `manufacturedProduct carries arms (manufacturedMaterial / manufacturedLabeledDrug, including repeated ones) whose codings name different products, counting each arm's <translation> alternates: they share no coding, or, where both arms name their product only through translations, each also names a coding the other does not and two of those are in the same code system under different symbols. The document contradicts itself and nothing in it ranks the arms, so no product code is selected (every arm survives serialization verbatim).`,
+    position,
+  };
+}
+
+/**
+ * Build a `MEDICATION_PRODUCT_ARM_REPEATED` warning. Emitted when one
+ * `manufacturedProduct` carries **more than one arm of the same kind**: two or
+ * more `manufacturedMaterial`s, or two or more `manufacturedLabeledDrug`s.
+ *
+ * CDA R2 models `ManufacturedProduct`'s participant as a **choice**, one arm,
+ * so a repeat is already outside the model. Repeated arms that *disagree* were
+ * already caught ({@link medicationProductArmConflict}), but repeated arms that
+ * **agree** were reduced to one in complete silence, which left a document
+ * asserting the same product three times indistinguishable, in everything the
+ * parser reported, from one asserting it once. Cardinality was observable only
+ * when the codings happened to differ, so a consumer could not tell "this
+ * sender repeats the arm" from "this sender writes one arm", and a de-duplicated
+ * repeat is a structural fact about the document that the parser had silently
+ * absorbed.
+ *
+ * **Keyed to the arms, not to their codings**, exactly as
+ * {@link medicationProductArmUnexpected} is keyed to the arm rather than to its
+ * `<code>`. Whether the repeats agree is a different question with a different
+ * code already answering it, and letting agreement decide whether the repeat is
+ * reported would make markup *content* rather than markup *shape* decide whether
+ * a structural deviation was named. An arm carrying no `<code>` at all counts:
+ * it is still an arm.
+ *
+ * **Deliberately not safety-critical, and the argument is conditional in the
+ * same shape as {@link medicationProductArmUnexpected}'s.** Wherever this fires
+ * *alone*, a `<code>` element was selected and read exactly as a single-arm
+ * document's would have been, so it reports known vendor shape rather than lost
+ * clinical data and a profile may defensibly tolerate it. The states in which
+ * that sentence would not be enough each carry an unquietable companion:
+ * `MEDICATION_PRODUCT_ARM_CONFLICT` where the arms named different products and
+ * nothing was selected, `MISSING_PRODUCT_CODE` where no arm carried a `<code>`
+ * at all, and `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY` where an element was
+ * selected but the product is named only in a `<translation>`. All three are in
+ * `SAFETY_CRITICAL_CODES`, so tolerating this one can never buy silence about a
+ * withheld, absent, or unselected drug. (A selected `<code>` that merely asserts
+ * a `nullFlavor` and nothing else is not one of those states: that is the
+ * document completely stating the product is unknown, and it reads here exactly
+ * as it would on a single arm.)
+ *
+ * **Provenance:** that `ManufacturedProduct` models one participant rather than
+ * a list is base CDA R2 structure. Whether a C-CDA template *forbids* the repeat
+ * is a normative question this repo cannot settle without the R2.1 Schematron,
+ * so no conformance verb is claimed: the warning says only that an arm repeats.
+ *
+ * @example
+ * ```ts
+ * import { medicationProductArmRepeated } from "@cosyte/ccda";
+ * const w = medicationProductArmRepeated({ path: "manufacturedProduct" });
+ * ```
+ */
+export function medicationProductArmRepeated(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.MEDICATION_PRODUCT_ARM_REPEATED,
+    message: `manufacturedProduct carries more than one arm of the same kind (manufacturedMaterial or manufacturedLabeledDrug), which CDA R2 models as a choice of one participant; the repeat is reported rather than absorbed, and whether the repeated arms agree is answered separately by MEDICATION_PRODUCT_ARM_CONFLICT.`,
+    position,
+  };
+}
+
+/**
+ * Build a `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY` warning. Emitted when
+ * **no** arm of a `manufacturedProduct` asserts a primary `@code` and at least
+ * one of them names a product in a `<translation>` alternate instead.
+ *
+ * `nullFlavor="OTH"` beside a `<translation>` is the documented C-CDA idiom for
+ * "not codable in the bound value set, here is an alternate coding", so on that
+ * shape the arm's whole product identity is in the translation. The conflict
+ * rule already reads it, which is what lets a null-marked arm disagree with a
+ * named one. **Selection deliberately does not**, and does not change here:
+ * this package's stated boundary is that slot checks apply to a slot's *primary*
+ * coding, so lifting a translation into the product position would hand
+ * {@link checkCodeSlot} a coding the document never wrote there, which is the
+ * manufactured reading the whole area refuses.
+ *
+ * What changes is the silence between those two rules. `drug.code` (or
+ * `vaccine.code`) is `undefined`, and a consumer reading the product off the
+ * slot got a medication with a dose, a route and a timing and no drug, with
+ * **no warning of any kind**: `MISSING_PRODUCT_CODE` does not fire (an arm *did*
+ * carry a `<code>`), and {@link checkCodeSlot} is silent by design on a slot
+ * whose only assertion is a `nullFlavor`, because a declared `nullFlavor` is a
+ * complete statement that the concept is unknown. Here it is not unknown: the
+ * document names it one element down.
+ *
+ * **Where the coding is reachable depends on which arm carries it, and the
+ * warning says which.** Only one arm ever becomes the returned `CD`. When the
+ * arm holding the translation is that one, the coding is somewhere on
+ * `drug.translation`, since the `CD` comes back with its `nullFlavor` and its
+ * translations intact; **search that list rather than reading `[0]`**, because a
+ * `<code>` may carry several `<translation>`s and the first can be a
+ * `nullFlavor`-marked one or an alternate in a code system the reader does not
+ * want. When it is **not** (two arms, neither asserting a primary, the
+ * translation on the arm that was not selected), the returned `CD` is the other
+ * arm's and no *product-naming* coding is on it, so the coding is reachable only
+ * in the serialized document. `onSelectedArm` distinguishes them in the message,
+ * and the `position` always points at the `<code>` that carries the translation
+ * rather than at the selected element, so it never sends a reader to an element
+ * that does not hold what the warning says exists.
+ * `serializeCcda` re-emits the parsed DOM either way, so every arm and every
+ * `<translation>` survives `doc.toString()` byte-for-byte.
+ *
+ * This warning is that missing signal, and it is in `SAFETY_CRITICAL_CODES`
+ * because tolerating it would restore a silent `undefined` where the document
+ * names a drug, the same harm `MISSING_PRODUCT_CODE` is classified for, one
+ * markup layer down. **It is the lone signal on the `nullFlavor`-marked shape**
+ * (the documented idiom), where nothing else fires. On the variant where the
+ * `<code>` carries a `<translation>` and asserts neither a symbol nor a
+ * `nullFlavor`, `MISSING_CODE_VALUE` fires beside it, which is itself
+ * safety-critical, so the classification does not rest on being alone there.
+ *
+ * It is **not** `MISSING_PRODUCT_CODE`, which asserts that no arm carried a
+ * coded product at all: that would be false here. It does **not** fire behind
+ * `MEDICATION_PRODUCT_ARM_CONFLICT`, which is the stronger, more specific
+ * statement about the same slot and is the lone signal there, exactly the
+ * suppression `MISSING_PRODUCT_CODE` already makes.
+ *
+ * **Provenance:** that a `CD`'s `<translation>` carries an alternate coding of
+ * the same concept is HL7 v3 datatype semantics, and that `nullFlavor="OTH"`
+ * beside one is the C-CDA idiom for an uncodable concept is C-CDA guidance. No
+ * conformance verb is claimed, and no SHALL is invented: the warning reports
+ * where the coding is and that the product slot was left empty.
+ *
+ * @example
+ * ```ts
+ * import { medicationProductCodeTranslationOnly } from "@cosyte/ccda";
+ * const w = medicationProductCodeTranslationOnly({ path: "code" }, true);
+ * ```
+ */
+export function medicationProductCodeTranslationOnly(
+  position: CcdaPosition,
+  onSelectedArm: boolean,
+): CcdaWarning {
+  const where = onSelectedArm
+    ? `the coding is somewhere on the returned CD's translation list rather than on its code (search the list, the first entry need not be the one naming the product)`
+    : `this arm is not the one returned as the product CD, so the coding is reachable only in the re-serialized document`;
+  return {
+    code: WARNING_CODES.MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY,
+    message: `No manufacturedProduct arm asserts a primary @code, and the product is named only in a <translation> alternate at this position; translations are preserved and re-serialized but are never slot-checked, so no product code is selected and ${where}.`,
     position,
   };
 }
