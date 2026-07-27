@@ -1035,6 +1035,87 @@ statusCode, effectiveTime, component+`).
 
 ### Fixed
 
+- **Clinical safety: the two residuals the `nullFlavor` slice named and did not close, a patient
+  identifier read out of a null-marked `<id>`, and a medication naming two different drugs.** One
+  new stable warning code, safety-critical, and one behavioural change to `getMrn()` / `pickMrn`.
+  - **`getMrn()` no longer hands back an MRN the document disowned.** The previous slice made
+    `<id nullFlavor="UNK" extension="MRN001"/>` warn (`CONTRADICTORY_NULL_FLAVOR`), but `pickMrn`
+    still returned `"MRN001"`, so `doc.getMrn()` produced a patient identifier out of a field the
+    document had marked unknown. A misfiled patient record is the third harm this package's harm
+    ordering names, alongside a wrong dose and a wrong code system, and it is the worst of the three
+    to detect: silent, persistent, and it contaminates everything downstream. `pickMrn` now returns
+    `undefined` when the **first** `patientRole/id` carries a `nullFlavor`.
+  - **It withholds, it does not substitute.** Falling through to the next `<id>` is the tempting
+    move and the worse one: CDA R2 makes `patientRole/id` `1..*` and nothing in the document ranks
+    the entries, so the second id is whatever the sending system listed second, commonly a plan
+    member number, an account number, or the SSN under `2.16.840.1.113883.4.1`. Answering the MRN
+    question confidently from a different assigning authority, with no signal naming the
+    substitution, trades one wrong-identifier failure for a quieter one. The rule declines a
+    manufactured reading; it does not manufacture a replacement. Same slot, same position, reading
+    withheld. A caller who knows their own authority OIDs can resolve it from
+    `getPatient()?.identifiers`, which still reports every id in full.
+  - **The datatype is unchanged, and that is the point.** `parseIi` still keeps `@extension` on a
+    contradicted `<id>`: it **is** the document's own text, with no second copy the way `PQ.raw`
+    sits beside `PQ.value`, so withholding it there would delete what the document said. The
+    withholding moved to the layer that manufactures a reading instead. What `pickMrn` produces is a
+    **selection**, one `<id>` chosen out of a list and flattened to a bare `string` that no longer
+    carries the marking that qualified it, and that is exactly the shape `PQ.value` has relative to
+    `PQ.raw`. So the same rule now buys both properties rather than trading one against the other:
+    `doc.getMrn()` is `undefined`, and `doc.getPatient()?.identifiers[0]` still reports
+    `{root, extension: "MRN001", nullFlavor: "UNK"}` verbatim.
+  - **The other identity slots are left reporting the document verbatim, deliberately.**
+    `ClinicalDocument.id`, `setId`, `relatedDocument/parentDocument/id` and every entry-level `<id>`
+    (the practice-, lab- and act-assigned identifiers) are only ever handed back as the whole
+    datatype with the `nullFlavor` attached and the warning in `doc.warnings`. There is no
+    naked-string accessor over any of them, so there is no affordance to close and nothing that
+    could be withheld without losing data.
+  - **`templateId` is the stated exception rather than a member of that list.** Document- and
+    section-type recognition _does_ derive a reading from `templateId.@root`, so a null-marked
+    `templateId` still resolves the document type and its required-section SHALL set. Left unchanged
+    on purpose: a `templateId` asserts a document _shape_, not an identity for a person or a record,
+    so a mis-read costs a spurious or missing `REQUIRED_SECTION_MISSING` rather than a misattributed
+    clinical fact, and declining would swap a working type for `UNKNOWN_DOCUMENT_TEMPLATE`.
+  - **The one exception is the emit side: `editCcda` no longer launders a null-marked identifier
+    into an asserted one.** Stamping a CDA R2 `RPLC` revision copies the source's `<id>` into the new
+    `relatedDocument/parentDocument`, and it copied `root`/`extension` only, silently dropping a
+    `@nullFlavor`. A revision of a source whose `ClinicalDocument.id` is null-marked now throws
+    `CcdaEditError` `SOURCE_MISSING_ID`, the same refusal an id-less source already got and for the
+    same reason: an `<id>` marked null names no prior version for the RPLC link to replace. A
+    null-marked `setId` gets the milder remedy its optionality allows, it identifies no version
+    series, so it is treated as absent and a fresh series id is minted.
+  - **A `manufacturedProduct` carrying BOTH arms of the CDA R2 choice no longer silently drops one
+    (`MEDICATION_PRODUCT_ARM_CONFLICT`, safety-critical).** The previous slice fixed the single-arm
+    case but left `manufacturedMaterial` unconditionally preferred, so a document carrying
+    `manufacturedMaterial` **and** `manufacturedLabeledDrug` with different codes had one of its two
+    named drugs dropped without a word. Two drugs on one medication is a contradictory document and
+    nothing in it ranks the arms, so preferring one is not reporting what the document said, it is
+    manufacturing a choice the document declined to make. The parser now refuses when **both** arms
+    name a product and they are different (a different `@code`, or one `@code` under two different
+    `@codeSystem`s): no product code is selected, `drug` / `vaccine` is `undefined`, and the new
+    warning is the signal. `MISSING_PRODUCT_CODE` is deliberately suppressed behind it, because "no
+    arm yielded a code" would be false, and with no code selected the code-system and terminology
+    checks have nothing to run on either, which is why the new code is safety-critical and why it is
+    scoped this narrowly.
+  - **An arm that asserts no symbol names no product, so it never conflicts with one that does.** A
+    `nullFlavor`-only `<code>`, or an arm with no `<code>` at all, is an _exceptional value_ under
+    HL7 v3 rather than a competing one, the same rule `contradictsAssertedValue` applies one layer
+    down. Whichever arm names the drug is read, and this is also the direction the previous
+    behaviour lost data in: a `nullFlavor`-only `manufacturedMaterial` used to win over a
+    `manufacturedLabeledDrug` naming a real RxNorm concept, in silence. Arms naming the **same**
+    product are redundant rather than contradictory, so the material arm is read as before.
+  - **`MEDICATION_PRODUCT_ARM_UNEXPECTED` now keys off the arm rather than its `<code>`**, so a
+    name-only `manufacturedLabeledDrug` is reported too, and markup shape no longer decides whether
+    the deviation gets flagged. All three consumable call sites are covered (Medication Activity,
+    Immunization Activity, Planned Medication Activity), and nothing is lost: `serializeCcda`
+    re-emits the parsed DOM, so both arms round-trip byte-for-byte.
+  - **Provenance, stated rather than invented.** No normative SHALL is cited for either change and
+    none is fabricated. CDA R2 declares `@nullFlavor` and `@extension` on `II` independently, and
+    neither CDA R2 nor C-CDA R2.1 states which `patientRole/id` is the MRN; that
+    `ManufacturedProduct` models one participant rather than two is base CDA R2 structure, but
+    whether the C-CDA template forbids both arms together needs the normative R2.1 Schematron this
+    repo does not hold. Both rest on HL7 v3 datatype semantics (`nullFlavor` marks an _exceptional
+    value_, one with no proper value) plus the harm ordering `SAFETY_CRITICAL_CODES` encodes.
+
 - **Clinical safety: four instances of one defect class, the parser getting quieter the more broken
   the document was.** Four new stable warning codes, three of them safety-critical.
   - **A `nullFlavor` asserted beside a populated value no longer passes silently

@@ -207,9 +207,9 @@ export type CcdaEditErrorCode =
  * The typed error {@link editCcda} throws when an edit cannot be applied safely
  *, a hand-constructed source with no XML to edit, a structured-body-less
  * document, an add/replace precondition violation, an edit that would drop a
- * per-document-type SHALL required section, or a revision of a source that
- * carries no `ClinicalDocument.id` (the RPLC link has no prior version to name).
- * Consumers narrow via `code`.
+ * per-document-type SHALL required section, or a revision of a source whose
+ * `ClinicalDocument.id` is absent or marked `nullFlavor` (the RPLC link has no
+ * prior version it can truthfully name). Consumers narrow via `code`.
  *
  * @example
  * ```ts
@@ -256,8 +256,9 @@ export class CcdaEditError extends Error {
  *   `source` is never mutated.
  * @throws {@link CcdaEditError} when the source has no retained XML, has no
  *   `structuredBody` to edit, violates an add/replace precondition, would drop a
- *   SHALL required section, or (when stamping a revision) has no
- *   `ClinicalDocument.id` for the RPLC link to name (`SOURCE_MISSING_ID`).
+ *   SHALL required section, or (when stamping a revision) has no usable
+ *   `ClinicalDocument.id` for the RPLC link to name, absent or `nullFlavor`-marked
+ *   (`SOURCE_MISSING_ID`).
  * @throws {TypeError} when a section's content violates a builder guard (an
  *   invalid timestamp, a resolved problem without a resolution date, …).
  * @example
@@ -540,12 +541,47 @@ function stampRevision(
     );
   }
 
+  // The same refusal, for an <id> that is present but marked @nullFlavor. In HL7
+  // v3 a nullFlavor marks an exceptional value, one with no proper value, so such
+  // an <id> names no document. `iiFrom` copies only root/extension, so building
+  // the parentDocument from it would silently drop the marking and promote an
+  // identifier the source disowned into an unqualified assertion on the emitted
+  // document, the emit-side twin of reading an MRN out of a null-marked <id>
+  // (see `pickMrn`). Carrying the nullFlavor forward instead is not an option
+  // worth taking: it would emit a parentDocument/id that is itself contradictory
+  // (or that names nothing at all), which the conservative-on-emit rule forbids
+  // and which our own parser would flag on the way back in.
+  if (attr(oldIdEl, "nullFlavor") !== undefined) {
+    throw new CcdaEditError(
+      "SOURCE_MISSING_ID",
+      "editCcda: the source ClinicalDocument's <id> carries a nullFlavor, so it names no " +
+        "prior version for a CDA R2 RPLC revision to replace (ParentDocument.id is required " +
+        "1..*, and copying root/extension forward would drop the nullFlavor and assert an " +
+        "identifier the source disowned). Pass revision: false to edit in place, or give the " +
+        "source a real id before revising.",
+    );
+  }
+
   // The version-series id: keep the source's setId, else the caller's, else mint
   // one (the source starts a series here). The replacement's setId SHALL equal
-  // the parentDocument's setId, so a single value feeds both.
+  // the parentDocument's setId, so a single value feeds both. A setId marked
+  // @nullFlavor identifies no version series, so it is treated as absent rather
+  // than laundered into an asserted series id, the same rule as the <id> above
+  // with the milder remedy the optional element allows. Stated plainly, because
+  // the minted id does land on the parentDocument too and that looks like the
+  // fabrication refused three lines up: it is not the same claim. A setId names
+  // the version *series*, and minting one says "this edit starts a series",
+  // which is exactly what an absent setId already got here; CDA R2 requires the
+  // replacement and its parent to share it, hence both. ParentDocument.id is
+  // what names the prior document itself, and that is never invented. The
+  // disowned extension is carried nowhere.
+  const usableSetIdEl =
+    oldSetIdEl !== undefined && attr(oldSetIdEl, "nullFlavor") === undefined
+      ? oldSetIdEl
+      : undefined;
   const seriesId: DocumentIdInit =
-    oldSetIdEl !== undefined
-      ? iiFrom(oldSetIdEl)
+    usableSetIdEl !== undefined
+      ? iiFrom(usableSetIdEl)
       : (init?.setId ?? { root: SYNTH_ROOT, extension: id("setid") });
 
   // The version the parent carried (a source with no versionNumber is treated as

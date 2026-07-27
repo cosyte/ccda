@@ -22,6 +22,7 @@ describe("code surface stability", () => {
         "IMMUNIZATION_REFUSED",
         "INVALID_NULL_FLAVOR",
         "MALFORMED_DATETIME",
+        "MEDICATION_PRODUCT_ARM_CONFLICT",
         "MEDICATION_PRODUCT_ARM_UNEXPECTED",
         "MISSING_ASSIGNING_AUTHORITY",
         "MISSING_CODE_SYSTEM",

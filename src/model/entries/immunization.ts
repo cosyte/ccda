@@ -96,12 +96,16 @@ function buildImmunization(
   const statusCode = statusCodeOf(sbadm);
   if (negated === true) ctx.emit(immunizationRefused(positionOf(sbadm)));
 
-  const { el: vaccineEl } = consumableProductCode(sbadm, ctx);
+  const { el: vaccineEl, conflicted } = consumableProductCode(sbadm, ctx);
   const vaccine = parseCd(vaccineEl, ctx);
   const vaccinePos = vaccineEl === undefined ? positionOf(sbadm) : positionOf(vaccineEl);
   // Same rule as a Medication Activity: an immunization with no coded vaccine
-  // on any arm is a safety-critical absence, never a silent `undefined`.
-  if (vaccineEl === undefined) ctx.emit(missingProductCode(positionOf(sbadm)));
+  // on any arm is a safety-critical absence, never a silent `undefined`, and a
+  // vaccine withheld because the two arms disagreed is covered by the stronger
+  // `MEDICATION_PRODUCT_ARM_CONFLICT` instead.
+  if (vaccineEl === undefined && conflicted !== true) {
+    ctx.emit(missingProductCode(positionOf(sbadm)));
+  }
   checkCodeSlot(vaccine, "vaccine", vaccinePos, ctx);
 
   const dose = parsePq(child(sbadm, "doseQuantity"), ctx);

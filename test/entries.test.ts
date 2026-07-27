@@ -826,3 +826,202 @@ describe("clinical entries, placement + tolerance", () => {
     expect(doc.getAllergies()).toEqual([]);
   });
 });
+
+/**
+ * The second `PRE-EXISTING` gap `#56` named and did not close: a
+ * `manufacturedProduct` carrying **both** arms of the CDA R2 choice silently
+ * dropped the non-`manufacturedMaterial` one. Two drugs named on one
+ * medication is a contradictory document, the same shape as a `nullFlavor`
+ * beside a value, and gets the same resolution: warn, withhold the reading the
+ * parser would be *manufacturing*, preserve everything verbatim.
+ */
+describe("clinical entries, both ManufacturedProduct arms on one product", () => {
+  /** Append a `manufacturedLabeledDrug` arm beside the existing material one. */
+  const bothArms = (section: string, labeledCode: string): string =>
+    section.replace(
+      "</manufacturedMaterial>",
+      `</manufacturedMaterial>
+                  <manufacturedLabeledDrug>
+                    <code ${labeledCode}/>
+                  </manufacturedLabeledDrug>`,
+    );
+
+  // Aspirin (the RxNorm code this repo's tolerance notes already use), a
+  // different concept from the fixture's Lisinopril, so the two arms genuinely
+  // disagree about which drug this medication is.
+  const OTHER_DRUG = 'code="1191" codeSystem="2.16.840.1.113883.6.88" displayName="Aspirin"';
+
+  it("refuses to choose between two arms naming different drugs", () => {
+    // Before: med.drug.code === "314076", the labeled arm dropped in silence.
+    const doc = parseCcda(buildCcda({ sections: bothArms(MEDICATIONS_SECTION, OTHER_DRUG) }));
+    const med = doc.getMedications()[0];
+    expect(med).toBeDefined();
+    expect(med?.drug).toBeUndefined();
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+    // Dose, route and timing are untouched: the entry is still read, it just
+    // no longer names a drug the document did not settle on.
+    expect(med?.dose?.value).toBe(10);
+    expect(med?.route?.code).toBe("C38288");
+  });
+
+  it("does not also claim no arm yielded a code", () => {
+    // MISSING_PRODUCT_CODE would assert something false here, and the conflict
+    // warning is the stronger, more specific statement standing in its place.
+    const doc = parseCcda(buildCcda({ sections: bothArms(MEDICATIONS_SECTION, OTHER_DRUG) }));
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MISSING_PRODUCT_CODE);
+  });
+
+  it("recovers the drug when only the alternate arm names one", () => {
+    // The direction the old behaviour lost data in: a nullFlavor-only material
+    // arm used to win over a labeled arm naming a real RxNorm concept, and the
+    // drug vanished in silence. A null value is an exceptional value, not a
+    // competing one, so there is no contradiction here to refuse.
+    const xml = buildCcda({
+      sections: MEDICATIONS_SECTION.replace(
+        '<code code="314076" codeSystem="2.16.840.1.113883.6.88" displayName="Lisinopril 10 MG Oral Tablet"/>',
+        '<code nullFlavor="UNK"/>',
+      ).replace(
+        "</manufacturedMaterial>",
+        `</manufacturedMaterial>
+                  <manufacturedLabeledDrug>
+                    <code code="314076" codeSystem="2.16.840.1.113883.6.88"/>
+                  </manufacturedLabeledDrug>`,
+      ),
+    });
+    const doc = parseCcda(xml);
+    expect(doc.getMedications()[0]?.drug?.code).toBe("314076");
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED);
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+  });
+
+  it("keeps a determinate drug when the OTHER arm asserts no symbol", () => {
+    // The mirror, and the one that matters most: refusing here would discard an
+    // RxNorm code the document names exactly once, and take every checkCodeSlot
+    // check on it down as well.
+    const doc = parseCcda(
+      buildCcda({ sections: bothArms(MEDICATIONS_SECTION, 'nullFlavor="NA"') }),
+    );
+    expect(doc.getMedications()[0]?.drug?.code).toBe("314076");
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MISSING_PRODUCT_CODE);
+  });
+
+  it("keeps the code-system checks alive on a second arm that names nothing", () => {
+    // The regression a naive "both arms present" rule would cause: withholding
+    // the product takes UNEXPECTED_CODE_SYSTEM down with it, making the parser
+    // quieter about a wrong terminology, the direction this work exists to
+    // reverse.
+    const wrongSystem = MEDICATIONS_SECTION.replace(
+      'codeSystem="2.16.840.1.113883.6.88" displayName="Lisinopril 10 MG Oral Tablet"',
+      'codeSystem="2.16.840.1.113883.6.96"',
+    );
+    const doc = parseCcda(buildCcda({ sections: bothArms(wrongSystem, 'nullFlavor="NA"') }));
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.UNEXPECTED_CODE_SYSTEM);
+  });
+
+  it("flags an alternate arm that carries no code to key off", () => {
+    // The presence warning keys off the ARM, so markup shape cannot decide
+    // whether the deviation gets reported. (Real-world this arm usually carries
+    // a <name>; the fixture omits it because the PHI scanner reads <name> as a
+    // person-name token and a brand string does not belong in its allow-list.)
+    const codeless = MEDICATIONS_SECTION.replace(
+      "</manufacturedMaterial>",
+      `</manufacturedMaterial>
+                  <manufacturedLabeledDrug/>`,
+    );
+    const doc = parseCcda(buildCcda({ sections: codeless }));
+    expect(doc.getMedications()[0]?.drug?.code).toBe("314076");
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED);
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+  });
+
+  it("does not treat a missing codeSystem on one arm as a different product", () => {
+    // Same symbol, one arm unqualified: MISSING_CODE_SYSTEM already covers that
+    // shape, and withholding instead would swap a loud warning for a quiet one.
+    const doc = parseCcda(buildCcda({ sections: bothArms(MEDICATIONS_SECTION, 'code="314076"') }));
+    expect(doc.getMedications()[0]?.drug?.code).toBe("314076");
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+  });
+
+  it("treats one symbol under two terminologies as a conflict", () => {
+    const doc = parseCcda(
+      buildCcda({
+        sections: bothArms(
+          MEDICATIONS_SECTION,
+          'code="314076" codeSystem="2.16.840.1.113883.6.96"',
+        ),
+      }),
+    );
+    expect(doc.getMedications()[0]?.drug).toBeUndefined();
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+  });
+
+  it("reads the material arm when both arms name the same product", () => {
+    // Redundant, not contradictory: there is one drug here, so withholding it
+    // would discard a determinate reading for no safety gain.
+    const same =
+      'code="314076" codeSystem="2.16.840.1.113883.6.88" displayName="Lisinopril 10 MG Oral Tablet"';
+    const doc = parseCcda(buildCcda({ sections: bothArms(MEDICATIONS_SECTION, same) }));
+    expect(doc.getMedications()[0]?.drug?.code).toBe("314076");
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED);
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MISSING_PRODUCT_CODE);
+  });
+
+  it("loses nothing: both arms survive serialization verbatim", () => {
+    // Withholding the model reading is only defensible because the document
+    // itself round-trips, so a caller who needs the dropped arm can still get it.
+    const doc = parseCcda(buildCcda({ sections: bothArms(MEDICATIONS_SECTION, OTHER_DRUG) }));
+    const out = doc.toString();
+    expect(out).toContain("manufacturedMaterial");
+    expect(out).toContain("manufacturedLabeledDrug");
+    expect(out).toContain('code="1191"');
+    expect(out).toContain('code="314076"');
+    expect(parseCcda(out).toString()).toBe(out);
+  });
+
+  it("applies the same refusal to an immunization vaccine", () => {
+    // A different CVX code from the fixture's 140; no displayName is asserted,
+    // the test needs only that the two arms disagree.
+    const other = 'code="141" codeSystem="2.16.840.1.113883.12.292"';
+    const doc = parseCcda(buildCcda({ sections: bothArms(IMMUNIZATIONS_SECTION, other) }));
+    expect(doc.getImmunizations()[0]?.vaccine).toBeUndefined();
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MISSING_PRODUCT_CODE);
+  });
+
+  it("applies the same refusal to a planned medication", () => {
+    const doc = parseCcda(buildCcda({ sections: bothArms(PLAN_OF_TREATMENT_SECTION, OTHER_DRUG) }));
+    const planned = doc.getPlannedItems().find((p) => p.kind === "medicationActivity");
+    expect(planned).toBeDefined();
+    expect(planned?.code).toBeUndefined();
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MISSING_PRODUCT_CODE);
+  });
+
+  // The negatives, so the new refusal cannot become "no drug for anyone".
+  it("stays silent on a single-arm document and unchanged on the lone alternate arm", () => {
+    const clean = codes(parseCcda(buildCcda({ sections: MEDICATIONS_SECTION })).warnings);
+    expect(clean).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+    expect(clean).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED);
+
+    const lone = MEDICATIONS_SECTION.replace(
+      "<manufacturedMaterial>",
+      "<manufacturedLabeledDrug>",
+    ).replace("</manufacturedMaterial>", "</manufacturedLabeledDrug>");
+    const doc = parseCcda(buildCcda({ sections: lone }));
+    expect(doc.getMedications()[0]?.drug?.code).toBe("314076");
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED);
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+  });
+
+  it("still flags a consumable with no code on either arm", () => {
+    const none = MEDICATIONS_SECTION.replace(
+      /<manufacturedMaterial>[\s\S]*?<\/manufacturedMaterial>/u,
+      "",
+    );
+    expect(codes(parseCcda(buildCcda({ sections: none })).warnings)).toContain(
+      WARNING_CODES.MISSING_PRODUCT_CODE,
+    );
+  });
+});

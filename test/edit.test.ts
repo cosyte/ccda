@@ -524,6 +524,68 @@ describe("editCcda, edge-case coverage", () => {
     }
   });
 
+  it("refuses to revise a source whose <id> is marked nullFlavor (no laundering on emit)", () => {
+    // The emit-side twin of the pickMrn residual. `iiFrom` copies root/extension
+    // and nothing else, so stamping the revision would have written
+    // <id root="1.2" extension="DOC-1"/> into the parentDocument, dropping the
+    // nullFlavor and promoting an identifier the source explicitly disowned into
+    // an unqualified assertion about which document is being replaced.
+    const doc = parseCcda(rawCda({ id: '<id root="1.2" extension="DOC-1" nullFlavor="UNK"/>' }));
+    expect(doc.header.documentId?.extension).toBe("DOC-1");
+    expect(doc.header.documentId?.nullFlavor).toBe("UNK");
+    try {
+      editCcda(doc, {
+        sections: [
+          { kind: "problems", mode: "replace", content: [{ problem: DIABETES, status: "active" }] },
+        ],
+      });
+      throw new Error("expected throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(CcdaEditError);
+      expect((err as CcdaEditError).code).toBe("SOURCE_MISSING_ID");
+    }
+  });
+
+  it("treats a nullFlavor-marked setId as absent rather than asserting it", () => {
+    // Milder remedy for an optional element: a setId marked null identifies no
+    // version series, so a fresh one is minted. Laundering it would have emitted
+    // the disowned series id twice, on the revision and on its parentDocument.
+    const doc = parseCcda(
+      rawCda({
+        id: '<id root="1.2" extension="DOC-1"/>',
+        setId: '<setId root="1.2" extension="SERIES-1" nullFlavor="UNK"/>',
+      }),
+    );
+    const revised = editCcda(doc, {
+      sections: [
+        { kind: "problems", mode: "replace", content: [{ problem: DIABETES, status: "active" }] },
+      ],
+    });
+    expect(revised.header.setId?.nullFlavor).toBeUndefined();
+    expect(revised.header.setId?.extension).not.toBe("SERIES-1");
+    expect(revised.toString()).not.toContain("SERIES-1");
+  });
+
+  it("still revises a source carrying a clean id and setId", () => {
+    // The negative: the refusal is scoped to a null-marked identifier, an
+    // ordinary versioned source must keep revising exactly as before.
+    const doc = parseCcda(
+      rawCda({
+        id: '<id root="1.2" extension="DOC-1"/>',
+        setId: '<setId root="1.2" extension="SERIES-1"/>',
+        versionNumber: '<versionNumber value="3"/>',
+      }),
+    );
+    const revised = editCcda(doc, {
+      sections: [
+        { kind: "problems", mode: "replace", content: [{ problem: DIABETES, status: "active" }] },
+      ],
+    });
+    expect(revised.header.setId?.extension).toBe("SERIES-1");
+    expect(revised.header.versionNumber).toBe(4);
+    expect(revised.header.relatedDocuments[0]?.parentDocument.ids[0]?.extension).toBe("DOC-1");
+  });
+
   it("an id-less source can still be edited in place with revision: false", () => {
     // Refusal is scoped to the revision path: no RPLC link, no ParentDocument.id
     // requirement, so an in-place edit of an id-less source is allowed.

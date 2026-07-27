@@ -51,13 +51,41 @@ immutability + explicit mutation, and the profile system.
     (a `@unit` with no `@value`, an `@root` with no `@extension`, a `CD`'s `originalText` or
     `<translation>`) is coherent and stays silent. **If you add a datatype or an inline value arm,
     route it through `contradictsAssertedValue` or this claim stops being true.**
+  - **The withholding rule is "was this reading manufactured beside a surviving verbatim copy",
+    not "does this field look dangerous", and it applies at whatever layer manufactures.** Above
+    the datatypes it fires once for an identifier: `pickMrn` (behind `getMrn()`) _selects_ one
+    `<id>` from a list and flattens it to a bare `string` with the `nullFlavor` gone, so it returns
+    `undefined` when the **first** `patientRole/id` is null-marked. **It withholds, it does not
+    substitute** the next `<id>`: nothing in a C-CDA ranks `patientRole/id` entries, so the second
+    is as likely to be an account or member number or the SSN, and answering from a different
+    assigning authority is a quieter version of the same failure. `parseIi` still keeps
+    `@extension`, so `getPatient()?.identifiers` reports every id in full. The other identity slots
+    (`ClinicalDocument.id`, `setId`, `parentDocument/id`, entry-level `<id>`s) are only ever
+    reported whole beside the warning, have no naked-string accessor, and are deliberately left
+    alone. **`templateId` is the stated exception, not a member of that list:** recognition derives
+    `documentType` (and the required-section SHALL set) from `templateId.@root`, so a null-marked
+    `templateId` still resolves a type. Left as-is deliberately, it asserts a document _shape_ not
+    a person, so a mis-read costs a spurious `REQUIRED_SECTION_MISSING` rather than a misattributed
+    clinical fact. On the emit side `editCcda` refuses an `RPLC` revision from a null-marked
+    `ClinicalDocument.id` (`CcdaEditError` `SOURCE_MISSING_ID`) and treats a null-marked `setId` as
+    absent, rather than copying `root`/`extension` forward and laundering the marking away.
   - A medication/vaccine product is read from **either** arm of the CDA R2 `ManufacturedProduct`
     choice, at all three consumable call sites (Medication Activity, Immunization Activity, Planned
-    Medication Activity); the `manufacturedLabeledDrug` arm is flagged
-    `MEDICATION_PRODUCT_ARM_UNEXPECTED` (deliberately tolerable, the code is present and fully
-    checked). No arm yielding a code is `MISSING_PRODUCT_CODE`, safety-critical, never a silent
-    `undefined`. A document carrying **both** arms with different codes still silently prefers
-    `manufacturedMaterial` and drops the other, a pre-existing gap this slice did not close.
+    Medication Activity). The **presence** of a `manufacturedLabeledDrug` arm is flagged
+    `MEDICATION_PRODUCT_ARM_UNEXPECTED` (deliberately tolerable; keyed to the arm, not its `<code>`,
+    so a name-only `LabeledDrug` is reported too). No arm yielding a code is
+    `MISSING_PRODUCT_CODE`, safety-critical, never a silent `undefined`. With **both** arms present
+    the treatment is decided by what they say: only one naming a product means that one is read
+    whichever arm it is (a null value is an _exceptional_ value, not a competing one, so there is
+    nothing to refuse, and this is the direction the old behaviour silently lost a real RxNorm code
+    in); both naming the **same** product means the material arm is read as before; both naming
+    **different** products (different `@code`, or one `@code` under two `@codeSystem`s) is
+    `MEDICATION_PRODUCT_ARM_CONFLICT` (safety-critical) and **no code is selected**, because nothing
+    in the document ranks the arms so any pick would be manufactured. `MISSING_PRODUCT_CODE` is
+    suppressed behind it (it would assert the false "no arm yielded a code") and `checkCodeSlot` has
+    nothing to check, which makes the conflict code the lone signal by construction and is why it is
+    safety-critical and scoped this narrowly. Nothing is lost, `serializeCcda` re-emits the parsed
+    DOM so both arms round-trip byte-for-byte.
   - `SAFETY_CRITICAL_CODES` is a frozen read-only view, not a `Set` instance: every read operation
     works (including spread), but `instanceof Set` is `false`.
   - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`

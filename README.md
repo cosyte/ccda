@@ -114,6 +114,19 @@ alternate arm carries the same `CE` and goes through the same code-system checks
 strictly safer than the alternative of returning `drug: undefined` while dose and route survive. If
 no arm yields a code, that is `MISSING_PRODUCT_CODE` (safety-critical), never a silent `undefined`.
 
+A document carrying **both** arms is handled on what they say. `MEDICATION_PRODUCT_ARM_UNEXPECTED`
+fires on the presence of the `manufacturedLabeledDrug` arm either way. If only one arm names a
+product (the other asserting a `nullFlavor`-only `<code>`, or no `<code>` at all) the one that names
+it is read, whichever arm that is, because a null value is an exceptional value and not a competing
+one. If both name the **same** product it is redundant, and the material arm is read as before. Only
+when both name **different** products (a different `@code`, or one `@code` under two different
+`@codeSystem`s) does the parser refuse to choose: `MEDICATION_PRODUCT_ARM_CONFLICT`
+(safety-critical) fires, `drug` / `vaccine` is `undefined`, and `MISSING_PRODUCT_CODE` is suppressed
+behind it because "no arm yielded a code" would be false. Nothing is lost, `serializeCcda` re-emits
+the parsed DOM, so both arms round-trip byte-for-byte. The cost is stated rather than hidden: with
+no code selected, the code-system and terminology checks have nothing to run on for that slot, which
+is why the conflict warning is safety-critical and why it is scoped this narrowly.
+
 ## What it extracts: discrete clinical data
 
 - **Results**: Result Organizers via `getResults()`: the LOINC-coded analyte, the polymorphic
@@ -505,6 +518,33 @@ copy survives beside a derived reading (the `integer` value carries `raw` for ex
 what the document said rather than decline to embellish it. Those keep the field: a contradicted
 `allergy.allergen.code` still returns the code, with `nullFlavor` on the same object and the warning
 in `doc.warnings`.
+
+**Where a derived reading exists above the datatype, it is withheld there instead.** The one place
+this model manufactures an identifier out of an `II` is `pickMrn` (behind `getMrn()`), which
+_selects_ one `<id>` from a list and flattens it to a bare `string` with the `nullFlavor` gone. So
+`getMrn()` withholds when the first `patientRole/id` is null-marked:
+
+```ts
+doc.getMrn(); // undefined  ← the document marked that <id> unknown
+doc.getPatient()?.identifiers[0]; // { root, extension: "MRN001", nullFlavor: "UNK" }
+```
+
+It withholds rather than falling through to the next `<id>`. CDA R2 makes `patientRole/id` `1..*`
+and nothing in the document ranks the entries, so the second id is not another MRN, it is whatever
+the sending system listed second, often a plan member number, an account number, or the SSN under
+`2.16.840.1.113883.4.1`. Substituting it would answer confidently from a different assigning
+authority with no signal naming the substitution. A caller who knows their own authority OIDs can
+resolve it from `getPatient()?.identifiers`, which still reports every id in full.
+
+The other identity slots (`ClinicalDocument.id`, `setId`, `parentDocument/id`, entry-level `<id>`s)
+are only ever reported as the whole datatype beside the warning, so there is no naked value to
+withhold. `templateId` is the stated exception: document- and section-type recognition does derive a
+reading from its `@root`, so a null-marked `templateId` still resolves a document type. That is
+deliberate, a `templateId` is a conformance assertion about the document's shape rather than an
+identifier for a person or a record, so a mis-read costs a spurious `REQUIRED_SECTION_MISSING`, not
+a misattributed clinical fact. On the emit side, `editCcda` refuses to stamp an `RPLC` revision from
+a null-marked `ClinicalDocument.id` (`CcdaEditError` `SOURCE_MISSING_ID`) rather than copy
+`root`/`extension` forward and drop the marking.
 
 Only a _value-bearing_ assertion contradicts. Metadata that qualifies a null value is coherent and
 stays silent: a `PQ` `@unit` with no `@value` (a dimension without a magnitude), an `II` `@root` with

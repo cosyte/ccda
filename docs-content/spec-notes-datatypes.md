@@ -42,10 +42,31 @@ what
 than a new rule, and it costs nothing because `value`/`date` are readings the parser manufactured from
 a `raw` that survives.
 
-Withholding stops there, deliberately. `PQ`, `TS` and the `integer` observation value are the only
-shapes in this model that keep both a verbatim string and a parsed interpretation. On `CD`, `II`,
-`ST`, `ED` and `BL` the value-bearing field **is** the document's own text, with no second copy, so it
-is kept and the warning plus the co-located `nullFlavor` is the signal.
+Withholding stops there **at the datatype layer**, deliberately. `PQ`, `TS` and the `integer`
+observation value are the only shapes in this model that keep both a verbatim string and a parsed
+interpretation. On `CD`, `II`, `ST`, `ED` and `BL` the value-bearing field **is** the document's own
+text, with no second copy, so it is kept and the warning plus the co-located `nullFlavor` is the
+signal.
+
+The test is whether the reading was _manufactured_ beside a surviving verbatim copy, never whether
+the field looks dangerous. Where a datatype's field is the document's bytes but something **above**
+it derives a reading, the withholding moves up there. This model does that once for an identifier:
+`pickMrn` (behind `getMrn()`) selects one `<id>` out of a list and flattens it to a bare `string`
+that no longer carries the `nullFlavor`, which is exactly the relationship `PQ.value` has to
+`PQ.raw`. So `getMrn()` returns `undefined` when the first `patientRole/id` is null-marked, `parseIi`
+still keeps `@extension`, and a caller reading `getPatient()?.identifiers` still sees both. It
+withholds rather than substituting the next id, because declining a manufactured reading is not the
+same act as manufacturing a replacement, and nothing in the document ranks the ids.
+
+The other identity slots (document `id`, `setId`, `parentDocument/id`, entry-level `<id>`s) are only
+ever reported whole beside the warning, so there is nothing there to withhold. `templateId` is the
+stated exception rather than a member of that list: recognition does derive the document type (and
+its required-section SHALL set) from `templateId.@root`, and a null-marked `templateId` still
+resolves it. That is deliberate, it asserts a document _shape_ rather than a person or a record, so
+a mis-read costs a spurious `REQUIRED_SECTION_MISSING` rather than a misattributed clinical fact,
+and refusing would replace a working type with `UNKNOWN_DOCUMENT_TEMPLATE`. The emit side is guarded
+separately: `editCcda` refuses to build an `RPLC` `parentDocument` out of a null-marked source `<id>`
+rather than copy `root`/`extension` forward and lose the marking.
 
 One thing the check deliberately does **not** do is short-circuit the rest of the slot's validation. A
 `nullFlavor`-only `CD` still names a terminology, so a wrong or deprecated `@codeSystem` on it still

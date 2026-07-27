@@ -123,6 +123,20 @@ milestone it stopped at.
   `@unit` with no `@value`, an `@root` with no `@extension`, a `CD`'s `originalText` / `<translation>`)
   is coherent, not contradictory, and stays silent, and a `nullFlavor`-only coded slot is still checked
   for a wrong or deprecated `@codeSystem`.
+- **`getMrn()` withholds on a `nullFlavor`-marked `<id>`.** If you were getting an MRN and now get
+  `undefined`, the first `patientRole/id` declared itself unknown. That is the one place this model
+  manufactures an identifier out of an `II`: `pickMrn` _selects_ one id from a list and flattens it
+  to a bare string with the marking gone, so the selection declines while the datatype keeps
+  everything. It does **not** fall through to the next `<id>`: nothing in a C-CDA ranks
+  `patientRole/id` entries, so the second one is whatever the sender listed second, often a member
+  number, an account number, or the SSN. Read `doc.getPatient()?.identifiers` for the verbatim
+  `extension` with its `nullFlavor` beside it, and branch on `root` yourself if you know your
+  assigning authority's OIDs. The other identity slots (document `id`, `setId`, `parentDocument/id`,
+  entry-level ids) are unchanged and still report the document verbatim; `templateId` is the stated
+  exception, a null-marked one still resolves the document type, deliberately, since it asserts a
+  document shape rather than a person. On the emit side, `editCcda` refuses to stamp an `RPLC`
+  revision from a null-marked `ClinicalDocument.id` (`CcdaEditError` `SOURCE_MISSING_ID`), because
+  copying `root`/`extension` into the `parentDocument` would drop the marking.
 - **A medication or vaccine product is read from either `ManufacturedProduct` arm.**
   `manufacturedMaterial` is silent; `manufacturedLabeledDrug` is read too and flagged
   `MEDICATION_PRODUCT_ARM_UNEXPECTED` (tolerable by a profile, since the code is present and fully
@@ -130,8 +144,17 @@ milestone it stopped at.
   route and timing all survive a missing consumable and would otherwise make the record read as a
   complete medication with no drug. Both apply at all three consumable call sites: a performed
   Medication Activity, an Immunization Activity, and a Planned Medication Activity. A document that
-  carries **both** arms with different codes is a known gap: the `manufacturedMaterial` one wins and
-  the other is dropped without a warning.
+  carries **both** arms naming **different** products (a different `@code`, or one `@code` under two
+  different `@codeSystem`s) draws `MEDICATION_PRODUCT_ARM_CONFLICT` (safety-critical) and no product
+  code is selected at all: two drugs on one medication is a contradictory document, nothing in it
+  ranks the arms, and picking one would be the parser inventing an answer. If `med.drug` is
+  `undefined` and you see this code, read `doc.toString()`, both arms survive serialization
+  byte-for-byte. `MISSING_PRODUCT_CODE` is suppressed behind it because "no arm yielded a code"
+  would be false, and so are the code-system checks, since there is no code to check, which is why
+  the conflict warning is safety-critical. Arms naming the **same** product are redundant rather
+  than contradictory, so the material arm is read as before. An arm asserting no symbol at all (a
+  `nullFlavor`-only `<code>`, or no `<code>`) names no product and never conflicts with one that
+  does, so whichever arm names the drug is read.
 - **UCUM validation is grammatical, on a curated atom subset.** The validator checks well-formed UCUM
   against the prefixes/atoms that appear in lab Results and Vital Signs, not the full UCUM registry. A
   valid-but-uncurated atom may read as `NON_UCUM_UNIT`; the raw unit is always preserved. It does not
