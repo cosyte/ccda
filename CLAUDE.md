@@ -16,13 +16,45 @@ immutability + explicit mutation, and the profile system.
 
 ## Status
 
-- **Scaffolded from the shared `@cosyte/*` parser template.** Pre-alpha `0.0.x`, not yet published to
-  npm. `src/index.ts` carries archetype **stubs** (`parseCcda`, `WARNING_CODES`, `FATAL_CODES`).
-  The real parser lands in subsequent phases.
+- **Published on npm at `0.0.1`**, public, MIT. Pre-alpha on the shared cosyte `0.0.x` ladder
+  (`0.0.x` until first alpha, ADR 0001). A published version never moves backwards.
+- **There are no stubs left.** `src/index.ts` exports a working parser (`parseCcda`), serializer
+  (`serializeCcda`), document builder (`buildCcda`), and document editor (`editCcda`), plus the
+  `CcdaDocument` model, the HL7 v3 datatype layer, the entry extractors for fourteen families
+  (Problems / Medications / Allergies / Results / Vital Signs / Immunizations / Procedures /
+  Encounters / Social-History smoking status / Plan of Treatment / Functional Status / Mental Status
+  / Family History / Past Medical History), the recognition tables (`documentTypeForOid`,
+  `sectionForTemplateRoot`, `sectionForLoinc`), the required-section SHALL tables
+  (`requiredSectionKeys`, `missingRequiredSections`), the code-system OIDs + `checkCodeSlot`, the
+  computable UCUM grammar, the bring-your-own `TerminologyAdapter` contract, the vendor-profile
+  system (`defineCcdaProfile`, `ccdaProfiles`, `SAFETY_CRITICAL_CODES`), and
+  `WARNING_CODES` / `FATAL_CODES`.
+- **Boundaries that are real, and stated under-warning.** Do not describe the package as more
+  complete than these:
+  - `buildCcda` emits **two of the twelve** document types (CCD, Referral Note). The other ten are
+    not implemented. Parsing **recognizes** all twelve; only building is limited.
+  - A `TerminologyAdapter` is consulted at the **five `CodeSlot`s only** (`problem`, `medication`,
+    `allergen`, `route`, `vaccine`). Every other coded value is never handed to the adapter, so a
+    clean run means those five slots passed, **not** that the document was terminology-verified.
+  - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`
+    assert nothing (Consultation Note, Progress Note, Procedure Note, Operative Note, Diagnostic
+    Imaging Report, Unstructured Document). Empty means "no unconditional in-catalog SHALL section
+    is asserted yet", never "this type has no requirements". Per-type provenance varies: the
+    Referral Note's set is traced to the normative R2.1 Schematron (CONF:1198-30925 and the
+    SHOULD-not-SHALL exclusions beside it, see the comment at `required-sections.ts:44`), while the
+    others are asserted conservatively without that end-to-end tracing. Do not broaden or narrow an
+    untraced set without the Schematron in hand.
+  - `editCcda` covers **twelve single-list section kinds**. Functional Status and Mental Status are
+    **buildable but not editable** (each is assembled from three separate content lists), as are the
+    Referral Note's narrative-only Assessment and Reason for Referral sections. There is no
+    entry-level append and no section removal.
+  - A built document round-trips through `parseCcda` with zero warnings, but its conformance was
+    grounded against the raw C-CDA R2.1 IG text, not a validator run: it is **expected but not
+    proven** to pass an external IG validator.
 - **XML-parser dependency: ratified (one-way door).** C-CDA is XML, and the shared standard permits an
-  XML-parser runtime dep for `ccda`/`ncpdp` **per an ADR**. `docs/adr/0001-xml-parser.md` is now
+  XML-parser runtime dep for `ccda`/`ncpdp` **per an ADR**. `docs/adr/0001-xml-parser.md` is
   **Accepted**: `@xmldom/xmldom` (exact-pinned, **1 of the ≤ 3** runtime-dep cap), chosen for faithful
-  DOM round-trip + a hardenable (XXE-safe) posture. The parse layer (Phase 1) configures and consumes
+  DOM round-trip + a hardenable (XXE-safe) posture. The parse layer configures and consumes
   it; do **not** add a _second_ XML library. Reuse this one (and coordinate `@cosyte/ncpdp` onto the
   same substrate).
 
@@ -97,7 +129,10 @@ A TypeScript library for the HL7 Consolidated CDA R2.1 standard.
 
 ## Hard gates
 
-- **≥ 90% line coverage** on `src/parser/`, `src/model/`, `src/templates/`, `src/helpers/` before v1 ships.
+- **≥ 90% per-directory coverage**, enforced today by `pnpm test:coverage` (not deferred to v1). The
+  gated directories are declared in `vitest.config.ts` (`coverageDirs`): `parser`, `model`,
+  `model/types`, `helpers`, `serialize`, `profiles`, `builder`, `edit`. Add a directory there when
+  you add one under `src/`.
 - **No `console.*` in library code.** Throw typed errors or return results.
 - **TypeScript strict + `noUncheckedIndexedAccess`.** No `any`, no unjustified `as` casts.
 

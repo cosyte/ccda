@@ -39,6 +39,37 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Documentation
 
+- **`CLAUDE.md` Status section and `README.md` headings corrected (CCDA-P7 stale-status residual).**
+  These were the last two files still misdescribing the package. `CLAUDE.md` governs every agent
+  session in this repo, so a wrong claim there propagates into work rather than just into a reader's
+  head, and its Status section was false twice over: it said the package was "not yet published to
+  npm" (it is published at `0.0.1`, and `package.json` agreed all along) and that `src/index.ts`
+  carried archetype **stubs** with "the real parser lands in subsequent phases". `src/index.ts`
+  exports a working `parseCcda` / `serializeCcda` / `buildCcda` / `editCcda`, the `CcdaDocument`
+  model, the HL7 v3 datatype layer, fourteen entry-family extractors, the recognition and
+  required-section tables, the code-system OIDs, the computable UCUM grammar, the
+  `TerminologyAdapter` contract, and the vendor-profile system. The section now says so and states
+  five boundaries **under-warning**: `buildCcda` covers two of twelve document types (parsing
+  recognizes all twelve); a `TerminologyAdapter` is consulted at the five `CodeSlot`s only, so a
+  clean run is not a verified document; six of twelve required-section SHALL tables assert nothing;
+  Functional and Mental Status are buildable but not editable; and a built document is
+  expected-but-not-proven to pass an external IG validator. The repo's stale hard gate ("≥ 90% line
+  coverage … before v1 ships", over a directory list including a `src/templates/` that does not
+  exist) is replaced by the gate that actually runs today, pointing at `vitest.config.ts` as its
+  source of truth. `README.md` is the npm front page, and its five `## What it extracts (Phase N)`
+  headings are restated as the capability each one describes: an installer of `0.0.1` cannot resolve
+  "Phase 5b" to anything. The accuracy defects around those headings are fixed in the same pass: the
+  status banner's closing "the other document types land in a later increment" read as a parser
+  limitation when only building is limited; the terminology section claimed `buildCcda` consults the
+  adapter "at each clinical coded slot" when five are wired, so the unwired ones (Results/Vital
+  Signs LOINC, procedure, encounter, planned-item, family-history, the status observation values,
+  the propensity type, and the reaction/severity/criticality observations) are now named; the Edit
+  section gained a "what editing does not cover" paragraph carrying the buildable-but-not-editable
+  boundary; and required-section validation now states that six of twelve tables assert nothing and
+  that a quiet parse is not a conformance result. The open question of which sections the CCD SHALL
+  set contains is left open on purpose: settling it needs the normative R2.1 Schematron, so the docs
+  describe what the code asserts and say the set is deliberately conservative, rather than implying
+  either candidate set is the correct one.
 - **`docs-content/` capability claims rewritten as a capability doc, not a phase log (CCDA-P7
   documentation residual).** `troubleshooting.md` opened its boundary list with "As of **Phase 5b**",
   a stamp no installer of `0.0.1` can resolve, and the list under it had drifted three slices behind

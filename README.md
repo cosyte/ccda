@@ -21,7 +21,7 @@ substrate for C-CDA's XML.
 > reconciliation triad (Problems / Medications / Allergies), the discrete-data families
 > (Results / Vital Signs / Immunizations) with a computable UCUM unit check, Procedures (with a
 > safety-critical performed-vs-planned `moodCode` split) / Encounters / Social-History smoking status,
-> the deferred clinical sections (Plan of Treatment / Functional Status / Mental Status / Family
+> the remaining clinical sections (Plan of Treatment / Functional Status / Mental Status / Family
 > History / Past Medical History), and per-document-type required-section (SHALL) validation, plus a
 > **spec-clean, round-trip serializer** (`serializeCcda` / `toString()`) and immutable copy-with
 > (`withWarnings`). A document **builder** (`buildCcda`) emits a spec-clean **CCD** or **Referral Note**
@@ -33,9 +33,11 @@ substrate for C-CDA's XML.
 > round-tripping through `parseCcda`). A document **editor** (`editCcda`) re-emits a parsed document
 > with a section added or replaced (every untouched section preserved byte-for-byte) and stamps a
 > CDA R2 revision (`relatedDocument` `RPLC` + `setId`/`versionNumber`). A **bring-your-own terminology
-> adapter** (`parseCcda` / `buildCcda`'s optional `terminology` option) lets a consumer plug in their own
-> licensed terminology service to semantically validate coded values: a rejected code is flagged
-> (`SEMANTIC_CODE_INVALID`), never coerced. The other document types land in a later increment.
+> adapter** (`parseCcda` / `buildCcda` / `editCcda`'s optional `terminology` option) lets a consumer plug
+> in their own licensed terminology service to semantically validate coded values at five recognized
+> coded slots: a rejected code is flagged (`SEMANTIC_CODE_INVALID`), never coerced. Parsing recognizes
+> all twelve US Realm document types; **building** covers two of them, and the other ten are not
+> implemented. See "Known limitations" for the boundaries in full.
 
 ## Install
 
@@ -76,7 +78,7 @@ first tolerated deviation to a thrown `CcdaParseError`. Unrecoverable or hostile
 billion-laughs entity expansion, oversized/over-deep/over-wide documents, malformed XML, a
 non-`ClinicalDocument` root) is always a thrown `CcdaParseError`.
 
-## What it extracts (Phase 1)
+## What it extracts: document type, header, and section framing
 
 - **Document type**: all 12 US Realm document types resolved from the root `templateId` (CCD,
   Discharge Summary, Referral Note, Consultation Note, History & Physical, Progress Note, Procedure
@@ -90,7 +92,7 @@ non-`ClinicalDocument` root) is always a thrown `CcdaParseError`.
 - **HL7 v3 datatypes**: `II`, `ST`, `BL`, `CD`, `PQ`, `IVL_PQ`, `TS`, `IVL_TS`, `ED`, with
   variable-precision v3 datetime parsing and null-flavor handling.
 
-## What it extracts (Phase 2): the reconciliation triad
+## What it extracts: the reconciliation triad
 
 - **Problems**: Problem Concern Acts via `getProblems()`: the coded condition (`value`, SNOMED CT /
   ICD-10-CM), the concern `status` (active / resolved / inactive / unknown), and `effectiveTime`.
@@ -105,7 +107,7 @@ Two safety-critical reconciliations stay conservative: a coded value that disagr
 surfaces **both** (`CODE_NARRATIVE_MISMATCH`) and picks no winner, and a missing `doseQuantity` /
 `routeCode` is preserved-as-absent and flagged, never silently defaulted.
 
-## What it extracts (Phase 3): discrete clinical data
+## What it extracts: discrete clinical data
 
 - **Results**: Result Organizers via `getResults()`: the LOINC-coded analyte, the polymorphic
   observation `value` as a discriminated `ObservationValue` (`physicalQuantity` / `coded` / `string` /
@@ -122,7 +124,79 @@ Every physical quantity is checked against a **computable, zero-dependency UCUM 
 letter-case slip caught (`UCUM_CASE_SUSPECT`), but the **raw unit is always preserved, never
 normalized away**. An unrecognized `value xsi:type` is kept as `unsupported`; nothing is dropped.
 
-## Serialize & round-trip (Phase 4)
+## What it extracts: procedures, encounters, and social history
+
+- **Procedures** via `getProcedures()`: the three Procedure Activity templates: an
+  altering/operative `<procedure>` (`…22.4.14`), a non-altering `<act>` service (`…22.4.12`), and an
+  assessment `<observation>` (`…22.4.13`), kept apart by a `kind` discriminant. **`moodCode` is
+  safety-critical:** a performed procedure (`EVN`) and a planned/ordered one
+  (`INT`/`RQO`/`PRMS`/`PRP`/`APT`/`ARQ`) become a `disposition` of `"performed"` vs `"planned"` and are
+  **never conflated**: a missing mood is `PLANNED_VS_PERFORMED_AMBIGUOUS`, an unrecognized mood is
+  `PROCEDURE_MOOD_UNEXPECTED`, both leaving `disposition` undefined rather than guessing.
+- **Encounters** via `getEncounters()`: the Encounter Activity (`…22.4.49`): the visit type `code`,
+  `statusCode`, and visit-period `effectiveTime`.
+- **Social History: Smoking Status** via `getSmokingStatus()`: the Smoking Status (Meaningful Use)
+  observation (`…22.4.78`). An explicitly-unknown status (a `nullFlavor` or an "unknown" SNOMED concept)
+  sets `unknown: true` and emits `SMOKING_STATUS_UNKNOWN`, never silently read as "never smoked"; a
+  value outside the Current Smoking Status value set is preserved and flagged
+  `SMOKING_STATUS_CODE_UNRECOGNIZED`.
+
+## What it extracts: plan of treatment, status, and history sections
+
+- **Plan of Treatment** via `getPlannedItems()`: the six planned-entry templates a Plan of Treatment
+  section (`…22.2.10`) can carry: Planned Act (`…22.4.39`), Encounter (`…22.4.40`), Procedure
+  (`…22.4.41`), Medication Activity (`…22.4.42`), Supply (`…22.4.43`), and Observation (`…22.4.44`),
+  kept apart by a `kind` discriminant. **Everything here is future/ordered, never performed:** each
+  item's `moodCode` is read into the same performed-vs-planned `disposition` as Procedures (a planned
+  mood → `"planned"`), and the two are **never conflated**; a missing/unrecognized mood leaves
+  `disposition` undefined rather than guessing.
+- **Functional Status** / **Mental Status** via `getFunctionalStatus()` / `getMentalStatus()`: the
+  Functional/Mental Status Observations (`…22.4.67` / `…22.4.74`), read whether standalone or clustered
+  in a status Organizer (`…22.4.66` / `…22.4.75`), plus **direct-entry Assessment Scale Observations**
+  (`…22.4.69`, flagged `assessmentScale`), the conformant C-CDA R2.1 placement, with their scored
+  Assessment Scale Supporting Observations (`…22.4.86`) on `supporting` and the total score read as an
+  `integer` (`xsi:type="INT"`) value. Each finding is `domain`-tagged **from its carrying section**, so
+  the two are **never conflated** (the same scale OID appears in both sections; the section, not the
+  template, fixes the domain); a scale in a section that is neither functional nor mental is not captured
+  (its domain is unknowable, never guessed). A scale mis-nested inside an organizer is still read
+  leniently.
+- **Family History** via `getFamilyHistory()`: the Family History Organizer (`…22.4.45`) → Observation
+  (`…22.4.46`) tree. The relative's identity (relationship, gender, birth time, `sdtc:deceasedInd`) is a
+  structured `relative` (not flattened into each condition); each condition carries its coded `value`,
+  an optional Age Observation (`…22.4.31`, age at onset), and a `causeOfDeath` flag from a Family History
+  Death Observation (`…22.4.47`).
+- **Past Medical History** via `getPastMedicalHistory()`: the **bare** Problem Observations (`…22.4.4`)
+  a Past Medical History section (`…22.2.20`) carries directly under each `<entry>` (not wrapped in a
+  Problem Concern Act), reusing the Problems model, so a past problem never double-counts as an active
+  one.
+
+## Required-section validation
+
+For a recognized `DocumentType`, a required (SHALL) catalog section that is absent surfaces a
+`REQUIRED_SECTION_MISSING` **warning**, never a fatal, so a missing section never blocks reading the
+data that _is_ present. `requiredSectionKeys(documentType)` and
+`missingRequiredSections(documentType, presentKeys)` expose the table directly.
+
+The table is **conservative**: it asserts only unconditional, in-catalog, high-confidence SHALL
+constraints and deliberately omits choice constraints (`SHALL contain A OR B`), SHOULD/MAY sections,
+and SHALL sections outside the recognized catalog (e.g. Hospital Course, Physical Exam). A document
+type with an empty table therefore means _"no unconditional in-catalog SHALL section is asserted yet"_,
+not _"this type has no requirements"_. Broadening a table is additive and safe. The **Referral Note**
+asserts **Reason for Referral** alongside Problems, Allergies, and Medications (traced to the
+normative R2.1 Schematron, CONF:1198-30925), so the SHALL check does not stay silent when a Referral
+Note omits it. Its Assessment/Plan requirement stays out (a choice constraint), as do its Results and
+Plan of Treatment sections (SHOULD, not SHALL).
+
+**Six of the twelve tables assert nothing**, so this check under-warns by design: Consultation Note,
+Progress Note, Procedure Note, Operative Note, Diagnostic Imaging Report, and Unstructured Document
+carry an empty set pending per-type verification against the IG. A document of one of those types can
+be missing every section its type requires and still parse clean, with no `REQUIRED_SECTION_MISSING`.
+Per-type provenance also varies: some sets are traced to the normative R2.1 Schematron and some are
+not yet reconciled against it, and the asserted sets are deliberately narrower rather than broader
+where that tracing is incomplete. **A quiet parse is not a conformance result.** If your pipeline needs
+IG conformance, validate the document with an external validator.
+
+## Serialize & round-trip
 
 The conservative _emit_ half of Postel's Law. `serializeCcda(doc)` (or `doc.toString()`) re-emits a
 parsed document as spec-clean C-CDA XML with a guaranteed UTF-8 declaration:
@@ -145,7 +219,7 @@ const out = serializeCcda(doc); // === doc.toString()
 > A hand-constructed `CcdaDocument` (not produced by `parseCcda` or `buildCcda`) retains no source XML,
 > so `toString()` throws. To construct a document from scratch, use the builder below.
 
-## Build a document (Phase 7)
+## Build a document
 
 `buildCcda(init)` is the emit _factory_ symmetric with `parseCcda`: from structured input it assembles
 a **spec-clean C-CDA R2.1** document and returns a real `CcdaDocument`. It emits either a **CCD**
@@ -262,12 +336,14 @@ condition is resolved, per Problem Observation `…22.4.4`) is emitted only for 
 keeps the `nullFlavor="UNK"` high, never a fabricated date. Each CCD SHALL section for which no content
 is supplied is emitted as a spec-clean empty `nullFlavor="NI"` section; the non-required Immunizations /
 Procedures / Encounters / Social History / Functional Status / Mental Status / Past Medical History /
-Plan of Treatment / Family History sections are emitted only when populated. The builder now emits two of
-the twelve document types (**CCD** and **Referral Note**); the remaining ten land in a later increment.
+Plan of Treatment / Family History sections are emitted only when populated. The builder emits two of
+the twelve document types (**CCD** and **Referral Note**); the other ten are **not implemented**, and any
+other `documentType` throws a `TypeError` rather than emitting something that merely resembles the type
+you asked for. Any C-CDA section outside the set listed above cannot be built at all.
 `buildCcda(init, { terminology })` accepts an optional bring-your-own terminology adapter (see "Code
 systems & provenance"). Every code is still emitted verbatim; the adapter can only flag, never coerce.
 
-## Edit a document (Phase 7)
+## Edit a document
 
 `editCcda(doc, options)` is the read→edit→write loop: it takes a document from `parseCcda` and re-emits
 it with a section **added** or **replaced**, returning the re-parsed document. It rebuilds only the
@@ -313,75 +389,23 @@ R2 SHALL (1..\*) and there is no prior-version id to name, so `editCcda` throws
 It is fail-safe: an unedited section is carried by reference (never dropped), an empty content list
 emits a spec-clean `nullFlavor="NI"` shell (never fabricated entries), and an edit that would drop a
 SHALL required section throws a typed `CcdaEditError`. `mode` is `"add"` (require absent), `"replace"`
-(require present), or `"upsert"` (default: replace-or-add). Editing supports whole-section add/replace
-across the twelve single-list section kinds; entry-level append that byte-preserves a section's other
-entries (use a `replace` with the full entry set), section removal, and the `APND`/`XFRM` relationships
-land in a later increment.
+(require present), or `"upsert"` (default: replace-or-add). `editCcda(doc, { terminology })` forwards an
+optional adapter to the final re-parse, so an adapter-rejected code in a grafted **or** untouched section
+is flagged; the edit still emits every code verbatim.
 
-## What it extracts (Phase 5): Procedures, Encounters, Social History
+**What editing does not cover.** The twelve editable section kinds are `problems`, `allergies`,
+`medications`, `results`, `vitalSigns`, `immunizations`, `procedures`, `encounters`, `socialHistory`,
+`pastMedicalHistory`, `planOfTreatment`, and `familyHistory`. **Functional Status and Mental Status are
+buildable but not editable**: each is assembled from three separate content lists, which the single-list
+edit shape does not fit. The Referral Note's narrative-only Assessment and Reason for Referral sections
+are likewise not editable. There is **no entry-level append**: adding one problem to an existing
+Problems section means a `replace` carrying the full entry set, which rebuilds that section from your
+typed input, so anything in the original section you do not carry over, **including detail this library
+does not model**, is absent from the result (every section you did not target is still carried through
+byte-for-byte). There is no way to remove a section at all, and the `APND` / `XFRM` document
+relationships are not implemented: an edit stamps `RPLC` only.
 
-- **Procedures** via `getProcedures()`: the three Procedure Activity templates: an
-  altering/operative `<procedure>` (`…22.4.14`), a non-altering `<act>` service (`…22.4.12`), and an
-  assessment `<observation>` (`…22.4.13`), kept apart by a `kind` discriminant. **`moodCode` is
-  safety-critical:** a performed procedure (`EVN`) and a planned/ordered one
-  (`INT`/`RQO`/`PRMS`/`PRP`/`APT`/`ARQ`) become a `disposition` of `"performed"` vs `"planned"` and are
-  **never conflated**: a missing mood is `PLANNED_VS_PERFORMED_AMBIGUOUS`, an unrecognized mood is
-  `PROCEDURE_MOOD_UNEXPECTED`, both leaving `disposition` undefined rather than guessing.
-- **Encounters** via `getEncounters()`: the Encounter Activity (`…22.4.49`): the visit type `code`,
-  `statusCode`, and visit-period `effectiveTime`.
-- **Social History: Smoking Status** via `getSmokingStatus()`: the Smoking Status (Meaningful Use)
-  observation (`…22.4.78`). An explicitly-unknown status (a `nullFlavor` or an "unknown" SNOMED concept)
-  sets `unknown: true` and emits `SMOKING_STATUS_UNKNOWN`, never silently read as "never smoked"; a
-  value outside the Current Smoking Status value set is preserved and flagged
-  `SMOKING_STATUS_CODE_UNRECOGNIZED`.
-
-### Required-section validation
-
-For a recognized `DocumentType`, a required (SHALL) catalog section that is absent surfaces a
-`REQUIRED_SECTION_MISSING` **warning**, never a fatal, so a missing section never blocks reading the
-data that _is_ present. `requiredSectionKeys(documentType)` and
-`missingRequiredSections(documentType, presentKeys)` expose the table directly.
-
-The table is **conservative**: it asserts only unconditional, in-catalog, high-confidence SHALL
-constraints and deliberately omits choice constraints (`SHALL contain A OR B`), SHOULD/MAY sections,
-and SHALL sections outside the recognized catalog (e.g. Hospital Course, Physical Exam). A document
-type with an empty table therefore means _"no unconditional in-catalog SHALL section is asserted yet"_,
-not _"this type has no requirements"_. Broadening a table is additive and safe. The **Referral Note**
-now asserts **Reason for Referral** alongside Problems, Allergies, and Medications (traced to the
-normative R2.1 Schematron, CONF:1198-30925). That section became a recognized catalog key, so the
-SHALL check no longer stays silent when a Referral Note omits it. Its Assessment/Plan requirement
-stays out (a choice constraint), as do its Results and Plan of Treatment sections (SHOULD, not SHALL).
-
-## What it extracts (Phase 5b): the deferred clinical sections
-
-- **Plan of Treatment** via `getPlannedItems()`: the six planned-entry templates a Plan of Treatment
-  section (`…22.2.10`) can carry: Planned Act (`…22.4.39`), Encounter (`…22.4.40`), Procedure
-  (`…22.4.41`), Medication Activity (`…22.4.42`), Supply (`…22.4.43`), and Observation (`…22.4.44`),
-  kept apart by a `kind` discriminant. **Everything here is future/ordered, never performed:** each
-  item's `moodCode` is read into the same performed-vs-planned `disposition` as Procedures (a planned
-  mood → `"planned"`), and the two are **never conflated**; a missing/unrecognized mood leaves
-  `disposition` undefined rather than guessing.
-- **Functional Status** / **Mental Status** via `getFunctionalStatus()` / `getMentalStatus()`: the
-  Functional/Mental Status Observations (`…22.4.67` / `…22.4.74`), read whether standalone or clustered
-  in a status Organizer (`…22.4.66` / `…22.4.75`), plus **direct-entry Assessment Scale Observations**
-  (`…22.4.69`, flagged `assessmentScale`), the conformant C-CDA R2.1 placement, with their scored
-  Assessment Scale Supporting Observations (`…22.4.86`) on `supporting` and the total score read as an
-  `integer` (`xsi:type="INT"`) value. Each finding is `domain`-tagged **from its carrying section**, so
-  the two are **never conflated** (the same scale OID appears in both sections; the section, not the
-  template, fixes the domain); a scale in a section that is neither functional nor mental is not captured
-  (its domain is unknowable, never guessed). A scale mis-nested inside an organizer is still read
-  leniently.
-- **Family History** via `getFamilyHistory()`: the Family History Organizer (`…22.4.45`) → Observation
-  (`…22.4.46`) tree. The relative's identity (relationship, gender, birth time, `sdtc:deceasedInd`) is a
-  structured `relative` (not flattened into each condition); each condition carries its coded `value`,
-  an optional Age Observation (`…22.4.31`, age at onset), and a `causeOfDeath` flag from a Family History
-  Death Observation (`…22.4.47`).
-- **Past Medical History** via `getPastMedicalHistory()`: the **bare** Problem Observations (`…22.4.4`)
-  a Past Medical History section (`…22.2.20`) carries directly under each `<entry>` (not wrapped in a
-  Problem Concern Act), reusing the Problems model, so a past problem never double-counts as an active
-  one.
-
-### Code systems & provenance
+## Code systems & provenance
 
 Slot validation (`checkCodeSlot`, exported OIDs `SNOMED_CT` / `RXNORM` / `ICD10_CM` / `NDC` / `UNII` /
 `NCI_ROUTE` / …) is **structural recognition only**: it checks that a coded value's `@codeSystem` OID
@@ -418,8 +442,17 @@ The adapter can only ever **report**: a `validateCode` verdict of `{ result: fal
 `SEMANTIC_CODE_INVALID` with the code preserved verbatim (never coerced); `undefined` means "no
 opinion" (silent).
 
+> **The adapter is consulted at five coded slots only, so read a silent document carefully.** Those
+> slots are the `CodeSlot` set `checkCodeSlot` recognizes: `problem`, `medication`, `allergen`, `route`,
+> and `vaccine`. Every other coded value is **never handed to your adapter** and therefore can never
+> raise `SEMANTIC_CODE_INVALID`: the Results and Vital Signs LOINC codes, the procedure, encounter,
+> planned-item and family-history codes, the smoking-status, functional-status and mental-status
+> observation values, the allergy propensity type, and the reaction, severity and criticality
+> observations. **A clean run means those five slots passed, not that the document's terminology was
+> verified.**
+
 The interface also declares an optional `translate` (`$translate`) method. `buildCcda` consults it at
-each clinical coded slot (problem value, allergen, medication drug + route, vaccine + route) and emits
+the same five slots (problem value, allergen, medication drug and route, vaccine and route) and emits
 any returned coding as a spec-clean CDA R2 `<translation>` alternate **beside** the primary code, an
 _additional_ coding, never a substitution:
 
@@ -446,7 +479,9 @@ const doc = buildCcda(init, { terminology: adapter });
 
 Here too the adapter can only ever **add**: `translate` returning `undefined` (no opinion) or an empty
 `matches` (unmapped) emits no `<translation>` and leaves output byte-identical, and the primary code is
-never rewritten to satisfy it.
+never rewritten to satisfy it. The Results and Vital Signs LOINC codes, the reaction / severity /
+criticality observations, and the procedure, encounter, planned-item and family-history codes are **not**
+wired for `<translation>` emission, and neither is the section-rebuild path `editCcda` uses.
 
 ## Known limitations
 
@@ -462,6 +497,21 @@ never rewritten to satisfy it.
 - **LOINC deprecation is a curated set**: `checkLoincDeprecation` flags a curated list of known
   deprecated LOINC codes, not every deprecation in the LOINC release. As with all code-system checks,
   this is recognition only: membership validation needs a licensed terminology service.
+- **A terminology adapter is consulted at five coded slots only**: `problem`, `medication`, `allergen`,
+  `route`, `vaccine`. Results/Vital Signs LOINC codes, procedure, encounter, planned-item and
+  family-history codes, the smoking/functional/mental status values, the allergy propensity type, and
+  the reaction/severity/criticality observations are never handed to it. A clean run means those five
+  slots passed, **not** that the document was terminology-verified.
+- **Required-section (SHALL) validation under-warns, and six of the twelve tables assert nothing**:
+  Consultation Note, Progress Note, Procedure Note, Operative Note, Diagnostic Imaging Report, and
+  Unstructured Document assert no unconditional in-catalog SHALL section yet, so a document of one of
+  those types missing every section its type requires still parses clean. A quiet parse is not a
+  conformance result.
+- **Editing is whole-section, across twelve kinds**: Functional Status and Mental Status are buildable
+  but **not editable** (each takes three separate content lists), as are the Referral Note's
+  narrative-only Assessment and Reason for Referral sections. There is no entry-level append (a
+  `replace` rebuilds the section from your typed input, dropping unmodeled detail in it), no section
+  removal, and no `APND` / `XFRM` relationship: an edit stamps `RPLC` only.
 - **Serializer re-emits a parsed document; the builder constructs one**: `serializeCcda` / `toString()`
   faithfully re-emit a _parsed_ document (the spec-clean emit half of Postel's Law). To construct a
   document from scratch, `buildCcda` emits a spec-clean **CCD** or **Referral Note**
@@ -472,7 +522,7 @@ never rewritten to satisfy it.
   specializes the header and emits its own SHALL set (Reason for Referral, Assessment, Plan of Treatment).
   To change a section of a document you already parsed, use `editCcda`. The remaining ten document
   types are not implemented. "Spec-clean" here means well-formed,
-  correctly-templated, and **round-tripping** through `parseCcda` with zero warnings. Every entry now
+  correctly-templated, and **round-tripping** through `parseCcda` with zero warnings. Every entry
   emits the `SHALL`-cardinality `effectiveTime` its C-CDA R2.1 template requires: the Problems/Allergies
   concern acts + observations, the Medication Activity `IVL_TS` duration, and the Results/Vital Signs
   organizers + observations. When the caller supplied a time it is used; when a `SHALL` requires the
