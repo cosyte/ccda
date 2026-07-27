@@ -159,16 +159,19 @@ milestone it stopped at.
   redundant rather than contradictory, so the material arm is read as before. An arm asserting no
   symbol at all (a `nullFlavor`-only `<code>` with no `<translation>`, or no `<code>`) names no
   product and never conflicts with one that does, so whichever arm names the drug is read.
-- **What an arm "names" includes its `<translation>` alternates.** The comparison runs over each
-  arm's whole coding set (its `@code` plus each `<translation>`), not the primary `@code` alone. If
-  you have a `nullFlavor="OTH"` arm whose `<translation>` carries the real RxNorm code, that arm now
-  names a drug: where it disagrees with the other arm you will get `MEDICATION_PRODUCT_ARM_CONFLICT`
-  and `med.drug === undefined` where you previously got the other arm's code in silence. The
-  converse also holds, an arm whose `<translation>` names the code the other arm leads with is
-  agreeing with it, so that combination no longer conflicts. **Selection is separate and unchanged**:
-  the element handed to the code-system and terminology checks is still chosen on the primary
-  `@code`, and a coding is never lifted out of a `<translation>` to stand in as the product, because
-  translations are preserved but not slot-checked.
+- **An arm that asserts no `@code` names what its `<translation>` alternates name.** If you have a
+  `nullFlavor="OTH"` arm whose `<translation>` carries the real RxNorm code, that arm now names a
+  drug: where it disagrees with the other arm you will get `MEDICATION_PRODUCT_ARM_CONFLICT` and
+  `med.drug === undefined` where you previously got the other arm's code in silence. **The
+  translations are a fallback, never an addition**, so two arms that both assert a `@code` are
+  compared on those and nothing else, exactly as before. That direction is deliberate: a translation
+  the two arms happen to share is routinely coarser than either primary (an RxNorm ingredient, a
+  local formulary id, an NDC spanning presentations), so counting it would let two arms naming two
+  strengths of one drug agree, and one strength would be handed back. Reading translations can only
+  make the warning fire more, never less. **Selection is separate and unchanged**: the element handed
+  to the code-system and terminology checks is still chosen on the primary `@code`, and a coding is
+  never lifted out of a `<translation>` to stand in as the product, because translations are
+  preserved but not slot-checked.
 - **UCUM validation is grammatical, on a curated atom subset.** The validator checks well-formed UCUM
   against the prefixes/atoms that appear in lab Results and Vital Signs, not the full UCUM registry. A
   valid-but-uncurated atom may read as `NON_UCUM_UNIT`; the raw unit is always preserved. It does not

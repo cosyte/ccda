@@ -131,18 +131,20 @@ is why the conflict warning is safety-critical and why it is scoped this narrowl
 `MEDICATION_PRODUCT_ARM_UNEXPECTED` can stay tolerable: wherever no code was selected it is not
 alone, the untolerable conflict code is beside it.
 
-**What "the same product" means is read across each arm's whole coding set**, its `<code>`'s own
-`@code` plus every `<translation>` alternate, not the primary `@code` alone. `nullFlavor="OTH"`
-beside a `<translation>` is the documented C-CDA idiom for "not codable in the bound value set, here
-is an alternate coding", so on that shape the arm's product identity lives in the translation, and a
-primary-only comparison read the arm as naming nothing and picked the other one in silence. It cuts
-the other way too: an arm whose `<translation>` names the code the other arm leads with is agreeing
-with it, in the document's own words, so that is not a conflict. Two arms conflict when **none** of
-the codings one offers agrees with any the other offers. Nothing beyond that is inferred, deciding
-that two codings the document never linked denote one concept is a `TerminologyAdapter`'s job.
-**Selection is a narrower question and stays keyed on the primary `@code`**: a coding is only ever
-handed to the slot checks from the position the document wrote it in, never lifted out of a
-`<translation>` (which this package preserves but never slot-checks).
+**What an arm names is its `<code>`'s own `@code`, or, when it asserts none, its `<translation>`
+alternates.** `nullFlavor="OTH"` beside a `<translation>` is the documented C-CDA idiom for "not
+codable in the bound value set, here is an alternate coding", so on that shape the arm's product
+identity lives in the translation, and a primary-only comparison read the arm as naming nothing and
+picked the other one in silence. **The translations are a fallback, never an addition**: two arms
+that both assert a `@code` are compared on those and nothing else. Adding translations in would let
+a coding two arms happen to share withdraw a conflict their primaries assert, and a shared
+translation is routinely coarser than either primary (an RxNorm ingredient, a local formulary id, an
+NDC spanning presentations), so two arms naming two strengths of one drug would agree and one
+strength would be handed back. Reading translations can therefore only make the conflict warning
+fire more, never less. **Selection is a narrower question again and stays keyed on the primary
+`@code`**: a coding is only ever handed to the slot checks from the position the document wrote it
+in, never lifted out of a `<translation>` (which this package preserves but never slot-checks).
+Among repeated arms of one kind, the first that names a product is the one read.
 
 ## What it extracts: discrete clinical data
 

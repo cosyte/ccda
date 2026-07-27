@@ -92,17 +92,21 @@ immutability + explicit mutation, and the profile system.
     DOM so every arm round-trips byte-for-byte.
   - **Disagreement is read across every arm and every coding; selection is not.** The conflict check
     covers both arms of the choice **and repeated arms of one kind** (two sibling
-    `manufacturedMaterial`s naming different drugs is the same silent pick), and it compares whole
-    coding sets: an arm's own `@code` plus each `<translation>` alternate. `nullFlavor="OTH"` beside
-    a `<translation>` is the documented C-CDA idiom, so on that shape the arm's product identity is
-    in the translation. Two arms conflict when **none** of the codings one offers agrees with any the
-    other offers, which both raises the conflict where a translation is an arm's only statement of
-    its drug and withholds it where one arm's translation names the other's code (the document's own
-    assertion that they denote one concept). **Which element is handed to `checkCodeSlot` is decided
-    by primary `@code` alone**, deliberately: this package's stated boundary is that slot checks
-    apply to a slot's primary coding and translations are preserved but never slot-checked, so
-    selecting on a translation would validate a `nullFlavor` primary against nothing or synthesize a
-    coding the document never wrote there.
+    `manufacturedMaterial`s naming different drugs is the same silent pick). An arm names its
+    `<code>`'s own `@code`, or, when it asserts none, the codings its `<translation>` alternates
+    assert: `nullFlavor="OTH"` beside a `<translation>` is the documented C-CDA idiom, so on that
+    shape the arm's product identity is in the translation. **The translations are a fallback, never
+    an addition, and that asymmetry is load-bearing.** Two arms that both assert a `@code` are
+    compared on those alone, so reading translations can only make the conflict fire _more_, never
+    less. Do not "improve" this into a set-intersection rule where a shared translation withdraws a
+    conflict: a shared translation is routinely coarser than either primary (an RxNorm ingredient, a
+    local formulary id, an NDC spanning presentations), `A = Z` and `B = Z` does not give `A = B`,
+    and the failure mode is handing back one strength of a document that names two. **Which element
+    is handed to `checkCodeSlot` is decided by primary `@code` alone**, deliberately: this package's
+    stated boundary is that slot checks apply to a slot's primary coding and translations are
+    preserved but never slot-checked, so selecting on a translation would validate a `nullFlavor`
+    primary against nothing or synthesize a coding the document never wrote there. Among repeated
+    arms of one kind, the first that names a product is the one selected.
   - `SAFETY_CRITICAL_CODES` is a frozen read-only view, not a `Set` instance: every read operation
     works (including spread), but `instanceof Set` is `false`.
   - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`

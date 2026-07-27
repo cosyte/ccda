@@ -653,7 +653,8 @@ export function missingProductCode(position: CcdaPosition): CcdaWarning {
  * `MEDICATION_PRODUCT_ARM_CONFLICT` ({@link medicationProductArmConflict}),
  * which is safety-critical and fires alongside this one.
  *
- * **When this warning stands alone, the code is read rather than refused**,
+ * **When this warning stands alone, the arm's `<code>` is read rather than
+ * refused**,
  * which is Postel's Law on the parse side: the alternate arm is a valid CDA R2
  * shape carrying the same `CE`, and the previous behaviour of returning
  * `drug: undefined` in silence was strictly worse than reading it and flagging
@@ -674,16 +675,19 @@ export function missingProductCode(position: CcdaPosition): CcdaWarning {
  * cannot answer without the R2.1 Schematron, so no conformance verb is claimed
  * here, the warning says only which arm was present. That also decides the
  * safety classification, and the argument has two halves rather than one.
- * Wherever this code is the *only* thing fired, a code was selected and fully
- * checked, so it reports known, meaning-preserving vendor noise a profile may
- * defensibly tolerate. Wherever a code was **not** selected, this code is by
- * construction not alone: `MEDICATION_PRODUCT_ARM_CONFLICT` is in
- * `SAFETY_CRITICAL_CODES`, so no profile may quiet it, and the withheld product
- * is reported whether or not this code is tolerated. Tolerating this one can
- * therefore never buy silence about a withheld drug, which is why it is
- * deliberately **not** in `SAFETY_CRITICAL_CODES`. Its exclusion is unchanged
- * by that reasoning: it is the justification that was corrected, not the
- * classification.
+ * Wherever this code is the *only* thing fired, a `<code>` element **was**
+ * selected and went through {@link checkCodeSlot} unchanged, so the slot was
+ * examined exactly as a single-arm document's would have been, and this code
+ * reports known, meaning-preserving vendor noise a profile may defensibly
+ * tolerate. Wherever **no** element was selected, this code is by construction
+ * not alone: either `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed) or
+ * `MISSING_PRODUCT_CODE` (no arm carried a `<code>` at all, the shape a
+ * name-only `LabeledDrug` produces) fires beside it, **both** of which are in
+ * `SAFETY_CRITICAL_CODES` and neither of which any profile may quiet. Tolerating
+ * this one can therefore never buy silence about an absent or withheld drug,
+ * which is why it is deliberately **not** in `SAFETY_CRITICAL_CODES`. Its
+ * exclusion is unchanged by that reasoning: it is the justification that was
+ * corrected, not the classification.
  *
  * @example
  * ```ts
@@ -694,7 +698,7 @@ export function missingProductCode(position: CcdaPosition): CcdaWarning {
 export function medicationProductArmUnexpected(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED,
-    message: `manufacturedProduct carries the manufacturedLabeledDrug arm, which C-CDA's medication templates are not written around; the arm is flagged, and unless a companion MEDICATION_PRODUCT_ARM_CONFLICT says otherwise the product code was read and checked as usual.`,
+    message: `manufacturedProduct carries the manufacturedLabeledDrug arm, which C-CDA's medication templates are not written around; the arm is flagged, and unless a companion warning says the product was withheld (MEDICATION_PRODUCT_ARM_CONFLICT) or absent (MISSING_PRODUCT_CODE) the product code was read and checked as usual.`,
     position,
   };
 }
@@ -711,15 +715,25 @@ export function medicationProductArmUnexpected(position: CcdaPosition): CcdaWarn
  * is the identical silent pick, one arm kind in, and `ManufacturedProduct`
  * models one participant, so a repeat is already outside the model.
  *
- * **What each arm is taken to name.** Every coding it offers: its `<code>`'s own
- * `@code`, plus each `<translation>` alternate. A `nullFlavor="OTH"` `<code>`
- * beside a `<translation>` is the documented C-CDA idiom for "not codable in the
- * bound value set, here is an alternate coding", so on that shape the arm's whole
- * product identity is in the translation, and a `@code`-only comparison read it
- * as naming nothing and selected the other arm in silence. Two arms conflict
- * when **none** of the codings one offers agrees with any the other offers; an
- * arm whose `<translation>` names the other arm's code is agreeing with it, in
- * the document's own words, and does not conflict.
+ * **What each arm is taken to name.** Its `<code>`'s own `@code` when it asserts
+ * one, and **otherwise** the codings its `<translation>` alternates assert. A
+ * `nullFlavor="OTH"` `<code>` beside a `<translation>` is the documented C-CDA
+ * idiom for "not codable in the bound value set, here is an alternate coding",
+ * so on that shape the arm's whole product identity is in the translation, and a
+ * `@code`-only comparison read it as naming nothing and selected the other arm
+ * in silence.
+ *
+ * **The translations are a fallback, never an addition.** They are read only for
+ * an arm whose `<code>` asserts no symbol, so two arms that both assert one are
+ * compared on those symbols and nothing else, exactly as before translations
+ * were read at all. Adding them would let a coding the two arms happen to share
+ * *withdraw* a conflict the primaries assert, and a shared translation is
+ * routinely coarser than either primary (an RxNorm ingredient, a local formulary
+ * id, an NDC spanning presentations), so two arms naming two strengths of one
+ * drug would agree and one strength would be handed back. Reading `A = B` out of
+ * `A = Z` and `B = Z` is a transitive closure the document never wrote. Widening
+ * what an arm names can therefore only make this warning fire **more**, never
+ * less.
  *
  * An arm that names no product at all (no `@code` and no `<translation>`
  * carrying one, e.g. a `nullFlavor`-only `<code>`, or no `<code>` at all) never
