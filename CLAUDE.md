@@ -137,10 +137,15 @@ immutability + explicit mutation, and the profile system.
 - **Em-dash brand gate armed.** `scripts/check-no-emdash.sh` (`pnpm check:no-emdash`) plus
   `.github/workflows/no-emdash.yml` enforce the founder directive banning `U+2014` outright
   (`knowledgebase/06-brand/voice-and-tone.md`, "No em dashes. Ever."). It scans **both** halves the
-  rule covers: every tracked file, **and** the PR title, body, and commit messages, on the
-  non-default `edited` trigger so retitling a PR re-checks it (this repo squash-merges, so the PR
-  title and body are the message that lands). When it goes red the fix is never to re-encode the
-  character: rewrite with a period, colon, comma, or parentheses.
+  rule covers: every tracked file **except the script itself**, **and** the PR title, body, and
+  commit messages. The script is self-excluded because it has to name the encodings it bans, so it
+  is the one file nothing checks; keep it free of the literal character. The workflow uses the
+  non-default `edited` trigger so retitling a PR re-checks it. What lands here was read, not
+  assumed: only squash merge is allowed, with `squash_merge_commit_title: COMMIT_OR_PR_TITLE` and
+  `squash_merge_commit_message: COMMIT_MESSAGES`, so the subject comes from the PR title and the
+  body comes from the branch commit messages. **The PR body does not land**; it is scanned anyway,
+  because it is a cosyte surface in its own right. When the gate goes red the fix is never to
+  re-encode the character: rewrite with a period, colon, comma, or parentheses.
   - **It is the text-only script variant, and dropping `grep -I` is the load-bearing part here.**
     `src/profiles/merge.ts` uses two raw NULs as the separator in `toleranceKey`'s composite key.
     The byte is the feature and cannot be removed, so grep classifies that file as binary. Under
@@ -152,10 +157,15 @@ immutability + explicit mutation, and the profile system.
   - **Do not swap in `website`'s variant** (it would re-make that exemption on purpose), and do not
     reach for `pathways`' preferred `git check-attr binary` partition without first adding a
     `.gitattributes`, which is deferred to the cross-repo "what is a text file" rule.
-  - Known limits are written down in the script header and are shared across every copy
-    (`knowledgebase`, `hl7`, `fhir`, `pathways`, `x12`, `ncpdp`, `dicom`), so fix them there, not
-    here. The pipeline code in this copy is byte-identical to `ncpdp`'s on purpose: a divergent
-    variant is worse than a known shared limit.
+  - Known limits are written down in the script header, and the fix for each is cross-repo rather
+    than local, so do not patch one here. **Which copies share which limit is not uniform**, and the
+    header is the precise statement: the literal encoded-form matching and the contents-not-names
+    gap are shared by all of `knowledgebase`, `hl7`, `fhir`, `pathways`, `x12`, `ncpdp` and `dicom`;
+    the stderr-capture residual's `sed -z` half exists only in `ncpdp`, `dicom` and here, because
+    the older copies have no `sed` stage; and the NUL-classification residual does not apply to
+    `pathways` at all, which partitions on `git check-attr binary` instead. The pipeline code in
+    this copy is byte-identical to `ncpdp`'s on purpose: a divergent variant is worse than a known
+    shared limit.
   - Scope, stated honestly: the gate covers new text only. It does not rewrite history, and 113 em
     dashes are already in commit messages on `main`, PR #52's subject line among them.
 

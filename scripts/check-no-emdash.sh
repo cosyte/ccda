@@ -313,9 +313,15 @@ cd "$(git rev-parse --show-toplevel)"
 #   make grep classify first-party TypeScript as binary. With -I the em dash in that file
 #   would have been skipped silently, which is exactly what PR #52's sweep did. Without
 #   it, the file is a LOUD red (grep prints "binary file matches" on stderr and
-#   refuse_if_incomplete fires). This repo is TypeScript, markdown, JSON, YAML, one shell
-#   script and one snapshot, with no binary assets at all: 161 tracked files, one holding
-#   a NUL, all 161 decoding as UTF-8, measured 2026-07-27. Fail closed, not open.
+#   refuse_if_incomplete fires). This repo tracks NO binary assets at all: as measured
+#   2026-07-27, BEFORE this port added its own files, 161 tracked files, exactly one
+#   holding a NUL, all 161 decoding as UTF-8. Do not read that count as current. It is a
+#   snapshot, it moves with every commit, and this header deliberately does not restate it
+#   in the present tense: a gate whose thesis is that a scan must not claim more than it
+#   read has no business carrying a census that goes stale on arrival. Re-measure if you
+#   need a number. What is durable is the shape of the tree, not its size: TypeScript,
+#   markdown, JSON, YAML, shell, one Vitest snapshot, and assorted dotfiles and
+#   extensionless config, every one of which the scan reads. Fail closed, not open.
 #
 #   KNOWN LIMIT, stated because ccda is a parser repo where it is plausible. The
 #   pattern matches U+2014 as UTF-8 and as the five textual encodings listed with it. It
@@ -323,10 +329,11 @@ cd "$(git rev-parse --show-toplevel)"
 #   `encoding="ISO-8859-1"` XML declaration carrying CP1252 0x97 is a plausible future
 #   artifact here: real vendor CDA in a Windows codepage is common, and the day one is
 #   checked in as a byte-faithful fixture this limit is live. Measured, not assumed: such
-#   a file scans clean and this gate stays GREEN. There is none today. Every C-CDA fixture
-#   is currently inline TypeScript, and all 161 tracked files decode as UTF-8; the one
-#   `0x97` byte in the tree is the second byte of a valid `\xc3\x97` (a multiplication
-#   sign in a test comment), not a legacy-charset em dash. The -I discussion above does
+#   a file scans clean and this gate stays GREEN. There was none at the time of the port.
+#   Every C-CDA fixture was inline TypeScript then, every tracked file decoded as UTF-8,
+#   and the one `0x97` byte in the tree was the second byte of a valid `\xc3\x97` (a
+#   multiplication sign in a test comment) rather than a legacy-charset em dash. Re-measure
+#   rather than trusting that sentence. The -I discussion above does
 #   not rescue the case either: GNU grep 3.8 DOES
 #   classify such a file as binary (any encoding error is enough, a NUL is not required),
 #   but it only surfaces that as the "binary file matches" diagnostic when the pattern
