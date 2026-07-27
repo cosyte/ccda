@@ -134,6 +134,63 @@ immutability + explicit mutation, and the profile system.
   DOM round-trip + a hardenable (XXE-safe) posture. The parse layer configures and consumes
   it; do **not** add a _second_ XML library. Reuse this one (and coordinate `@cosyte/ncpdp` onto the
   same substrate).
+- **Em-dash gate present and reporting, but NOT yet blocking.** `scripts/check-no-emdash.sh`
+  (`pnpm check:no-emdash`) plus `.github/workflows/no-emdash.yml` check the founder directive banning
+  `U+2014` outright (`knowledgebase/06-brand/voice-and-tone.md`, "No em dashes. Ever."). Read the
+  limit first, because "armed" would be the wrong word: **the job is not a required status check**,
+  so it does not stop a merge today. Verified against the API: `cosyte/ccda` is governed by two
+  org-level rulesets, and `parser-ci-required-checks` requires exactly
+  `ci / verify (22, ubuntu-latest)`, `ci / verify (24, ubuntu-latest)` and `ci / actionlint`. This
+  job's context, `Em-dash gate / no-emdash`, is not among them, and `allow_auto_merge` is on with
+  zero required approvals, so a PR carrying a live character can auto-merge while this job is red.
+  **Closing it is a GitHub settings change, not a file change** (there is nothing to edit in any
+  repo, and in particular not in `cosyte/.github`, which defines no ruleset). Rulesets stack, so
+  either route works: add the context to the org ruleset `parser-ci-required-checks`, which covers
+  `hl7`/`x12`/`ncpdp`/`dicom`/`mllp`/`ccda` at once but needs `admin:org`; or add a
+  repository-level ruleset here, which is what `pathways`, `docs`, `website` and `iac` already do.
+  Deliberately not attempted from a slice that ships files. `hl7`, `x12`, `ncpdp`, `dicom` and
+  `mllp` sit behind the same gap. (`fhir` had no ruleset or branch protection at all when this
+  was written; a repository-level one was added 2026-07-27.) So the
+  true claim is that a violation is **visible on every PR**, not that it is impossible. It scans
+  **both** halves the
+  rule covers: every tracked file **except the script itself**, **and** the PR title, body, and
+  commit messages. The script is self-excluded because it has to name the encodings it bans, so it
+  is the one file nothing checks; keep it free of the literal character. The workflow uses the
+  non-default `edited` trigger so retitling a PR re-checks it. What lands here was read, not
+  assumed: only squash merge is allowed, with `squash_merge_commit_title: COMMIT_OR_PR_TITLE` and
+  `squash_merge_commit_message: COMMIT_MESSAGES`, so the subject comes from the PR title and the
+  body comes from the branch commit messages. **The PR body does not land**; it is scanned anyway,
+  because it is a cosyte surface in its own right. When the gate goes red the fix is never to
+  re-encode the character: rewrite with a period, colon, comma, or parentheses.
+  - **It is the text-only script variant, and dropping `grep -I` is the load-bearing part here.**
+    `src/profiles/merge.ts` uses two raw NULs as the separator in `toleranceKey`'s composite key.
+    The byte is the feature and cannot be removed, so grep classifies that file as binary. Under
+    `-I`, or under `website`'s NUL-partition variant, it would be **silently exempt** from a ban
+    that has no exceptions. Without `-I` it is a loud red instead: a match in it lands on stderr and
+    trips `refuse_if_incomplete`. That is not theoretical. PR #52's "remove em dashes from source +
+    config" sweep skipped this exact file for this exact reason and left a live character behind,
+    which this gate caught on its first run.
+  - **Do not swap in `website`'s variant** (it would re-make that exemption on purpose), and do not
+    reach for `pathways`' preferred `git check-attr binary` partition without first adding a
+    `.gitattributes`, which is deferred to the cross-repo "what is a text file" rule.
+  - Known limits are written down in the script header, and the fix for each is cross-repo rather
+    than local, so do not patch one here. **Which copies share which limit is not uniform**, and the
+    header is the precise statement. **Do not trust a copy count written down anywhere, including
+    here.** The fleet grows every time a repo is ported, and a count in a comment is stale the day
+    after it is written, which is the same failure this gate exists to refuse. Enumerate at
+    carry-back time: `ls */scripts/check-no-emdash.sh` from the meta-repo, and remember `crew`
+    vendors `knowledgebase`'s copy under `knowledgebase/scripts/`, so it goes stale silently. What
+    is durable is which shapes differ, and that is worth knowing before carrying anything: `docs`
+    is the weakest (one line, no `-z`/`-0`/`-r`/`--`/`-e`, and both `-I` and `-d skip`);
+    `pathways` partitions on `git check-attr binary`; `website` and `mllp` partition on the NUL
+    byte; the rest are the text-only shape, of which only `ncpdp`, `dicom` and this one carry the
+    `sed -z` stage. That last point matters for the residuals: the encoded-form and
+    contents-not-names gaps are in every copy, the `sed` half of the stderr residual is only in
+    those three, and the NUL-classification residual does not apply to `pathways` at all. The
+    pipeline code in this copy is byte-identical to `ncpdp`'s on purpose: a divergent variant is
+    worse than a known shared limit.
+  - Scope, stated honestly: the gate covers new text only. It does not rewrite history, and 113 em
+    dashes are already in commit messages on `main`, PR #52's subject line among them.
 
 ## Tech Stack (the shared `@cosyte/*` standard)
 
