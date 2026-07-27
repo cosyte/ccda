@@ -15,7 +15,7 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 ### Tooling
 
 - **Em-dash brand gate (`scripts/check-no-emdash.sh`, `pnpm check:no-emdash`, plus
-  `.github/workflows/no-emdash.yml`).** Enforces the founder directive banning `U+2014` outright
+  `.github/workflows/no-emdash.yml`).** Checks the founder directive banning `U+2014` outright
   (`knowledgebase/06-brand/voice-and-tone.md`, "No em dashes. Ever.") over both halves the rule
   names: every tracked file except the self-excluded script itself (which has to name the encodings
   it bans, so nothing checks the checker), and the PR title, body, and commit messages. The workflow
@@ -24,9 +24,14 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
   (`squash_merge_commit_title: COMMIT_OR_PR_TITLE`). The body that lands is the branch commit
   messages (`COMMIT_MESSAGES`), not the PR body; the PR body is scanned anyway, as a cosyte surface
   in its own right. Its own workflow rather than a job in `ci.yml`, so a PR-description typo does
-  not re-run the Node
-  22 + 24 matrix. Ported from `ncpdp` (PR #34, `39212bb`), the text-only variant, with the pipeline
-  code kept byte-identical: known limits are one cross-repo fix across every copy, not one per repo.
+  not re-run the Node 22 + 24 matrix. **It reports; it does not yet block.** The job is not a
+  required status check: `cosyte/ccda` is governed by org-level rulesets whose required contexts are
+  `ci / verify (22, ubuntu-latest)`, `ci / verify (24, ubuntu-latest)` and `ci / actionlint`, and
+  `Em-dash gate / no-emdash` is not among them, so a PR carrying a live character can still
+  auto-merge. Making it blocking is an org-level `cosyte/.github` ruleset change, out of this repo's
+  reach. Ported from `ncpdp` (PR #34, `39212bb`), the text-only variant, with the pipeline
+  code kept byte-identical: the known limits are one cross-repo fix across the nine copies on `main`
+  (seven of this shape, plus `website`'s NUL-partition variant and `docs`), not one fix per repo.
   **One character of content changed**, in a JSDoc comment in `src/profiles/merge.ts`, where an em
   dash became a colon. That file had survived PR #52's remediation sweep because two functional NUL
   bytes (the separator in `toleranceKey`'s composite key, which cannot be removed) make grep

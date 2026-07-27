@@ -3,8 +3,30 @@ name: Em-dash gate
 # The brand rule (founder directive 2026-07-24, written down in the knowledgebase repo at
 # 06-brand/voice-and-tone.md: "No em dashes. Ever.") bans U+2014 outright across every
 # cosyte surface, and names commit messages explicitly. `documentation/conventions.md` in
-# the meta-repo has claimed the rule is CI-gated since it was written. This workflow is
-# the CI half of that rule for ccda: the tracked files, and the text that is not a file.
+# the meta-repo has claimed the rule is CI-gated since it was written. This workflow runs
+# that rule in CI for ccda, over the tracked files and over the text that is not a file.
+#
+# READ THIS BEFORE TRUSTING IT TO BLOCK ANYTHING. It runs on every PR and it reports, but
+# it is NOT a required status check, so today it does not stop a merge. Verified against
+# the API rather than assumed: `cosyte/ccda` is governed by two ORGANIZATION-level rulesets
+# (`baseline-branch-protection`, `parser-ci-required-checks`), and the required contexts are
+# exactly `ci / verify (22, ubuntu-latest)`, `ci / verify (24, ubuntu-latest)` and
+# `ci / actionlint`. This job's context is `Em-dash gate / no-emdash`, which is not among
+# them, and `allow_auto_merge` is true with zero required approvals. So a PR carrying a live
+# character in its title or in a tracked file CAN auto-merge while this job is red or still
+# running. Nothing in this repo can change that: the ruleset is org-sourced, and the repo
+# token cannot edit it. Closing it means adding `Em-dash gate / no-emdash` to
+# `parser-ci-required-checks` at the org level, which is a `cosyte/.github` change and is
+# deliberately not attempted from here. Until then the honest claim is that this gate makes
+# a violation VISIBLE on every PR, not that it makes one impossible. ncpdp and dicom carry
+# the same gap under the same ruleset; the overstatement was this port's, so this port
+# corrects it.
+#
+# That hazard is written down in this ecosystem already, and it is worth naming here so the
+# next reader does not have to rediscover it: `docs/CLAUDE.md` records that moving a gate
+# into its own job "for clarity" silently stops it blocking a merge, because the new job is
+# not in the required list. The reasoning below for a separate workflow is about COST, and
+# cost is the only thing it settles. It does not buy enforcement, and it never did.
 #
 # ccda was NOT already clean when this landed, which is unusual for a repo that had
 # already run a remediation sweep. PR #52 removed em dashes from source and config on
@@ -50,8 +72,10 @@ name: Em-dash gate
 #
 # This gate covers new text only. It does not rewrite history, and history here is not
 # clean: 113 em dashes sit in commit messages already on main, including PR #52's own
-# subject line. Rewriting published commit messages is not on the table, so the honest
-# scope is that nothing new lands with one.
+# subject line. Rewriting published commit messages is not on the table. So the honest
+# scope is that new text carrying a live character is REPORTED on every PR, by a job that
+# is not yet required and therefore does not yet block the merge (see the top of this
+# file). Do not read the scope note as a guarantee that nothing new lands with one.
 #
 # Run the file half locally with `pnpm check:no-emdash`, which is also on
 # `scripts/verify.sh ccda`'s ladder in the meta-repo.
@@ -84,10 +108,13 @@ jobs:
       - name: Check tracked files
         run: bash scripts/check-no-emdash.sh
 
-      # The rule names commit messages explicitly, and a squash merge composes its message
-      # from the PR title, the PR body, and the branch commits, so all three are checked.
-      # Pull requests only: on a push to main the message is already written, and this gate
-      # exists to stop it landing.
+      # The rule names commit messages explicitly. A squash merge here takes its SUBJECT
+      # from the PR title (or the lone commit's subject) and its BODY from the branch commit
+      # messages; the PR body does not land. All three are scanned anyway, which is a strict
+      # superset of what lands: the PR body is a cosyte surface in its own right, and
+      # covering it costs nothing. Pull requests only: on a push to main the message is
+      # already written, so scanning it there would report a violation that is already
+      # published rather than one that can still be fixed.
       - name: Check PR title, body, and commit messages
         if: github.event_name == 'pull_request'
         env:

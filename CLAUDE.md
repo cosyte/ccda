@@ -134,9 +134,20 @@ immutability + explicit mutation, and the profile system.
   DOM round-trip + a hardenable (XXE-safe) posture. The parse layer configures and consumes
   it; do **not** add a _second_ XML library. Reuse this one (and coordinate `@cosyte/ncpdp` onto the
   same substrate).
-- **Em-dash brand gate armed.** `scripts/check-no-emdash.sh` (`pnpm check:no-emdash`) plus
-  `.github/workflows/no-emdash.yml` enforce the founder directive banning `U+2014` outright
-  (`knowledgebase/06-brand/voice-and-tone.md`, "No em dashes. Ever."). It scans **both** halves the
+- **Em-dash gate present and reporting, but NOT yet blocking.** `scripts/check-no-emdash.sh`
+  (`pnpm check:no-emdash`) plus `.github/workflows/no-emdash.yml` check the founder directive banning
+  `U+2014` outright (`knowledgebase/06-brand/voice-and-tone.md`, "No em dashes. Ever."). Read the
+  limit first, because "armed" would be the wrong word: **the job is not a required status check**,
+  so it does not stop a merge today. Verified against the API: `cosyte/ccda` is governed by two
+  org-level rulesets, and `parser-ci-required-checks` requires exactly
+  `ci / verify (22, ubuntu-latest)`, `ci / verify (24, ubuntu-latest)` and `ci / actionlint`. This
+  job's context, `Em-dash gate / no-emdash`, is not among them, and `allow_auto_merge` is on with
+  zero required approvals, so a PR carrying a live character can auto-merge while this job is red.
+  Nothing in this repo can fix that: the ruleset is org-sourced and the repo token cannot edit it.
+  Closing it is a `cosyte/.github` change (add the context to `parser-ci-required-checks`) and is
+  deliberately not attempted from here. `ncpdp` and `dicom` sit behind the same gap. So the true
+  claim is that a violation is **visible on every PR**, not that it is impossible. It scans **both**
+  halves the
   rule covers: every tracked file **except the script itself**, **and** the PR title, body, and
   commit messages. The script is self-excluded because it has to name the encodings it bans, so it
   is the one file nothing checks; keep it free of the literal character. The workflow uses the
@@ -159,13 +170,15 @@ immutability + explicit mutation, and the profile system.
     `.gitattributes`, which is deferred to the cross-repo "what is a text file" rule.
   - Known limits are written down in the script header, and the fix for each is cross-repo rather
     than local, so do not patch one here. **Which copies share which limit is not uniform**, and the
-    header is the precise statement: the literal encoded-form matching and the contents-not-names
-    gap are shared by all of `knowledgebase`, `hl7`, `fhir`, `pathways`, `x12`, `ncpdp` and `dicom`;
-    the stderr-capture residual's `sed -z` half exists only in `ncpdp`, `dicom` and here, because
-    the older copies have no `sed` stage; and the NUL-classification residual does not apply to
-    `pathways` at all, which partitions on `git check-attr binary` instead. The pipeline code in
-    this copy is byte-identical to `ncpdp`'s on purpose: a divergent variant is worse than a known
-    shared limit.
+    header is the precise statement. There are **nine** copies on `main`, not seven: the seven
+    "same shape" ones (`knowledgebase`, `hl7`, `fhir`, `pathways`, `x12`, `ncpdp`, `dicom`) plus
+    `website` (the NUL-partition variant) and **`docs`**, which is the weakest in the fleet and is
+    the one most often left out of the census. The literal encoded-form matching and the
+    contents-not-names gap are shared by all nine. The stderr-capture residual's `sed -z` half
+    exists only in `ncpdp`, `dicom` and here, because the older copies have no `sed` stage. The
+    NUL-classification residual does not apply to `pathways`, which partitions on
+    `git check-attr binary` instead. The pipeline code in this copy is byte-identical to `ncpdp`'s
+    on purpose: a divergent variant is worse than a known shared limit.
   - Scope, stated honestly: the gate covers new text only. It does not rewrite history, and 113 em
     dashes are already in commit messages on `main`, PR #52's subject line among them.
 

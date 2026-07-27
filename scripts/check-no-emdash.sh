@@ -112,8 +112,14 @@
 #
 # ---------------------------------------------------------------------------
 # DISCLOSED RESIDUALS. These are inherited from the shared shape knowingly. They are
-# ONE cross-repo fix across the copies (knowledgebase, hl7, fhir, pathways, x12, ncpdp,
-# dicom, and now this one), not one fix per repo, so they are not fixed here. Do not
+# ONE cross-repo fix, not one fix per repo, so they are not fixed here. Count the copies
+# properly before carrying anything back, because the usual list is short by two. On main
+# there are NINE: the seven same-shape copies (knowledgebase, hl7, fhir, pathways, x12,
+# ncpdp, dicom, plus this one makes eight of that family) and website's NUL-partition
+# variant, and `docs`, which is routinely left out and is the weakest in the fleet. Its
+# whole scan is one line with no -z / -0 / -r / -- / -e, and with BOTH -I and -d skip:
+#   git ls-files | grep -vxF 'scripts/…' | xargs grep -Ind skip -nP "$PATTERN" || true
+# That is every fail-open route this header names, in one place. Do not
 # patch them in this copy alone: a divergent variant is worse than a known shared
 # limit, EXCEPT where the shape is outright wrong rather than merely bounded.
 # (Two things ARE already fixed in the shape this copy was taken from, because each
