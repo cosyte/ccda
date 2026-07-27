@@ -16,7 +16,9 @@ import type { CcdaPosition } from "../../parser/types.js";
 import {
   codeNarrativeMismatch,
   medicationProductArmConflict,
+  medicationProductArmRepeated,
   medicationProductArmUnexpected,
+  medicationProductCodeTranslationOnly,
   narrativeReferenceBroken,
   negationVsNullFlavorAmbiguous,
   problemStatusIndeterminate,
@@ -269,9 +271,13 @@ export function chain(el: Element | undefined, ...names: readonly string[]): Ele
  *   `manufacturedMaterial` is read, exactly as before. "The same product" is
  *   read off every coding an arm offers, its own `@code` and each
  *   `<translation>` alternate, so arms that agree in a different terminology
- *   than the one they lead with agree here too.
- * - **Both name different products** (no coding either arm offers coincides
- *   with one the other offers): the document names two drugs on one
+ *   than the one they lead with agree here too, and an arm that offers an
+ *   *extra* alternate the other stayed quiet about is elaborating its own
+ *   concept rather than denying the other's.
+ * - **Both name different products** (they share no coding at all, or, where
+ *   both fell back to `<translation>`s, each also names a coding the other does
+ *   not and two of those sit in the same terminology under different symbols,
+ *   see {@link namesConflictingProducts}): the document names two drugs on one
  *   medication, and *nothing in it ranks the arms*. Preferring
  *   `manufacturedMaterial` here would not be reporting what the document said,
  *   it would be manufacturing a choice the document declined to make, and
@@ -308,6 +314,28 @@ export function chain(el: Element | undefined, ...names: readonly string[]): Ele
  * document never wrote in that position, which is the manufactured reading this
  * whole rule refuses.
  *
+ * **A repeated arm is reported whether or not it agrees**
+ * (`MEDICATION_PRODUCT_ARM_REPEATED`, keyed to the arms rather than to their
+ * codings, exactly as the presence warning is). Repeated arms that disagree were
+ * already refused; repeated arms that *agree* were reduced to one in silence, so
+ * a document asserting one product three times reported identically to one
+ * asserting it once. Cardinality and agreement are separate facts and get
+ * separate codes.
+ *
+ * **And when the product is named only in a `<translation>`, that is said out
+ * loud** (`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`, safety-critical). Selection
+ * still does not read translations, so the returned `CD` is whatever the
+ * selection rule above picked and its `code` is `undefined`, exactly as before.
+ * What changes is that the shape is no longer silent: `MISSING_PRODUCT_CODE`
+ * cannot fire (an arm did carry a `<code>`) and `checkCodeSlot` is quiet by
+ * design on a `nullFlavor`-only slot, so a consumer reading the product off the
+ * slot previously saw a drugless medication with no warning at all, over a
+ * document that names the drug one element down. The warning is positioned on
+ * the `<code>` that carries the naming `<translation>`, and says whether that is
+ * the arm returned as the `CD`: with two arms neither asserting a primary, the
+ * coding may sit on the arm that was *not* selected, in which case it is not on
+ * the returned `CD` at all and only the re-serialized document has it.
+ *
  * Returns `undefined` when no arm carries a code; the caller decides what
  * that means for its entry type (a Medication Activity and an Immunization
  * Activity both flag it, `MISSING_PRODUCT_CODE`).
@@ -340,6 +368,20 @@ export function consumableProductCode(
     ctx.emit(medicationProductArmUnexpected(positionOf(product)));
   }
 
+  // Cardinality is reported on the ARMS, for the same reason the presence
+  // warning above is: `ManufacturedProduct` models a choice of ONE participant,
+  // so a repeated arm is outside the model whatever its <code> says, and
+  // repeated arms that AGREE were previously reduced to one in silence, leaving
+  // a document that asserts the same product three times indistinguishable from
+  // one that asserts it once. Whether the repeats agree is a separate question,
+  // answered below by the conflict rule.
+  if (
+    children(product, "manufacturedMaterial").length > 1 ||
+    children(product, "manufacturedLabeledDrug").length > 1
+  ) {
+    ctx.emit(medicationProductArmRepeated(positionOf(product)));
+  }
+
   const materialCodes = armCodes(product, "manufacturedMaterial");
   const labeledCodes = armCodes(product, "manufacturedLabeledDrug");
 
@@ -364,11 +406,62 @@ export function consumableProductCode(
   // NEITHER arm names a symbol, so the empty-slot machinery
   // (MISSING_CODE_VALUE, MISSING_CODE_SYSTEM, UNEXPECTED_CODE_SYSTEM) still
   // sees exactly the element it saw before this rule existed.
-  if (material === undefined) return labeled === undefined ? { product } : { el: labeled, product };
-  if (labeled !== undefined && !namesAProduct(material) && namesAProduct(labeled)) {
-    return { el: labeled, product };
+  const el = selectAcrossArms(material, labeled);
+  // The selected element asserts no primary symbol, so (by the rule just above)
+  // NO arm does: had any named one it would have been selected. If some arm
+  // nonetheless names a product in a <translation>, the document names a drug
+  // and the product slot reads empty, which until now happened in total silence
+  // (MISSING_PRODUCT_CODE does not fire, an arm did carry a <code>, and
+  // checkCodeSlot is quiet by design on a nullFlavor-only slot). The reading is
+  // NOT changed: selecting a translation would hand the slot checks a coding
+  // the document never wrote in that position. Only the silence is.
+  //
+  // The warning is positioned on the <code> that CARRIES the naming
+  // translation, which is not always the selected one: with two arms neither
+  // asserting a primary, the material arm is selected while the labeled arm may
+  // be the one holding the coding, and only ONE arm ever becomes the returned
+  // `CD`. Pointing at the selected element there would send a reader to an
+  // element that does not have what the warning says exists.
+  if (el !== undefined && !namesAProduct(el)) {
+    const naming = firstTranslationNamingProduct(materialCodes, labeledCodes);
+    if (naming !== undefined) {
+      ctx.emit(medicationProductCodeTranslationOnly(positionOf(naming), naming === el));
+    }
   }
-  return { el: material, product };
+  return el === undefined ? { product } : { el, product };
+}
+
+/**
+ * Pick between the two arm kinds' selectable `<code>`s. The labeled arm is read
+ * in exactly one situation: it names a product and the material arm does not.
+ * @internal
+ */
+function selectAcrossArms(
+  material: Element | undefined,
+  labeled: Element | undefined,
+): Element | undefined {
+  if (material === undefined) return labeled;
+  if (labeled !== undefined && !namesAProduct(material) && namesAProduct(labeled)) return labeled;
+  return material;
+}
+
+/**
+ * The first arm `<code>` that names a product **only** through a
+ * `<translation>`, scanning the `manufacturedMaterial` arms before the
+ * `manufacturedLabeledDrug` ones (which is document order only when the
+ * document writes them in that order). Called only when nothing selectable
+ * asserts a primary `@code`, so any coding {@link productCodingsOf} still finds
+ * is by definition a translation fallback. The scan starts from the same list
+ * the selection above draws from and in the same order, so the element it
+ * returns is the selected one exactly when the selected arm is the one holding
+ * the coding, which is what the warning reports.
+ * @internal
+ */
+function firstTranslationNamingProduct(
+  materials: readonly Element[],
+  labeled: readonly Element[],
+): Element | undefined {
+  return [...materials, ...labeled].find((code) => productCodingsOf(code).codings.length > 0);
 }
 
 /** The trimmed `@code` of a `<code>` element, or `undefined` when it asserts no symbol. @internal */
@@ -407,6 +500,21 @@ function codingOf(el: Element): ProductCoding | undefined {
 }
 
 /**
+ * What one arm names, and **how**: the codings themselves, plus whether they
+ * came from the `<translation>` fallback rather than from the arm's own `@code`.
+ *
+ * The provenance is not decoration. Two arms that both assert a primary are
+ * compared on those primaries alone, while two arms that both fell back to
+ * translations are compared under a stricter rule ({@link namesConflictingProducts}),
+ * so the comparison has to know which it is holding.
+ * @internal
+ */
+interface ArmCodings {
+  readonly codings: readonly ProductCoding[];
+  readonly fromTranslation: boolean;
+}
+
+/**
  * What a product arm's `<code>` **names**: its own `@code` when it asserts one,
  * and otherwise the codings its direct `<translation>` alternates assert. Empty
  * when the arm names no product at all.
@@ -440,12 +548,13 @@ function codingOf(el: Element): ProductCoding | undefined {
  * nest them.
  * @internal
  */
-function productCodingsOf(el: Element): readonly ProductCoding[] {
+function productCodingsOf(el: Element): ArmCodings {
   const primary = codingOf(el);
-  if (primary !== undefined) return [primary];
-  return children(el, "translation")
+  if (primary !== undefined) return { codings: [primary], fromTranslation: false };
+  const codings = children(el, "translation")
     .map(codingOf)
     .filter((coding): coding is ProductCoding => coding !== undefined);
+  return { codings, fromTranslation: true };
 }
 
 /**
@@ -480,25 +589,87 @@ function codingsAgree(a: ProductCoding, b: ProductCoding): boolean {
  * name (and with it every `checkCodeSlot` check on that code) to protect
  * against a contradiction that is not there.
  *
- * Two arms that both name a product conflict when **none** of the codings one
- * names agrees with any the other names. Because {@link productCodingsOf} reads
- * translations only as a *fallback* for an arm whose `<code>` asserts no symbol,
- * two arms that both assert one are compared exactly as they were before
- * translations were read at all: symbol against symbol, system against system.
- * The set form can therefore only ever add conflicts, never remove one. That
- * direction is deliberate, see {@link productCodingsOf} for why the other
- * direction is unsound. No terminology equivalence is inferred: deciding that
- * two codings the document never linked denote one concept is a
- * `TerminologyAdapter`'s job, and guessing it in the parser would be the same
- * manufactured reading this check refuses.
+ * **Two arms that both assert a primary `@code`** are compared exactly as they
+ * were before translations were read at all: symbol against symbol, system
+ * against system, one coding each. Because {@link productCodingsOf} reads
+ * translations only as a *fallback*, no translation can ever talk an asserted
+ * pair of primaries out of a disagreement. See {@link productCodingsOf} for why
+ * the other direction is unsound.
+ *
+ * **Two arms that BOTH fell back to translations** get one extra test on top of
+ * that, and only that one. Sharing a coding is still enough to agree, but it
+ * stops being enough when *each* arm also names a coding the other does not and
+ * two of those unshared codings sit **in the same terminology under different
+ * symbols**. It is the shape the "some coding agrees" test could not see: two
+ * arms whose primaries are both uncodable, one
+ * translating to a coarser shared concept plus a strength and the other to that
+ * same shared concept plus a *different* strength, agree on the coarse coding
+ * while naming two products, and handing one of them back is the failure this
+ * rule exists to refuse.
+ *
+ * **A shorter list is not a denial, and is deliberately not a conflict.** HL7 v3
+ * defines `CD.translation` as codings of *this* concept in other code systems,
+ * so an arm that offers an extra alternate (an NDC beside the RxNorm both arms
+ * share) is elaborating its own concept, not contradicting an arm that stayed
+ * quiet about that terminology. Requiring the sets to cover each other would
+ * draw an unquietable safety-critical code on a coherent document. Two codings
+ * in *different* systems are likewise never a disagreement: deciding that an NDC
+ * and an RxNorm concept denote different products is terminology work, which is
+ * a `TerminologyAdapter`'s job and would be a manufactured reading here.
+ *
+ * **The same-terminology test is a parser's reading, not something the document
+ * asserts, and it deliberately over-fires rather than under-fires.** Two
+ * different symbols in one code system usually are two products, but not always:
+ * two NDC package codes can describe one drug, and an RxNorm branded drug and
+ * its clinical equivalent are one product at two granularities. Telling those
+ * apart is the same terminology work refused just above, so the only choice is
+ * which way to be wrong. Over-firing costs a withheld product beside a loud
+ * safety-critical code; under-firing costs one of two strengths handed back in
+ * silence. The whole area is built on preferring the first.
+ *
+ * **One arm primary, the other translation-derived** keeps the "some coding
+ * agrees" rule untouched. The primary side offers exactly one coding, so
+ * agreement means the fallback side asserted, in the document's own words, that
+ * its concept is coded by exactly the symbol the other arm leads with. That is
+ * the document linking the two arms directly rather than through a shared third
+ * code.
+ *
+ * Every branch above only ever *adds* conflicts to what the base "some coding
+ * agrees" test reports: that test is the first clause here, and the extra
+ * same-terminology clause can only turn a non-conflict into a conflict. No
+ * terminology equivalence is inferred anywhere: deciding that two codings the
+ * document never linked denote one concept is a `TerminologyAdapter`'s job, and
+ * guessing it in the parser would be the same manufactured reading this check
+ * refuses.
  * @internal
  */
-function namesConflictingProducts(
-  a: readonly ProductCoding[],
-  b: readonly ProductCoding[],
-): boolean {
-  if (a.length === 0 || b.length === 0) return false;
-  return !a.some((x) => b.some((y) => codingsAgree(x, y)));
+function namesConflictingProducts(a: ArmCodings, b: ArmCodings): boolean {
+  if (a.codings.length === 0 || b.codings.length === 0) return false;
+  if (!a.codings.some((x) => b.codings.some((y) => codingsAgree(x, y)))) return true;
+  if (!a.fromTranslation || !b.fromTranslation) return false;
+  const aOnly = unsharedCodings(a.codings, b.codings);
+  const bOnly = unsharedCodings(b.codings, a.codings);
+  return aOnly.some((x) => bOnly.some((y) => contradictsWithinOneSystem(x, y)));
+}
+
+/** The codings on one side that no coding on the other side agrees with. @internal */
+function unsharedCodings(
+  side: readonly ProductCoding[],
+  other: readonly ProductCoding[],
+): readonly ProductCoding[] {
+  return side.filter((x) => !other.some((y) => codingsAgree(x, y)));
+}
+
+/**
+ * Whether two codings disagree *within one terminology*: both name their system,
+ * name the **same** one, and give different symbols. A coding that omits
+ * `@codeSystem` is never a disagreement here, exactly as in {@link codingsAgree}:
+ * `MISSING_CODE_SYSTEM` already covers that shape, and refusing on it would
+ * withhold a product over a gap that warning has already named.
+ * @internal
+ */
+function contradictsWithinOneSystem(a: ProductCoding, b: ProductCoding): boolean {
+  return a.system !== undefined && a.system === b.system && a.symbol !== b.symbol;
 }
 
 /** Every `<code>` element the arms of the given kind carry, in document order. @internal */
@@ -554,14 +725,20 @@ function offersConflictingProducts(
   labeled: readonly Element[],
 ): boolean {
   const seen = new Set<string>();
-  const named: (readonly ProductCoding[])[] = [];
+  const named: ArmCodings[] = [];
   for (const code of [...materials, ...labeled]) {
-    const codings = productCodingsOf(code);
-    if (codings.length === 0) continue;
-    const key = JSON.stringify(codings.map((c) => [c.symbol, c.system ?? null]));
+    const arm = productCodingsOf(code);
+    if (arm.codings.length === 0) continue;
+    // Provenance is part of the key: two arms offering the same symbols under
+    // different provenance are compared under different rules, so collapsing
+    // them would drop a comparison rather than repeat one.
+    const key = JSON.stringify([
+      arm.fromTranslation,
+      arm.codings.map((c) => [c.symbol, c.system ?? null]),
+    ]);
     if (seen.has(key)) continue;
     seen.add(key);
-    named.push(codings);
+    named.push(arm);
   }
   return named.some((a, i) => named.slice(i + 1).some((b) => namesConflictingProducts(a, b)));
 }

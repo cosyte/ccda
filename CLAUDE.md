@@ -110,7 +110,52 @@ immutability + explicit mutation, and the profile system.
     stated boundary is that slot checks apply to a slot's primary coding and translations are
     preserved but never slot-checked, so selecting on a translation would validate a `nullFlavor`
     primary against nothing or synthesize a coding the document never wrote there. Among repeated
-    arms of one kind, the first that names a product is the one selected.
+    arms of one kind, the first that names a product is the one selected. **Where BOTH arms fall
+    back to translations, sharing one coding is not always enough to agree**: that is the one pairing
+    where the shared-coarser-coding hazard survives (neither arm asserts a primary to compare), so
+    they also conflict when each names a coding the other does not **and** two of those unshared
+    codings are in the **same code system under different symbols**. An arm that merely offers an
+    extra alternate the other stayed quiet about is elaborating its own concept, which is what v3
+    says a `<translation>` does, and is deliberately **not** a conflict: a shorter list is not a
+    denial, and requiring the sets to cover each other drew an unquietable safety-critical code on a
+    coherent document. Codings in different code systems are never compared: that is terminology
+    work. Two arms that both assert a primary are still compared on those primaries alone. **The
+    same-terminology test is a parser's reading, not something the document asserts, and it
+    deliberately over-fires**: two NDC package codes can describe one drug and an RxNorm branded drug
+    and its clinical equivalent are one product at two granularities, but telling those apart is the
+    terminology work just refused, so the only choice is which way to be wrong.
+    **Every branch of this rule may only ever make the conflict fire more than the base rule would,
+    never less. That monotonicity is the safety property of this whole area; a matrix snapshot and a
+    table of disagreeing-primary shapes in `test/entries.test.ts` pin it. Any change here must
+    preserve it.** Note what monotone does **not** mean: firing more means **withholding** more, so a
+    document that yielded a product code can stop yielding one. The three-arm shape (a primary-
+    asserting arm behind which two fallback arms disagree) is exactly that, and the matrix pins it.
+    "No product code stops being reported" is a **false** way to state the invariant; do not restore
+    it.
+  - **Two states that used to be silent are now reported, without changing what is read.** A product
+    named only in a `<translation>` (no arm asserts a primary `@code`) is
+    `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`, **safety-critical**. The `CD` still comes back as the
+    selection rule always picked it and `drug.code` is still `undefined`, because selection reads
+    primaries only, but the gap is no longer unannounced. **Where the coding is reachable depends on
+    which arm holds it, and the warning says which**: only one arm ever becomes the returned `CD`, so
+    when the translation sits on the arm that was _not_ selected the coding is not on the model at
+    all and only `doc.toString()` has it. On the selected arm it is _somewhere_ on
+    `drug.translation`, which must be **searched** rather than read at `[0]` (a `<code>` may carry
+    several, and the first can be `nullFlavor`-marked or in an unwanted code system). The `position`
+    points at the `<code>` carrying the translation, not at the selected element. `MISSING_PRODUCT_CODE` cannot fire there (an arm did carry a `<code>`)
+    and `checkCodeSlot` is quiet by design on a `nullFlavor`-only slot, so on that idiom it is the
+    lone signal; on the variant asserting neither a symbol nor a `nullFlavor`, `MISSING_CODE_VALUE`
+    fires beside it. It stands down behind `MEDICATION_PRODUCT_ARM_CONFLICT`. More than one arm of
+    the **same kind** is `MEDICATION_PRODUCT_ARM_REPEATED`, **not** safety-critical, keyed to the
+    arms rather than to their codings exactly as the presence warning is; where it fires alone a
+    `<code>` was selected and read exactly as a single-arm document's would have been, and each state
+    where that would not be enough carries an unquietable companion
+    (`MEDICATION_PRODUCT_ARM_CONFLICT`, `MISSING_PRODUCT_CODE`,
+    `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`). A selected `<code>` asserting only a `nullFlavor`
+    and no `<translation>` is **not** one of those states: that is the document completely stating
+    the product is unknown, and it reads exactly as it would on a single arm. **`MEDICATION_PRODUCT_ARM_UNEXPECTED`'s
+    own argument is unchanged and still names two companions**, because it enumerates the states in
+    which **nothing is selected**, and the translation-only state does select an element.
   - `SAFETY_CRITICAL_CODES` is a frozen read-only view, not a `Set` instance: every read operation
     works (including spread), but `instanceof Set` is `false`.
   - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`

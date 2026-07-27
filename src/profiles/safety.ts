@@ -131,6 +131,11 @@ export const SAFETY_CRITICAL_CODES: ReadonlySet<WarningCode> = immutableSet<Warn
   // CDA R2 choice, or a repeated arm of one kind. An arm names its @code when it
   // asserts one, and otherwise the codings its <translation> alternates assert
   // (a fallback, never an addition, so this can only fire more, never less).
+  // Arms disagree when they share no coding at all, and, where BOTH named their
+  // product only through translations, also when each names a coding the other
+  // does not and two of those are in the same code system under different
+  // symbols. An extra alternate one arm offers and the other stayed quiet about
+  // is not a disagreement: a <translation> elaborates its own concept.
   // Worse than MISSING_PRODUCT_CODE in one respect:
   // there the drug is absent, here the document names two and nothing in it
   // ranks them, so any pick the parser makes is a coin flip presented as a
@@ -144,6 +149,26 @@ export const SAFETY_CRITICAL_CODES: ReadonlySet<WarningCode> = immutableSet<Warn
   // is base CDA R2 structure, and the classification rests on the harm
   // ordering.
   WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT,
+  // No manufacturedProduct arm asserts a primary @code and the product is named
+  // only in a <translation> alternate (the nullFlavor="OTH" plus <translation>
+  // idiom). Selection reads primaries only, deliberately, so the product slot
+  // comes back empty while the document names the drug one element down. On the
+  // nullFlavor-marked shape, the documented idiom, that used to be ENTIRELY
+  // silent and this is the lone signal: MISSING_PRODUCT_CODE cannot fire, an arm
+  // did carry a <code>, and checkCodeSlot is quiet by design on a
+  // nullFlavor-only slot because a declared nullFlavor is a complete statement
+  // that the concept is unknown, which here it is not. (On the variant that
+  // asserts neither a symbol nor a nullFlavor, MISSING_CODE_VALUE fires beside
+  // it and is itself untolerable, so the classification does not depend on being
+  // alone there.) Tolerating it would restore a silent product slot over a named
+  // drug: the MISSING_PRODUCT_CODE harm exactly, one markup layer down, and
+  // where the arm holding the translation is not the one returned as the CD the
+  // coding is not on the model at all, only in the re-serialized document.
+  // Provenance, stated so it is not mistaken for a traced constraint: no
+  // normative SHALL is cited. That a <translation> carries an alternate coding
+  // of the same concept is v3 datatype semantics, and the classification rests
+  // on the harm ordering.
+  WARNING_CODES.MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY,
   // A nullFlavor asserted beside a populated value, e.g. a doseQuantity that
   // says both "unknown" and "10 mg". The document contradicts itself, and of
   // the two readings the reassuring one is the one that can hurt a patient,

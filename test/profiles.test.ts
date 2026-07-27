@@ -236,6 +236,20 @@ describe("safety set", () => {
     // product is withheld, and MISSING_PRODUCT_CODE is suppressed behind this,
     // so a profile quieting it would restore a fully silent drop.
     expect(isSafetyCriticalCode(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT)).toBe(true);
+    // A repeated arm carries the same conditional argument as the presence
+    // warning above, for the same reason: where it fires alone a <code> was
+    // selected and read exactly as any single-arm document's would be, and each
+    // state where that would not be enough carries an unquietable companion
+    // (MEDICATION_PRODUCT_ARM_CONFLICT, MISSING_PRODUCT_CODE, or
+    // MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY).
+    expect(isSafetyCriticalCode(WARNING_CODES.MEDICATION_PRODUCT_ARM_REPEATED)).toBe(false);
+    // A product named only in a <translation> is the opposite case: selection
+    // reads primaries only, so the product slot comes back empty over a
+    // document that names the drug, and nothing else fires on that shape
+    // (MISSING_PRODUCT_CODE cannot, an arm did carry a <code>, and
+    // checkCodeSlot is quiet by design on a nullFlavor-only slot). Quieting the
+    // lone signal would restore a silent `drug === undefined`.
+    expect(isSafetyCriticalCode(WARNING_CODES.MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY)).toBe(true);
   });
 
   /**

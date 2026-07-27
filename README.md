@@ -148,6 +148,48 @@ fire more, never less. **Selection is a narrower question again and stays keyed 
 in, never lifted out of a `<translation>` (which this package preserves but never slot-checks).
 Among repeated arms of one kind, the first that names a product is the one read.
 
+**When no arm asserts a primary `@code` and the product is named only in a `<translation>`, that is
+`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY` (safety-critical).** The reading is unchanged: `med.drug`
+comes back as the selection rule always picked it, and `drug.code` is `undefined`. Only the silence
+changes. `MISSING_PRODUCT_CODE` cannot fire, an arm did carry a `<code>`, and the code-system checks
+are quiet by design on a `nullFlavor`-only slot, so a consumer reading `med.drug?.code` used to get a
+medication with a dose, a route and a timing and no drug, with no warning at all, over a document
+that names the drug one element down. **Where the coding is reachable depends on which arm holds it,
+and the warning's message and `position` say which.** Only one arm ever becomes `med.drug`: when
+that is the arm carrying the translation, the coding is somewhere on `drug.translation`, and you
+have to **search that list** rather than read `[0]`, because a `<code>` may carry several
+`<translation>`s and the first can be `nullFlavor`-marked or in a code system you did not want. When
+it is not (two arms, neither asserting a primary, the translation on the one that was not selected),
+no product-naming coding is on the returned `CD` at all and the coding is reachable only through
+`doc.toString()`, which re-emits every arm verbatim. On the `nullFlavor`-marked idiom it is the lone signal; on the
+variant that asserts neither a symbol nor a `nullFlavor`, `MISSING_CODE_VALUE` fires beside it. It
+stands down behind `MEDICATION_PRODUCT_ARM_CONFLICT`, the stronger statement about the same slot.
+
+**A repeated arm is reported whether or not it agrees** (`MEDICATION_PRODUCT_ARM_REPEATED`, tolerable
+by a profile). Repeated arms that disagree are refused as above; repeated arms that agree used to be
+reduced to one with nothing said, so a document asserting the same product three times reported
+identically to one asserting it once. Like the presence warning, it is keyed to the arms rather than
+to their codings, so an arm carrying no `<code>` counts too. Cardinality and agreement are separate
+facts with separate codes.
+
+**When BOTH arms fall back to translations, sharing one coding is not always enough to agree.** That
+is the one pairing where the shared-coarser-coding hazard above survives, because neither arm asserts
+a primary to compare: two arms translating to a shared coarser concept plus two different strengths
+share a coding while naming two products. So they also conflict when each names a coding the other
+does not **and** two of those unshared codings are in the same code system under different symbols.
+An arm that merely offers an extra alternate the other stayed quiet about (an NDC beside the RxNorm
+concept both share) is elaborating its own concept, which is what a `<translation>` does, and is not
+a conflict: a shorter list is not a denial. Codings in different code systems are never compared,
+because deciding whether an NDC and an RxNorm concept denote one product is terminology work. Two
+arms that both assert a primary are compared on those primaries alone, unchanged.
+
+That last test is a parser's reading rather than something the document asserts, and it deliberately
+**over-fires**: two different symbols in one code system usually are two products, but two NDC
+package codes can describe one drug, and an RxNorm branded drug and its clinical equivalent are one
+product at two granularities. Telling those apart is the terminology work this library refuses to
+guess at, so the choice is only which way to be wrong: over-firing costs a withheld product beside a
+loud safety-critical code, under-firing costs one of two strengths handed back in silence.
+
 ## What it extracts: discrete clinical data
 
 - **Results**: Result Organizers via `getResults()`: the LOINC-coded analyte, the polymorphic
