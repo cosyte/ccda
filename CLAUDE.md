@@ -426,13 +426,22 @@ immutability + explicit mutation, and the profile system.
     **The predicate is "reaches `dist`", NOT "is on the entry point"** and the difference is the whole
     lesson: both `BuildCcdaAssessmentScale` types shipped while **unexported**, because
     `BuildCcdaInit` references them, and they were two of the four.
-    `test/tsdoc-examples.test.ts` gates both halves: every documented import under `src/` is resolved
-    through the TypeScript checker against the module its specifier names (the entry point for
-    `"@cosyte/ccda"`, the module itself for a relative path), **and** the built `dist/index.d.ts` is
-    checked to carry no example import naming anything but `@cosyte/ccda`. That second half exists
-    because **exporting a previously internal symbol drags its TSDoc onto the published surface**, and
-    a surviving `"./shared.js"` would silently reopen the defect. The source half cannot see it: it is
-    a statement about the bundle. **The fix is per symbol and the two answers are different acts:** an internal helper
+    `test/tsdoc-examples.test.ts` gates two different things. (1) Every documented import under `src/`
+    is **resolved** through the TypeScript checker against the module its specifier names (the entry
+    point for `"@cosyte/ccda"`, the module itself for a relative path). (2) The **built** declarations
+    are checked to cite no specifier other than `@cosyte/ccda`. Half 2 exists because **exporting a
+    previously internal symbol drags its TSDoc onto the published surface**, and a surviving
+    `"./shared.js"` would silently reopen the defect; half 1 cannot see that, being a statement about
+    the bundle. It builds into a private out-dir, because `docs-content.test.ts` also builds and
+    `tsup` cleans first, so sharing `dist/` across parallel test files races.
+    **STATE HALF 2'S BOUND EXACTLY; THE LOOSE NAME FOR IT IS FALSE AND WAS PUBLISHED ONCE.** It is a
+    _specifier_ test over _single-line named imports_, not a resolution test, so it is green on the
+    published `0.0.2` `.d.ts` even though four examples there are broken. It is **not** "carries no
+    documented import a consumer cannot resolve"; half 1 is what catches those, in source. Neither
+    half sees a multi-line import, an `import X from`, or an `import * as X from`. That is a known,
+    filed bound. **Do not close it by growing the regex a third time:** two adversarial passes have
+    landed on this one guard, and a third round of hardening a documentation gate is the signal to
+    stop and put the shape question (parse the TSDoc properly, or drop half 2) to a human. **The fix is per symbol and the two answers are different acts:** an internal helper
     gets a module-relative import, a genuinely public symbol gets exported. Only
     `BuildCcdaAssessmentScale` / `BuildCcdaAssessmentScaleItem` warranted the second, because both were
     already the element type of public `buildCcda` fields (`functionalStatusScales`,

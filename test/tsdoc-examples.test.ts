@@ -25,14 +25,25 @@ import { beforeAll, describe, expect, it } from "vitest";
  *    fails either way. Type-only and value imports are both covered, because
  *    `getExportsOfModule` is the checker's own answer.
  *
- * 2. **Published truth, for what actually ships.** A relative specifier is meaningless inside the
- *    rolled-up `.d.ts`, so no example carrying one may survive into it. This is the half that
- *    catches the move this very slice made twice: **exporting a previously internal symbol drags
- *    its TSDoc into the published surface**, and if that TSDoc still said `"./shared.js"` the defect
- *    would reopen silently. Check 1 cannot see that, because it is a statement about the bundle.
- *    Note the predicate is "reaches `dist`", not "is on the entry point": both
- *    `BuildCcdaAssessmentScale` types shipped while unexported, because `BuildCcdaInit` references
- *    them, and they were two of the four that reached consumers.
+ * 2. **Published specifiers, narrowly.** A relative specifier is meaningless inside the rolled-up
+ *    `.d.ts`, so no example carrying one may survive into it. This is the half that catches the move
+ *    this very slice made twice: **exporting a previously internal symbol drags its TSDoc into the
+ *    published surface**, and if that TSDoc still said `"./shared.js"` the defect would reopen
+ *    silently. Check 1 cannot see that, because it is a statement about the bundle. Note the
+ *    predicate is "reaches `dist`", not "is on the entry point": both `BuildCcdaAssessmentScale`
+ *    types shipped while unexported, because `BuildCcdaInit` references them, and they were two of
+ *    the four that reached consumers.
+ *
+ * **STATE CHECK 2'S BOUND EXACTLY, BECAUSE THE LOOSE NAME FOR IT IS FALSE.** It is a *specifier*
+ * test over *single-line named imports*, not a resolution test. It does **not** re-check symbols
+ * against the bundle, so it passes on an artifact that does contain unresolvable documented imports:
+ * run it against the published `0.0.2` `.d.ts` and it is green, though four examples there are
+ * broken. Check 1 is what catches those, in source. It also does not see a multi-line import, an
+ * `import X from`, or an `import * as X from`. Those blind spots are shared with check 1's own regex
+ * and are a known, filed bound rather than a claim.
+ * **Do not close them by growing the regex a third time.** Two adversarial passes have now landed on
+ * this one guard; a third round of hardening a documentation gate is the signal to stop and put the
+ * shape question (parse the TSDoc properly, or drop the published half) to a human.
  */
 
 const root = join(import.meta.dirname, "..");
@@ -141,33 +152,42 @@ describe("TSDoc @example imports", () => {
     expect(broken).toEqual([]);
   });
 
-  describe("the published .d.ts", () => {
-    // The shared CI gate runs `test` before `build`, so provision `dist/` on demand here rather
-    // than assuming order, exactly as the docs-content snippet gate does.
+  describe("the built declarations", () => {
+    // Built into a PRIVATE out-dir, not `dist/`. `docs-content.test.ts` also runs `pnpm build` in a
+    // file-level beforeAll, vitest runs test files in parallel, and `tsup` cleans its output first,
+    // so sharing `dist/` would race: one file can read an artifact the other has just deleted. An
+    // isolated directory removes the ordering assumption rather than relying on it.
+    const outDir = join(root, "node_modules", ".tsdoc-gate-dist");
+    let declarations = "";
+
     beforeAll(() => {
-      execFileSync("pnpm", ["build"], { cwd: root, stdio: "inherit" });
+      execFileSync("pnpm", ["exec", "tsup", "--out-dir", outDir], { cwd: root, stdio: "inherit" });
+      declarations = readFileSync(join(outDir, "index.d.ts"), "utf8");
     }, 300_000);
 
-    it("carries no documented import a consumer cannot resolve", () => {
-      // A relative specifier is meaningless once the declarations are rolled up into one file:
-      // there is no `./shared.js` next to an installed `dist/index.d.ts`. Only the package's own
-      // name can appear. This is what fails if a future slice exports an internal symbol and drags
-      // its module-relative example onto the published surface with it.
-      const dts = readFileSync(join(root, "dist", "index.d.ts"), "utf8").split("\n");
-      const offenders = dts
+    it("cite no specifier other than the package's own name, on single-line named imports", () => {
+      // Deliberately narrow, and named for exactly what it measures. A relative specifier is
+      // meaningless once the declarations are rolled up into one file: there is no `./shared.js`
+      // beside an installed `index.d.ts`. This is what fails if a future slice exports an internal
+      // symbol and drags its module-relative example onto the published surface with it.
+      //
+      // It does NOT verify that the symbols resolve; check 1 does that, in source. A green result
+      // here is not "a consumer can follow every example", and must never be described that way.
+      const offenders = declarations
+        .split("\n")
         .map((text, index) => ({ text, line: index + 1 }))
         .filter(({ text }) => /^\s*\*\s*import\s+(?:type\s+)?\{[^}]*\}\s+from\s+"/.test(text))
         .filter(({ text }) => !/from\s+"@cosyte\/ccda";/.test(text))
-        .map(({ text, line }) => `dist/index.d.ts:${line} ${text.trim()}`);
+        .map(({ text, line }) => `index.d.ts:${line} ${text.trim()}`);
 
       expect(offenders).toEqual([]);
     });
 
-    it("still carries the examples this is meant to guard", () => {
+    it("still carry the examples this is meant to guard", () => {
       // Guards the guard: if the rollup ever stopped emitting TSDoc, the check above would pass
       // vacuously forever.
-      const dts = readFileSync(join(root, "dist", "index.d.ts"), "utf8");
-      const shipped = dts.match(/^\s*\*\s*import\s+(?:type\s+)?\{[^}]*\}\s+from\s+"/gm) ?? [];
+      const shipped =
+        declarations.match(/^\s*\*\s*import\s+(?:type\s+)?\{[^}]*\}\s+from\s+"/gm) ?? [];
       expect(shipped.length).toBeGreaterThan(100);
     });
   });

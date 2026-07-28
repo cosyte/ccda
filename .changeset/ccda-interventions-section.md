@@ -55,9 +55,7 @@ now either a module-relative import, where the symbol is deliberately internal, 
 only from the public surface.
 
 A new test resolves every documented import through the TypeScript checker against the module it
-names, and separately checks the built declarations carry no example import naming anything but
-`@cosyte/ccda`. The second half matters because exporting a previously internal symbol also publishes
-its documentation, which would otherwise reintroduce an unresolvable import unnoticed.
+names, so an example can no longer cite a symbol that module does not export.
 
 No warning code was added, renamed or reclassified, no existing type changed, and nothing about how
 entries are read has changed.
