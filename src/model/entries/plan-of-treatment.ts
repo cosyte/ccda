@@ -15,6 +15,7 @@
  */
 
 import { attr, child, positionOf } from "../dom.js";
+import { checkCodeSlot } from "../code-systems.js";
 import { parseCd, type CD } from "../types/cd.js";
 import type { II } from "../types/ii.js";
 import { parseIvlTs, type IVL_TS } from "../types/ivl-ts.js";
@@ -80,10 +81,17 @@ export type PlannedItemKind =
  * name different drugs (beside `MEDICATION_PRODUCT_ARM_CONFLICT`). But an arm
  * whose `<code>` asserts neither a symbol nor a `nullFlavor` yields a **truthy
  * but empty `CD`**, and a `nullFlavor`-only one yields a `CD` carrying just that
- * marking. Neither is `MISSING_PRODUCT_CODE` (an arm did carry a `<code>`), and
- * unlike a performed Medication Activity's `drug` this field is **not** one of
- * the five wired `CodeSlot`s, so `MISSING_CODE_VALUE` cannot fire on it either
- * and the empty shape is silent. Read `code?.code`, not `code`.
+ * marking. Neither is `MISSING_PRODUCT_CODE`, an arm did carry a `<code>`. Read
+ * `code?.code`, not `code`.
+ *
+ * On the `medicationActivity` variant that empty shape is **no longer silent**:
+ * the field is slot-checked against the `medication` binding exactly as a
+ * performed Medication Activity's `drug` is, so it draws `MISSING_CODE_VALUE`,
+ * and a drug code carrying no `@codeSystem` or one outside RxNorm/NDC draws
+ * `MISSING_CODE_SYSTEM` or `UNEXPECTED_CODE_SYSTEM`. A `nullFlavor`-only `CD` is
+ * a complete statement and stays silent, as it does everywhere else. The other
+ * five variants are **not** slot-checked: their `code` is the planned act, which
+ * is not one of the five bound `CodeSlot`s.
  *
  * @example
  * ```ts
@@ -168,10 +176,12 @@ function buildPlannedItem(
 
   const codeEl = plannedCodeElement(el, kind, ctx);
   const code = parseCd(codeEl, ctx);
+  const codePos = positionOf(codeEl ?? el);
+  checkPlannedCodeSlot(code, kind, codePos, ctx);
   const value = kind === "observation" ? readObservationValue(child(el, "value"), ctx) : undefined;
   const effectiveTime = parseIvlTs(child(el, "effectiveTime"), ctx);
   const narrative = resolveNarrative(el, narrativeById, ctx);
-  reconcileCode(code, narrative, "plannedItem", positionOf(codeEl ?? el), ctx);
+  reconcileCode(code, narrative, "plannedItem", codePos, ctx);
 
   const out: {
     ids: readonly II[];
@@ -196,6 +206,59 @@ function buildPlannedItem(
   if (effectiveTime !== undefined) out.effectiveTime = effectiveTime;
   if (narrative !== undefined) out.narrative = narrative;
   return out;
+}
+
+/**
+ * Slot-check a planned item's `code` against the terminologies C-CDA expects
+ * there. Only the `medicationActivity` variant is wired, and only to the
+ * `medication` slot.
+ *
+ * **Why that variant and no other.** A planned item's `code` is the planned act
+ * itself for five of the six variants: a LOINC observation, a SNOMED act, a CPT
+ * encounter, a SNOMED or ICD-10-PCS procedure, a SNOMED supply. None of those is
+ * one of the five bound `CodeSlot`s, and there is no binding to check them
+ * against that this repo can cite without the normative R2.1 value sets, so
+ * inventing one would flag conformant documents. The `medicationActivity`
+ * variant is the exception because its `code` is not an act at all: it is the
+ * **drug**, read from `consumable/manufacturedProduct` exactly as a performed
+ * Medication Activity's `drug` is (see {@link plannedCodeElement}), so it is the
+ * same coded value in the same terminology at the same slot, and it gets the
+ * same check.
+ *
+ * **What this makes reachable, stated exactly rather than roundly.** Four codes,
+ * not five: `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM`
+ * and (with a caller-supplied `TerminologyAdapter`) `SEMANTIC_CODE_INVALID`.
+ * `DEPRECATED_CODE_SYSTEM` is **not** among them: the `medication` slot's
+ * binding declares no deprecated systems, so that code cannot fire at this slot
+ * on a *performed* medication either, and parity is the whole claim here. An
+ * ICD-9 OID on a drug draws `UNEXPECTED_CODE_SYSTEM` in both places.
+ *
+ * **The gap it closes.** `MEDICATION_PRODUCT_ARM_UNEXPECTED` and
+ * `MEDICATION_PRODUCT_ARM_REPEATED` are deliberately tolerable, and that rests
+ * on an argument: every state in which they fire without a `<code>` having been
+ * selected and read normally carries an unquietable companion, and on the shape
+ * where an arm's `<code>` asserts neither a symbol nor a `nullFlavor` that named
+ * companion is `MISSING_CODE_VALUE`. It could not fire here, so the argument was
+ * false at this call site and only at this call site: a planned medication whose
+ * only arm was `<manufacturedLabeledDrug><code/></manufacturedLabeledDrug>` had
+ * **no drug identity at all** and carried a single profile-quietable warning,
+ * which the documented filter-the-expected-noise pattern reduces to silence. On
+ * the Plan of Treatment, which says what a patient is about to be given.
+ *
+ * **Monotone by construction, not by argument.** `checkCodeSlot` only ever
+ * emits; it selects nothing, withholds nothing, and does not touch the returned
+ * `CD`. So no document can go from warned to silent here and none can lose a
+ * product code. The matrix in `test/entries.test.ts` measures that against base
+ * rather than asserting it. @internal
+ */
+function checkPlannedCodeSlot(
+  code: CD | undefined,
+  kind: PlannedItemKind,
+  position: { readonly path?: string; readonly line?: number; readonly column?: number },
+  ctx: ParseCtx,
+): void {
+  if (kind !== "medicationActivity") return;
+  checkCodeSlot(code, "medication", position, ctx);
 }
 
 /**

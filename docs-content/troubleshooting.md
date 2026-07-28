@@ -105,8 +105,10 @@ milestone it stopped at.
   element, there is nothing to judge.
   **Those five slots are the whole of it, so read a silent document carefully.** Every other coded
   value is never handed to your adapter and therefore can never raise `SEMANTIC_CODE_INVALID`: the
-  Results and Vital Signs LOINC codes, the procedure, encounter, planned-item, and family-history
-  codes, the smoking-status, functional-status, and mental-status observation values, the allergy
+  Results and Vital Signs LOINC codes, the procedure, encounter, and family-history codes, the
+  planned-item codes for the five variants whose `code` is the planned act (a planned **medication**'s
+  `code` is the drug, so it is checked at the `medication` slot like any other),
+  the smoking-status, functional-status, and mental-status observation values, the allergy
   propensity type, and the reaction, severity, and criticality observations. Within the five, the
   checks apply to the slot's **primary** coding; alternate codings carried in `<translation>` are
   preserved and re-serialized but are not themselves slot-checked. A clean run means the five checked
@@ -206,14 +208,14 @@ milestone it stopped at.
   `nullFlavor`-marked idiom nothing else fires at all (`MISSING_PRODUCT_CODE` would be false, an arm
   did carry a `<code>`, and the code-system checks are silent by design on a slot whose only
   assertion is a `nullFlavor`), and on the variant that asserts neither a symbol nor a `nullFlavor`
-  the companion is `MISSING_CODE_VALUE`, which is itself safety-critical **at a wired slot**: on a
-  performed medication or an immunization, but not on a planned one, whose `code` is not slot-checked
-  at all (see the Plan of Treatment bullet below). Behind
+  the companion is `MISSING_CODE_VALUE`, which is itself safety-critical, at all three call sites
+  alike: a performed medication, an immunization, and a planned medication's drug (see the Plan of
+  Treatment bullet below). Behind
   `MEDICATION_PRODUCT_ARM_CONFLICT` it stands down, the same way `MISSING_PRODUCT_CODE` does. **Its
   precondition is about each arm's LEAD `<code>`, not the arm**: selection reads the first `<code>`
-  on an arm and no other, so an arm whose *second* `<code>` asserts a primary is still a slot with no
+  on an arm and no other, so an arm whose _second_ `<code>` asserts a primary is still a slot with no
   selected product and still draws this code, with `MEDICATION_PRODUCT_CODE_REPEATED` beside it. The
-  message said "no arm asserts a primary `@code`" and called the translation the *only* place the
+  message said "no arm asserts a primary `@code`" and called the translation the _only_ place the
   product was named until `0.0.3`; both were false on precisely that shape.
 - **A repeated arm is reported even when the repeats agree
   (`MEDICATION_PRODUCT_ARM_REPEATED`).** `ManufacturedProduct` models a choice of one participant, so
@@ -259,22 +261,28 @@ milestone it stopped at.
   structured drug contradicting the narrative. All of that is fixed in `0.0.3`. The act `<code>` is
   not on the model for this variant, as it is not for a performed Medication Activity or an
   Immunization Activity; read `doc.toString()` if you need it.
-  **What did NOT generalize with it: the code-system and terminology checks.** A `PlannedItem.code`
-  is not one of the five wired `CodeSlot`s (see above), so `checkCodeSlot` is never called on it and
-  `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM`, `DEPRECATED_CODE_SYSTEM` and
-  `SEMANTIC_CODE_INVALID` **cannot fire on a planned medication's drug**, where they all fire on a
-  performed one's. This limit predates the fix and is unchanged by it, but it is now reachable on
-  every planned medication rather than only on those with no act `<code>`, so it is worth stating
-  plainly: a planned drug asserting a `@code` with no `@codeSystem`, or an empty `<code/>`, comes
-  back read and unremarked. That is queued as its own item, not folded in here: wiring the slot makes
-  five codes newly reachable at a call site and needs its own base-measured matrix.
-  **The consequence worth planning around:** on that shape the only warning left can be a
-  profile-tolerable one. A planned medication whose single arm is
-  `<manufacturedLabeledDrug><code/></manufacturedLabeledDrug>` has no drug identity at all and draws
-  `MEDICATION_PRODUCT_ARM_UNEXPECTED` alone; two empty-`<code/>` material arms draw
-  `MEDICATION_PRODUCT_ARM_REPEATED` alone. If you apply a vendor profile and then filter the expected
-  noise, as this documentation elsewhere suggests, that document reaches you silent. **Do not treat a
-  quiet `getPlannedItems()` as a checked one**: test `item.code?.code`, not `item.code`.
+  **The code-system and terminology checks reach it too, as of `0.0.3`.** Because that `code` is the
+  drug, it is checked against the `medication` binding exactly as a performed Medication Activity's
+  `drug` is, so `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM` and (with a
+  `TerminologyAdapter`) `SEMANTIC_CODE_INVALID` fire on a planned drug, code for code with its
+  performed twin. On `0.0.2` and earlier none of them could: a planned drug asserting a `@code` with
+  no `@codeSystem`, an empty `<code/>`, or an OID outside RxNorm/NDC came back read and unremarked.
+  `DEPRECATED_CODE_SYSTEM` is the one that does not apply, and it does not apply to a performed drug
+  either: the `medication` binding declares no deprecated systems, so an ICD-9-CM OID on a drug is
+  `UNEXPECTED_CODE_SYSTEM` in both places.
+  **What that changed for the tolerable product codes.** `MEDICATION_PRODUCT_ARM_UNEXPECTED` and
+  `MEDICATION_PRODUCT_ARM_REPEATED` are profile-tolerable, and their tolerability rests on an
+  unquietable companion firing wherever no `<code>` was selected and read normally. On the
+  empty-`<code>` shape that companion is `MISSING_CODE_VALUE`, which could not fire here, so on
+  `0.0.2` a planned medication whose single arm was
+  `<manufacturedLabeledDrug><code/></manufacturedLabeledDrug>` had no drug identity at all and drew
+  `MEDICATION_PRODUCT_ARM_UNEXPECTED` alone, and two empty-`<code/>` material arms drew
+  `MEDICATION_PRODUCT_ARM_REPEATED` alone. Apply a vendor profile, filter the expected noise as this
+  documentation elsewhere suggests, and that document reached you silent. Both shapes now carry
+  `MISSING_CODE_VALUE`, which no profile can quiet. **The other five planned kinds are still not
+  slot-checked**, deliberately: their `code` is the planned act, not a drug, and none of those
+  codes is one of the five wired `CodeSlot`s. **So do not treat a quiet `getPlannedItems()` as a
+  checked one**: test `item.code?.code`, not `item.code`.
 - **UCUM validation is grammatical, on a curated atom subset.** The validator checks well-formed UCUM
   against the prefixes/atoms that appear in lab Results and Vital Signs, not the full UCUM registry. A
   valid-but-uncurated atom may read as `NON_UCUM_UNIT`; the raw unit is always preserved. It does not
