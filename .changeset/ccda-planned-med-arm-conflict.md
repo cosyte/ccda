@@ -17,7 +17,7 @@ that says what a patient is **about to be given**. `MISSING_PRODUCT_CODE`,
 with it.
 
 The root cause is semantic. CDA R2 types `SubstanceAdministration.code` as an
-`ActSubstanceAdministrationCode`, the *kind of administration act*, while the substance participates
+`ActSubstanceAdministrationCode`, the _kind of administration act_, while the substance participates
 through `consumable/manufacturedProduct`. So the direct `<code>` was never a weaker drug code to fall
 back on, and preferring it read an act type into the drug slot. `code` on a planned
 `medicationActivity` was the drug on a document without an act `<code>` and the act type on one with
@@ -29,12 +29,12 @@ so no round-trip fixture could produce the shape. The act `<code>` is not on the
 variant, as it is not for the other two call sites, and round-trips through `doc.toString()`.
 
 **What did NOT generalize with it, stated so nobody reads more into the fix**: `checkCodeSlot` and a
-`TerminologyAdapter` run at the five wired `CodeSlot`s only, and a `PlannedItem.code` is not one of
-them. So `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM`,
-`DEPRECATED_CODE_SYSTEM` and `SEMANTIC_CODE_INVALID` still cannot fire on a planned medication's
-drug, where they all fire on a performed one's. That limit predates this change and is unchanged by
-it, but it is now reachable on every planned medication rather than only on those with no act
-`<code>`, so a matrix row pins it and the docs say it. Wiring the slot is its own item.
+`TerminologyAdapter` run at the five wired `CodeSlot`s only, and a `PlannedItem.code` was not one of
+them, so `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM` and
+`SEMANTIC_CODE_INVALID` could not fire on a planned medication's drug where they all fire on a
+performed one's. That limit predates this change and was unchanged by it. It is closed **separately,
+in this same release**, by the drug-slot change entered beside this one, which carries its own
+base-measured matrix rather than being folded into this slice.
 
 Monotonicity is measured against the previous release's `src/` rather than argued, and this slice has
 **one exception**. Across a 27-row matrix, the nine "no act `<code>`" rows come back byte-identical
@@ -48,6 +48,6 @@ constant, not a predicate. After, it fires on **one of nine**, exactly the row w
 contradicts the narrative, the failure it exists to catch. No row loses a product warning.
 
 Also narrows `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`'s message, which opened "No
-manufacturedProduct arm asserts a primary `@code`" and called the `<translation>` the *only* place
+manufacturedProduct arm asserts a primary `@code`" and called the `<translation>` the _only_ place
 the product was named. Both are false on an arm whose **second** `<code>` asserts a primary, which
 selection never reads. Message text only, no behaviour change.

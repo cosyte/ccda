@@ -682,10 +682,18 @@ export function missingProductCode(position: CcdaPosition): CcdaWarning {
  * Wherever this code is the *only* thing fired, a `<code>` element **was**
  * selected, and it is read exactly as the same document would have been read
  * with one arm: whatever the call site does with a product code, it does
- * unchanged. (That differs by call site, which is why this says "unchanged"
- * rather than "fully checked": a Medication Activity and an Immunization
- * Activity run the code through {@link checkCodeSlot} *and* reconcile it against
- * the narrative, while a Planned Medication Activity only reconciles.) So this
+ * unchanged. ("Unchanged" rather than "fully checked", deliberately: the slot
+ * checks are structural recognition, plus the opt-in semantic tier when a caller
+ * supplies a `TerminologyAdapter`, while a `<translation>` alternate is
+ * preserved and never slot-checked at all, so "checked" would claim more than
+ * any call site delivers. What the call sites *do* is now
+ * uniform. All three consumable sites, a Medication Activity, an Immunization
+ * Activity and a Planned Medication Activity, run the selected code through
+ * {@link checkCodeSlot} **and** reconcile it against the narrative. It used to
+ * differ, the planned site only reconciling, and that is precisely what made
+ * this argument false there: the companion this classification leans on for the
+ * empty-`<code>` shape is `MISSING_CODE_VALUE`, which could not then fire on a
+ * planned drug.) So this
  * code reports known, meaning-preserving vendor noise a profile may defensibly
  * tolerate. Wherever **no** element was selected, this code is by construction
  * not alone: either `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed) or

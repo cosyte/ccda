@@ -16,7 +16,8 @@ immutability + explicit mutation, and the profile system.
 
 ## Status
 
-- **Published on npm at `0.0.1`**, public, MIT. Pre-alpha on the shared cosyte `0.0.x` ladder
+- **Published on npm at `0.0.2`**, public, MIT (re-derived from the registry 2026-07-28, where this
+  line said `0.0.1`; `npm view @cosyte/ccda version` is the only source of truth). Pre-alpha on the shared cosyte `0.0.x` ladder
   (`0.0.x` until first alpha, ADR 0001). A published version never moves backwards.
 - **There are no stubs left.** `src/index.ts` exports a working parser (`parseCcda`), serializer
   (`serializeCcda`), document builder (`buildCcda`), and document editor (`editCcda`), plus the
@@ -227,26 +228,46 @@ immutability + explicit mutation, and the profile system.
     performed Medication Activity or an Immunization Activity, the other two `consumable` call sites,
     both of which have always ignored it; it round-trips through `serializeCcda`. The other five
     planned kinds are untouched, their `<code>` _is_ the planned act and they have no consumable.
-    **What did NOT generalize with it, and must not be claimed: `checkCodeSlot`.** A `PlannedItem.code`
-    is not one of the five wired `CodeSlot`s, so `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`,
-    `UNEXPECTED_CODE_SYSTEM`, `DEPRECATED_CODE_SYSTEM` and `SEMANTIC_CODE_INVALID` **cannot fire on a
-    planned medication's drug** where they all fire on a performed one's, and a
-    `<manufacturedMaterial><code/></manufacturedMaterial>` comes back as a truthy empty `CD` in total
-    silence. `PRE-EXISTING` and unchanged by this slice, but now reachable on every planned medication
-    rather than only on those with no act `<code>`, and a matrix row pins it. Wiring the slot is its
-    own item: it makes five codes newly reachable at a call site and needs its own base-measured
-    matrix, exactly as this slice did. Do not bolt it onto an adjacent change.
-    **Its sharpest consequence, which belongs in that item's acceptance criteria:** the conditional
-    tolerability argument for `MEDICATION_PRODUCT_ARM_UNEXPECTED` and `MEDICATION_PRODUCT_ARM_REPEATED`
-    ("each state where that would not be enough carries an unquietable companion") is **false at this
-    call site**, because the companion it names on the empty-`<code>` shape is `MISSING_CODE_VALUE`,
-    which cannot fire on a `PlannedItem.code`. Measured: a planned medication whose only arm is
-    `<manufacturedLabeledDrug><code/></manufacturedLabeledDrug>` has **no drug identity at all** and
-    draws `MEDICATION_PRODUCT_ARM_UNEXPECTED` alone; two empty-`<code/>` material arms draw
+    **What did not generalize with it was `checkCodeSlot`, and `CCDA-PLANNED-CODE-SLOT` closed that
+    separately.** A `PlannedItem.code` was not one of the five wired `CodeSlot`s, so
+    `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM` and `SEMANTIC_CODE_INVALID`
+    could not fire on a planned medication's drug where they all fire on a performed one's, and a
+    `<manufacturedMaterial><code/></manufacturedMaterial>` came back as a truthy empty `CD` in total
+    silence. It was `PRE-EXISTING` and unchanged by that slice, correctly kept out of it, and shipped
+    as its own item with its own base-measured matrix. See the entry below.
+  - **A planned medication's drug is slot-checked at the `medication` binding, and the other five
+    planned kinds are not slot-checked at all.** The `medicationActivity` variant's `code` **is** the
+    drug, read from the same `consumable/manufacturedProduct` a performed Medication Activity reads,
+    so it is the same coded value in the same terminology at the same slot and gets the same check.
+    The other five carry the planned act itself (LOINC observation, CPT encounter, SNOMED
+    act/procedure/supply); none is one of the five bound `CodeSlot`s, and binding them would mean
+    inventing a value set this repo cannot cite without the normative R2.1 artifacts, so an empty or
+    unexpectedly-coded `<code>` on those five is still read and unremarked. **Do not "finish the job"
+    by wiring them.**
+    **Four codes became newly reachable, not five, and the difference is worth keeping straight:**
+    `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM` and (with an adapter)
+    `SEMANTIC_CODE_INVALID`. `DEPRECATED_CODE_SYSTEM` is **not** among them, because the `medication`
+    binding's `deprecated` list is empty, so it cannot fire at that slot on a _performed_ medication
+    either. An ICD-9-CM OID on a drug is `UNEXPECTED_CODE_SYSTEM` in both places, and a matrix row
+    pins that rather than leaving it to be re-derived.
+    **What it bought:** the conditional tolerability argument for `MEDICATION_PRODUCT_ARM_UNEXPECTED`
+    and `MEDICATION_PRODUCT_ARM_REPEATED` ("each state where that would not be enough carries an
+    unquietable companion") was **false at this call site and only at this call site**, because the
+    companion it names on the empty-`<code>` shape is `MISSING_CODE_VALUE`. A planned medication whose
+    only arm was `<manufacturedLabeledDrug><code/></manufacturedLabeledDrug>` had **no drug identity
+    at all** and drew `MEDICATION_PRODUCT_ARM_UNEXPECTED` alone; two empty-`<code/>` material arms drew
     `MEDICATION_PRODUCT_ARM_REPEATED` alone. Neither is in `SAFETY_CRITICAL_CODES`, so a profile plus
-    the documented filter-the-expected-noise pattern reduces both to silence. `PRE-EXISTING` and
-    base-identical, pinned by a test rather than left implicit, and it is why wiring the slot is
-    worth doing rather than merely tidy.
+    the documented filter-the-expected-noise pattern reduced both to silence. Both now carry
+    `MISSING_CODE_VALUE`. The argument holds at all three consumable call sites.
+    **This is the one slice in the series that satisfies the monotonicity invariant WHOLE, and that
+    is a property of the change rather than a claim about it:** `checkCodeSlot` only emits. It selects
+    nothing, withholds nothing and never touches the `CD`, so no row can go warned to silent, trade a
+    safety-critical code for a weaker one, or stop handing back a drug. Measured anyway, in a 26-row
+    matrix (thirteen arm shapes, each parsed as a planned medication **and** as its performed twin)
+    run against base `src/`: thirteen performed rows byte-identical, ten of thirteen planned rows
+    moving, every one of them by gaining the code its twin already drew, and after the change the two
+    columns of all thirteen shapes agree exactly. The pre-existing 27-row planned-arm matrix moved
+    three rows, each purely gaining `MISSING_CODE_VALUE`.
   - **`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`'s precondition is each arm's LEAD `<code>`, and the
     message now says so.** It used to open "No manufacturedProduct arm asserts a primary `@code`" and
     call the translation the _only_ place the product was named. Both are false on an arm whose

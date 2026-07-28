@@ -2638,19 +2638,22 @@ describe("clinical entries, a Planned Medication Activity carrying its own act <
     expect(parseCcda(out).toString()).toBe(out);
   });
 
-  it("pins what is NOT covered here: a drugless planned medication can carry only a tolerable code", () => {
-    // PRE-EXISTING and deliberately NOT fixed by this slice, pinned so it is a
-    // measured limit rather than a discovery. `checkCodeSlot` is not called on a
-    // PlannedItem.code (it is not one of the five wired CodeSlots), so the
-    // untolerable companion that carries the tolerability argument for
-    // MEDICATION_PRODUCT_ARM_UNEXPECTED and MEDICATION_PRODUCT_ARM_REPEATED at
-    // the other two call sites, MISSING_CODE_VALUE, cannot fire here. An arm
-    // whose <code> asserts neither a symbol nor a nullFlavor therefore leaves a
-    // planned medication with NO drug identity and only a PROFILE-QUIETABLE
-    // warning, so a profile plus the documented "filter the expected noise"
-    // pattern reduces it to total silence. Base behaves identically, so this
-    // slice does not cause it; it makes it reachable on more documents, which is
-    // why it is written down here and queued rather than left implicit.
+  it("restores the tolerability argument: a drugless planned medication now carries an unquietable code", () => {
+    // `CCDA-PLANNED-CODE-SLOT`. This block used to pin the OPPOSITE, as a
+    // measured PRE-EXISTING limit: `checkCodeSlot` was never called on a
+    // PlannedItem.code, so MISSING_CODE_VALUE could not fire here, and the
+    // conditional tolerability argument for MEDICATION_PRODUCT_ARM_UNEXPECTED
+    // and MEDICATION_PRODUCT_ARM_REPEATED ("each state where a <code> was not
+    // selected and read normally carries an unquietable companion") was FALSE at
+    // this call site and only at this call site. Its sharpest form: a planned
+    // medication whose only arm was <manufacturedLabeledDrug><code/></...> had NO
+    // drug identity at all and drew a single PROFILE-QUIETABLE warning, which the
+    // documented "filter the expected noise" pattern reduces to total silence, on
+    // the section that says what a patient is ABOUT TO BE GIVEN.
+    //
+    // The slot is wired now, so the named companion fires and the argument holds
+    // at all three consumable call sites. What is READ is unchanged in both
+    // shapes: `checkCodeSlot` only emits.
     const labeled = parseCcda(
       buildCcda({
         sections: plannedMed("<manufacturedLabeledDrug><code/></manufacturedLabeledDrug>"),
@@ -2660,7 +2663,9 @@ describe("clinical entries, a Planned Medication Activity carrying its own act <
     expect(fromLabeled?.code).toStrictEqual({});
     expect(fromLabeled?.code?.code).toBeUndefined();
     expect(codes(labeled.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED);
-    expect(codes(labeled.warnings)).not.toContain(WARNING_CODES.MISSING_CODE_VALUE);
+    expect(codes(labeled.warnings)).toContain(WARNING_CODES.MISSING_CODE_VALUE);
+    // Still not MISSING_PRODUCT_CODE: an arm did carry a <code>. That backstop
+    // and this slot check answer different questions and neither substitutes.
     expect(codes(labeled.warnings)).not.toContain(WARNING_CODES.MISSING_PRODUCT_CODE);
 
     const repeated = parseCcda(
@@ -2671,12 +2676,29 @@ describe("clinical entries, a Planned Medication Activity carrying its own act <
       }),
     );
     expect(codes(repeated.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_REPEATED);
-    expect(codes(repeated.warnings)).not.toContain(WARNING_CODES.MISSING_CODE_VALUE);
+    expect(codes(repeated.warnings)).toContain(WARNING_CODES.MISSING_CODE_VALUE);
 
-    // Neither companion is unquietable here, which is exactly the gap.
+    // The tolerable codes stay tolerable; what changed is that the companion
+    // carrying their argument is present, and no profile can quiet it.
     expect(SAFETY_CRITICAL_CODES.has(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED)).toBe(false);
     expect(SAFETY_CRITICAL_CODES.has(WARNING_CODES.MEDICATION_PRODUCT_ARM_REPEATED)).toBe(false);
     expect(SAFETY_CRITICAL_CODES.has(WARNING_CODES.MISSING_CODE_VALUE)).toBe(true);
+  });
+
+  it("leaves the other five planned kinds unchecked, because their <code> is the planned ACT", () => {
+    // The wiring is scoped to `medicationActivity` on purpose. The other five
+    // carry the planned act itself: a LOINC observation, a SNOMED act, a CPT
+    // encounter, a SNOMED procedure, a SNOMED supply. None is one of the five
+    // bound CodeSlots, and picking one for them would flag conformant documents,
+    // so an empty <code> on those variants stays silent exactly as it always has.
+    const emptyCoded = PLAN_OF_TREATMENT_SECTION.replace(
+      /<code code="58410-2"[^/]*\/>/u,
+      "<code/>",
+    );
+    const doc = parseCcda(buildCcda({ sections: emptyCoded }));
+    const observation = doc.getPlannedItems().find((p) => p.kind === "observation");
+    expect(observation?.code).toStrictEqual({});
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MISSING_CODE_VALUE);
   });
 
   it("pins the planned-medication matrix: what is read, and what is said about it", () => {
@@ -2740,6 +2762,17 @@ describe("clinical entries, a Planned Medication Activity carrying its own act <
     //    element as a rival drug assertion, the manufactured reading this area
     //    refuses, with no de-identified document to ground it. Stated, not
     //    quietly excluded.
+    //
+    // 4. `CCDA-PLANNED-CODE-SLOT` MOVED THREE OF THESE TWENTY-SEVEN ROWS, ALL IN
+    //    ONE DIRECTION, measured by running this block against that slice's base
+    //    `src/`. The three "single arm, empty code" rows each GAINED
+    //    MISSING_CODE_VALUE; the other twenty-four came back BYTE-IDENTICAL, and
+    //    so did the performed-medication matrix above. No row's reading changed
+    //    at all: `checkCodeSlot` only emits, it selects nothing and withholds
+    //    nothing, so unlike the two slices before it this one cannot break the
+    //    invariant in either of its halves. State it plainly: no row goes from
+    //    warned to silent, no row trades a safety-critical code for a weaker one,
+    //    and no row stops handing back a code.
     const armShapes: readonly (readonly [string, string])[] = [
       ["clean single arm", MATERIAL_ARM],
       [
@@ -2765,15 +2798,13 @@ describe("clinical entries, a Planned Medication Activity carrying its own act <
         `<manufacturedMaterial><code nullFlavor="OTH"><translation code="${LISINOPRIL}" codeSystem="${RXNORM}"/></code></manufacturedMaterial>`,
       ],
       [
-        // THE ROW THAT PINS WHAT DID *NOT* GENERALIZE. An arm whose <code>
-        // asserts neither a symbol nor a nullFlavor comes back as a truthy but
-        // empty CD in TOTAL SILENCE here, where the performed twin draws
-        // MISSING_CODE_VALUE: `checkCodeSlot` is never called on a
-        // PlannedItem.code, which is not one of the five wired CodeSlots.
-        // PRE-EXISTING and unchanged by this slice (base is silent on the "no
-        // act code" variant too), but reachable on strictly more documents now,
-        // so it is measured rather than left for someone to discover.
-        "single arm, empty code (NOT slot-checked here)",
+        // THE ROW `CCDA-PLANNED-CODE-SLOT` MOVED, and the ONLY shape here it
+        // moves. An arm whose <code> asserts neither a symbol nor a nullFlavor
+        // used to come back as a truthy but empty CD in TOTAL SILENCE, where the
+        // performed twin drew MISSING_CODE_VALUE. It now draws it too, in all
+        // three variants: three rows gain a safety-critical warning, none loses
+        // one, and what is READ is byte-identical.
+        "single arm, empty code (now slot-checked)",
         `<manufacturedMaterial><code/></manufacturedMaterial>`,
       ],
       [
@@ -2799,14 +2830,15 @@ describe("clinical entries, a Planned Medication Activity carrying its own act <
         // the drug's, so a matrix that filtered it out could not measure the
         // thing most likely to go wrong here.
         //
-        // MISSING_CODE_SYSTEM and MISSING_CODE_VALUE are in the frame for the
-        // OPPOSITE reason, and their absence from every row is a MEASUREMENT
-        // rather than a clean bill of health: neither can fire at this call
-        // site at all, because `checkCodeSlot` is only called at the five wired
-        // CodeSlots and a PlannedItem.code is not one of them. The
-        // "single arm, empty code" row above is what makes that visible instead
-        // of implied. If wiring the slot is ever taken up as its own item,
-        // these two columns are where it will show.
+        // MISSING_CODE_SYSTEM and MISSING_CODE_VALUE are in the frame because
+        // this is where wiring the slot shows, and it did:
+        // `CCDA-PLANNED-CODE-SLOT` moved exactly the three "single arm, empty
+        // code" rows, each purely gaining MISSING_CODE_VALUE. Their absence from
+        // the other twenty-four is a MEASUREMENT, not an assumption: every one of
+        // those either names an RxNorm product (the `medication` binding expects
+        // it) or asserts a nullFlavor, which is a complete statement and silent
+        // by design. The dedicated slot matrix below is where the rest of the
+        // newly-reachable codes are measured, against their performed twins.
         const said = codes(doc.warnings)
           .filter(
             (c) =>
@@ -2848,13 +2880,305 @@ describe("clinical entries, a Planned Medication Activity carrying its own act <
         "single arm, translation only / no act code: code=none sys=none nullFlavor=OTH | MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
         "single arm, translation only / act code present: code=none sys=none nullFlavor=OTH | MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
         "single arm, translation only / act code + narrative: code=none sys=none nullFlavor=OTH | MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
-        "single arm, empty code (NOT slot-checked here) / no act code: code=none sys=none nullFlavor=none | silent",
-        "single arm, empty code (NOT slot-checked here) / act code present: code=none sys=none nullFlavor=none | silent",
-        "single arm, empty code (NOT slot-checked here) / act code + narrative: code=none sys=none nullFlavor=none | silent",
+        "single arm, empty code (now slot-checked) / no act code: code=none sys=none nullFlavor=none | MISSING_CODE_VALUE",
+        "single arm, empty code (now slot-checked) / act code present: code=none sys=none nullFlavor=none | MISSING_CODE_VALUE",
+        "single arm, empty code (now slot-checked) / act code + narrative: code=none sys=none nullFlavor=none | MISSING_CODE_VALUE",
         "single arm whose drug contradicts the narrative / no act code: code=1191 sys=2.16.840.1.113883.6.88 nullFlavor=none | silent",
         "single arm whose drug contradicts the narrative / act code present: code=1191 sys=2.16.840.1.113883.6.88 nullFlavor=none | silent",
         "single arm whose drug contradicts the narrative / act code + narrative: code=1191 sys=2.16.840.1.113883.6.88 nullFlavor=none | CODE_NARRATIVE_MISMATCH",
       ]
     `);
+  });
+});
+
+/**
+ * `CCDA-PLANNED-CODE-SLOT`. A `PlannedItem.code` on the `medicationActivity`
+ * variant IS the drug, read from the same `consumable/manufacturedProduct` a
+ * performed Medication Activity reads, but it was never handed to
+ * `checkCodeSlot`, so the whole slot-check tier was unreachable there.
+ *
+ * The sharpest consequence, and the reason this is a slice rather than a tidy:
+ * `MEDICATION_PRODUCT_ARM_UNEXPECTED` and `MEDICATION_PRODUCT_ARM_REPEATED` are
+ * deliberately tolerable, and that rests on the claim that wherever they fire
+ * without a `<code>` having been selected and read normally, an **unquietable**
+ * companion fires beside them. On the shape where an arm's `<code>` asserts
+ * neither a symbol nor a `nullFlavor`, the companion that claim names is
+ * `MISSING_CODE_VALUE`. It could not fire here, so a planned medication with no
+ * drug identity at all carried one profile-quietable warning, on the section
+ * that says what a patient is about to be given.
+ *
+ * The bar this block measures is **parity**: a planned drug must draw exactly
+ * what its performed twin draws, on the same arms, code for code. Anything
+ * looser would be an invented binding rather than the one C-CDA already applies
+ * to `Medication Information`.
+ */
+describe("clinical entries, the drug slot on a Planned Medication Activity", () => {
+  const RXNORM = "2.16.840.1.113883.6.88";
+  const SNOMED_CT = "2.16.840.1.113883.6.96";
+  const NDC = "2.16.840.1.113883.6.69";
+  /** ICD-9-CM diagnosis. Deprecated for the `problem` slot; merely UNEXPECTED here. */
+  const ICD9_CM_DX = "2.16.840.1.113883.6.103";
+  /** Lisinopril 10 MG Oral Tablet, the drug every fixture in this file uses. */
+  const LISINOPRIL = "314076";
+  /**
+   * SNOMED CT "Administration of drug or medicament (procedure)", verified in
+   * the block above. Reused here rather than minting a new SNOMED code: it is
+   * exactly the wrong-slot mistake `UNEXPECTED_CODE_SYSTEM` exists to catch (an
+   * act concept written into the consumable), and reusing a checked code avoids
+   * a fourth instance of this area's fixture-code defect.
+   */
+  const ADMIN_OF_DRUG = "18629005";
+  /**
+   * A placeholder in NDC's 5-4-2 shape, carrying **no** `displayName`, so it
+   * asserts no product identity for a label to be wrong about and this file
+   * makes no claim about which drug (if any) it is assigned to. The row measures
+   * one thing only: that the NDC OID is in the `medication` binding's expected
+   * set, so a drug coded under it draws nothing. Deliberately not an RxNorm code,
+   * because the clean row above already covers that half of the binding.
+   */
+  const PLACEHOLDER_NDC = "12345-6789-01";
+
+  const material = (codeXml: string): string =>
+    `<manufacturedMaterial>${codeXml}</manufacturedMaterial>`;
+
+  /** One Planned Medication Activity, arms as given, no act `<code>` and no narrative. */
+  const planned = (arms: string): string => `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.10" extension="2014-06-09"/>
+          <code code="18776-5" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Plan of Treatment</title>
+          <text><content ID="slot1">Lisinopril 10 MG Oral Tablet</content></text>
+          <entry>
+            <substanceAdministration classCode="SBADM" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.42" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="slot-plan-1"/>
+              <statusCode code="active"/>
+              <consumable><manufacturedProduct>${arms}</manufacturedProduct></consumable>
+            </substanceAdministration>
+          </entry>
+        </section>
+      </component>`;
+
+  /**
+   * The performed twin: the SAME arms on a Medication Activity. `doseQuantity`
+   * and `routeCode` are present so the only warnings this document can raise are
+   * the product + slot ones under measurement.
+   */
+  const performed = (arms: string): string => `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.1.1" extension="2015-08-01"/>
+          <code code="10160-0" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Medications</title>
+          <text><content ID="slot2">Lisinopril 10 MG Oral Tablet</content></text>
+          <entry>
+            <substanceAdministration classCode="SBADM" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.16" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.3" extension="slot-perf-1"/>
+              <statusCode code="active"/>
+              <routeCode code="C38288" codeSystem="2.16.840.1.113883.3.26.1.1" displayName="Oral"/>
+              <doseQuantity value="10" unit="mg"/>
+              <consumable><manufacturedProduct>${arms}</manufacturedProduct></consumable>
+            </substanceAdministration>
+          </entry>
+        </section>
+      </component>`;
+
+  /**
+   * The codes under measurement: the whole slot-check tier, the datatype-level
+   * contradiction it sits beside, and every product warning, so a row that
+   * traded one family for the other would be visible rather than filtered away.
+   */
+  const relevant = (warnings: readonly CcdaWarning[]): string[] =>
+    codes(warnings)
+      .filter(
+        (c) =>
+          c.startsWith("MEDICATION_PRODUCT") ||
+          c === "MISSING_PRODUCT_CODE" ||
+          c === "MISSING_CODE_VALUE" ||
+          c === "MISSING_CODE_SYSTEM" ||
+          c === "UNEXPECTED_CODE_SYSTEM" ||
+          c === "DEPRECATED_CODE_SYSTEM" ||
+          c === "SEMANTIC_CODE_INVALID" ||
+          c === "CONTRADICTORY_NULL_FLAVOR",
+      )
+      .sort();
+
+  const shapes: readonly (readonly [string, string])[] = [
+    [
+      "RxNorm drug, clean",
+      material(
+        `<code code="${LISINOPRIL}" codeSystem="${RXNORM}" displayName="Lisinopril 10 MG Oral Tablet"/>`,
+      ),
+    ],
+    [
+      "NDC drug, the binding's other expected system",
+      material(`<code code="${PLACEHOLDER_NDC}" codeSystem="${NDC}"/>`),
+    ],
+    [
+      // A SNOMED act concept written into the consumable: the wrong-slot mistake.
+      "SNOMED concept in the drug slot",
+      material(`<code code="${ADMIN_OF_DRUG}" codeSystem="${SNOMED_CT}"/>`),
+    ],
+    [
+      // THE ROW THAT MEASURES WHAT IS *NOT* REACHABLE. ICD-9-CM is in the
+      // `problem` slot's DEPRECATED list, which is why one might expect
+      // DEPRECATED_CODE_SYSTEM here. The `medication` binding declares NO
+      // deprecated systems, so it cannot fire at this slot on a PERFORMED
+      // medication either, and this row draws UNEXPECTED_CODE_SYSTEM in both
+      // columns. Four codes became reachable at this call site, not five.
+      "ICD-9-CM OID on a drug",
+      material(`<code code="401.9" codeSystem="${ICD9_CM_DX}"/>`),
+    ],
+    ["@code with no @codeSystem", material(`<code code="${LISINOPRIL}"/>`)],
+    ["empty <code/>", material(`<code/>`)],
+    ["@codeSystem with no @code", material(`<code codeSystem="${RXNORM}"/>`)],
+    [
+      "@codeSystem with no @code, and the wrong system",
+      material(`<code codeSystem="${SNOMED_CT}"/>`),
+    ],
+    // A complete statement ("this drug is unknown"), silent by design at every slot.
+    ["nullFlavor only", material(`<code nullFlavor="UNK"/>`)],
+    [
+      // The structural tier runs on the system even with no symbol asserted.
+      "nullFlavor only, wrong system",
+      material(`<code nullFlavor="UNK" codeSystem="${SNOMED_CT}"/>`),
+    ],
+    [
+      // A nullFlavor beside an asserted symbol buys no silence: the symbol is
+      // still unreadable without a system.
+      "@code beside a nullFlavor, no system",
+      material(`<code code="${LISINOPRIL}" nullFlavor="UNK"/>`),
+    ],
+    [
+      // THE SHARPEST FORM, verbatim from the item. Before this slice: one
+      // profile-quietable warning over a planned drug with NO identity at all.
+      "labeled arm only, empty code",
+      `<manufacturedLabeledDrug><code/></manufacturedLabeledDrug>`,
+    ],
+    ["two material arms, both empty codes", `${material(`<code/>`)}${material(`<code/>`)}`],
+  ];
+
+  it("pins the drug-slot matrix, planned against its performed twin, arm for arm", () => {
+    // THE BASE-MEASURED MATRIX for this slice, twenty-six rows over thirteen
+    // shapes. Measured by running this block against base `src/` rather than
+    // argued.
+    //
+    // AGAINST BASE, ALL THIRTEEN `performed` ROWS COME BACK BYTE-IDENTICAL and
+    // TEN OF THE THIRTEEN `planned` rows move, every one of them by GAINING the
+    // slot code its performed twin was already drawing. ELEVEN codes across those
+    // ten rows, counted per code rather than per row because one row gains two:
+    // five MISSING_CODE_VALUE, four UNEXPECTED_CODE_SYSTEM, two
+    // MISSING_CODE_SYSTEM. ("@codeSystem with no @code, and the wrong system" is
+    // the row in two of those buckets.) The three that do not move are the two rows base
+    // already got right (a clean RxNorm drug, an NDC drug) and the
+    // nullFlavor-only row, which is a complete statement and silent at every slot
+    // by design. Nothing is withdrawn anywhere, and that is not a claim but a
+    // property of the change:
+    // `checkCodeSlot` only emits. It selects nothing, returns nothing, and never
+    // touches the `CD`, so no document can go from warned to silent here, no row
+    // can trade a safety-critical code for a weaker one, and no row can stop
+    // handing back a drug. That is the strongest form of the invariant this area
+    // states, and this is the first slice in the series able to satisfy it whole.
+    //
+    // AFTER, THE TWO COLUMNS OF ALL THIRTEEN SHAPES AGREE EXACTLY, which is the
+    // acceptance bar: a planned drug is the same coded value in the same
+    // terminology at the same slot, so it must draw the same codes.
+    //
+    // The `read` column is in the frame for exactly that reason: it must be
+    // identical in the two columns of every row and identical to base, and a
+    // future change that "improves" the slot check into something that selects
+    // would show up here first.
+    const matrix = shapes.flatMap(([name, arms]) => {
+      const p = parseCcda(buildCcda({ sections: planned(arms) }));
+      const q = parseCcda(buildCcda({ sections: performed(arms) }));
+      const drug = p.getPlannedItems().find((i) => i.kind === "medicationActivity")?.code;
+      const perfDrug = q.getMedications()[0]?.drug;
+      const render = (cd: CD | undefined, said: readonly string[]): string =>
+        `${
+          cd === undefined
+            ? "no CD"
+            : `code=${cd.code ?? "none"} sys=${cd.codeSystem ?? "none"} nullFlavor=${cd.nullFlavor ?? "none"}`
+        } | ${said.join(" ") || "silent"}`;
+      return [
+        `${name} / planned:   ${render(drug, relevant(p.warnings))}`,
+        `${name} / performed: ${render(perfDrug, relevant(q.warnings))}`,
+      ];
+    });
+    expect(matrix).toMatchInlineSnapshot(`
+      [
+        "RxNorm drug, clean / planned:   code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | silent",
+        "RxNorm drug, clean / performed: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | silent",
+        "NDC drug, the binding's other expected system / planned:   code=12345-6789-01 sys=2.16.840.1.113883.6.69 nullFlavor=none | silent",
+        "NDC drug, the binding's other expected system / performed: code=12345-6789-01 sys=2.16.840.1.113883.6.69 nullFlavor=none | silent",
+        "SNOMED concept in the drug slot / planned:   code=18629005 sys=2.16.840.1.113883.6.96 nullFlavor=none | UNEXPECTED_CODE_SYSTEM",
+        "SNOMED concept in the drug slot / performed: code=18629005 sys=2.16.840.1.113883.6.96 nullFlavor=none | UNEXPECTED_CODE_SYSTEM",
+        "ICD-9-CM OID on a drug / planned:   code=401.9 sys=2.16.840.1.113883.6.103 nullFlavor=none | UNEXPECTED_CODE_SYSTEM",
+        "ICD-9-CM OID on a drug / performed: code=401.9 sys=2.16.840.1.113883.6.103 nullFlavor=none | UNEXPECTED_CODE_SYSTEM",
+        "@code with no @codeSystem / planned:   code=314076 sys=none nullFlavor=none | MISSING_CODE_SYSTEM",
+        "@code with no @codeSystem / performed: code=314076 sys=none nullFlavor=none | MISSING_CODE_SYSTEM",
+        "empty <code/> / planned:   code=none sys=none nullFlavor=none | MISSING_CODE_VALUE",
+        "empty <code/> / performed: code=none sys=none nullFlavor=none | MISSING_CODE_VALUE",
+        "@codeSystem with no @code / planned:   code=none sys=2.16.840.1.113883.6.88 nullFlavor=none | MISSING_CODE_VALUE",
+        "@codeSystem with no @code / performed: code=none sys=2.16.840.1.113883.6.88 nullFlavor=none | MISSING_CODE_VALUE",
+        "@codeSystem with no @code, and the wrong system / planned:   code=none sys=2.16.840.1.113883.6.96 nullFlavor=none | MISSING_CODE_VALUE UNEXPECTED_CODE_SYSTEM",
+        "@codeSystem with no @code, and the wrong system / performed: code=none sys=2.16.840.1.113883.6.96 nullFlavor=none | MISSING_CODE_VALUE UNEXPECTED_CODE_SYSTEM",
+        "nullFlavor only / planned:   code=none sys=none nullFlavor=UNK | silent",
+        "nullFlavor only / performed: code=none sys=none nullFlavor=UNK | silent",
+        "nullFlavor only, wrong system / planned:   code=none sys=2.16.840.1.113883.6.96 nullFlavor=UNK | UNEXPECTED_CODE_SYSTEM",
+        "nullFlavor only, wrong system / performed: code=none sys=2.16.840.1.113883.6.96 nullFlavor=UNK | UNEXPECTED_CODE_SYSTEM",
+        "@code beside a nullFlavor, no system / planned:   code=314076 sys=none nullFlavor=UNK | CONTRADICTORY_NULL_FLAVOR MISSING_CODE_SYSTEM",
+        "@code beside a nullFlavor, no system / performed: code=314076 sys=none nullFlavor=UNK | CONTRADICTORY_NULL_FLAVOR MISSING_CODE_SYSTEM",
+        "labeled arm only, empty code / planned:   code=none sys=none nullFlavor=none | MEDICATION_PRODUCT_ARM_UNEXPECTED MISSING_CODE_VALUE",
+        "labeled arm only, empty code / performed: code=none sys=none nullFlavor=none | MEDICATION_PRODUCT_ARM_UNEXPECTED MISSING_CODE_VALUE",
+        "two material arms, both empty codes / planned:   code=none sys=none nullFlavor=none | MEDICATION_PRODUCT_ARM_REPEATED MISSING_CODE_VALUE",
+        "two material arms, both empty codes / performed: code=none sys=none nullFlavor=none | MEDICATION_PRODUCT_ARM_REPEATED MISSING_CODE_VALUE",
+      ]
+    `);
+  });
+
+  it("draws the same codes on a planned drug as on a performed one, for every shape", () => {
+    // The matrix above is the diffable artifact; this is the invariant itself,
+    // asserted per shape so a failure names the shape rather than a snapshot
+    // line. Parity is the whole bar: a planned drug is the same coded value in
+    // the same terminology at the same slot, so it must draw the same codes.
+    for (const [name, arms] of shapes) {
+      const p = relevant(parseCcda(buildCcda({ sections: planned(arms) })).warnings);
+      const q = relevant(parseCcda(buildCcda({ sections: performed(arms) })).warnings);
+      expect(`${name}: ${p.join(" ")}`).toBe(`${name}: ${q.join(" ")}`);
+    }
+  });
+
+  it("reaches the semantic tier too, when a caller supplies a terminology adapter", () => {
+    // The fifth code the slot check gates. It needs a bring-your-own adapter, so
+    // it cannot appear in the matrix above (which parses with none), but it is
+    // newly reachable on a planned drug exactly as the four structural ones are.
+    const rejecting = { validateCode: () => ({ result: false }) };
+    const arms = material(`<code code="${LISINOPRIL}" codeSystem="${RXNORM}"/>`);
+    const xml = buildCcda({ sections: planned(arms) });
+
+    expect(codes(parseCcda(xml).warnings)).not.toContain(WARNING_CODES.SEMANTIC_CODE_INVALID);
+    const checked = parseCcda(xml, { terminology: rejecting });
+    expect(codes(checked.warnings)).toContain(WARNING_CODES.SEMANTIC_CODE_INVALID);
+    // Surfaced, never coerced: the code itself is untouched.
+    expect(checked.getPlannedItems().find((i) => i.kind === "medicationActivity")?.code?.code).toBe(
+      LISINOPRIL,
+    );
+  });
+
+  it("is not reachable through the act <code> on the other five planned kinds", () => {
+    // The wiring is scoped to the one variant whose `code` is a drug. A planned
+    // observation carries LOINC, a planned encounter CPT, a planned act/procedure/
+    // supply SNOMED, and none of the five bound CodeSlots binds any of those, so
+    // checking them would mean inventing a binding this repo cannot cite.
+    const doc = parseCcda(buildCcda({ sections: PLAN_OF_TREATMENT_SECTION }));
+    const said = relevant(doc.warnings);
+    expect(said).toStrictEqual([]);
+    // And the LOINC/CPT/SNOMED act codes are still read, unflagged.
+    const byKind = new Map(doc.getPlannedItems().map((i) => [i.kind, i.code?.code]));
+    expect(byKind.get("observation")).toBe("58410-2");
+    expect(byKind.get("encounter")).toBe("99213");
+    expect(byKind.get("supply")).toBe("58938008");
   });
 });

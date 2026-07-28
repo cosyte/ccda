@@ -1062,6 +1062,50 @@ statusCode, effectiveTime, component+`).
 
 ### Fixed
 
+- **Clinical safety: a planned medication's drug is now code-system checked, exactly as a performed
+  one's is. Until now a planned medication with NO drug identity at all could reach a consumer
+  carrying only a profile-quietable warning.** `checkCodeSlot` runs at the five wired `CodeSlot`s,
+  and a `PlannedItem.code` was not one of them, so `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`,
+  `UNEXPECTED_CODE_SYSTEM` and (with a caller-supplied `TerminologyAdapter`) `SEMANTIC_CODE_INVALID`
+  could not fire on a planned drug where they all fire on a performed one. A planned drug asserting
+  a `@code` with no `@codeSystem`, an empty `<code/>`, or an OID outside RxNorm/NDC was read and left
+  unremarked. The `medicationActivity` variant's `code` **is** the drug, read from the same
+  `consumable/manufacturedProduct` a performed Medication Activity reads, so it is the same coded
+  value in the same terminology at the same slot; it now gets the same check. Entered as
+  `PRE-EXISTING` and queued by the slice above rather than folded into it, because making four codes
+  newly reachable at a call site needs its own base-measured matrix.
+  - **The sharpest consequence, and the reason this is a fix rather than a tidy.**
+    `MEDICATION_PRODUCT_ARM_UNEXPECTED` and `MEDICATION_PRODUCT_ARM_REPEATED` are deliberately
+    tolerable, and that rests on a conditional argument: wherever they fire without a `<code>` having
+    been selected and read normally, an **unquietable** companion fires beside them. On the shape
+    where an arm's `<code>` asserts neither a symbol nor a `nullFlavor`, the companion that argument
+    names is `MISSING_CODE_VALUE`, which could not fire here. So the argument was false at this call
+    site and only at this call site: a planned medication whose single arm was
+    `<manufacturedLabeledDrug><code/></manufacturedLabeledDrug>` had no drug identity at all and drew
+    `MEDICATION_PRODUCT_ARM_UNEXPECTED` alone, and two empty-`<code/>` material arms drew
+    `MEDICATION_PRODUCT_ARM_REPEATED` alone. Neither is in `SAFETY_CRITICAL_CODES`, so a vendor
+    profile plus the documented filter-the-expected-noise pattern reduced both to silence, on the
+    section that says what a patient is **about to be given**. Both shapes now carry
+    `MISSING_CODE_VALUE`, which no profile can quiet.
+  - **Four codes, not five, and the fifth is named rather than glossed.**
+    `DEPRECATED_CODE_SYSTEM` is **not** newly reachable: the `medication` slot's binding declares no
+    deprecated systems, so it cannot fire at that slot on a performed medication either. An ICD-9-CM
+    OID on a drug draws `UNEXPECTED_CODE_SYSTEM` in both places, and the matrix has a row that says so.
+  - **Scoped to the one variant whose `code` is a drug.** The other five planned kinds carry the
+    planned act itself (a LOINC observation, a CPT encounter, SNOMED act/procedure/supply). None is
+    one of the five bound `CodeSlot`s, and binding them would mean inventing a value set this
+    package cannot cite, so they are deliberately left unchecked.
+  - **Monotone whole, for the first time in this series, and measured rather than argued.** A new
+    26-row matrix (thirteen arm shapes, each parsed as a planned medication **and** as its performed
+    twin) run against base `src/`: all thirteen performed rows come back byte-identical, ten of the
+    thirteen planned rows move, and every one of them moves by **gaining** the code its performed twin
+    was already drawing. No row goes from warned to silent, no row trades a safety-critical code for
+    a weaker one, and no row stops handing back a drug, because `checkCodeSlot` only emits: it
+    selects nothing, withholds nothing, and never touches the `CD`. After, the two columns of all
+    thirteen shapes agree exactly, which is the bar. The pre-existing 27-row planned-arm matrix moved
+    three rows, each purely gaining `MISSING_CODE_VALUE`, and the performed-medication matrix is
+    untouched.
+
 - **Clinical safety: `MEDICATION_PRODUCT_ARM_CONFLICT` had NEVER been reachable on a Planned
   Medication Activity, so two `manufacturedProduct` arms naming two different drugs went completely
   unmentioned on the Plan of Treatment.** `plannedCodeElement` returned the planned act's direct
@@ -1535,8 +1579,9 @@ value="12"/>` returned a score of 12 with no warning. The `integer` observation 
   without its system is not a code (`250.00` is diabetes in ICD-9-CM and an unrelated concept
   elsewhere), and the parser got quieter the more broken the input was.
   - The new stable warning code **`MISSING_CODE_SYSTEM`** fires at all five wired `CodeSlot`s
-    (`problem`, `medication`, `allergen`, `route`, `vaccine`, so at all six call sites, medication and
-    immunization each contributing a route).
+    (`problem`, `medication`, `allergen`, `route`, `vaccine`, so at all **seven** call sites:
+    medication and immunization each contribute a route, and the `medication` slot is reached from a
+    performed Medication Activity's drug and from a planned one's alike).
   - **Nothing is inferred.** No system is guessed from the slot's expected list or from a
     `@codeSystemName` label (display text, not an identifier), and the value is preserved verbatim. The
     adapter is still not consulted, correctly: it validates a system + code pair, and there is no

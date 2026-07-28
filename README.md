@@ -127,14 +127,20 @@ variant (it round-trips through `doc.toString()`, as every unmodelled element do
 the act `<code>` was preferred when present, so on those documents the planned item's `code` was an
 act type rather than a drug, and none of the product warnings on this page could fire there at all.
 
-**The code-system and terminology checks do NOT generalize with it, and that limit is older and
-wider than this page.** `checkCodeSlot` and your `TerminologyAdapter` run at the five wired
-`CodeSlot`s only (problem, medication, allergen, route, vaccine), and a `PlannedItem.code` is not one
-of them, as "Known limitations" already says. So `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`,
-`UNEXPECTED_CODE_SYSTEM`, `DEPRECATED_CODE_SYSTEM` and `SEMANTIC_CODE_INVALID` **cannot fire on a
-planned medication's drug**, where they do fire on a performed one's. A planned drug asserting a
-`@code` with no `@codeSystem`, or an empty `<code/>`, is read and left unremarked. Treat a quiet
-`getPlannedItems()` accordingly.
+**The code-system and terminology checks apply to a planned drug too.** Because that `code` is the
+drug rather than an act, it is checked against the `medication` binding exactly as a performed
+Medication Activity's `drug` is: `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`,
+`UNEXPECTED_CODE_SYSTEM` and, when you supply a `TerminologyAdapter`, `SEMANTIC_CODE_INVALID` all
+fire on a planned drug, code for code with its performed twin. Until `0.0.3` none of them could, so a
+planned drug asserting a `@code` with no `@codeSystem`, or an empty `<code/>`, was read and left
+unremarked. `DEPRECATED_CODE_SYSTEM` is the one that does not apply, in both places alike: the
+`medication` binding declares no deprecated systems, so an ICD-9-CM OID on a drug is
+`UNEXPECTED_CODE_SYSTEM`.
+
+**The other five planned kinds are not code-system checked**, and that is deliberate. Their `code` is
+the planned act itself (a LOINC observation, a CPT encounter, a SNOMED act, procedure or supply), and
+none of those is one of the five wired `CodeSlot`s, so an empty or unexpectedly-coded `<code>` on
+them is read and left unremarked. Test `item.code?.code`, not `item.code`.
 
 A document carrying **more than one arm** is handled on what the arms say. That means both arms of
 the choice, and a **repeated** arm of one kind: two sibling `manufacturedMaterial`s naming different
@@ -189,9 +195,8 @@ it is not (two arms, neither asserting a primary, the translation on the one tha
 no product-naming coding is on the returned `CD` at all and the coding is reachable only through
 `doc.toString()`, which re-emits every arm verbatim. On the `nullFlavor`-marked idiom it is the lone
 signal; on the variant that asserts neither a symbol nor a `nullFlavor`, `MISSING_CODE_VALUE` fires
-beside it **at a wired slot**, so on a performed medication or an immunization but not on a planned
-one, whose `code` is not slot-checked at all (see above). It stands down behind
-`MEDICATION_PRODUCT_ARM_CONFLICT`, the stronger statement about the same slot.
+beside it, at all three call sites alike, a planned medication's drug included (see above). It stands
+down behind `MEDICATION_PRODUCT_ARM_CONFLICT`, the stronger statement about the same slot.
 
 **A repeated arm is reported whether or not it agrees** (`MEDICATION_PRODUCT_ARM_REPEATED`, tolerable
 by a profile). Repeated arms that disagree are refused as above; repeated arms that agree used to be
@@ -578,8 +583,10 @@ opinion" (silent).
 > **The adapter is consulted at five coded slots only, so read a silent document carefully.** Those
 > slots are the `CodeSlot` set `checkCodeSlot` recognizes: `problem`, `medication`, `allergen`, `route`,
 > and `vaccine`. Every other coded value is **never handed to your adapter** and therefore can never
-> raise `SEMANTIC_CODE_INVALID`: the Results and Vital Signs LOINC codes, the procedure, encounter,
-> planned-item and family-history codes, the smoking-status, functional-status and mental-status
+> raise `SEMANTIC_CODE_INVALID`: the Results and Vital Signs LOINC codes, the procedure, encounter and
+> family-history codes, the planned-item codes for the five variants whose `code` is the planned act
+> (a planned **medication**'s `code` is the drug, so it is checked at the `medication` slot like any
+> other), the smoking-status, functional-status and mental-status
 > observation values, the allergy propensity type, and the reaction, severity and criticality
 > observations. Within the five, the checks apply to the slot's **primary** coding; alternate codings
 > carried in `<translation>` are preserved and re-serialized but are not themselves slot-checked.
@@ -717,8 +724,10 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
   deprecated LOINC codes, not every deprecation in the LOINC release. As with all code-system checks,
   this is recognition only: membership validation needs a licensed terminology service.
 - **A terminology adapter is consulted at five coded slots only**: `problem`, `medication`, `allergen`,
-  `route`, `vaccine`. Results/Vital Signs LOINC codes, procedure, encounter, planned-item and
-  family-history codes, the smoking/functional/mental status values, the allergy propensity type, and
+  `route`, `vaccine`. Results/Vital Signs LOINC codes, procedure, encounter and
+  family-history codes, the planned-item codes for the five variants whose `code` is the planned act
+  (a planned **medication**'s `code` is the drug, so it goes to the `medication` slot),
+  the smoking/functional/mental status values, the allergy propensity type, and
   the reaction/severity/criticality observations are never handed to it. Within the five, the checks
   apply to the slot's primary coding; alternate codings in `<translation>` are preserved but not
   slot-checked. A clean run means those five slots passed, **not** that the document was
