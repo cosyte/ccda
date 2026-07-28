@@ -39,7 +39,7 @@ arm's and no product-naming coding is on it, so the coding is reachable only thr
 `nullFlavor`-marked idiom this is the lone signal, which is why no profile may quiet it; on the
 variant that asserts neither a symbol nor a `nullFlavor`, `MISSING_CODE_VALUE` fires beside it and is
 itself safety-critical. It stands down behind `MEDICATION_PRODUCT_ARM_CONFLICT` exactly as
-`MISSING_PRODUCT_CODE` already does, and applies at all three consumable call sites.
+`MISSING_PRODUCT_CODE` already does, and applies at every consumable call site.
 
 `MEDICATION_PRODUCT_ARM_REPEATED` (tolerable by a profile) fires when one `manufacturedProduct`
 carries more than one arm of the same kind. Repeated arms that disagreed were already refused;
@@ -48,8 +48,10 @@ product three times reported identically to one asserting it once. It is keyed t
 than to their codings, as the presence warning is, so an arm carrying no `<code>` counts. Where it
 fires alone a `<code>` was selected and read exactly as a single-arm document's would have been, and
 each state where that would not be enough carries an unquietable companion
-(`MEDICATION_PRODUCT_ARM_CONFLICT`, `MISSING_PRODUCT_CODE`, or
-`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`).
+(`MEDICATION_PRODUCT_ARM_CONFLICT`, `MISSING_PRODUCT_CODE`,
+`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`, or `MISSING_CODE_VALUE` where the selected `<code>`
+asserts neither a symbol nor a `nullFlavor`; that fourth one was added by
+`CCDA-PLANNED-IMMUNIZATION-DROPPED` in this same release, which found the list incomplete).
 
 **Where BOTH arms fall back to `<translation>`s, sharing one coding is no longer always enough to
 agree.** That is the one pairing where the shared-coarser-coding hazard survives, because neither arm

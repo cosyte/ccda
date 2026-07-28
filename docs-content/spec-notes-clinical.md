@@ -10,21 +10,21 @@ sidebar_position: 3
 Beyond identity + narrative, `parseCcda` extracts the structured clinical entries into typed accessors.
 Each family is reached in one call; every safety-critical distinction is **kept apart, never conflated**.
 
-| Accessor | What it returns |
-|---|---|
-| `getProblems()` | Problem Concern Acts → coded conditions (SNOMED CT / ICD-10-CM) + active/resolved status. |
-| `getMedications()` | Medication Activities → RxNorm drug, dose, route, therapy window vs periodic frequency. |
-| `getAllergies()` | Allergy Concern Acts → allergen, reactions (manifestation + severity), criticality, the "No Known Allergies" flag. |
-| `getResults()` | Result Organizers → LOINC analyte, polymorphic UCUM-checked value, reference range, interpretation. |
-| `getVitals()` | Vital Signs Organizers → the same UCUM-checked value machinery. |
-| `getImmunizations()` | Immunization Activities → CVX vaccine, dose, route, date, the `refused` flag. |
-| `getProcedures()` | Performed **or** planned procedures, split by `moodCode`. |
-| `getEncounters()` | Encounter Activities → visit type, status, period. |
-| `getSmokingStatus()` | Smoking Status observations → SNOMED value + an explicit `unknown` flag. |
-| `getPlannedItems()` | Plan of Treatment entries: all future/ordered, never performed. |
-| `getFunctionalStatus()` / `getMentalStatus()` | Functional / Mental Status findings + direct-entry Assessment Scale Observations (`assessmentScale`, with an `INT` score + `supporting` items), domain-tagged so the two never merge. |
-| `getFamilyHistory()` | One entry per relative: structured identity + their conditions. |
-| `getPastMedicalHistory()` | Bare historical Problem Observations (never double-counted as active). |
+| Accessor                                      | What it returns                                                                                                                                                                                                                                                                                                                                  |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `getProblems()`                               | Problem Concern Acts → coded conditions (SNOMED CT / ICD-10-CM) + active/resolved status.                                                                                                                                                                                                                                                        |
+| `getMedications()`                            | Medication Activities → RxNorm drug, dose, route, therapy window vs periodic frequency.                                                                                                                                                                                                                                                          |
+| `getAllergies()`                              | Allergy Concern Acts → allergen, reactions (manifestation + severity), criticality, the "No Known Allergies" flag.                                                                                                                                                                                                                               |
+| `getResults()`                                | Result Organizers → LOINC analyte, polymorphic UCUM-checked value, reference range, interpretation.                                                                                                                                                                                                                                              |
+| `getVitals()`                                 | Vital Signs Organizers → the same UCUM-checked value machinery.                                                                                                                                                                                                                                                                                  |
+| `getImmunizations()`                          | Immunization Activities → CVX vaccine, dose, route, date, the `refused` flag.                                                                                                                                                                                                                                                                    |
+| `getProcedures()`                             | Performed **or** planned procedures, split by `moodCode`.                                                                                                                                                                                                                                                                                        |
+| `getEncounters()`                             | Encounter Activities → visit type, status, period.                                                                                                                                                                                                                                                                                               |
+| `getSmokingStatus()`                          | Smoking Status observations → SNOMED value + an explicit `unknown` flag.                                                                                                                                                                                                                                                                         |
+| `getPlannedItems()`                           | Plan of Treatment entries, seven templates (act, encounter, procedure, medication, supply, observation, immunization): all future/ordered, never performed. Four of the section's eleven admissible entry templates are not planned items and are not returned, and only an `<entry>`'s own act is read (a nested planned entry is not reached). |
+| `getFunctionalStatus()` / `getMentalStatus()` | Functional / Mental Status findings + direct-entry Assessment Scale Observations (`assessmentScale`, with an `INT` score + `supporting` items), domain-tagged so the two never merge.                                                                                                                                                            |
+| `getFamilyHistory()`                          | One entry per relative: structured identity + their conditions.                                                                                                                                                                                                                                                                                  |
+| `getPastMedicalHistory()`                     | Bare historical Problem Observations (never double-counted as active).                                                                                                                                                                                                                                                                           |
 
 ## The safety-critical distinctions
 
@@ -105,7 +105,7 @@ function doc(x: string) {
 
 For a recognized document type, an absent required (SHALL) catalog section surfaces a
 `REQUIRED_SECTION_MISSING` **warning**, never a fatal, so a missing section never blocks reading the
-data that *is* present. The table is **conservative**: it asserts only unconditional, in-catalog,
+data that _is_ present. The table is **conservative**: it asserts only unconditional, in-catalog,
 high-confidence SHALL constraints and omits choice constraints (`SHALL contain A OR B`), SHOULD/MAY
 sections, and SHALL sections outside the recognized catalog. `requiredSectionKeys(documentType)` and
 `missingRequiredSections(documentType, presentKeys)` expose the table directly.

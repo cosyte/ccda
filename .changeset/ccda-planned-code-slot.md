@@ -36,11 +36,14 @@ newly reachable: the `medication` slot's binding declares no deprecated systems,
 that slot on a performed medication either. An ICD-9-CM OID on a drug draws `UNEXPECTED_CODE_SYSTEM`
 in both places, and a matrix row pins that rather than leaving it to be inferred.
 
-**Scoped to the one planned variant whose `code` is a drug.** The other five carry the planned act
+**Scoped to the planned variants whose `code` is a product.** The others carry the planned act
 itself, a LOINC observation, a CPT encounter, a SNOMED act, procedure or supply. None of those is one
-of the five bound `CodeSlot`s, and binding them would mean inventing a value set this package cannot
-cite without the normative R2.1 artifacts, so they are deliberately left unchecked and an empty
-`<code>` on them stays silent exactly as before.
+of the five bound `CodeSlot`s, so they are deliberately left unchecked and an empty `<code>` on them
+stays silent exactly as before. That is a **choice**: only the system checks would need a value set
+this package cannot cite, since `MISSING_CODE_VALUE` and `MISSING_CODE_SYSTEM` are raised before any
+binding is read. (`CCDA-PLANNED-IMMUNIZATION-DROPPED`, in this same release, corrects that
+justification and adds the Planned Immunization Activity as a second slot-checked variant, at the
+`vaccine` binding.)
 
 **Monotone whole, for the first time in this series, and measured rather than argued.** A new 26-row
 matrix (thirteen arm shapes, each parsed as a planned medication **and** as its performed twin) run

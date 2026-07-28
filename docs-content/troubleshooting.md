@@ -143,15 +143,18 @@ milestone it stopped at.
   `manufacturedMaterial` is silent; `manufacturedLabeledDrug` is read too and flagged
   `MEDICATION_PRODUCT_ARM_UNEXPECTED`. That one is tolerable by a profile, and the reason is
   conditional rather than absolute: wherever it fires **alone** a `<code>` element was selected and
-  read exactly as a single-arm document's would have been, and wherever **none** was selected it is
-  **not** alone, because either `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed) or
+  read exactly as a single-arm document's would have been, and wherever **no product identity comes
+  back** it is **not** alone, because `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed),
   `MISSING_PRODUCT_CODE` (no arm carried a `<code>` at all, which is what a name-only `LabeledDrug`
-  produces) fires beside it, and both are safety-critical and unquietable by a profile. So tolerating
-  the presence warning can never buy silence about an absent or withheld drug. No arm yielding a code is
+  produces) or `MISSING_CODE_VALUE` (an element was selected and asserts neither a symbol nor a
+  `nullFlavor`) fires beside it, and all three are safety-critical and unquietable by a profile. The
+  third was missing from this list until `0.0.3`: it covered the shapes where _selection_ failed, not
+  every shape where _identity_ is absent. So tolerating the presence warning can never buy silence
+  about an absent or withheld drug. No arm yielding a code is
   `MISSING_PRODUCT_CODE` and is safety-critical, because dose, route and timing all survive a
   missing consumable and would otherwise make the record read as a complete medication with no drug.
-  Both apply at all three consumable call sites: a performed Medication Activity, an Immunization
-  Activity, and a Planned Medication Activity. A document whose arms name **different** products
+  Both apply at every consumable call site: a performed Medication Activity, an Immunization
+  Activity, a Planned Medication Activity, and a Planned Immunization Activity. A document whose arms name **different** products
   draws `MEDICATION_PRODUCT_ARM_CONFLICT` (safety-critical) and no product code is selected at all:
   two drugs on one medication is a contradictory document, nothing in it ranks the arms, and picking
   one would be the parser inventing an answer. That covers both arms of the choice **and a repeated
@@ -208,9 +211,9 @@ milestone it stopped at.
   `nullFlavor`-marked idiom nothing else fires at all (`MISSING_PRODUCT_CODE` would be false, an arm
   did carry a `<code>`, and the code-system checks are silent by design on a slot whose only
   assertion is a `nullFlavor`), and on the variant that asserts neither a symbol nor a `nullFlavor`
-  the companion is `MISSING_CODE_VALUE`, which is itself safety-critical, at all three call sites
-  alike: a performed medication, an immunization, and a planned medication's drug (see the Plan of
-  Treatment bullet below). Behind
+  the companion is `MISSING_CODE_VALUE`, which is itself safety-critical, at every consumable call
+  site alike: a performed medication, an immunization, a planned medication's drug, and a planned
+  vaccination's vaccine (see the Plan of Treatment bullet below). Behind
   `MEDICATION_PRODUCT_ARM_CONFLICT` it stands down, the same way `MISSING_PRODUCT_CODE` does. **Its
   precondition is about each arm's LEAD `<code>`, not the arm**: selection reads the first `<code>`
   on an arm and no other, so an arm whose _second_ `<code>` asserts a primary is still a slot with no
@@ -225,8 +228,10 @@ milestone it stopped at.
   keyed to the arms rather than to their codings, so an arm with no `<code>` counts, and it is
   tolerable by a profile: where it fires alone a `<code>` was selected and read exactly as any
   single-arm document's would be, and each state where that would not be enough carries an
-  unquietable companion (`MEDICATION_PRODUCT_ARM_CONFLICT`, `MISSING_PRODUCT_CODE`, or
-  `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`).
+  unquietable companion (`MEDICATION_PRODUCT_ARM_CONFLICT`, `MISSING_PRODUCT_CODE`,
+  `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`, or `MISSING_CODE_VALUE` where the selected `<code>`
+  asserts neither a symbol nor a `nullFlavor`, which is exactly what two empty-`<code/>` material arms
+  produce). That fourth one was missing from this list until `0.0.3`.
 - **A repeated `<code>` on ONE arm is reported too, and its second `<code>` is no longer dropped from
   the comparison (`MEDICATION_PRODUCT_CODE_REPEATED`, safety-critical).** `Material.code` and
   `LabeledDrug.code` are each at most one in CDA R2, and only the first was ever read, so an arm
@@ -280,9 +285,37 @@ milestone it stopped at.
   `MEDICATION_PRODUCT_ARM_REPEATED` alone. Apply a vendor profile, filter the expected noise as this
   documentation elsewhere suggests, and that document reached you silent. Both shapes now carry
   `MISSING_CODE_VALUE`, which no profile can quiet. **The other five planned kinds are still not
-  slot-checked**, deliberately: their `code` is the planned act, not a drug, and none of those
-  codes is one of the five wired `CodeSlot`s. **So do not treat a quiet `getPlannedItems()` as a
-  checked one**: test `item.code?.code`, not `item.code`.
+  slot-checked.** That is a **choice**, and it used to be stated as a necessity ("binding them would
+  mean inventing a value set"), which is true only of the system checks: `MISSING_CODE_VALUE` and
+  `MISSING_CODE_SYSTEM` are raised before any binding is read, so they could be raised on an act-coded
+  planned `<code>` without citing a value set. They are not, deliberately, and changing that would be
+  its own decision. **So do not treat a quiet `getPlannedItems()` as a checked one**: test
+  `item.code?.code`, not `item.code`.
+- **A Planned Immunization Activity used to vanish entirely, and that was the sharpest form of this
+  family.** On `0.0.2` and earlier a Plan of Treatment entry carrying the Planned Immunization
+  Activity template (`…22.4.120`) matched nothing: `getPlannedItems()` returned **no item for it at
+  all** and raised **no warning**, so reading that list to answer "what is this patient scheduled to
+  receive" gave you a clean, warning-free answer with a scheduled vaccination missing from it. There
+  was no `undefined` to test for and no code to filter on, and the document round-tripped
+  byte-for-byte through `serializeCcda`, so nothing looked wrong. As of `0.0.3` it comes back as
+  `kind: "immunizationActivity"`, and, exactly like a planned medication, its `code` is the **product
+  from the `consumable`** rather than the `substanceAdministration`'s own `<code>`, so every product
+  warning on this page applies to it. It is slot-checked against the **`vaccine`** binding, which is
+  **CVX only**: an NDC-coded planned vaccine draws `UNEXPECTED_CODE_SYSTEM` where an NDC-coded planned
+  drug does not, because each variant matches its own performed twin rather than the other variant.
+  If you kept a workaround that read these entries out of `doc.toString()`, you can drop it. **What
+  `getPlannedItems()` returns is still not everything a Plan of Treatment section can hold**: the
+  section admits eleven entry templates and this returns seven. The four it does not return are
+  Instruction (`…22.4.20`), Handoff Communication Participants (`…22.4.141`), Nutrition Recommendation
+  (`…22.4.130`) and Goal Observation (`…22.4.121`); a Goal Observation is `moodCode="GOL"`, which this
+  parser calls neither performed nor planned. Their narrative and structure are preserved and they
+  re-serialize faithfully, but they are not planned items, and nothing is raised about them.
+  **Nor is any planned entry that is NESTED rather than a direct `<entry>` act**, for any of the seven
+  kinds: `getPlannedItems()` reads an `<entry>`'s own act and goes no deeper, so a planned flu shot
+  hanging off a Planned Intervention Act (`…22.4.146`, which R2.1 lets contain one) still comes back
+  as no item and no warning. That is the same silence, one level in, and it is a standing limitation
+  of this accessor rather than something the `…22.4.120` fix changed. If your senders nest, read
+  `doc.toString()`.
 - **UCUM validation is grammatical, on a curated atom subset.** The validator checks well-formed UCUM
   against the prefixes/atoms that appear in lab Results and Vital Signs, not the full UCUM registry. A
   valid-but-uncurated atom may read as `NON_UCUM_UNIT`; the raw unit is always preserved. It does not

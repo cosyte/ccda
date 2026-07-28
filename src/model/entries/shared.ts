@@ -90,6 +90,16 @@ export const PLANNED_MEDICATION_ACTIVITY = "2.16.840.1.113883.10.20.22.4.42";
 export const PLANNED_SUPPLY = "2.16.840.1.113883.10.20.22.4.43";
 /** Planned Observation, a planned/ordered `<observation>` in the Plan of Treatment. */
 export const PLANNED_OBSERVATION = "2.16.840.1.113883.10.20.22.4.44";
+/**
+ * Planned Immunization Activity, a planned `<substanceAdministration>` whose
+ * vaccine lives in its `consumable` (Immunization Medication Information,
+ * {@link IMMUNIZATION_MEDICATION_INFORMATION}). **Root-only: the template
+ * asserts no `@extension`**, unlike the six `…22.4.39`-`…22.4.44` planned
+ * templates, which all carry the R2.1 `2014-06-09` stamp. Matching ignores the
+ * extension either way ({@link hasTemplateRoot}), but the builder must not
+ * invent one.
+ */
+export const PLANNED_IMMUNIZATION_ACTIVITY = "2.16.840.1.113883.10.20.22.4.120";
 /** Functional Status Organizer, clusters Functional Status Observations. */
 export const FUNCTIONAL_STATUS_ORGANIZER = "2.16.840.1.113883.10.20.22.4.66";
 /** Functional Status Observation, a single coded functional-status finding + value. */
@@ -168,6 +178,16 @@ export const ENTRY_ROOT_TO_SECTION: ReadonlyMap<string, string> = new Map([
   [PLANNED_MEDICATION_ACTIVITY, "planOfTreatment"],
   [PLANNED_SUPPLY, "planOfTreatment"],
   [PLANNED_OBSERVATION, "planOfTreatment"],
+  // The Plan of Treatment Section is the only *section* the R2.1 catalog lets
+  // carry a Planned Immunization Activity as a direct entry. Its one other listed
+  // container, the Planned Intervention Act, holds it as a NESTED act, which this
+  // check never inspects (it reads an `<entry>`'s own act and no deeper), so the
+  // mapping cannot fire on that shape. A Goal Observation is NOT a second
+  // container: its `plannedComponent` entryRelationship targets Entry Reference,
+  // so it *references* a planned entry rather than nesting one. Adding a root here can only make
+  // SECTION_PLACEMENT_SUSPECT fire more: the loop reports the first root whose
+  // home disagrees with the section and merely continues past one that agrees.
+  [PLANNED_IMMUNIZATION_ACTIVITY, "planOfTreatment"],
   [FUNCTIONAL_STATUS_ORGANIZER, "functionalStatus"],
   [FUNCTIONAL_STATUS_OBSERVATION, "functionalStatus"],
   [MENTAL_STATUS_ORGANIZER, "mentalStatus"],

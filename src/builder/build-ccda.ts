@@ -110,11 +110,13 @@
  *
  * **This slice adds Plan of Treatment.** A **Plan of Treatment** section (V2,
  * `…22.2.10`, LOINC `18776-5`, the R2.1 `2014-06-09` stamp) emits one or more of
- * the six planned-entry templates, a Planned Act (`…4.39`), Encounter (`…4.40`),
- * Procedure (`…4.41`), Medication Activity (`…4.42`), Supply (`…4.43`), or
- * Observation (`…4.44`), each with its coded order (its default code system
- * varies by kind: SNOMED CT for an act/procedure/supply, CPT for an encounter,
- * LOINC for an observation, RxNorm, via the `consumable`, for a medication), a
+ * the seven planned-entry templates, a Planned Act (`…4.39`), Encounter
+ * (`…4.40`), Procedure (`…4.41`), Medication Activity (`…4.42`), Supply
+ * (`…4.43`), Observation (`…4.44`), or Immunization Activity (`…4.120`, the one
+ * unversioned template of the seven), each with its coded order (its default
+ * code system varies by kind: SNOMED CT for an act/procedure/supply, CPT for an
+ * encounter, LOINC for an observation, RxNorm, via the `consumable`, for a
+ * medication, and CVX, via the `consumable`, for an immunization), a
  * planned `@moodCode`, and the SHALL `statusCode` fixed to `active`. **Planned is
  * never conflated with performed.** The builder input admits *only* planned
  * `@moodCode`s (default `INT`), `EVN` is not representable, and, correct by
@@ -125,8 +127,14 @@
  * them). `statusCode` is fixed to `active` (never a performed `completed`), so
  * every entry reads back through the parser as `disposition: "planned"`, never
  * mistaken for a performed Procedure or Encounter.
- * The planned `effectiveTime` is SHOULD [0..1], emitted only when supplied (a plan
- * may be undated, never a fabricated date), and the Planned Observation's
+ * The planned `effectiveTime` is `[0..1]` on the five non-`substanceAdministration`
+ * variants (`…4.39`, `…4.40`, `…4.41`, `…4.43`, `…4.44`), emitted only when
+ * supplied (a plan may be undated, never a fabricated date). It is `[1..1]` on
+ * **both** `substanceAdministration` variants, `…4.120` and `…4.42`
+ * (CONF:1098-30468); only the first has a required field on its input type, so a
+ * Planned Medication Activity built without one is emitted short that SHALL
+ * element, a pre-existing gap whose fix is a breaking input-type change. The
+ * Planned Observation's
  * expected coded result `value` [0..1] is emitted only when supplied, never
  * invented. Like the other non-SHALL sections it is emitted only when populated,
  * and its section has no entries-required variant.
@@ -269,6 +277,7 @@ import {
   MENTAL_STATUS_ORGANIZER,
   PLANNED_ACT,
   PLANNED_ENCOUNTER,
+  PLANNED_IMMUNIZATION_ACTIVITY,
   PLANNED_MEDICATION_ACTIVITY,
   PLANNED_OBSERVATION,
   PLANNED_PROCEDURE,
@@ -401,10 +410,13 @@ const MENTAL_STATUS_CODE = {
 } as const;
 /**
  * The `@extension` stamp carried by the Plan of Treatment Section (V2,
- * `…22.2.10`) and all six planned-entry templates it can carry (Planned Act
- * `…4.39`, Encounter `…4.40`, Procedure `…4.41`, Medication Activity `…4.42`,
- * Supply `…4.43`, Observation `…4.44`), R2.1's `2014-06-09` version, not the
- * `2015-08-01` stamp the CCD SHALL sections use. @internal
+ * `…22.2.10`) and six of the seven planned-entry templates this builder emits
+ * (Planned Act `…4.39`, Encounter `…4.40`, Procedure `…4.41`, Medication
+ * Activity `…4.42`, Supply `…4.43`, Observation `…4.44`), R2.1's `2014-06-09`
+ * version, not the `2015-08-01` stamp the CCD SHALL sections use. **The Planned
+ * Immunization Activity (`…4.120`) is not one of them**: it is unversioned and
+ * is emitted root-only, so it takes its `extension` from `PLANNED_VARIANTS`
+ * rather than from here. @internal
  */
 const PLAN_OF_TREATMENT_EXT = "2014-06-09";
 /**
@@ -1380,6 +1392,52 @@ export interface BuildCcdaPlannedOrder extends BuildCcdaPlannedItemBase {
 }
 
 /**
+ * A planned Immunization Activity (`…4.120`). `mood` excludes the appointment
+ * moods, the same `substanceAdministration` domain a
+ * {@link BuildCcdaPlannedOrder} draws on. `code` is the **vaccine**, emitted in
+ * the `consumable` (Immunization Medication Information `…4.54`) and defaulting
+ * to **CVX**, never RxNorm: the two `substanceAdministration` planned variants
+ * have different default systems because their slot bindings differ.
+ *
+ * **`effectiveTime` is required here because the template requires it**, and the
+ * builder is conservative on emit, so the type requires what the template
+ * requires rather than emitting a document short a SHALL element or fabricating
+ * a date the caller never supplied. C-CDA makes `effectiveTime` `[1..1]` on this
+ * template, "the time that the immunization activity should occur".
+ *
+ * **Do not read that as "this is the only planned template that requires it",
+ * which is what this docblock claimed until the claim was checked.** C-CDA makes
+ * `effectiveTime` `[1..1]` on **both** `substanceAdministration` planned
+ * variants: Planned Medication Activity (`…4.42`) SHALL carry exactly one too
+ * (CONF:1098-30468). It is the other **five** (`…4.39`, `…4.40`, `…4.41`,
+ * `…4.43`, `…4.44`) that make it `[0..1]`. {@link BuildCcdaPlannedOrder} still
+ * types `effectiveTime` as optional for its `medicationActivity` arm, so
+ * `buildCcda` can emit a Planned Medication Activity short that SHALL element.
+ * **That gap predates this type and is deliberately not closed here:** making
+ * the field required on `BuildCcdaPlannedOrder` is a breaking change to a
+ * published type and belongs in its own slice. It is written down rather than
+ * left for the next reader to re-derive "the other six are `[0..1]`" from a
+ * sentence that was wrong.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaPlannedImmunization } from "@cosyte/ccda";
+ * const dueFluShot: BuildCcdaPlannedImmunization = {
+ *   kind: "immunizationActivity",
+ *   code: { code: "140", displayName: "Influenza, split virus, trivalent, injectable, preservative free" },
+ *   effectiveTime: "20241001",
+ * };
+ * ```
+ */
+export interface BuildCcdaPlannedImmunization extends BuildCcdaPlannedItemBase {
+  readonly kind: "immunizationActivity";
+  /** The planned `@moodCode`; defaults to `"INT"`. Appointment moods not representable. */
+  readonly mood?: PlannedOrderMood;
+  /** When the immunization should occur. **Required**: the template makes it `[1..1]`. */
+  readonly effectiveTime: string;
+}
+
+/**
  * A planned Observation (`…4.44`). `mood` excludes the appointment moods (not in
  * `x_ActMoodDocumentObservation`). `value` is the expected coded result (a
  * goal/target, SNOMED CT by default), emitted only when supplied. Default code
@@ -1409,11 +1467,14 @@ export interface BuildCcdaPlannedObservation extends BuildCcdaPlannedItemBase {
 
 /**
  * A planned item for the Plan of Treatment section (`…22.2.10`), a discriminated
- * union over the six planned-entry templates, split by which `@moodCode` domain
- * each element admits: {@link BuildCcdaPlannedAct} (act/encounter/procedure, which
+ * union over the seven planned-entry templates the parser returns, split by
+ * which `@moodCode` domain each element admits and by which SHALL elements each
+ * template carries: {@link BuildCcdaPlannedAct} (act/encounter/procedure, which
  * accept the appointment moods `APT`/`ARQ`), {@link BuildCcdaPlannedOrder}
- * (medication/supply), and {@link BuildCcdaPlannedObservation} (observation, which
- * also carries an expected `value`). **The mood split is correct by
+ * (medication/supply), {@link BuildCcdaPlannedObservation} (observation, which
+ * also carries an expected `value`), and {@link BuildCcdaPlannedImmunization}
+ * (immunization, whose `effectiveTime` is required rather than optional).
+ * **The mood split is correct by
  * construction:** the base CDA R2 mood domains for `substanceAdministration`,
  * `supply`, and `observation` exclude `APT`/`ARQ`, so those appointment moods are
  * simply not representable on those kinds, the type prevents emitting a
@@ -1437,7 +1498,8 @@ export interface BuildCcdaPlannedObservation extends BuildCcdaPlannedItemBase {
 export type BuildCcdaPlannedItem =
   | BuildCcdaPlannedAct
   | BuildCcdaPlannedOrder
-  | BuildCcdaPlannedObservation;
+  | BuildCcdaPlannedObservation
+  | BuildCcdaPlannedImmunization;
 
 /**
  * Input to {@link buildCcda}. `patient` is required; each clinical collection
@@ -3744,10 +3806,17 @@ function pastMedicalHistorySection(
 }
 
 /**
- * The element name, `@classCode`, template root, and default code system for each
- * of the six planned-entry variants. The drug of a Planned Medication Activity
- * lives in its `consumable` (no direct `<code>`); the other five carry a direct
- * `<code>`. @internal
+ * The element name, `@classCode`, template root, version stamp, and default code
+ * system for each of the seven planned-entry variants. The product of a Planned
+ * Medication Activity or a Planned Immunization Activity lives in its
+ * `consumable` (no direct `<code>`); the other five carry a direct `<code>`.
+ *
+ * **`extension` is per-variant and one variant has none.** The six
+ * `…22.4.39`-`…22.4.44` templates carry the R2.1 `2014-06-09` stamp; the Planned
+ * Immunization Activity (`…22.4.120`) is **unversioned**, exactly like the
+ * Assessment Section, so it is emitted root-only. `setAttrs` drops an
+ * `undefined` attribute, so `extension: undefined` is the absence rather than an
+ * empty string. @internal
  */
 const PLANNED_VARIANTS: Record<
   PlannedItemKind,
@@ -3755,29 +3824,58 @@ const PLANNED_VARIANTS: Record<
     readonly element: string;
     readonly classCode: string;
     readonly root: string;
+    readonly extension?: string;
     readonly system: string;
   }
 > = {
-  act: { element: "act", classCode: "ACT", root: PLANNED_ACT, system: SNOMED_CT },
-  encounter: { element: "encounter", classCode: "ENC", root: PLANNED_ENCOUNTER, system: CPT },
+  act: {
+    element: "act",
+    classCode: "ACT",
+    root: PLANNED_ACT,
+    extension: PLAN_OF_TREATMENT_EXT,
+    system: SNOMED_CT,
+  },
+  encounter: {
+    element: "encounter",
+    classCode: "ENC",
+    root: PLANNED_ENCOUNTER,
+    extension: PLAN_OF_TREATMENT_EXT,
+    system: CPT,
+  },
   procedure: {
     element: "procedure",
     classCode: "PROC",
     root: PLANNED_PROCEDURE,
+    extension: PLAN_OF_TREATMENT_EXT,
     system: SNOMED_CT,
   },
   medicationActivity: {
     element: "substanceAdministration",
     classCode: "SBADM",
     root: PLANNED_MEDICATION_ACTIVITY,
+    extension: PLAN_OF_TREATMENT_EXT,
     system: RXNORM,
   },
-  supply: { element: "supply", classCode: "SPLY", root: PLANNED_SUPPLY, system: SNOMED_CT },
+  supply: {
+    element: "supply",
+    classCode: "SPLY",
+    root: PLANNED_SUPPLY,
+    extension: PLAN_OF_TREATMENT_EXT,
+    system: SNOMED_CT,
+  },
   observation: {
     element: "observation",
     classCode: "OBS",
     root: PLANNED_OBSERVATION,
+    extension: PLAN_OF_TREATMENT_EXT,
     system: LOINC,
+  },
+  // Root-only: the Planned Immunization Activity asserts no @extension.
+  immunizationActivity: {
+    element: "substanceAdministration",
+    classCode: "SBADM",
+    root: PLANNED_IMMUNIZATION_ACTIVITY,
+    system: CVX,
   },
 };
 
@@ -3786,7 +3884,7 @@ const PLANNED_VARIANTS: Record<
  * Only called with a non-empty list (see {@link buildCcda}), Plan of Treatment is
  * a CCD SHOULD (not SHALL) section, so an unpopulated one is not fabricated. The
  * Plan of Treatment Section (V2, `…22.2.10`, LOINC `18776-5`, the R2.1
- * `2014-06-09` stamp) carries the six planned-entry templates, each future/ordered
+ * `2014-06-09` stamp) carries the seven planned-entry templates, each future/ordered
  *, never a performed act. The section has no entries-required variant (`…2.10.1`),
  * so only the base `templateId` is emitted even when it carries entries. @internal
  */
@@ -3892,7 +3990,7 @@ function planOfTreatmentSection(
   return el(doc, "component", undefined, section);
 }
 
-/** Build one planned `<entry>` (one of the six planned-entry variants). @internal */
+/** Build one planned `<entry>` (one of the seven planned-entry variants). @internal */
 function plannedItemEntry(
   doc: Document,
   p: BuildCcdaPlannedItem,
@@ -3910,13 +4008,16 @@ function plannedItemEntry(
     doc,
     variant.element,
     { classCode: variant.classCode, moodCode: mood },
-    el(doc, "templateId", { root: variant.root, extension: PLAN_OF_TREATMENT_EXT }),
+    // Per-variant, because the Planned Immunization Activity is unversioned and
+    // must not be stamped `2014-06-09` like the other six.
+    el(doc, "templateId", { root: variant.root, extension: variant.extension }),
     el(doc, "id", { root: SYNTH_ROOT, extension: id("plan") }),
   );
-  // Every variant but the Planned Medication Activity carries a direct <code>;
-  // the medication's drug lives in its <consumable> (appended after statusCode,
-  // in CDA schema order), exactly where the parser reads it back from.
-  if (p.kind !== "medicationActivity") {
+  // Every variant but the two substanceAdministrations carries a direct <code>;
+  // their product (drug / vaccine) lives in the <consumable> (appended after
+  // effectiveTime, in CDA schema order), exactly where the parser reads it back
+  // from.
+  if (p.kind !== "medicationActivity" && p.kind !== "immunizationActivity") {
     act.appendChild(
       codeEl(doc, "code", { ...p.code, codeSystem: p.code.codeSystem ?? variant.system }),
     );
@@ -3925,8 +4026,16 @@ function plannedItemEntry(
   // Planned entries fix statusCode to "active" (SHALL), the plan is future/ordered,
   // never a performed "completed" act; the builder never emits a performed status here.
   act.appendChild(el(doc, "statusCode", { code: "active" }));
-  // Planned effectiveTime is SHOULD [0..1]: emitted only when supplied, never
-  // fabricated with a nullFlavor when a plan carries no date.
+  // Planned effectiveTime is [0..1] on FIVE of the seven templates (`…4.39`,
+  // `…4.40`, `…4.41`, `…4.43`, `…4.44`): emitted only when supplied, never
+  // fabricated with a nullFlavor when a plan carries no date. It is [1..1] on
+  // BOTH substanceAdministration variants, `…4.120` (the immunization) and
+  // `…4.42` (the medication, CONF:1098-30468). Only the first of those has a
+  // required field on its input type, so this branch is always taken for an
+  // immunization; a Planned Medication Activity built with no `effectiveTime` is
+  // still emitted short that SHALL element. Pre-existing, and closing it means a
+  // breaking change to a published input type, so it is its own item rather than
+  // a side effect here.
   if (p.effectiveTime !== undefined) {
     act.appendChild(
       el(doc, "effectiveTime", {
@@ -3934,8 +4043,14 @@ function plannedItemEntry(
       }),
     );
   }
+  // The two consumable-bearing variants, each with its own product template and
+  // default code system: Medication Information + RxNorm, Immunization
+  // Medication Information + CVX.
   if (p.kind === "medicationActivity") {
     act.appendChild(medicationConsumable(doc, p.code));
+  }
+  if (p.kind === "immunizationActivity") {
+    act.appendChild(immunizationConsumable(doc, p.code));
   }
   // The Planned Observation MAY carry the expected coded result (value [0..1]);
   // emitted only when supplied, never invented for the caller.
