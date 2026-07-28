@@ -191,7 +191,10 @@ const FULL_INIT: BuildCcdaInit = {
   ],
   immunizations: [
     {
-      vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" },
+      vaccine: {
+        code: "140",
+        displayName: "Influenza, split virus, trivalent, injectable, preservative free",
+      },
       effectiveTime: "20240101",
       route: { code: "C28161", displayName: "Intramuscular" },
     },

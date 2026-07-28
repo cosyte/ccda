@@ -789,13 +789,13 @@ export interface BuildCcdaVitalsPanel {
  * ```ts
  * import type { BuildCcdaImmunization } from "@cosyte/ccda";
  * const flu: BuildCcdaImmunization = {
- *   vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" }, // CVX
+ *   vaccine: { code: "140", displayName: "Influenza, split virus, trivalent, injectable, preservative free" }, // CVX
  *   dose: { value: 0.5, unit: "mL" },
  *   route: { code: "C28161", displayName: "Intramuscular" }, // NCI Thesaurus
  *   effectiveTime: "20240101",
  * };
  * const refused: BuildCcdaImmunization = {
- *   vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" },
+ *   vaccine: { code: "140", displayName: "Influenza, split virus, trivalent, injectable, preservative free" },
  *   refused: true,
  * };
  * ```

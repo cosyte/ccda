@@ -118,7 +118,7 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
       <templateId root="2.16.840.1.113883.10.20.22.2.2.1" extension="2015-08-01"/>
       <code code="11369-6" codeSystem="2.16.840.1.113883.6.1"/>
       <title>Immunizations</title>
-      <text><content ID="imm1">Influenza, seasonal, injectable</content></text>
+      <text><content ID="imm1">Influenza, split virus, trivalent, injectable, preservative free</content></text>
       <entry><substanceAdministration classCode="SBADM" moodCode="EVN">
         <templateId root="2.16.840.1.113883.10.20.22.4.52" extension="2015-08-01"/>
         <statusCode code="completed"/>
@@ -127,7 +127,7 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
         <consumable><manufacturedProduct classCode="MANU">
           <templateId root="2.16.840.1.113883.10.20.22.4.54" extension="2014-06-09"/>
           <manufacturedMaterial>
-            <code code="140" codeSystem="2.16.840.1.113883.12.292" displayName="Influenza, seasonal, injectable"/>
+            <code code="140" codeSystem="2.16.840.1.113883.12.292" displayName="Influenza, split virus, trivalent, injectable, preservative free"/>
           </manufacturedMaterial>
         </manufacturedProduct></consumable>
         <text><reference value="#imm1"/></text>

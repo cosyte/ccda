@@ -243,6 +243,30 @@ describe("safety set", () => {
     // (MEDICATION_PRODUCT_ARM_CONFLICT, MISSING_PRODUCT_CODE, or
     // MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY).
     expect(isSafetyCriticalCode(WARNING_CODES.MEDICATION_PRODUCT_ARM_REPEATED)).toBe(false);
+    // A repeated <code> on ONE arm is the same cardinality fact one markup layer
+    // in, and it lands on the OTHER side of the line from the repeated ARM. The
+    // difference is selection: with two arms the one naming a product is read,
+    // so the repeated-arm code never fires alone over a lost drug; with two
+    // <code>s on one arm only the arm's LEAD <code> is selected, so a lead
+    // asserting a nullFlavor beside a sibling naming an RxNorm product leaves
+    // the slot empty over a document that names the drug, with this code as the
+    // only signal. MISSING_PRODUCT_CODE cannot fire (a <code> exists), the
+    // conflict rule cannot (an exceptional value is not a rival drug), and
+    // checkCodeSlot is quiet on a nullFlavor-only slot. That is
+    // MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY's harm with a sibling <code> in
+    // place of a <translation>, so it is classified the same way.
+    expect(isSafetyCriticalCode(WARNING_CODES.MEDICATION_PRODUCT_CODE_REPEATED)).toBe(true);
+    expect(() =>
+      defineCcdaProfile({
+        name: "tolerate-repeated-code",
+        tolerate: [
+          {
+            code: WARNING_CODES.MEDICATION_PRODUCT_CODE_REPEATED,
+            rationale: "should throw",
+          },
+        ],
+      }),
+    ).toThrow();
     // A product named only in a <translation> is the opposite case: selection
     // reads primaries only, so the product slot comes back empty over a
     // document that names the drug, and nothing else fires on that shape

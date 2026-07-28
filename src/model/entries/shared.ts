@@ -18,6 +18,7 @@ import {
   medicationProductArmConflict,
   medicationProductArmRepeated,
   medicationProductArmUnexpected,
+  medicationProductCodeRepeated,
   medicationProductCodeTranslationOnly,
   narrativeReferenceBroken,
   negationVsNullFlavorAmbiguous,
@@ -297,7 +298,8 @@ export function chain(el: Element | undefined, ...names: readonly string[]): Ele
  *
  * **Disagreement is read across every arm, selection is not.** The conflict
  * check runs over *all* the `<code>` elements the `manufacturedProduct` carries,
- * both arm kinds and repeated arms of one kind (two sibling
+ * both arm kinds, repeated arms of one kind, and repeated `<code>`s on one arm
+ * (two sibling
  * `manufacturedMaterial`s naming different drugs is the same silent pick, one
  * arm kind in). An arm names its `@code` when it asserts one, and **otherwise**
  * the codings its `<translation>` alternates assert, a fallback rather than an
@@ -321,6 +323,28 @@ export function chain(el: Element | undefined, ...names: readonly string[]): Ele
  * a document asserting one product three times reported identically to one
  * asserting it once. Cardinality and agreement are separate facts and get
  * separate codes.
+ *
+ * **And a repeated `<code>` on one arm is reported**
+ * (`MEDICATION_PRODUCT_CODE_REPEATED`, **safety-critical**, positioned on the
+ * arm that carries it, one warning per offending arm). `Material.code` and
+ * `LabeledDrug.code` are each at most one in CDA R2, and only the **first**
+ * `<code>` per arm was ever read, so an arm writing two drugs as sibling
+ * `<code>`s handed the first back as the product and discarded the second
+ * without comparing it or mentioning it, which is
+ * `MEDICATION_PRODUCT_ARM_CONFLICT`'s exact failure on a shape that rule could
+ * not see. Every `<code>` on every arm now reaches the **comparison**, so that
+ * shape conflicts.
+ *
+ * **Selection was deliberately NOT widened with it**, and that asymmetry is the
+ * same one this whole area rests on. See {@link armLeadCodes}: a second `<code>`
+ * is a new candidate rather than a new arm, it sits earlier in document order
+ * than a later arm's lead, and {@link selectableCode} ranks on "names a product"
+ * alone, so admitting it would displace an equally-symboled but richer sibling
+ * coding and take `CODE_NARRATIVE_MISMATCH`, `MISSING_CODE_VALUE`, or a
+ * `<translation>` list down with it. So what a caller *reads* is unchanged,
+ * which is why the new code is safety-critical rather than tolerable: it is the
+ * lone signal on the shape where the lead `<code>` is `nullFlavor`-marked and
+ * the sibling names the drug.
  *
  * **And when the product is named only in a `<translation>`, that is said out
  * loud** (`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`, safety-critical). Selection
@@ -382,20 +406,52 @@ export function consumableProductCode(
     ctx.emit(medicationProductArmRepeated(positionOf(product)));
   }
 
+  // The same cardinality question one markup layer in. `Material.code` and
+  // `LabeledDrug.code` are each at most one in CDA R2, so a second <code> on
+  // ONE arm is outside the model exactly as a second arm is -- and it used to be
+  // dropped before it was ever compared, because only the first <code> per arm
+  // was read. Reported per ARM rather than per product, because unlike the
+  // repeated arm (a fact about the manufacturedProduct) this is a fact about a
+  // particular arm, and the `position` names which one; a product with two
+  // offending arms draws two warnings at two locations rather than one that
+  // points at only one of them.
+  for (const arm of productArms(product)) {
+    if (children(arm, "code").length > 1) ctx.emit(medicationProductCodeRepeated(positionOf(arm)));
+  }
+
   const materialCodes = armCodes(product, "manufacturedMaterial");
   const labeledCodes = armCodes(product, "manufacturedLabeledDrug");
 
   // Disagreement is read across everything the product carries: both arm kinds,
-  // repeated arms of one kind, and (for an arm whose <code> asserts no symbol)
-  // its <translation> alternates. A pick between two named drugs is the same
-  // harm whichever markup shape hides it.
+  // repeated arms of one kind, every <code> an arm carries rather than just its
+  // first, and (for a <code> that asserts no symbol) its <translation>
+  // alternates. A pick between two named drugs is the same harm whichever markup
+  // shape hides it.
   if (offersConflictingProducts(materialCodes, labeledCodes)) {
     ctx.emit(medicationProductArmConflict(positionOf(product)));
     return { product, conflicted: true };
   }
 
-  const material = selectableCode(materialCodes);
-  const labeled = selectableCode(labeledCodes);
+  // **Selection reads the LEAD <code> of each arm and nothing else, and widening
+  // the comparison above deliberately did not widen this.** "Disagreement is
+  // read across every arm, selection is not" is the split this whole area is
+  // built on, and a second <code> is a new candidate, not a new arm. Letting one
+  // into selection moves the pick to an element EARLIER in document order than
+  // the one chosen before, which is completeness-blind: a bare <code code="X"/>
+  // would displace a sibling arm's <code code="X" displayName="..."/>, and with
+  // the displayName goes CODE_NARRATIVE_MISMATCH, the only guard on the
+  // structured code disagreeing with the narrative, on a document where it
+  // previously fired correctly. Same for a displaced <code> carrying the
+  // <translation>s, and same for MISSING_CODE_VALUE on a displaced empty <code>.
+  // Every one of those is a safety-critical signal traded for a symbol that was
+  // already identical, since only codings that AGREE can survive the conflict
+  // check above. So what is read is byte-identical to what was read before this
+  // rule existed WHEREVER A PRODUCT IS STILL RETURNED: the comparison and the
+  // cardinality report are the only additions, but the widened comparison does
+  // withhold the product on the shapes where it now finds a disagreement, which
+  // is exactly the defect this rule exists to close.
+  const material = selectableCode(armLeadCodes(product, "manufacturedMaterial"));
+  const labeled = selectableCode(armLeadCodes(product, "manufacturedLabeledDrug"));
 
   // Only one arm can name a product now, or they name the same one, so the pick
   // is the document's rather than the parser's. The labeled arm is read in
@@ -422,8 +478,20 @@ export function consumableProductCode(
   // be the one holding the coding, and only ONE arm ever becomes the returned
   // `CD`. Pointing at the selected element there would send a reader to an
   // element that does not have what the warning says exists.
+  //
+  // It scans the LEAD <code>s, the same list selection just drew from, which is
+  // what keeps its precondition true: nothing selectable asserts a primary, so
+  // any coding still found there is by definition a translation fallback.
+  // Handing it the widened list would break exactly that, because a non-lead
+  // <code> may assert a primary @code, and the warning would then point at an
+  // element whose product is not in a <translation> at all while its message
+  // says no arm asserts a primary. That is the same false remediation
+  // instruction #62's first cut shipped, and it is not repeated here.
   if (el !== undefined && !namesAProduct(el)) {
-    const naming = firstTranslationNamingProduct(materialCodes, labeledCodes);
+    const naming = firstTranslationNamingProduct(
+      armLeadCodes(product, "manufacturedMaterial"),
+      armLeadCodes(product, "manufacturedLabeledDrug"),
+    );
     if (naming !== undefined) {
       ctx.emit(medicationProductCodeTranslationOnly(positionOf(naming), naming === el));
     }
@@ -672,25 +740,91 @@ function contradictsWithinOneSystem(a: ProductCoding, b: ProductCoding): boolean
   return a.system !== undefined && a.system === b.system && a.symbol !== b.symbol;
 }
 
-/** Every `<code>` element the arms of the given kind carry, in document order. @internal */
+/**
+ * Every `<code>` element the arms of the given kind carry, in document order.
+ * **The comparison list.**
+ *
+ * **Every one, not the first per arm.** `Material.code` and `LabeledDrug.code`
+ * are each at most one in CDA R2, so an arm carrying two `<code>` children is
+ * already outside the model, exactly as a repeated *arm* is. Reading only the
+ * first dropped the second before it reached the conflict rule, which is the
+ * same silent pick between two named products that rule exists to refuse, one
+ * markup layer further in: an arm writing Lisinopril and Aspirin as sibling
+ * `<code>`s handed back Lisinopril, and said nothing at all. The repeat itself
+ * is reported separately ({@link medicationProductCodeRepeated}); this function
+ * only stops hiding the elements from the comparison.
+ *
+ * **Not the selection list**, deliberately. See {@link armLeadCodes}.
+ * @internal
+ */
 function armCodes(product: Element, arm: string): readonly Element[] {
+  return children(product, arm).flatMap((el) => children(el, "code"));
+}
+
+/**
+ * The **lead** `<code>` of each arm of the given kind, in document order: the
+ * one element per arm that CDA R2's `0..1` cardinality actually admits. **The
+ * selection list.**
+ *
+ * Selection is a narrower question than disagreement and stays on this list even
+ * though {@link armCodes} compares more. A second `<code>` is a new *candidate*,
+ * not a new arm, and every candidate it adds sits EARLIER in document order than
+ * the lead `<code>` of a later arm, so admitting them re-decides picks the
+ * document never re-decided. `selectableCode` ranks on "names a product" alone,
+ * which is completeness-blind on purpose, so the newcomer would displace an
+ * equally-symboled but richer sibling: a bare `<code code="X"/>` over a
+ * `<code code="X" displayName="..."/>`, taking `CODE_NARRATIVE_MISMATCH` (the
+ * only guard on the structured code contradicting the narrative) down with it;
+ * over a `<code code="X">` carrying the `<translation>`s; or over an empty
+ * `<code/>` that `MISSING_CODE_VALUE` would have fired on. All three are
+ * safety-critical signals, and all three would be traded for a symbol that was
+ * already identical, since only codings that AGREE survive the conflict check.
+ * Ranking the candidates by completeness instead would be the parser choosing
+ * between codings the document wrote as equals, which is the manufactured
+ * reading this whole area refuses. So the product a caller reads is
+ * byte-identical to what it was before repeated `<code>`s were considered,
+ * wherever one is still returned at all: the widened comparison in
+ * {@link armCodes} withholds it entirely on the shapes where it now finds a
+ * disagreement.
+ * @internal
+ */
+function armLeadCodes(product: Element, arm: string): readonly Element[] {
   return children(product, arm)
     .map((el) => child(el, "code"))
     .filter((code): code is Element => code !== undefined);
 }
 
+/** Every arm of a `manufacturedProduct`, both kinds, materials first. @internal */
+function productArms(product: Element): readonly Element[] {
+  return [
+    ...children(product, "manufacturedMaterial"),
+    ...children(product, "manufacturedLabeledDrug"),
+  ];
+}
+
 /**
- * The `<code>` of the arm of one kind that the product code is selected from:
- * the first that **names** a product, else the first there is.
+ * The `<code>` the product code is selected from among the **lead** `<code>`s of
+ * the arms of one kind: the first, in document order, that names a product, else
+ * the first there is. One candidate per arm, never two.
  *
  * Preferring the first arm that names one is the same rule already applied
- * *across* arm kinds, applied within one: with only one arm naming a product the
- * pick is the document's rather than the parser's, so reading the null-marked
- * sibling instead would drop a drug the document names exactly once, in silence.
- * Falling back to the first arm when none names a product keeps the empty-slot
- * machinery (`MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM`)
- * seeing exactly the element it saw before repeated arms were considered.
- * Selection is only ever reached when the arms do not conflict.
+ * *across* arm kinds, applied within one kind: with only one arm naming a
+ * product the pick is the document's rather than the parser's, so reading the
+ * null-marked sibling arm instead would drop a drug the document names exactly
+ * once, in silence. Falling back to the first arm's `<code>` when none names a
+ * product keeps the empty-slot machinery (`MISSING_CODE_VALUE`,
+ * `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM`) seeing exactly the element it
+ * saw before repeated arms were considered. Selection is only ever reached when
+ * nothing conflicts.
+ *
+ * **The rule is deliberately NOT applied within one arm.** A repeated `<code>`
+ * on a single arm is compared (see {@link armCodes}) and reported
+ * ({@link medicationProductCodeRepeated}), but never becomes a candidate here.
+ *
+ * **The list handed in is {@link armLeadCodes}, never {@link armCodes}**, and
+ * that is load-bearing rather than incidental: this function ranks on "names a
+ * product" alone, so it is completeness-blind. See {@link armLeadCodes} for
+ * which extra candidates that would let in, and what admitting them costs.
  * @internal
  */
 function selectableCode(codes: readonly Element[]): Element | undefined {
@@ -701,14 +835,18 @@ function selectableCode(codes: readonly Element[]): Element | undefined {
  * Whether the `<code>` elements a `manufacturedProduct` carries fail to agree on
  * one product.
  *
- * The candidates are every `manufacturedMaterial/code` and every
- * `manufacturedLabeledDrug/code`, so **repeated arms of one kind** are compared
- * too. Two sibling `manufacturedMaterial`s naming different drugs is the
- * identical silent pick to the two-arm case, only one arm kind in: the first was
- * read and the second dropped without a word. `ManufacturedProduct` models one
- * participant, so a repeated arm is already outside the model, and the parser's
- * job on it is the same as on any contradiction it cannot rank, refuse and say
- * so.
+ * The candidates are **every** `<code>` under **every** `manufacturedMaterial`
+ * and **every** `manufacturedLabeledDrug`, so repeated arms of one kind are
+ * compared, and so are repeated `<code>`s within one arm. Two sibling
+ * `manufacturedMaterial`s naming different drugs is the identical silent pick to
+ * the two-arm case, only one arm kind in: the first was read and the second
+ * dropped without a word. Two sibling `<code>`s under *one*
+ * `manufacturedMaterial` is that same pick again, one markup layer further in,
+ * and it was invisible for exactly the same reason (see {@link armCodes}).
+ * `ManufacturedProduct` models one participant and `Material`/`LabeledDrug`
+ * carry at most one `code` each, so both repeats are already outside the model,
+ * and the parser's job on either is the same as on any contradiction it cannot
+ * rank, refuse and say so.
  *
  * Agreement is not transitive (an arm omitting `@codeSystem` agrees with the
  * same symbol under any system), so the comparison is genuinely pairwise. It is

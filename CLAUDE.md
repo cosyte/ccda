@@ -95,8 +95,10 @@ immutability + explicit mutation, and the profile system.
     safety-critical and scoped this narrowly. Nothing is lost, `serializeCcda` re-emits the parsed
     DOM so every arm round-trips byte-for-byte.
   - **Disagreement is read across every arm and every coding; selection is not.** The conflict check
-    covers both arms of the choice **and repeated arms of one kind** (two sibling
-    `manufacturedMaterial`s naming different drugs is the same silent pick). An arm names its
+    covers both arms of the choice, **repeated arms of one kind** (two sibling
+    `manufacturedMaterial`s naming different drugs is the same silent pick), **and every `<code>` an
+    arm carries rather than just its first** (two sibling `<code>`s under one arm is that same pick
+    again, one markup layer further in, and it was invisible until `CCDA-ARM-MULTI-CODE`). An arm names its
     `<code>`'s own `@code`, or, when it asserts none, the codings its `<translation>` alternates
     assert: `nullFlavor="OTH"` beside a `<translation>` is the documented C-CDA idiom, so on that
     shape the arm's product identity is in the translation. **The translations are a fallback, never
@@ -156,6 +158,44 @@ immutability + explicit mutation, and the profile system.
     the product is unknown, and it reads exactly as it would on a single arm. **`MEDICATION_PRODUCT_ARM_UNEXPECTED`'s
     own argument is unchanged and still names two companions**, because it enumerates the states in
     which **nothing is selected**, and the translation-only state does select an element.
+  - **A repeated `<code>` on ONE arm is the same cardinality fact one markup layer in**
+    (`MEDICATION_PRODUCT_CODE_REPEATED`, **safety-critical**). It is emitted **per arm** and
+    positioned on the arm that carries the repeat, because it states a fact about that arm rather
+    than about the `manufacturedProduct`.
+    **The comparison was widened to every `<code>`; SELECTION WAS NOT, and that asymmetry is
+    load-bearing. Do not "finish the job" by widening it.** Selection reads each arm's **lead**
+    `<code>` (`armLeadCodes`), the one element CDA R2's `0..1` admits. A second `<code>` is a new
+    _candidate_, not a new arm, and every candidate it adds sits **earlier in document order** than a
+    later arm's lead, while `selectableCode` ranks on "names a product" alone and is
+    completeness-blind on purpose. So admitting them re-decides picks the document never re-decided:
+    a bare `<code code="X"/>` displaces a sibling arm's `<code code="X" displayName="..."/>` and
+    takes `CODE_NARRATIVE_MISMATCH` with it (the only guard on the structured code contradicting the
+    narrative), or displaces the `<code>` carrying the `<translation>`s, or displaces an empty
+    `<code/>` that `MISSING_CODE_VALUE` fires on. All three are safety-critical, and all three would
+    be traded for a symbol that was **already identical**, since only agreeing codings survive the
+    conflict check. Ranking candidates on completeness instead is the manufactured reading this area
+    refuses. Two matrix rows exist solely to fail loudly if anyone widens it.
+    **Its safety-critical classification follows directly from that**, and is where it parts company
+    with `MEDICATION_PRODUCT_ARM_REPEATED`: with two arms the naming one is read, so that code never
+    fires alone over a lost drug; with two `<code>`s on one arm only the lead is read, so a lead
+    asserting a `nullFlavor` beside a sibling naming an RxNorm product leaves the slot empty over a
+    document that names the drug, with this code as the **lone** signal (`MISSING_PRODUCT_CODE`
+    cannot fire, a `<code>` exists; the conflict rule cannot, an exceptional value is not a rival
+    drug; `checkCodeSlot` is quiet on a `nullFlavor`-only slot). That is
+    `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`'s harm with a sibling `<code>` in place of a
+    `<translation>`. It **over-fires on the benign identical repeat deliberately**: splitting that
+    shape off would let what the codings _say_ decide whether a structural deviation is named, the
+    inversion the repeated-arm code refuses one layer out.
+  - **The monotonicity claim has a precise form, and the loose one is false.** Measured by running
+    the matrix in `test/entries.test.ts` against the previous release's `src/`, not argued.
+    `CCDA-ARM-MULTI-CODE` left all nineteen of `#62`'s rows byte-identical and moved only its own
+    eight, each of which gains warnings and reads what the previous release read except the three the
+    conflict rule now withholds outright. **Exactly one row's warning set is not a superset of its
+    old one**, and that is the documented suppression rather than a lost signal:
+    `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY` stands down behind `MEDICATION_PRODUCT_ARM_CONFLICT`
+    exactly as `MISSING_PRODUCT_CODE` does. So state it as **no row goes from warned to silent, and
+    no row trades a safety-critical code for a weaker one** rather than as "no row loses a warning",
+    which this slice made false.
   - `SAFETY_CRITICAL_CODES` is a frozen read-only view, not a `Set` instance: every read operation
     works (including spread), but `instanceof Set` is `false`.
   - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`

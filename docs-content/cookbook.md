@@ -290,13 +290,22 @@ const doc = buildCcda({
   patient: { mrn: "MRN-00042" },
   immunizations: [
     {
-      vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" }, // CVX
+      vaccine: {
+        code: "140",
+        displayName: "Influenza, split virus, trivalent, injectable, preservative free",
+      }, // CVX
       dose: { value: 0.5, unit: "mL" }, // UCUM
       route: { code: "C28161", displayName: "Intramuscular" }, // NCI Thesaurus
       effectiveTime: "20240101",
     },
     // A refused shot: emitted as negationInd="true", flagged IMMUNIZATION_REFUSED, never an "unknown".
-    { vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" }, refused: true },
+    {
+      vaccine: {
+        code: "140",
+        displayName: "Influenza, split virus, trivalent, injectable, preservative free",
+      },
+      refused: true,
+    },
   ],
 });
 
