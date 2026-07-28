@@ -3563,3 +3563,455 @@ describe("clinical entries, a Planned Immunization Activity", () => {
     expect(parseCcda(doc.toString()).toString()).toBe(doc.toString());
   });
 });
+
+/**
+ * `CCDA-NESTED-PLANNED-ENTRIES`. `extractPlannedItems` read an `<entry>`'s own
+ * act and went no deeper, so every one of the seven planned templates vanished
+ * without a word when it sat inside a **Planned Intervention Act**
+ * (`…22.4.146`), the act R2.1 uses to group the interventions planned toward a
+ * goal.
+ *
+ * **It is the same failure as `CCDA-PLANNED-IMMUNIZATION-DROPPED`, one markup
+ * layer in and seven times the surface.** A planned drug or vaccination hanging
+ * off an intervention came back as no item and no warning, round-tripping
+ * byte-for-byte through `serializeCcda`, so a consumer asking
+ * `getPlannedItems()` what a patient was scheduled to receive got a clean,
+ * warning-free answer with the entry missing from it. There was no `undefined`
+ * to test for and no code to filter on.
+ *
+ * **Why the container is named rather than the recursion generalized.** R2.1
+ * gives the Planned Intervention Act an `entryRelationship` for each of the
+ * seven, and each holds the planned act **inline** rather than by reference,
+ * which is what makes those entries reachable at all. Descending through every
+ * act instead would reach entries the other extractors own and shapes the
+ * catalog does not admit. That is a larger decision and this is not it.
+ *
+ * **What is walked past rather than followed.** The template's `[1..*]`
+ * `typeCode="RSON"` relationship holds an **Entry Reference** (`…22.4.122`),
+ * whose own SHALL points at a Goal Observation. An Entry Reference carries an
+ * `<id>` and a `nullFlavor="NP"` `<code>` and no planned root, so root-matching
+ * steps over it. Resolving the pointer would hand back an item the container
+ * does not hold, from somewhere else in the document.
+ *
+ * The bar this block measures is **parity with the direct entry**: the same act
+ * must read identically whether it is an `<entry>`'s own act or an intervention's
+ * component, because nesting is a statement about grouping and not about the act.
+ */
+describe("clinical entries, planned entries nested in a Planned Intervention Act", () => {
+  const SNOMED_CT = "2.16.840.1.113883.6.96";
+  const RXNORM = "2.16.840.1.113883.6.88";
+  const CVX_OID = "2.16.840.1.113883.12.292";
+  const NDC_OID = "2.16.840.1.113883.6.69";
+  /** RxNorm Lisinopril 10 MG Oral Tablet, the drug every planned fixture here already uses. */
+  const LISINOPRIL = "314076";
+  /** RxNorm Aspirin, the second drug in this file's conflict rows. */
+  const ASPIRIN = "1191";
+  /** CVX 140 with its own display name, reused verbatim rather than re-minted. */
+  const FLU = "140";
+  const FLU_LABEL = "Influenza, split virus, trivalent, injectable, preservative free";
+  /** An NDC-shaped placeholder asserting no product identity, reused from the vaccine matrix. */
+  const PLACEHOLDER_NDC = "12345-6789-01";
+
+  /**
+   * The seven planned templates as `<entry>`-ready acts, each carrying the exact
+   * code the Plan of Treatment fixture already uses. Every one is placed BOTH as
+   * a direct entry and as an intervention's component below, so the matrix
+   * compares an act against itself rather than against a second fixture.
+   */
+  const PLANNED_ACT_XML = `<act classCode="ACT" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.39" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-act-1"/>
+              <code code="409073007" codeSystem="${SNOMED_CT}" displayName="Education"/>
+              <statusCode code="active"/>
+            </act>`;
+  const PLANNED_ENCOUNTER_XML = `<encounter classCode="ENC" moodCode="APT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.40" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-enc-1"/>
+              <code code="99213" codeSystem="2.16.840.1.113883.6.12" displayName="Office visit"/>
+              <statusCode code="active"/>
+            </encounter>`;
+  const PLANNED_PROCEDURE_XML = `<procedure classCode="PROC" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.41" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-proc-1"/>
+              <code code="73761001" codeSystem="${SNOMED_CT}" displayName="Colonoscopy"/>
+              <statusCode code="active"/>
+            </procedure>`;
+  const PLANNED_MEDICATION_XML = `<substanceAdministration classCode="SBADM" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.42" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-med-1"/>
+              <statusCode code="active"/>
+              <effectiveTime value="20240901"/>
+              <consumable><manufacturedProduct><manufacturedMaterial>
+                <code code="${LISINOPRIL}" codeSystem="${RXNORM}" displayName="Lisinopril 10 MG Oral Tablet"/>
+              </manufacturedMaterial></manufacturedProduct></consumable>
+            </substanceAdministration>`;
+  const PLANNED_SUPPLY_XML = `<supply classCode="SPLY" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.43" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-sup-1"/>
+              <code code="58938008" codeSystem="${SNOMED_CT}" displayName="Wheelchair"/>
+              <statusCode code="active"/>
+            </supply>`;
+  const PLANNED_OBSERVATION_XML = `<observation classCode="OBS" moodCode="RQO">
+              <templateId root="2.16.840.1.113883.10.20.22.4.44" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-obs-1"/>
+              <code code="58410-2" codeSystem="2.16.840.1.113883.6.1" displayName="CBC panel"/>
+              <statusCode code="active"/>
+              <effectiveTime value="20240801"/>
+            </observation>`;
+  const PLANNED_IMMUNIZATION_XML = `<substanceAdministration classCode="SBADM" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.120"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-imm-1"/>
+              <statusCode code="active"/>
+              <effectiveTime value="20241001"/>
+              <consumable><manufacturedProduct><manufacturedMaterial>
+                <code code="${FLU}" codeSystem="${CVX_OID}" displayName="${FLU_LABEL}"/>
+              </manufacturedMaterial></manufacturedProduct></consumable>
+            </substanceAdministration>`;
+
+  /** The seven, in `PLANNED_VARIANTS` order, for the matrix below. */
+  const PLANNED_ACTS: readonly (readonly [string, string])[] = [
+    ["act", PLANNED_ACT_XML],
+    ["encounter", PLANNED_ENCOUNTER_XML],
+    ["procedure", PLANNED_PROCEDURE_XML],
+    ["medicationActivity", PLANNED_MEDICATION_XML],
+    ["supply", PLANNED_SUPPLY_XML],
+    ["observation", PLANNED_OBSERVATION_XML],
+    ["immunizationActivity", PLANNED_IMMUNIZATION_XML],
+  ];
+
+  /**
+   * An Interventions Section (V3) (`…21.2.3`, LOINC `62387-6` "Interventions
+   * Provided") holding one Planned Intervention Act whose `entryRelationship`s
+   * carry `nested`. That is the conformant home for this container: the Plan of
+   * Treatment Section's eleven entry templates do not include it, and the
+   * Interventions Section admits it as a direct `<entry>`. Reaching it there
+   * costs nothing extra, because `extractPlannedItems` runs on every `<section>`
+   * rather than on a recognized Plan of Treatment alone.
+   *
+   * The `RSON` Entry Reference is present on every instance because the template
+   * makes it `[1..*]`, and because it is the shape that must be walked past
+   * rather than followed.
+   *
+   * The container's own `<code>` is deliberately **absent**: nothing in this
+   * package reads it, HL7's own Guide Example writes a placeholder there rather
+   * than a concept, and inventing a SNOMED code to fill a slot no test measures
+   * is how this repo has produced three mislabelled fixture codes already.
+   */
+  const interventions = (nested: string): string => `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.21.2.3" extension="2015-08-01"/>
+          <code code="62387-6" codeSystem="2.16.840.1.113883.6.1" displayName="Interventions Provided"/>
+          <title>Interventions</title>
+          <text><content ID="ivn1">Planned toward the recorded goal</content></text>
+          <entry>
+            <act classCode="ACT" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.146" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-ivn-1"/>
+              <statusCode code="active"/>
+              <entryRelationship typeCode="RSON">
+                <act classCode="ACT" moodCode="EVN">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.122"/>
+                  <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-goal-1"/>
+                  <code nullFlavor="NP"/>
+                  <statusCode code="completed"/>
+                </act>
+              </entryRelationship>
+              ${nested}
+            </act>
+          </entry>
+        </section>
+      </component>`;
+
+  /** A Plan of Treatment section carrying the same acts as direct entries. */
+  const planOfTreatment = (entries: string): string => `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.10" extension="2014-06-09"/>
+          <code code="18776-5" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Plan of Treatment</title>
+          <text><content ID="plan1">Planned toward the recorded goal</content></text>
+          ${entries}
+        </section>
+      </component>`;
+
+  const wrap = (acts: readonly string[]): string =>
+    acts.map((a) => `<entryRelationship typeCode="REFR">${a}</entryRelationship>`).join("");
+
+  const entries = (acts: readonly string[]): string =>
+    acts.map((a) => `<entry>${a}</entry>`).join("");
+
+  it("returns a planned drug and a planned vaccination that hang off an intervention", () => {
+    // THE DEFECT. Base returns [] and says nothing at all: an intervention
+    // planning a drug and a flu shot reduced to an empty, warning-free list.
+    const med = PLANNED_MEDICATION_XML;
+    const imm = PLANNED_IMMUNIZATION_XML;
+    const doc = parseCcda(buildCcda({ sections: interventions(wrap([med, imm])) }));
+    const items = doc.getPlannedItems();
+    expect(items.map((i) => i.kind)).toStrictEqual(["medicationActivity", "immunizationActivity"]);
+    expect(items[0]?.code?.code).toBe(LISINOPRIL);
+    expect(items[1]?.code?.code).toBe(FLU);
+    // Nesting says nothing about mood: each act's own `@moodCode` is still what
+    // the disposition is read from.
+    expect(items.every((i) => i.disposition === "planned")).toBe(true);
+  });
+
+  it("walks past the RSON Entry Reference instead of following it", () => {
+    // Every fixture in this block carries one, so a rule that followed pointers
+    // would show up as a phantom item on all of them. Measured explicitly here:
+    // an intervention whose ONLY entryRelationship is the goal reference yields
+    // nothing, because the planned entry it names lives elsewhere.
+    const doc = parseCcda(buildCcda({ sections: interventions("") }));
+    expect(doc.getPlannedItems()).toStrictEqual([]);
+  });
+
+  it("leaves the PERFORMED acts an intervention also holds out of the result", () => {
+    // A Planned Intervention Act may carry a performed Medication Activity
+    // (`…22.4.16`) as well as a planned one, and both are
+    // `substanceAdministration`s. Matching on the templateId root rather than on
+    // the element name or the `@moodCode` is what keeps the performed one out:
+    // the template settles the question and no mood has to be guessed at.
+    const performedMed = `<substanceAdministration classCode="SBADM" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.16" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-perf-med-1"/>
+              <statusCode code="completed"/>
+              <effectiveTime value="20240101"/>
+              <consumable><manufacturedProduct><manufacturedMaterial>
+                <code code="${ASPIRIN}" codeSystem="${RXNORM}" displayName="Aspirin"/>
+              </manufacturedMaterial></manufacturedProduct></consumable>
+            </substanceAdministration>`;
+    const doc = parseCcda(buildCcda({ sections: interventions(wrap([performedMed])) }));
+    expect(doc.getPlannedItems()).toStrictEqual([]);
+  });
+
+  it("leaves the three open non-item templates dropped and silent, nested as at the top level", () => {
+    // Instruction (`…22.4.20`), Handoff Communication Participants
+    // (`…22.4.141`) and Nutrition Recommendation (`…22.4.130`) are admitted by
+    // the container exactly as they are by the Plan of Treatment Section, and
+    // whether to REPORT them as dropped is an open decision at both levels. It
+    // is pinned here rather than settled, so a change of mind has to move a test.
+    // Both are written WITHOUT a `<code>`: nothing reads one on a template this
+    // package does not return, and minting a SNOMED or LOINC concept to fill a
+    // slot no assertion measures is exactly how three mislabelled fixture codes
+    // got into this area already.
+    const instruction = `<act classCode="ACT" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.20" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-instr-1"/>
+              <statusCode code="completed"/>
+            </act>`;
+    const nutrition = `<act classCode="ACT" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.130"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-nutr-1"/>
+              <statusCode code="active"/>
+            </act>`;
+    const doc = parseCcda(buildCcda({ sections: interventions(wrap([instruction, nutrition])) }));
+    expect(doc.getPlannedItems()).toStrictEqual([]);
+  });
+
+  it("does NOT reach the two other containers R2.1 nests planned acts in", () => {
+    // THE BOUND, MEASURED RATHER THAN ASSERTED, because a doc claiming "nesting
+    // is fixed" would be false and this area has shipped exactly that class of
+    // claim before. R2.1 inline-nests planned acts in two more places by the
+    // identical `entryRelationship` pattern:
+    //
+    //   Nutrition Recommendation (`…22.4.130`) holds SIX of the seven (every
+    //   planned template except `…22.4.120`), and is itself one of the eleven
+    //   Plan of Treatment entry templates this parser already drops silently.
+    //
+    //   Intervention Act (`…22.4.131`), the PERFORMED sibling and a `SHOULD`
+    //   entry of an Interventions Section, holds a Planned Intervention Act,
+    //   which holds all seven. So the SAME container is read one layer out and
+    //   not one layer in. (Do not upgrade that into a claim about which shape
+    //   senders write most: the Interventions Section admits the Planned
+    //   Intervention Act as a DIRECT entry at the same `SHOULD` strength, and
+    //   that shape IS read. This file has no frequency evidence and should not
+    //   pretend to.)
+    //
+    // Both come back as nothing with nothing said, exactly as they did on base.
+    // Widening to them is a decision with its own matrix, not a tidy-up, and
+    // this test fails loudly if someone takes it without one.
+    const med = PLANNED_MEDICATION_XML;
+    const nutritionHolding = `<act classCode="ACT" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.130"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-nutr-2"/>
+              <statusCode code="active"/>
+              ${wrap([med])}
+            </act>`;
+    const performedIntervention = `<act classCode="ACT" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.131" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-ivn-4"/>
+              <statusCode code="completed"/>
+              <entryRelationship typeCode="REFR">
+                <act classCode="ACT" moodCode="INT">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.146" extension="2015-08-01"/>
+                  <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-ivn-5"/>
+                  <statusCode code="active"/>
+                  ${wrap([med])}
+                </act>
+              </entryRelationship>
+            </act>`;
+    // Five public sites say these come back as "nothing with nothing said", so
+    // pin BOTH halves. The silence half is measured DIFFERENTIALLY, against the
+    // same document with the container removed, rather than by asserting the
+    // whole document is warning-free: the fixture envelope raises its own
+    // unrelated warnings (a CCD short its SHALL sections, a patient id with no
+    // assigningAuthorityName), and an assertion that swept those in would be
+    // measuring the fixture instead of the claim. Equal warning sets means the
+    // container contributes NOTHING, which is exactly what makes this shape
+    // dangerous: there is no code for a consumer to filter on.
+    const empty = parseCcda(buildCcda({ sections: planOfTreatment("") }));
+    for (const container of [nutritionHolding, performedIntervention]) {
+      const doc = parseCcda(buildCcda({ sections: planOfTreatment(entries([container])) }));
+      expect(doc.getPlannedItems()).toStrictEqual([]);
+      expect(codes(doc.warnings).sort()).toStrictEqual(codes(empty.warnings).sort());
+    }
+  });
+
+  it("descends through an intervention nested in an intervention", () => {
+    // Self-similar containment is walked by the same rule rather than special
+    // cased. The DOM is a tree, so it terminates on its own.
+    const imm = PLANNED_IMMUNIZATION_XML;
+    const inner = `<act classCode="ACT" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.146" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-ivn-2"/>
+              <statusCode code="active"/>
+              ${wrap([imm])}
+            </act>`;
+    const doc = parseCcda(buildCcda({ sections: interventions(wrap([inner])) }));
+    expect(doc.getPlannedItems().map((i) => i.kind)).toStrictEqual(["immunizationActivity"]);
+    expect(doc.getPlannedItems()[0]?.code?.code).toBe(FLU);
+  });
+
+  it("reaches a nested planned medication's product warnings, which nothing could before", () => {
+    // The safety payload. Two `manufacturedProduct` arms naming two different
+    // drugs on an act describing what the patient is about to be given: base is
+    // silent because the entry is never seen at all, so this is not a warning
+    // that was quiet, it is one that had nothing to fire on.
+    const twoArms = `<substanceAdministration classCode="SBADM" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.42" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-med-2"/>
+              <statusCode code="active"/>
+              <effectiveTime value="20240901"/>
+              <consumable><manufacturedProduct>
+                <manufacturedMaterial><code code="${LISINOPRIL}" codeSystem="${RXNORM}"/></manufacturedMaterial>
+                <manufacturedLabeledDrug><code code="${ASPIRIN}" codeSystem="${RXNORM}"/></manufacturedLabeledDrug>
+              </manufacturedProduct></consumable>
+            </substanceAdministration>`;
+    const doc = parseCcda(buildCcda({ sections: interventions(wrap([twoArms])) }));
+    const item = doc.getPlannedItems().find((i) => i.kind === "medicationActivity");
+    expect(item).toBeDefined();
+    // No code is selected: nothing in the document ranks the arms, exactly as at
+    // the direct-entry call site.
+    expect(item?.code).toBeUndefined();
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MISSING_PRODUCT_CODE);
+  });
+
+  it("slot-checks a nested planned vaccine at the vaccine binding, CVX only", () => {
+    // Parity with the direct entry down to the binding: NDC is expected on a
+    // drug and unexpected on a vaccine, so the same coding that is clean in a
+    // planned medication is UNEXPECTED_CODE_SYSTEM here.
+    const ndcVaccine = `<substanceAdministration classCode="SBADM" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.120"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-imm-2"/>
+              <statusCode code="active"/>
+              <effectiveTime value="20241001"/>
+              <consumable><manufacturedProduct><manufacturedMaterial>
+                <code code="${PLACEHOLDER_NDC}" codeSystem="${NDC_OID}"/>
+              </manufacturedMaterial></manufacturedProduct></consumable>
+            </substanceAdministration>`;
+    const doc = parseCcda(buildCcda({ sections: interventions(wrap([ndcVaccine])) }));
+    expect(doc.getPlannedItems().map((i) => i.kind)).toStrictEqual(["immunizationActivity"]);
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.UNEXPECTED_CODE_SYSTEM);
+  });
+
+  it("keeps a direct entry and the intervention's components in document order", () => {
+    // The container is tolerated as a direct entry of a Plan of Treatment
+    // section too (extraction is section-agnostic), which is the shape that
+    // shows the ordering: the section's own entries and the intervention's
+    // components interleave in the order the document wrote them.
+    const proc = PLANNED_PROCEDURE_XML;
+    const imm = PLANNED_IMMUNIZATION_XML;
+    const med = PLANNED_MEDICATION_XML;
+    const container = `<act classCode="ACT" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.146" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nest-ivn-3"/>
+              <statusCode code="active"/>
+              ${wrap([imm, med])}
+            </act>`;
+    const doc = parseCcda(buildCcda({ sections: planOfTreatment(entries([proc, container])) }));
+    expect(doc.getPlannedItems().map((i) => i.kind)).toStrictEqual([
+      "procedure",
+      "immunizationActivity",
+      "medicationActivity",
+    ]);
+  });
+
+  it("pins the direct-vs-nested matrix: every kind reads the same either way", () => {
+    // MEASURED against base `src/`, not argued. Fourteen rows, one per kind per
+    // placement, each placement holding the SAME act element.
+    //
+    // 1. THE SEVEN "direct entry" ROWS COME BACK BYTE-IDENTICAL. This slice
+    //    leaves the direct path untouched, and every pre-existing inline
+    //    snapshot in this file still passes unchanged.
+    //
+    // 2. ALL SEVEN "nested in an intervention" ROWS MOVE FROM THE SAME BASE
+    //    READING, `DROPPED (no PlannedItem) | silent`. That is the whole defect
+    //    and the whole monotonicity argument in one line: no row loses a warning
+    //    because no row had one, and no row stops handing back a code because
+    //    none handed one back. Recognizing what was previously unreachable can
+    //    only add, and here it adds seven items and nothing else.
+    //
+    // 3. AFTER, THE TWO COLUMNS AGREE EXACTLY. Parity with the direct entry is
+    //    the bar: nesting is a statement about how the plan is grouped, never
+    //    about the act, so an act that reads one way as an `<entry>` and another
+    //    way as a component would be the defect in a new direction.
+    const matrix = PLANNED_ACTS.flatMap(([name, act]) => {
+      const placements: readonly (readonly [string, string])[] = [
+        ["direct entry", planOfTreatment(entries([act]))],
+        ["nested in an intervention", interventions(wrap([act]))],
+      ];
+      return placements.map(([label, sections]) => {
+        const doc = parseCcda(buildCcda({ sections }));
+        const item = doc.getPlannedItems()[0];
+        // The product family plus the whole slot tier, so a row that traded one
+        // for the other would be visible rather than filtered away.
+        const said = codes(doc.warnings)
+          .filter(
+            (c) =>
+              c.startsWith("MEDICATION_PRODUCT") ||
+              c === "MISSING_PRODUCT_CODE" ||
+              c.endsWith("_CODE_SYSTEM") ||
+              c === "MISSING_CODE_VALUE" ||
+              c === "SEMANTIC_CODE_INVALID" ||
+              c === "CODE_NARRATIVE_MISMATCH",
+          )
+          .sort()
+          .join(" ");
+        const read =
+          item === undefined
+            ? "DROPPED (no PlannedItem)"
+            : `kind=${item.kind} code=${item.code?.code ?? "none"} mood=${item.moodCode ?? "none"} disposition=${item.disposition ?? "none"}`;
+        return `${name} / ${label}: ${read} | ${said || "silent"}`;
+      });
+    });
+    expect(matrix).toMatchInlineSnapshot(`
+      [
+        "act / direct entry: kind=act code=409073007 mood=INT disposition=planned | silent",
+        "act / nested in an intervention: kind=act code=409073007 mood=INT disposition=planned | silent",
+        "encounter / direct entry: kind=encounter code=99213 mood=APT disposition=planned | silent",
+        "encounter / nested in an intervention: kind=encounter code=99213 mood=APT disposition=planned | silent",
+        "procedure / direct entry: kind=procedure code=73761001 mood=INT disposition=planned | silent",
+        "procedure / nested in an intervention: kind=procedure code=73761001 mood=INT disposition=planned | silent",
+        "medicationActivity / direct entry: kind=medicationActivity code=314076 mood=INT disposition=planned | silent",
+        "medicationActivity / nested in an intervention: kind=medicationActivity code=314076 mood=INT disposition=planned | silent",
+        "supply / direct entry: kind=supply code=58938008 mood=INT disposition=planned | silent",
+        "supply / nested in an intervention: kind=supply code=58938008 mood=INT disposition=planned | silent",
+        "observation / direct entry: kind=observation code=58410-2 mood=RQO disposition=planned | silent",
+        "observation / nested in an intervention: kind=observation code=58410-2 mood=RQO disposition=planned | silent",
+        "immunizationActivity / direct entry: kind=immunizationActivity code=140 mood=INT disposition=planned | silent",
+        "immunizationActivity / nested in an intervention: kind=immunizationActivity code=140 mood=INT disposition=planned | silent",
+      ]
+    `);
+  });
+});

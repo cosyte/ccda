@@ -1343,7 +1343,22 @@ export type PlannedOrderMood = "INT" | "RQO" | "PRMS" | "PRP";
 interface BuildCcdaPlannedItemBase {
   /** The planned act/observation/drug code; default code system varies by `kind`. */
   readonly code: BuildCode;
-  /** The planned time as an HL7 date string; emitted only when supplied (SHOULD [0..1]). */
+  /**
+   * The planned time as an HL7 date string; emitted only when supplied, never
+   * fabricated.
+   *
+   * **`[0..1]` is the cardinality on five of the seven templates, not on all of
+   * them, and this said "SHOULD [0..1]" flatly until the claim was checked.**
+   * Both `substanceAdministration` variants SHALL carry exactly one:
+   * Planned Medication Activity (`…4.42`, CONF:1098-30468) and Planned
+   * Immunization Activity (`…4.120`). {@link BuildCcdaPlannedImmunization}
+   * redeclares this field as required, which is why omitting it there is a type
+   * error; {@link BuildCcdaPlannedOrder} does not, so `buildCcda` will emit a
+   * Planned Medication Activity short that SHALL element if you leave it out.
+   * **That gap is known and deliberately still open**: closing it means making
+   * the field required on a published input type, which is a breaking change and
+   * a decision of its own rather than a patch.
+   */
   readonly effectiveTime?: string;
 }
 

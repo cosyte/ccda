@@ -25,15 +25,22 @@
  * be reported as dropped is an open decision, not a settled one**, and it is
  * recorded as such rather than silently taken here.
  *
- * **Nor does this reach a planned entry that is NESTED rather than a direct
- * `<entry>` act**, for any of the seven kinds: {@link extractPlannedItems} reads
- * an `<entry>`'s own act and goes no deeper, so a Planned Immunization Activity
- * inside a Planned Intervention Act (`…22.4.146`, which R2.1 lets contain one) is
- * still returned as nothing with nothing said. That is a standing limitation of
- * this accessor, older than any of these variants and deliberately not addressed
- * here. (A Goal Observation is **not** a second such container: its
+ * **A planned entry NESTED in a Planned Intervention Act (`…22.4.146`) is now
+ * reached too, for all seven kinds.** R2.1 gives that act an `entryRelationship`
+ * for each of the seven and each holds the planned act **inline**, so until this
+ * was fixed a planned drug or vaccination one markup layer in was returned as
+ * nothing with nothing said, the same silence the Planned Immunization Activity
+ * produced a layer out. {@link extractPlannedItems} descends into that container
+ * and no other, which does **not** solve nesting in general: a Nutrition
+ * Recommendation (`…22.4.130`) inline-holds six of the seven and an Intervention
+ * Act (`…22.4.131`) inline-holds a Planned Intervention Act, and neither is
+ * reached. See its docblock for that bound in full and for what the container
+ * also holds and this still does not return. (A Goal Observation is **not** one
+ * of those containers: its
  * `plannedComponent` entryRelationship targets Entry Reference, so it references
- * a planned entry rather than nesting one.)
+ * a planned entry rather than nesting one. Neither is a Planned Intervention
+ * Act's own `[1..*]` `typeCode="RSON"` relationship, which likewise holds an
+ * Entry Reference; a pointer is walked past, never followed.)
  *
  * **Planned Immunization Activity was the one genuinely missing member**, and it
  * matched no root at all until this was fixed: `getPlannedItems()` returned
@@ -64,17 +71,21 @@ import {
   PLANNED_ACT,
   PLANNED_ENCOUNTER,
   PLANNED_IMMUNIZATION_ACTIVITY,
+  PLANNED_INTERVENTION_ACT,
   PLANNED_MEDICATION_ACTIVITY,
   PLANNED_OBSERVATION,
   PLANNED_PROCEDURE,
   PLANNED_SUPPLY,
+  anyEntryAct,
   childEntries,
   classifyDisposition,
   consumableProductCode,
   entryAct,
+  hasTemplateRoot,
   idsOf,
   readNegation,
   reconcileCode,
+  relatedEntryActs,
   resolveNarrative,
   statusCodeOf,
   type EventDisposition,
@@ -231,15 +242,54 @@ const PLANNED_CODE_SLOTS: ReadonlyMap<PlannedItemKind, "medication" | "vaccine">
 ]);
 
 /**
- * Extract every planned item from a Plan of Treatment `<section>` element. Each
- * `<entry>` whose act carries one of the seven templates in
- * {@link PLANNED_VARIANTS} becomes a {@link PlannedItem}. Two shapes are
- * deliberately **not** returned, and neither raises a warning. The section's four
- * other admissible entry templates (Instruction, Handoff Communication
- * Participants, Nutrition Recommendation, Goal Observation) are not planned
- * items. And only an `<entry>`'s **own** act is read: a planned entry nested
- * inside another act (a Planned Intervention Act, `…22.4.146`) is not reached, for
- * any of the seven kinds. Never throws.
+ * Extract every planned item from a `<section>` element: each `<entry>` whose act
+ * carries one of the seven templates in {@link PLANNED_VARIANTS}, **and** each of
+ * the seven nested inside a Planned Intervention Act
+ * ({@link PLANNED_INTERVENTION_ACT}, `…22.4.146`). Never throws.
+ *
+ * **The container is named rather than inferred, and it is the only one.** R2.1
+ * gives the Planned Intervention Act an `entryRelationship` for
+ * every one of the seven, each holding the planned act **inline**, so before this
+ * a planned entry sitting there was returned as nothing with nothing said, for
+ * all seven kinds. A Planned Intervention Act nested in a Planned Intervention
+ * Act is descended into too, because the walk is the same walk; the DOM is a
+ * tree, so it terminates.
+ *
+ * **It is the only container descended into, and R2.1 has others, so this does
+ * NOT solve nesting in general.** A Nutrition Recommendation (`…22.4.130`)
+ * inline-holds six of the seven by the identical `entryRelationship` pattern
+ * (every planned template except `…22.4.120`), and an Intervention Act
+ * (`…22.4.131`, the performed sibling and the `SHOULD` entry of an Interventions
+ * Section) inline-holds a Planned Intervention Act. A planned entry in either is
+ * still returned as nothing with nothing said. That is left as it was found: the
+ * scope taken here is the one container, and widening it is a decision with its
+ * own base-measured matrix, not a tidy-up. A test pins both as unreached so the
+ * bound is measured rather than asserted.
+ *
+ * **An `entryRelationship` is read for what it CONTAINS, never followed for what
+ * it REFERENCES.** The template's `[1..*]` `typeCode="RSON"` relationship holds an
+ * Entry Reference (`…22.4.122`) whose own SHALL points at a Goal Observation.
+ * That act carries no planned template root, so it is walked past rather than
+ * resolved: its target lives elsewhere in the document and is reached on its own
+ * terms, and resolving a pointer here would return an item the container does not
+ * hold.
+ *
+ * **Which acts a Planned Intervention Act holds and this still does not return:**
+ * the performed ones (`MedicationActivity`, `ImmunizationActivity`,
+ * `ProcedureActivityProcedure`, `EncounterActivity`, and the rest, none of which
+ * is planned and none of which carries a planned root), and the same three
+ * non-item templates the section itself admits (Instruction `…22.4.20`, Handoff
+ * Communication Participants `…22.4.141`, Nutrition Recommendation `…22.4.130`).
+ * Whether those three should be reported as dropped is an open decision, at both
+ * levels, and it is still recorded rather than taken.
+ *
+ * **A returned item does not say whether it was a direct `<entry>` or nested.**
+ * The Planned Intervention Act is not modelled: this package carries no container
+ * type, no goal linkage, and no `nested` flag, so the grouping toward a goal is
+ * available only from `doc.toString()`. What `getPlannedItems()` answers is which
+ * acts are planned for this patient, and a nested one is planned on exactly the
+ * same terms as a direct one. Each item keeps its own `ids`, so a caller that
+ * needs the grouping can correlate.
  *
  * @example
  * ```ts
@@ -260,8 +310,48 @@ export function extractPlannedItems(
       out.push(buildPlannedItem(el, variant.kind, narrativeById, ctx));
       break;
     }
+    // Checked independently of the loop above rather than as an eighth variant
+    // in it, so an act that somehow stacks a planned root AND `…22.4.146` yields
+    // its own item *and* the ones it contains. Ranking them against each other
+    // would drop one or the other over a shape no document ranks, and this
+    // accessor's whole defect was dropping things. `anyEntryAct` rather than an
+    // eighth `entryAct` call: an `<entry>` carries one act, so one scan answers
+    // it, and this extractor runs on every `<section>` of every document.
+    const act = anyEntryAct(entry);
+    if (act !== undefined && hasTemplateRoot(act, PLANNED_INTERVENTION_ACT)) {
+      collectNested(act, narrativeById, ctx, out);
+    }
   }
   return out;
+}
+
+/**
+ * Append every planned item a Planned Intervention Act holds inline, descending
+ * through a nested Planned Intervention Act by the same rule.
+ *
+ * Matching is on the nested act's **`templateId` root alone**, exactly as
+ * {@link extractPlannedItems} matches a direct entry act, and that is what keeps
+ * the performed acts the same container admits out of the result: a Medication
+ * Activity (`…22.4.16`) and a Planned Medication Activity (`…22.4.42`) are both
+ * `substanceAdministration`s, so an element-name or `@moodCode` test would either
+ * admit the performed one or start guessing at a mood the template already
+ * settles. `@moodCode` is still read onto every item's `disposition`, so a
+ * planned template carrying a performed mood is reported as what it says rather
+ * than as what its template promised. @internal
+ */
+function collectNested(
+  container: Element,
+  narrativeById: ReadonlyMap<string, string>,
+  ctx: ParseCtx,
+  out: PlannedItem[],
+): void {
+  for (const nested of relatedEntryActs(container)) {
+    const variant = PLANNED_VARIANTS.find((v) => hasTemplateRoot(nested, v.root));
+    if (variant !== undefined) out.push(buildPlannedItem(nested, variant.kind, narrativeById, ctx));
+    if (hasTemplateRoot(nested, PLANNED_INTERVENTION_ACT)) {
+      collectNested(nested, narrativeById, ctx, out);
+    }
+  }
 }
 
 /** Build one planned item from its act element. @internal */

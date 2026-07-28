@@ -529,6 +529,21 @@ export class CcdaDocument {
    * of `"planned"` derived from `moodCode` (never read as performed). Empty when
    * the document carries no Plan of Treatment entries.
    *
+   * **Two bounds, because a quiet result here is not a complete one.** This
+   * returns **seven** entry templates and the Plan of Treatment Section admits
+   * **eleven**: Instruction (`…22.4.20`), Handoff Communication Participants
+   * (`…22.4.141`), Nutrition Recommendation (`…22.4.130`) and Goal Observation
+   * (`…22.4.121`) are not acts planned for the patient and are not returned, and
+   * nothing is raised about them. A Goal Observation is the clearest of the four:
+   * it is `moodCode="GOL"`, which this parser calls neither performed nor
+   * planned. And a planned entry is reached as a direct `<entry>` act or nested
+   * inside a **Planned Intervention Act** (`…22.4.146`), the one container R2.1
+   * lets hold all seven inline. **Nesting is not solved in general**: R2.1 also
+   * puts planned acts inside a Nutrition Recommendation (`…22.4.130`, six of the
+   * seven) and a Planned Intervention Act inside an Intervention Act
+   * (`…22.4.131`), and a planned entry in either is still not reached. All of it
+   * re-serializes faithfully, so `toString()` is the fallback.
+   *
    * @example
    * ```ts
    * const orders = doc.getPlannedItems().filter((p) => p.kind === "medicationActivity");

@@ -293,9 +293,14 @@ normalized away**. An unrecognized `value xsi:type` is kept as `unsupported`; no
   (`…22.4.20`), Handoff Communication Participants (`…22.4.141`), Nutrition Recommendation
   (`…22.4.130`) and Goal Observation (`…22.4.121`), none of which is an act to be performed on the
   patient at a future time. A Goal Observation is the clearest: it is `moodCode="GOL"`, which this
-  parser classifies as neither performed nor planned. Only an `<entry>`'s **own** act is read, so a
-  planned entry nested inside another act (a Planned Intervention Act, `…22.4.146`) is not returned
-  either, for any of the seven kinds, and nothing is raised about it. **The Planned Immunization Activity was missing
+  parser classifies as neither performed nor planned. A planned entry is read as an `<entry>`'s own
+  act **or** nested inside a **Planned Intervention Act** (`…22.4.146`), the act that groups the
+  interventions planned toward a goal and the one container C-CDA lets hold all seven inline; until
+  `0.0.3` only the first was read, so all seven vanished from the nested shape with nothing raised
+  about it. **That does not solve nesting in general.** C-CDA also puts planned acts inside a Nutrition
+  Recommendation (`…22.4.130`, six of the seven) and a Planned Intervention Act inside an Intervention
+  Act (`…22.4.131`); a planned entry in either is still not reached, and nothing is raised about it.
+  **The Planned Immunization Activity was missing
   until `0.0.3`**, matching no template at all, so a scheduled vaccination was absent from
   `getPlannedItems()` with no warning to find it by. Its `code` is the **vaccine** from the
   `consumable`, checked against CVX, exactly as a performed Immunization Activity's `vaccine` is.
