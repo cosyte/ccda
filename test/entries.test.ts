@@ -1095,6 +1095,14 @@ describe("clinical entries, arm disagreement through <translation> and repeated 
   const materialCode = (codeXml: string): string =>
     MEDICATIONS_SECTION.replace(MATERIAL_CODE, codeXml);
 
+  /**
+   * Append a SECOND `<code>` inside the fixture's single `manufacturedMaterial`
+   * arm, beside the one already there. One arm, two `<code>` children, which is
+   * the shape `armCodes` used to read only the first of.
+   */
+  const withSecondCode = (section: string, codeXml: string): string =>
+    section.replace(MATERIAL_CODE, `${MATERIAL_CODE}${codeXml}`);
+
   it("refuses when a null-marked labeled arm names a different drug in its translation", () => {
     // The item's shape: nullFlavor="OTH" plus <translation> is the documented
     // C-CDA idiom for "not codable in the bound value set, here is an alternate
@@ -1820,20 +1828,247 @@ describe("clinical entries, arm disagreement through <translation> and repeated 
       expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
     });
 
+    /**
+     * `CCDA-ARM-MULTI-CODE`. The residual `#62`'s refuters found and confirmed
+     * `PRE-EXISTING`: `armCodes` read only the FIRST `<code>` per arm, so an arm
+     * carrying two had its second never compared and never mentioned. Same harm
+     * class as the rest of this area, a silent pick between two products, one
+     * markup layer further in than the repeated arm.
+     */
+    it("refuses between two sibling <code>s inside ONE manufacturedMaterial arm", () => {
+      // The defect, reproduced: before this, the parser handed back Lisinopril
+      // and said NOTHING about the Aspirin beside it. Not a MEDICATION_PRODUCT_*
+      // warning of any kind: MEDICATION_PRODUCT_ARM_REPEATED cannot fire (one
+      // arm), MEDICATION_PRODUCT_ARM_UNEXPECTED cannot fire (the material arm),
+      // and the second <code> never reached the conflict rule at all.
+      const doc = parseCcda(
+        buildCcda({
+          sections: withSecondCode(
+            MEDICATIONS_SECTION,
+            `<code code="${ASPIRIN}" codeSystem="${RXNORM}"/>`,
+          ),
+        }),
+      );
+      expect(doc.getMedications()[0]?.drug).toBeUndefined();
+      expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+      expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_CODE_REPEATED);
+      // The conflict is the stronger statement about the same slot, so the
+      // "no arm yielded a code" backstop stays suppressed behind it.
+      expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MISSING_PRODUCT_CODE);
+    });
+
+    it("refuses the same way inside one manufacturedLabeledDrug arm", () => {
+      const doc = parseCcda(
+        buildCcda({
+          sections: MEDICATIONS_SECTION.replace(
+            /<manufacturedMaterial>[\s\S]*?<\/manufacturedMaterial>/u,
+            `<manufacturedLabeledDrug>
+               <code code="${LISINOPRIL}" codeSystem="${RXNORM}"/>
+               <code code="${ASPIRIN}" codeSystem="${RXNORM}"/>
+             </manufacturedLabeledDrug>`,
+          ),
+        }),
+      );
+      expect(doc.getMedications()[0]?.drug).toBeUndefined();
+      expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+      expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_CODE_REPEATED);
+    });
+
+    it("does not let a second <code> re-decide what is READ, and is untolerable where that loses a drug", () => {
+      // The state that decides the classification. The arm's lead <code>
+      // asserts a nullFlavor and its sibling names a drug. Selection stays on
+      // the lead one deliberately, so the product slot comes back empty over a
+      // document that names the drug one element along, and NOTHING else can
+      // fire: MISSING_PRODUCT_CODE cannot (a <code> exists), the conflict rule
+      // cannot (an exceptional value is not a rival drug), and checkCodeSlot is
+      // quiet by design on a nullFlavor-only slot. That is
+      // MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY's harm with a sibling <code> in
+      // place of a <translation>, so this code is the lone signal here and must
+      // be unquietable.
+      const doc = parseCcda(
+        buildCcda({
+          sections: materialCode(
+            `<code nullFlavor="UNK"/><code code="${ASPIRIN}" codeSystem="${RXNORM}"/>`,
+          ),
+        }),
+      );
+      expect(doc.getMedications()[0]?.drug?.code).toBeUndefined();
+      expect(doc.getMedications()[0]?.drug?.nullFlavor).toBe("UNK");
+      expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_CODE_REPEATED);
+      expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+      // The drug is not lost, only unselected: it round-trips verbatim.
+      expect(doc.toString()).toContain(`code="${ASPIRIN}"`);
+    });
+
+    it("keeps every safety-critical signal the LEAD <code> used to draw", () => {
+      // The regression this design exists to avoid. Selecting a newly-visible
+      // sibling would move the pick EARLIER in document order onto a
+      // completeness-blind match, and take with it whatever the displaced
+      // element was drawing. Both shapes below name one symbol throughout, so
+      // nothing about the drug is in doubt; what is at stake is the guard.
+      //
+      // 1. An empty <code/> is what MISSING_CODE_VALUE is scoped to.
+      const emptyLead = parseCcda(
+        buildCcda({
+          sections: materialCode(`<code/><code code="${ASPIRIN}" codeSystem="${RXNORM}"/>`),
+        }),
+      );
+      expect(codes(emptyLead.warnings)).toContain(WARNING_CODES.MISSING_CODE_VALUE);
+      expect(codes(emptyLead.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_CODE_REPEATED);
+      // 2. CODE_NARRATIVE_MISMATCH reads the selected element's displayName, so
+      // a bare sibling displacing a labelled arm's <code> would silence the one
+      // guard on the structured code contradicting the narrative.
+      const bareSibling = parseCcda(
+        buildCcda({
+          sections: withSecondMaterial(
+            materialCode(
+              `<code nullFlavor="UNK"/><code code="${ASPIRIN}" codeSystem="${RXNORM}"/>`,
+            ),
+            `<code code="${ASPIRIN}" codeSystem="${RXNORM}" displayName="Aspirin"/>`,
+          ),
+        }),
+      );
+      expect(bareSibling.getMedications()[0]?.drug?.displayName).toBe("Aspirin");
+      expect(codes(bareSibling.warnings)).toContain(WARNING_CODES.CODE_NARRATIVE_MISMATCH);
+    });
+
+    it("still reads the product when the repeated <code>s agree, and says the arm repeats", () => {
+      // Cardinality and agreement are separate facts with separate codes, the
+      // same split MEDICATION_PRODUCT_ARM_REPEATED already makes one layer out.
+      const doc = parseCcda(
+        buildCcda({
+          sections: withSecondCode(
+            MEDICATIONS_SECTION,
+            `<code code="${LISINOPRIL}" codeSystem="${RXNORM}"/>`,
+          ),
+        }),
+      );
+      expect(doc.getMedications()[0]?.drug?.code).toBe(LISINOPRIL);
+      expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_CODE_REPEATED);
+      expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+    });
+
+    it("reaches a repeated <code> across arm kinds too", () => {
+      // The cross-arm shape the reproduction started from: the labeled arm's
+      // first <code> is null-marked and its second names a different drug. The
+      // material arm's Lisinopril used to win in silence.
+      const doc = parseCcda(
+        buildCcda({
+          sections: withLabeledArm(
+            MEDICATIONS_SECTION,
+            `<code nullFlavor="UNK"/><code code="${ASPIRIN}" codeSystem="${RXNORM}"/>`,
+          ),
+        }),
+      );
+      expect(doc.getMedications()[0]?.drug).toBeUndefined();
+      expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+    });
+
+    it("positions the repeat on the ARM that carries it, one warning per offending arm", () => {
+      // Unlike MEDICATION_PRODUCT_ARM_REPEATED, which states a fact about the
+      // manufacturedProduct, this states a fact about a particular arm. Two
+      // offending arms draw two warnings at two positions rather than one
+      // pointing at only one of them.
+      const doc = parseCcda(
+        buildCcda({
+          sections: withLabeledArm(
+            withSecondCode(
+              MEDICATIONS_SECTION,
+              `<code code="${LISINOPRIL}" codeSystem="${RXNORM}"/>`,
+            ),
+            `<code code="${LISINOPRIL}" codeSystem="${RXNORM}"/><code code="${LISINOPRIL}" codeSystem="${RXNORM}"/>`,
+          ),
+        }),
+      );
+      const repeats = doc.warnings.filter(
+        (w) => w.code === WARNING_CODES.MEDICATION_PRODUCT_CODE_REPEATED,
+      );
+      expect(repeats).toHaveLength(2);
+      expect(repeats.map((w) => w.position?.path)).toStrictEqual([
+        "manufacturedMaterial",
+        "manufacturedLabeledDrug",
+      ]);
+      // Distinct locations, not the same element reported twice.
+      expect(repeats[0]?.position?.line).not.toBe(repeats[1]?.position?.line);
+    });
+
+    it("keeps the translation-only warning pointing where the coding actually is", () => {
+      // The trap #62 shipped once and this slice must not re-open. The
+      // translation-only scan runs over the LEAD <code>s, the same list
+      // selection drew from, so the element it returns is the selected one
+      // exactly when the selected arm holds the coding: `position` and the
+      // "search drug.translation" branch stay true. Handing it the widened list
+      // would let it land on a non-lead <code> that asserts a PRIMARY, and the
+      // message would then send a reader to a <translation> that does not exist.
+      //
+      // What it does NOT buy, stated so nobody reads more into it: the message's
+      // opening clause, "No manufacturedProduct arm asserts a primary @code", is
+      // FALSE on this very fixture, whose arm asserts one on its second <code>.
+      // That is PRE-EXISTING (base emits the identical message on the identical
+      // input) and this slice only improves the disclosure around it, since
+      // MEDICATION_PRODUCT_CODE_REPEATED now fires beside it. Narrowing that
+      // clause to the lead <code>s is a separate change to a separate warning.
+      const doc = parseCcda(
+        buildCcda({
+          sections: materialCode(
+            `<code nullFlavor="OTH"><translation code="${ASPIRIN}" codeSystem="${RXNORM}"/></code><code code="${ASPIRIN}" codeSystem="${RXNORM}"/>`,
+          ),
+        }),
+      );
+      const translationOnly = doc.warnings.filter(
+        (w) => w.code === WARNING_CODES.MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY,
+      );
+      expect(translationOnly).toHaveLength(1);
+      // It points at the lead <code>, which is the selected one and does carry
+      // the translation the message sends the reader to.
+      expect(translationOnly[0]?.message).toContain("returned CD's translation list");
+      expect(doc.getMedications()[0]?.drug?.translation?.[0]?.code).toBe(ASPIRIN);
+    });
+
     it("pins the whole product-arm matrix: what is read, and what is said about it", () => {
       // The monotonicity argument as a diffable artifact rather than a claim.
-      // Every row records the product code actually handed back, the nullFlavor
-      // beside it, and the product warnings raised. Measured against the same
-      // matrix run on the previous release: NO ROW LOST A WARNING, every row
-      // that moved gained one, and exactly two rows moved to `no CD`. One of
-      // those (both arms translation-only, differing strengths) gave up a `CD`
-      // that named no product; the other (a primary-asserting arm behind two
-      // disagreeing fallback arms, the last row here) gave up a FULLY CODED
-      // `CD`. That second one is what monotone costs, and it is why "no product
-      // code stops being reported" is a false way to state this invariant.
-      // Firing more means WITHHOLDING more. If a future change makes any row
-      // REPORT LESS, or hand back a code where this snapshot has none, that is
-      // the silent pick between two drugs coming back and the diff will show it.
+      // Every row records the product code handed back, the code system it was
+      // asserted under, the nullFlavor beside it, and the product warnings
+      // raised. If a future change makes any row REPORT LESS, or hand back a
+      // code where this snapshot has none, that is the silent pick between two
+      // drugs coming back and the diff will show it.
+      //
+      // Measured, both times, by running THIS FILE against the previous
+      // release's `src/` rather than by argument.
+      //
+      // `#62` (translations, repeated arms) moved the first nineteen rows: no
+      // row lost a warning, every row that moved gained one, and exactly two
+      // moved to `no CD`. One gave up a `CD` that named no product; the other
+      // (a primary-asserting arm behind two disagreeing fallback arms) gave up
+      // a FULLY CODED `CD`. That is what monotone COSTS, and it is why "no
+      // product code stops being reported" is a false way to state this
+      // invariant. Firing more means WITHHOLDING more.
+      //
+      // `CCDA-ARM-MULTI-CODE` (every `<code>` on an arm reaches the COMPARISON,
+      // selection deliberately untouched) left all nineteen of those rows
+      // BYTE-IDENTICAL and moved only the eight it added. Every one of those
+      // eight gained warnings, and **every one of them reads exactly what base
+      // read, except the three the conflict rule now withholds outright.** That
+      // is the whole design: widening what is compared is monotone, widening
+      // what is SELECTED is not, because `selectableCode` ranks on "names a
+      // product" alone and a newly-visible sibling sits earlier in document
+      // order, so it would displace an equally-symboled but richer coding and
+      // take the safety-critical signal that coding was drawing with it. The
+      // last two rows are there to make that concrete and to fail loudly if
+      // anyone ever widens selection: they keep `MISSING_CODE_VALUE` and
+      // `CODE_NARRATIVE_MISMATCH` alive on shapes where a bare sibling would
+      // have won.
+      //
+      // **One row's warning set is not a superset of its old one, and it is the
+      // only one:** "two translation-only codes disagreeing on strength" traded
+      // `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY` for
+      // `MEDICATION_PRODUCT_ARM_CONFLICT`. That is the documented suppression,
+      // not a lost signal, the translation-only code stands down behind the
+      // conflict exactly as `MISSING_PRODUCT_CODE` does, because the conflict is
+      // the stronger statement about the same slot. Both are in
+      // `SAFETY_CRITICAL_CODES`, so no profile can quiet either. State the
+      // invariant that way: no row goes from warned to silent, and no row trades
+      // a safety-critical code for a weaker one.
       const shapes: readonly (readonly [string, string])[] = [
         ["single arm", MEDICATIONS_SECTION],
         [
@@ -1966,41 +2201,117 @@ describe("clinical entries, arm disagreement through <translation> and repeated 
             `<code nullFlavor="OTH"><translation code="${LISINOPRIL_INGREDIENT}" codeSystem="${RXNORM}"/><translation code="${LISINOPRIL_20MG}" codeSystem="${RXNORM}"/></code>`,
           ),
         ],
+        // CCDA-ARM-MULTI-CODE's rows: two <code>s on ONE arm, the elements
+        // `armCodes` used to drop before anything compared them.
+        [
+          "one material, two codes agreeing",
+          withSecondCode(
+            MEDICATIONS_SECTION,
+            `<code code="${LISINOPRIL}" codeSystem="${RXNORM}"/>`,
+          ),
+        ],
+        [
+          // THE DEFECT. Base hands back code=314076 in complete silence.
+          "one material, two codes naming different drugs",
+          withSecondCode(MEDICATIONS_SECTION, `<code code="${ASPIRIN}" codeSystem="${RXNORM}"/>`),
+        ],
+        [
+          "one material, null-marked code then a naming one",
+          materialCode(`<code nullFlavor="UNK"/><code code="${ASPIRIN}" codeSystem="${RXNORM}"/>`),
+        ],
+        [
+          "one material, naming code then a null-marked one",
+          withSecondCode(MEDICATIONS_SECTION, `<code nullFlavor="UNK"/>`),
+        ],
+        [
+          "one material, two translation-only codes disagreeing on strength",
+          materialCode(
+            `<code nullFlavor="OTH"><translation code="${LISINOPRIL_INGREDIENT}" codeSystem="${RXNORM}"/><translation code="${LISINOPRIL}" codeSystem="${RXNORM}"/></code><code nullFlavor="OTH"><translation code="${LISINOPRIL_INGREDIENT}" codeSystem="${RXNORM}"/><translation code="${LISINOPRIL_20MG}" codeSystem="${RXNORM}"/></code>`,
+          ),
+        ],
+        [
+          "labeled arm hides a second drug in its second code",
+          withLabeledArm(
+            MEDICATIONS_SECTION,
+            `<code nullFlavor="UNK"/><code code="${ASPIRIN}" codeSystem="${RXNORM}"/>`,
+          ),
+        ],
+        [
+          // THE ROWS THAT PIN SELECTION AS UNCHANGED. If a newly-visible sibling
+          // ever displaces the lead <code>, the safety-critical signal the lead
+          // was drawing goes quiet and these rows show it: an empty <code/> is
+          // what MISSING_CODE_VALUE is scoped to, and the richer sibling arm's
+          // displayName is what CODE_NARRATIVE_MISMATCH reads.
+          "one material, empty code then a naming one",
+          materialCode(`<code/><code code="${ASPIRIN}" codeSystem="${RXNORM}"/>`),
+        ],
+        [
+          "bare second code, richer arm behind it",
+          withSecondMaterial(
+            materialCode(`<code nullFlavor="UNK"/><code code="${ASPIRIN}"/>`),
+            `<code code="${ASPIRIN}" codeSystem="${RXNORM}" displayName="Aspirin"/>`,
+          ),
+        ],
       ];
       const matrix = shapes.map(([name, sections]) => {
         const doc = parseCcda(buildCcda({ sections }));
         const drug = doc.getMedications()[0]?.drug;
+        // MISSING_CODE_SYSTEM, MISSING_CODE_VALUE and CODE_NARRATIVE_MISMATCH
+        // are in the frame because they are the safety-critical signals that
+        // fire ON the selected element, so they are what goes quiet if anything
+        // ever moves selection. A matrix that filtered them out could show a
+        // stranded coding as though nothing had been said about it, which is how
+        // an instrument stops being able to measure the thing it is for.
         const said = codes(doc.warnings)
-          .filter((c) => c.startsWith("MEDICATION_PRODUCT") || c === "MISSING_PRODUCT_CODE")
+          .filter(
+            (c) =>
+              c.startsWith("MEDICATION_PRODUCT") ||
+              c === "MISSING_PRODUCT_CODE" ||
+              c === "MISSING_CODE_SYSTEM" ||
+              c === "MISSING_CODE_VALUE" ||
+              c === "CODE_NARRATIVE_MISMATCH",
+          )
           .sort()
           .join(" ");
+        // The codeSystem is printed, not just the symbol: a symbol that keeps
+        // its value while losing the terminology it was asserted under is a
+        // different reading, and a matrix that hid it could not be used to
+        // measure this area again.
         const read =
           drug === undefined
             ? "no CD"
-            : `code=${drug.code ?? "none"} nullFlavor=${drug.nullFlavor ?? "none"}`;
+            : `code=${drug.code ?? "none"} sys=${drug.codeSystem ?? "none"} nullFlavor=${drug.nullFlavor ?? "none"}`;
         return `${name}: ${read} | ${said || "silent"}`;
       });
       expect(matrix).toMatchInlineSnapshot(`
         [
-          "single arm: code=314076 nullFlavor=none | silent",
-          "single arm, translation only: code=none nullFlavor=OTH | MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
-          "single arm, nullFlavor only: code=none nullFlavor=UNK | silent",
-          "two materials agreeing: code=314076 nullFlavor=none | MEDICATION_PRODUCT_ARM_REPEATED",
+          "single arm: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | silent",
+          "single arm, translation only: code=none sys=none nullFlavor=OTH | MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
+          "single arm, nullFlavor only: code=none sys=none nullFlavor=UNK | silent",
+          "two materials agreeing: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | MEDICATION_PRODUCT_ARM_REPEATED",
           "two materials disagreeing: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_ARM_REPEATED",
-          "two materials, second has no code: code=314076 nullFlavor=none | MEDICATION_PRODUCT_ARM_REPEATED",
-          "material and labeled agreeing: code=314076 nullFlavor=none | MEDICATION_PRODUCT_ARM_UNEXPECTED",
+          "two materials, second has no code: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | MEDICATION_PRODUCT_ARM_REPEATED",
+          "material and labeled agreeing: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | MEDICATION_PRODUCT_ARM_UNEXPECTED",
           "material and labeled disagreeing: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_ARM_UNEXPECTED",
           "primaries differ, translation shared: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_ARM_UNEXPECTED",
           "both translation-only, shared coarse coding, different strengths: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_ARM_UNEXPECTED",
-          "both translation-only, identical: code=none nullFlavor=OTH | MEDICATION_PRODUCT_ARM_UNEXPECTED MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
-          "both translation-only, one a subset of the other: code=none nullFlavor=OTH | MEDICATION_PRODUCT_ARM_UNEXPECTED MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
-          "material nullFlavor only, labeled translation-only: code=none nullFlavor=UNK | MEDICATION_PRODUCT_ARM_UNEXPECTED MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
-          "material primary, labeled translation-only agreeing: code=314076 nullFlavor=none | MEDICATION_PRODUCT_ARM_UNEXPECTED",
+          "both translation-only, identical: code=none sys=none nullFlavor=OTH | MEDICATION_PRODUCT_ARM_UNEXPECTED MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
+          "both translation-only, one a subset of the other: code=none sys=none nullFlavor=OTH | MEDICATION_PRODUCT_ARM_UNEXPECTED MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
+          "material nullFlavor only, labeled translation-only: code=none sys=none nullFlavor=UNK | MEDICATION_PRODUCT_ARM_UNEXPECTED MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
+          "material primary, labeled translation-only agreeing: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | MEDICATION_PRODUCT_ARM_UNEXPECTED",
           "material primary, labeled translation-only coarser: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_ARM_UNEXPECTED",
           "no code on any arm: no CD | MEDICATION_PRODUCT_ARM_UNEXPECTED MISSING_PRODUCT_CODE",
-          "three materials all agreeing: code=314076 nullFlavor=none | MEDICATION_PRODUCT_ARM_REPEATED",
-          "first material nullFlavor only, second names a drug: code=1191 nullFlavor=none | MEDICATION_PRODUCT_ARM_REPEATED",
+          "three materials all agreeing: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | MEDICATION_PRODUCT_ARM_REPEATED",
+          "first material nullFlavor only, second names a drug: code=1191 sys=2.16.840.1.113883.6.88 nullFlavor=none | MEDICATION_PRODUCT_ARM_REPEATED",
           "primary-asserting arm behind two disagreeing fallback arms: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_ARM_REPEATED MEDICATION_PRODUCT_ARM_UNEXPECTED",
+          "one material, two codes agreeing: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | MEDICATION_PRODUCT_CODE_REPEATED",
+          "one material, two codes naming different drugs: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_CODE_REPEATED",
+          "one material, null-marked code then a naming one: code=none sys=none nullFlavor=UNK | MEDICATION_PRODUCT_CODE_REPEATED",
+          "one material, naming code then a null-marked one: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | MEDICATION_PRODUCT_CODE_REPEATED",
+          "one material, two translation-only codes disagreeing on strength: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_CODE_REPEATED",
+          "labeled arm hides a second drug in its second code: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_ARM_UNEXPECTED MEDICATION_PRODUCT_CODE_REPEATED",
+          "one material, empty code then a naming one: code=none sys=none nullFlavor=none | MEDICATION_PRODUCT_CODE_REPEATED MISSING_CODE_VALUE",
+          "bare second code, richer arm behind it: code=1191 sys=2.16.840.1.113883.6.88 nullFlavor=none | CODE_NARRATIVE_MISMATCH MEDICATION_PRODUCT_ARM_REPEATED MEDICATION_PRODUCT_CODE_REPEATED",
         ]
       `);
     });
@@ -2045,6 +2356,13 @@ describe("clinical entries, arm disagreement through <translation> and repeated 
         );
         expect(withinKind.getMedications()[0]?.drug).toBeUndefined();
         expect(codes(withinKind.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+        // And the same pair as two <code>s inside ONE arm (CCDA-ARM-MULTI-CODE).
+        // Every disagreeing shape above has to survive the innermost nesting
+        // too, or the second <code> is back to being dropped in silence.
+        const withinArm = parseCcda(buildCcda({ sections: materialCode(`${material}${labeled}`) }));
+        expect(withinArm.getMedications()[0]?.drug).toBeUndefined();
+        expect(codes(withinArm.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+        expect(codes(withinArm.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_CODE_REPEATED);
       }
     });
   });

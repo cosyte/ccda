@@ -218,6 +218,24 @@ milestone it stopped at.
   single-arm document's would be, and each state where that would not be enough carries an
   unquietable companion (`MEDICATION_PRODUCT_ARM_CONFLICT`, `MISSING_PRODUCT_CODE`, or
   `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`).
+- **A repeated `<code>` on ONE arm is reported too, and its second `<code>` is no longer dropped from
+  the comparison (`MEDICATION_PRODUCT_CODE_REPEATED`, safety-critical).** `Material.code` and
+  `LabeledDrug.code` are each at most one in CDA R2, and only the first was ever read, so an arm
+  writing an RxNorm code for Lisinopril and a second one for Aspirin handed back Lisinopril and said
+  nothing at all. Every `<code>` on every arm now reaches the comparison, so that document raises
+  `MEDICATION_PRODUCT_ARM_CONFLICT` and `med.drug` is `undefined`. This code is reported **per arm**,
+  and its `position` names which arm carries the repeat, so two offending arms give you two warnings
+  at two places rather than one that points at only one of them. **What you read does not change**:
+  selection still takes each arm's first `<code>` and nothing else, deliberately, because a
+  newly-visible sibling sits earlier in document order and would displace an equally-symboled but
+  richer coding, taking `CODE_NARRATIVE_MISMATCH`, `MISSING_CODE_VALUE`, or a `<translation>` list
+  with it in exchange for a symbol that was already identical. **No profile can quiet this one**, and
+  that is why: on the shape where the arm's first `<code>` asserts a `nullFlavor` and its sibling
+  names the drug, `med.drug?.code` is `undefined` over a document that names the drug one element
+  along, nothing else fires, and this is the only signal. Read `doc.toString()` for the sibling
+  verbatim. On a benign identical repeat it costs you a warning over a document that lost nothing;
+  that over-fire is the price of not letting what the codings say decide whether the cardinality gets
+  named at all.
 - **UCUM validation is grammatical, on a curated atom subset.** The validator checks well-formed UCUM
   against the prefixes/atoms that appear in lab Results and Vital Signs, not the full UCUM registry. A
   valid-but-uncurated atom may read as `NON_UCUM_UNIT`; the raw unit is always preserved. It does not

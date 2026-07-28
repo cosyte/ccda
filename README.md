@@ -172,6 +172,28 @@ identically to one asserting it once. Like the presence warning, it is keyed to 
 to their codings, so an arm carrying no `<code>` counts too. Cardinality and agreement are separate
 facts with separate codes.
 
+**Every `<code>` an arm carries is compared, not just the first**, and a repeated one is reported
+(`MEDICATION_PRODUCT_CODE_REPEATED`, safety-critical). `Material.code` and `LabeledDrug.code` are each
+at most one in CDA R2, so a second `<code>` on one arm is outside the model exactly as a second arm
+is; reading only the first dropped it before anything compared it, so an arm writing Lisinopril and
+Aspirin as sibling `<code>`s handed back Lisinopril and said nothing. That is the conflict rule's own
+failure on a shape it could not see. This code is reported **per arm** (its `position` names which
+one), unlike the repeated-arm code, which states a fact about the `manufacturedProduct` and is
+positioned on it.
+
+**Selection was deliberately not widened with the comparison, so what you read does not change.** A
+second `<code>` is a new candidate rather than a new arm, and it sits earlier in document order than a
+later arm's; selection ranks on "names a product" alone, so admitting it would displace an
+equally-symboled but richer sibling coding, taking `CODE_NARRATIVE_MISMATCH`, `MISSING_CODE_VALUE`, or
+a `<translation>` list down with it, in exchange for a symbol that was already identical. Only the
+arm's lead `<code>` is selected, which is why the new code is **safety-critical** rather than
+tolerable: on the shape where the lead asserts a `nullFlavor` and the sibling names the drug, it is
+the only signal, `med.drug?.code` is `undefined` over a document that names the drug one element
+along, and that is `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`'s harm with a sibling `<code>` in place
+of a `<translation>`. It over-fires on the benign identical repeat as the price of that: deciding from
+what the codings say whether the cardinality gets named is the inversion the repeated-arm code
+already refuses.
+
 **When BOTH arms fall back to translations, sharing one coding is not always enough to agree.** That
 is the one pairing where the shared-coarser-coding hazard above survives, because neither arm asserts
 a primary to compare: two arms translating to a shared coarser concept plus two different strengths

@@ -56,6 +56,7 @@ export const WARNING_CODES = {
   MEDICATION_PRODUCT_ARM_UNEXPECTED: "MEDICATION_PRODUCT_ARM_UNEXPECTED",
   MEDICATION_PRODUCT_ARM_CONFLICT: "MEDICATION_PRODUCT_ARM_CONFLICT",
   MEDICATION_PRODUCT_ARM_REPEATED: "MEDICATION_PRODUCT_ARM_REPEATED",
+  MEDICATION_PRODUCT_CODE_REPEATED: "MEDICATION_PRODUCT_CODE_REPEATED",
   MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY: "MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
   MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED: "MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED",
   PROBLEM_STATUS_INDETERMINATE: "PROBLEM_STATUS_INDETERMINATE",
@@ -874,6 +875,102 @@ export function medicationProductArmRepeated(position: CcdaPosition): CcdaWarnin
   return {
     code: WARNING_CODES.MEDICATION_PRODUCT_ARM_REPEATED,
     message: `manufacturedProduct carries more than one arm of the same kind (manufacturedMaterial or manufacturedLabeledDrug), which CDA R2 models as a choice of one participant; the repeat is reported rather than absorbed, and whether the repeated arms agree is answered separately by MEDICATION_PRODUCT_ARM_CONFLICT.`,
+    position,
+  };
+}
+
+/**
+ * Build a `MEDICATION_PRODUCT_CODE_REPEATED` warning. Emitted when **one**
+ * product arm, a single `manufacturedMaterial` or a single
+ * `manufacturedLabeledDrug`, carries **more than one `<code>` child**.
+ *
+ * The sibling of {@link medicationProductArmRepeated}, one markup layer in, and
+ * it closes the same silent drop. CDA R2 gives `Material` and `LabeledDrug` at
+ * most one `code` each, so a second `<code>` is already outside the model; but
+ * arm selection read only the **first** `<code>` per arm, so the second never
+ * reached the conflict rule and was never mentioned. An arm writing two RxNorm
+ * drugs as sibling `<code>`s therefore handed the first one back as *the*
+ * product, in complete silence, with the second discarded: the identical
+ * "quietly picks between two named drugs" failure
+ * {@link medicationProductArmConflict} exists to refuse, on a shape that rule
+ * could not see. Every `<code>` on every arm is now compared, so that shape
+ * conflicts, and this code reports the cardinality itself.
+ *
+ * **Reported per arm, not per `manufacturedProduct`, which is the one place it
+ * departs from {@link medicationProductArmRepeated}.** That warning states a
+ * fact about the `manufacturedProduct` (its arms repeat) and is positioned on
+ * it; this one states a fact about a *particular arm*, and the `position` names
+ * which. A product with two offending arms draws two warnings at two locations
+ * rather than one warning pointing at only one of them, so the position never
+ * sends a reader to an element that does not carry what the message describes.
+ *
+ * **Keyed to the `<code>` elements, not to what they say**, exactly as the
+ * repeated-arm and unexpected-arm codes are keyed to arms: whether the repeats
+ * *agree* is a separate question with {@link medicationProductArmConflict}
+ * already answering it, and letting agreement decide whether the repeat is named
+ * would make markup content rather than markup shape decide whether a structural
+ * deviation was reported.
+ *
+ * **In `SAFETY_CRITICAL_CODES`, unlike {@link medicationProductArmRepeated}, and
+ * the difference is selection.** With two *arms*, the one naming a product is
+ * the one read, so wherever the repeated-arm code fires alone a drug the
+ * document names was returned and read exactly as a single-arm document's would
+ * have been. With two `<code>`s on **one** arm, selection deliberately reads
+ * only the lead one, so whatever the second says is never on the returned `CD`.
+ * That leaves a state in which this code fires **alone** and a named drug is
+ * lost: the lead `<code>` asserts a `nullFlavor` and the sibling names an RxNorm
+ * product, so the product slot comes back empty over a document that names the
+ * drug one element along. Nothing else fires there. `MISSING_PRODUCT_CODE`
+ * cannot (a `<code>` exists), {@link medicationProductArmConflict} cannot (an
+ * exceptional value is not a rival drug, which is what lets a null-marked arm
+ * lose to a naming one everywhere else), and {@link checkCodeSlot} is quiet by
+ * design on a `nullFlavor`-only slot. That is
+ * {@link medicationProductCodeTranslationOnly}'s harm exactly, with a sibling
+ * `<code>` in place of a `<translation>`, and it is classified the same way for
+ * the same reason: tolerating it would restore a silent empty product slot over
+ * a drug the document names. The milder states are lossy in the same direction,
+ * just less. A `displayName` or a `<translation>` list on the non-lead sibling
+ * is dropped from the model too, and the `displayName` is what
+ * `CODE_NARRATIVE_MISMATCH` reads.
+ *
+ * **So it over-fires on the benign repeat, deliberately.** Two byte-identical
+ * `<code>`s lose nothing, and no profile can quiet the code anyway. Splitting
+ * that shape off into a second code would mean deciding, from what the codings
+ * happen to *say*, whether a structural deviation gets named, which is the exact
+ * inversion {@link medicationProductArmRepeated} refuses one layer out. One
+ * markup shape, one structural fact, one code. The only choice is which way to
+ * be wrong, and over-firing here costs a warning on a coherent document while
+ * under-firing costs a dropped drug on an incoherent one.
+ *
+ * **Nothing about this changes what is read, wherever a product is still
+ * returned at all.** Selection stays on each arm's lead `<code>`, so the
+ * returned `CD` is exactly the one the parser returned before repeated
+ * `<code>`s were considered. The exception is the shapes where the widened
+ * comparison now finds a disagreement: there
+ * {@link medicationProductArmConflict} withholds the product outright, so a
+ * document that used to yield a coded `CD` yields none. That is this slice's
+ * whole point, not a side effect. Admitting the newly-visible
+ * candidates into selection would have displaced richer sibling codings on equal
+ * symbols and taken `CODE_NARRATIVE_MISMATCH` and `MISSING_CODE_VALUE` down with
+ * them. What changed beside this code is only that every `<code>` now reaches
+ * {@link medicationProductArmConflict}'s comparison.
+ *
+ * **Provenance:** that `Material.code` and `LabeledDrug.code` are each at most
+ * one is base CDA R2 structure. Whether a C-CDA template *forbids* the repeat is
+ * a normative question this repo cannot settle without the R2.1 Schematron, so
+ * no conformance verb is claimed: the warning says only that one arm carries
+ * more than one `<code>`.
+ *
+ * @example
+ * ```ts
+ * import { medicationProductCodeRepeated } from "@cosyte/ccda";
+ * const w = medicationProductCodeRepeated({ path: "manufacturedMaterial" });
+ * ```
+ */
+export function medicationProductCodeRepeated(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.MEDICATION_PRODUCT_CODE_REPEATED,
+    message: `The product arm at this position carries more than one <code>, which CDA R2 models as at most one per arm; the repeat is reported rather than absorbed, every <code> on the arm is compared, and whether they agree is answered separately by MEDICATION_PRODUCT_ARM_CONFLICT. No <code> after the first on an arm is ever selected as the product.`,
     position,
   };
 }

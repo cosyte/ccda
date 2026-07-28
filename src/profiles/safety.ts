@@ -169,6 +169,31 @@ export const SAFETY_CRITICAL_CODES: ReadonlySet<WarningCode> = immutableSet<Warn
   // of the same concept is v3 datatype semantics, and the classification rests
   // on the harm ordering.
   WARNING_CODES.MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY,
+  // One product arm carrying more than one <code>, which CDA R2 models as at
+  // most one per arm. Here and NOT with MEDICATION_PRODUCT_ARM_REPEATED, which
+  // is tolerable, and the difference is selection. With two ARMS the one naming
+  // a product is the one read, so wherever that code fires alone a drug the
+  // document names came back. With two <code>s on ONE arm, selection reads the
+  // arm's lead <code> only (widening it would displace richer sibling codings on
+  // equal symbols and take CODE_NARRATIVE_MISMATCH and MISSING_CODE_VALUE with
+  // them), so whatever a later sibling says is never on the returned CD. That
+  // leaves a state where this code fires ALONE and a named drug is lost: a lead
+  // <code> asserting a nullFlavor beside a sibling naming an RxNorm product, so
+  // the slot reads empty over a document that names the drug one element along.
+  // Nothing else can fire there. MISSING_PRODUCT_CODE cannot (a <code> exists),
+  // the conflict rule cannot (an exceptional value is not a rival drug), and
+  // checkCodeSlot is quiet by design on a nullFlavor-only slot. That is
+  // MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY's harm with a sibling <code> in
+  // place of a <translation>, and tolerating it would restore the same silent
+  // empty product slot. It over-fires on the benign identical repeat on purpose:
+  // splitting that off would let what the codings SAY decide whether a
+  // structural deviation is named, the inversion the repeated-arm code refuses
+  // one layer out, and the over-fire costs a warning while the under-fire costs
+  // a drug. Provenance, stated so it is not mistaken for a traced constraint: no
+  // normative SHALL is cited. That Material.code and LabeledDrug.code are each
+  // 0..1 is base CDA R2 structure, and the classification rests on the harm
+  // ordering.
+  WARNING_CODES.MEDICATION_PRODUCT_CODE_REPEATED,
   // A nullFlavor asserted beside a populated value, e.g. a doseQuantity that
   // says both "unknown" and "10 mg". The document contradicts itself, and of
   // the two readings the reassuring one is the one that can hurt a patient,
