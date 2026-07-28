@@ -196,6 +196,65 @@ immutability + explicit mutation, and the profile system.
     exactly as `MISSING_PRODUCT_CODE` does. So state it as **no row goes from warned to silent, and
     no row trades a safety-critical code for a weaker one** rather than as "no row loses a warning",
     which this slice made false.
+    **`CCDA-PLANNED-MED-ARM-CONFLICT-UNREACHABLE` broke even that form, in one place, deliberately,
+    and the exception is measured rather than argued.** Its own 27-row matrix (three variants of
+    nine arm shapes on a Planned Medication Activity) leaves the nine "no act `<code>`" rows
+    byte-identical and the performed-medication matrix untouched. The nine "act `<code>` present"
+    rows are pure gain: base reads an act type into the drug slot and is silent on all nine; each
+    now matches its twin. The nine "act `<code>` + narrative" rows move on `CODE_NARRATIVE_MISMATCH`
+    alone, **eight of them losing it, two of those going warned to silent and two trading it for a
+    tolerable code**. That is a false positive being removed, not a signal: base fired it on **nine
+    of nine**, the clean document included, because it was comparing an `ActSubstanceAdministrationCode`'s
+    `displayName` against a narrative naming a drug, which no conformant document matches. It was a
+    constant, not a predicate. After, it fires on **one of nine**, exactly the row whose structured
+    drug contradicts the narrative, which is the failure it exists to catch and the one base reported
+    identically to the clean document. **No row loses a product warning.** Do not generalize this
+    exception: it is the one code whose _subject_ moved, from the act code to the drug.
+  - **A Planned Medication Activity's `code` is the DRUG, and the consumable is read whether or not
+    the act carries its own `<code>`.** CDA R2 makes `SubstanceAdministration.code` an
+    `ActSubstanceAdministrationCode` (the kind of administration act); the substance participates
+    through `consumable/manufacturedProduct`. So an act `<code>` is not a weaker drug code to fall
+    back on, and `plannedCodeElement` must never return before calling `consumableProductCode` for
+    this variant. It did until `CCDA-PLANNED-MED-ARM-CONFLICT-UNREACHABLE`, returning the direct
+    `<code>` first, which made the act type the planned item's `code` and skipped the product path
+    entirely: **every** warning `consumableProductCode` raises was unreachable at this call site,
+    `MEDICATION_PRODUCT_ARM_CONFLICT` above all, so two arms naming two different drugs on the Plan
+    of Treatment (what a patient is _about to be given_) drew nothing at all. `CODE_NARRATIVE_MISMATCH`
+    was reachable but blind to its subject there, reconciling an act type's label against a narrative
+    that names a drug. The builder is what hid it for so long: it emits the drug in the `consumable`
+    and **no** direct `<code>` for this variant, so no round-trip fixture could produce the shape.
+    The act `<code>` is deliberately **not** on the model for this variant, exactly as it is not for a
+    performed Medication Activity or an Immunization Activity, the other two `consumable` call sites,
+    both of which have always ignored it; it round-trips through `serializeCcda`. The other five
+    planned kinds are untouched, their `<code>` _is_ the planned act and they have no consumable.
+    **What did NOT generalize with it, and must not be claimed: `checkCodeSlot`.** A `PlannedItem.code`
+    is not one of the five wired `CodeSlot`s, so `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`,
+    `UNEXPECTED_CODE_SYSTEM`, `DEPRECATED_CODE_SYSTEM` and `SEMANTIC_CODE_INVALID` **cannot fire on a
+    planned medication's drug** where they all fire on a performed one's, and a
+    `<manufacturedMaterial><code/></manufacturedMaterial>` comes back as a truthy empty `CD` in total
+    silence. `PRE-EXISTING` and unchanged by this slice, but now reachable on every planned medication
+    rather than only on those with no act `<code>`, and a matrix row pins it. Wiring the slot is its
+    own item: it makes five codes newly reachable at a call site and needs its own base-measured
+    matrix, exactly as this slice did. Do not bolt it onto an adjacent change.
+    **Its sharpest consequence, which belongs in that item's acceptance criteria:** the conditional
+    tolerability argument for `MEDICATION_PRODUCT_ARM_UNEXPECTED` and `MEDICATION_PRODUCT_ARM_REPEATED`
+    ("each state where that would not be enough carries an unquietable companion") is **false at this
+    call site**, because the companion it names on the empty-`<code>` shape is `MISSING_CODE_VALUE`,
+    which cannot fire on a `PlannedItem.code`. Measured: a planned medication whose only arm is
+    `<manufacturedLabeledDrug><code/></manufacturedLabeledDrug>` has **no drug identity at all** and
+    draws `MEDICATION_PRODUCT_ARM_UNEXPECTED` alone; two empty-`<code/>` material arms draw
+    `MEDICATION_PRODUCT_ARM_REPEATED` alone. Neither is in `SAFETY_CRITICAL_CODES`, so a profile plus
+    the documented filter-the-expected-noise pattern reduces both to silence. `PRE-EXISTING` and
+    base-identical, pinned by a test rather than left implicit, and it is why wiring the slot is
+    worth doing rather than merely tidy.
+  - **`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`'s precondition is each arm's LEAD `<code>`, and the
+    message now says so.** It used to open "No manufacturedProduct arm asserts a primary `@code`" and
+    call the translation the _only_ place the product was named. Both are false on an arm whose
+    **second** `<code>` asserts a primary, which selection never reads (`armLeadCodes`) and which
+    `MEDICATION_PRODUCT_CODE_REPEATED` reports beside it. `CCDA-ARM-MULTI-CODE` improved the
+    disclosure and deliberately left the clause; it is narrowed now. A safety-critical warning that
+    misdescribes the document it is about is the same defect as one that points at a coding that is
+    not there.
   - `SAFETY_CRITICAL_CODES` is a frozen read-only view, not a `Set` instance: every read operation
     works (including spread), but `instanceof Set` is `false`.
   - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`

@@ -20,10 +20,10 @@ product and discarded the other, in complete silence. That is exactly the failur
 that rule could not see. It is the same failure as the repeated _arm_, one markup layer further in.
 
 Every `<code>` on every arm now reaches the comparison, so that shape conflicts and no product is
-returned. Applies at all three consumable call sites, with one pre-existing limit this slice does
-not change: Medication Activity and Immunization Activity always, and Planned Medication Activity
-only when the planned act carries no `<code>` of its own, because a direct `<code>` short-circuits
-the consumable read before any arm is looked at.
+returned. Applies at all three consumable call sites. It did so with one pre-existing limit this
+slice did not close, Planned Medication Activity only when the planned act carried no `<code>` of
+its own, because a direct `<code>` short-circuited the consumable read before any arm was looked at;
+that limit is closed in the same release by `CCDA-PLANNED-MED-ARM-CONFLICT-UNREACHABLE`.
 
 **Selection was deliberately not widened with it.** "Disagreement is read across every arm, selection
 is not" is the split this area is built on, and a second `<code>` is a new _candidate_ rather than a

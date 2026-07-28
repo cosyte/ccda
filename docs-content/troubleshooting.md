@@ -206,8 +206,15 @@ milestone it stopped at.
   `nullFlavor`-marked idiom nothing else fires at all (`MISSING_PRODUCT_CODE` would be false, an arm
   did carry a `<code>`, and the code-system checks are silent by design on a slot whose only
   assertion is a `nullFlavor`), and on the variant that asserts neither a symbol nor a `nullFlavor`
-  the companion is `MISSING_CODE_VALUE`, which is itself safety-critical. Behind
-  `MEDICATION_PRODUCT_ARM_CONFLICT` it stands down, the same way `MISSING_PRODUCT_CODE` does.
+  the companion is `MISSING_CODE_VALUE`, which is itself safety-critical **at a wired slot**: on a
+  performed medication or an immunization, but not on a planned one, whose `code` is not slot-checked
+  at all (see the Plan of Treatment bullet below). Behind
+  `MEDICATION_PRODUCT_ARM_CONFLICT` it stands down, the same way `MISSING_PRODUCT_CODE` does. **Its
+  precondition is about each arm's LEAD `<code>`, not the arm**: selection reads the first `<code>`
+  on an arm and no other, so an arm whose *second* `<code>` asserts a primary is still a slot with no
+  selected product and still draws this code, with `MEDICATION_PRODUCT_CODE_REPEATED` beside it. The
+  message said "no arm asserts a primary `@code`" and called the translation the *only* place the
+  product was named until `0.0.3`; both were false on precisely that shape.
 - **A repeated arm is reported even when the repeats agree
   (`MEDICATION_PRODUCT_ARM_REPEATED`).** `ManufacturedProduct` models a choice of one participant, so
   two `manufacturedMaterial`s (or two `manufacturedLabeledDrug`s) is outside the model whatever they
@@ -236,6 +243,38 @@ milestone it stopped at.
   verbatim. On a benign identical repeat it costs you a warning over a document that lost nothing;
   that over-fire is the price of not letting what the codings say decide whether the cardinality gets
   named at all.
+- **A Planned Medication Activity's `code` is the drug, not the `substanceAdministration`'s own
+  `<code>`.** If you read `getPlannedItems()` and a `medicationActivity` entry came back with a code
+  that is not a drug (a SNOMED CT "Administration of drug or medicament", say) you were on `0.0.2` or
+  earlier: the direct `<code>` was preferred whenever it was present, and only a planned medication
+  without one ever read its `consumable`. CDA R2 makes `SubstanceAdministration.code` an
+  `ActSubstanceAdministrationCode`, the **kind of administration act**, while the substance
+  participates through `consumable/manufacturedProduct`, so that code was never a drug and reading it
+  into the drug slot short-circuited the entire product path. **Every product warning on this page
+  was unreachable on that variant**, `MEDICATION_PRODUCT_ARM_CONFLICT` above all, so a planned
+  medication whose two `manufacturedProduct` arms named two different drugs was reported with no
+  warning of any kind, on the section that says what a patient is about to be given.
+  `CODE_NARRATIVE_MISMATCH` was reachable but useless there, comparing an act type's label against a
+  narrative that names a drug, so it fired on well-formed documents and stayed quiet about the
+  structured drug contradicting the narrative. All of that is fixed in `0.0.3`. The act `<code>` is
+  not on the model for this variant, as it is not for a performed Medication Activity or an
+  Immunization Activity; read `doc.toString()` if you need it.
+  **What did NOT generalize with it: the code-system and terminology checks.** A `PlannedItem.code`
+  is not one of the five wired `CodeSlot`s (see above), so `checkCodeSlot` is never called on it and
+  `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM`, `DEPRECATED_CODE_SYSTEM` and
+  `SEMANTIC_CODE_INVALID` **cannot fire on a planned medication's drug**, where they all fire on a
+  performed one's. This limit predates the fix and is unchanged by it, but it is now reachable on
+  every planned medication rather than only on those with no act `<code>`, so it is worth stating
+  plainly: a planned drug asserting a `@code` with no `@codeSystem`, or an empty `<code/>`, comes
+  back read and unremarked. That is queued as its own item, not folded in here: wiring the slot makes
+  five codes newly reachable at a call site and needs its own base-measured matrix.
+  **The consequence worth planning around:** on that shape the only warning left can be a
+  profile-tolerable one. A planned medication whose single arm is
+  `<manufacturedLabeledDrug><code/></manufacturedLabeledDrug>` has no drug identity at all and draws
+  `MEDICATION_PRODUCT_ARM_UNEXPECTED` alone; two empty-`<code/>` material arms draw
+  `MEDICATION_PRODUCT_ARM_REPEATED` alone. If you apply a vendor profile and then filter the expected
+  noise, as this documentation elsewhere suggests, that document reaches you silent. **Do not treat a
+  quiet `getPlannedItems()` as a checked one**: test `item.code?.code`, not `item.code`.
 - **UCUM validation is grammatical, on a curated atom subset.** The validator checks well-formed UCUM
   against the prefixes/atoms that appear in lab Results and Vital Signs, not the full UCUM registry. A
   valid-but-uncurated atom may read as `NON_UCUM_UNIT`; the raw unit is always preserved. It does not
