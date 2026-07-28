@@ -2,8 +2,9 @@
 "@cosyte/ccda": patch
 ---
 
-Report a medication product that is named only in a `<translation>`, report a repeated
-`manufacturedProduct` arm, and let two translation-only arms disagree inside one terminology.
+Report a product named in a `<translation>` when no arm's lead `<code>` asserts one,
+report a repeated `manufacturedProduct` arm, and let two translation-only arms disagree inside one
+terminology.
 
 **Two new stable warning codes.** `MEDICATION_PRODUCT_ARM_CONFLICT`'s predicate widens in exactly one
 shape, described below, and it moves in one direction only: it fires on strictly more documents than
