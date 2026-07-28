@@ -663,16 +663,24 @@ export function missingProductCode(position: CcdaPosition): CcdaWarning {
  * flagging the deviation. The selected element is then handed to whatever the
  * call site does with a product code, unchanged by which arm it came off.
  *
- * **There are two states in which nothing is selected at all, and neither is
- * this warning's to carry.** In the first, `MEDICATION_PRODUCT_ARM_CONFLICT`
- * fires beside this one: the arms disagreed, so no product code is selected and
- * no code-system or terminology check runs for that slot. In the second, no arm
- * carried a `<code>` at all (the shape a name-only `LabeledDrug` produces) and
- * `MISSING_PRODUCT_CODE` fires beside this one instead. The classification below
- * is stated conditionally for that reason: it used to be argued from "the drug
- * is present and fully checked", full stop, which stopped being true the moment
- * the conflict state existed, and which was never true of the second state
- * either.
+ * **There are three states in which no product identity comes back, and none of
+ * them is this warning's to carry.** In the first,
+ * `MEDICATION_PRODUCT_ARM_CONFLICT` fires beside this one: the arms disagreed,
+ * so no product code is selected and no code-system or terminology check runs
+ * for that slot. In the second, no arm carried a `<code>` at all (the shape a
+ * name-only `LabeledDrug` produces) and `MISSING_PRODUCT_CODE` fires beside this
+ * one instead. In the third an element **is** selected, so neither of those can
+ * fire, and it still names nothing: an arm whose `<code>` asserts neither a
+ * symbol nor a `nullFlavor`, where the companion is `MISSING_CODE_VALUE`. That
+ * third state was missing from this list, which made the enumeration look
+ * exhaustive when it covered only the shapes where *selection* failed rather
+ * than every shape where *identity* is absent. `MISSING_CODE_VALUE` is in
+ * `SAFETY_CRITICAL_CODES` like the other two, so the classification is
+ * unaffected; the argument for it was incomplete, not wrong. The classification
+ * below is stated conditionally for that reason: it used to be argued from "the
+ * drug is present and fully checked", full stop, which stopped being true the
+ * moment the conflict state existed, and which was never true of the second or
+ * third state either.
  *
  * **Provenance:** the two-arm choice is base CDA R2 structure. Whether the
  * C-CDA template *forbids* the alternate arm is a normative question this repo
@@ -687,23 +695,26 @@ export function missingProductCode(position: CcdaPosition): CcdaWarning {
  * supplies a `TerminologyAdapter`, while a `<translation>` alternate is
  * preserved and never slot-checked at all, so "checked" would claim more than
  * any call site delivers. What the call sites *do* is now
- * uniform. All three consumable sites, a Medication Activity, an Immunization
- * Activity and a Planned Medication Activity, run the selected code through
- * {@link checkCodeSlot} **and** reconcile it against the narrative. It used to
+ * uniform. Every consumable site, a Medication Activity, an Immunization
+ * Activity, a Planned Medication Activity and a Planned Immunization Activity,
+ * runs the selected code through {@link checkCodeSlot} **and** reconciles it
+ * against the narrative. It used to
  * differ, the planned site only reconciling, and that is precisely what made
  * this argument false there: the companion this classification leans on for the
  * empty-`<code>` shape is `MISSING_CODE_VALUE`, which could not then fire on a
  * planned drug.) So this
  * code reports known, meaning-preserving vendor noise a profile may defensibly
- * tolerate. Wherever **no** element was selected, this code is by construction
- * not alone: either `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed) or
- * `MISSING_PRODUCT_CODE` (no arm carried a `<code>` at all, the shape a
- * name-only `LabeledDrug` produces) fires beside it, **both** of which are in
- * `SAFETY_CRITICAL_CODES` and neither of which any profile may quiet. Tolerating
- * this one can therefore never buy silence about an absent or withheld drug,
- * which is why it is deliberately **not** in `SAFETY_CRITICAL_CODES`. Its
- * exclusion is unchanged by that reasoning: it is the justification that was
- * corrected, not the classification.
+ * tolerate. Wherever **no product identity** comes back, this code is by
+ * construction not alone: `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms
+ * disagreed, nothing selected), `MISSING_PRODUCT_CODE` (no arm carried a
+ * `<code>` at all, the shape a name-only `LabeledDrug` produces), or
+ * `MISSING_CODE_VALUE` (an element was selected and asserts neither a symbol nor
+ * a `nullFlavor`) fires beside it. **All three** are in `SAFETY_CRITICAL_CODES`
+ * and none of them may any profile quiet. Tolerating this one can therefore
+ * never buy silence about an absent or withheld drug, which is why it is
+ * deliberately **not** in `SAFETY_CRITICAL_CODES`. Its exclusion is unchanged by
+ * that reasoning: it is the justification that was corrected, not the
+ * classification.
  *
  * @example
  * ```ts
@@ -714,7 +725,7 @@ export function missingProductCode(position: CcdaPosition): CcdaWarning {
 export function medicationProductArmUnexpected(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED,
-    message: `manufacturedProduct carries the manufacturedLabeledDrug arm, which C-CDA's medication templates are not written around; the arm is flagged, and unless a companion warning says the product was withheld (MEDICATION_PRODUCT_ARM_CONFLICT) or absent (MISSING_PRODUCT_CODE) the product code was read and checked as usual.`,
+    message: `manufacturedProduct carries the manufacturedLabeledDrug arm, which C-CDA's medication templates are not written around; the arm is flagged, and unless a companion warning says the product was withheld (MEDICATION_PRODUCT_ARM_CONFLICT), absent (MISSING_PRODUCT_CODE) or unnamed (MISSING_CODE_VALUE) the product code was read and checked as usual.`,
     position,
   };
 }
@@ -857,16 +868,22 @@ export function medicationProductArmConflict(position: CcdaPosition): CcdaWarnin
  * *alone*, a `<code>` element was selected and read exactly as a single-arm
  * document's would have been, so it reports known vendor shape rather than lost
  * clinical data and a profile may defensibly tolerate it. The states in which
- * that sentence would not be enough each carry an unquietable companion:
+ * that sentence would not be enough each carry an unquietable companion, and
+ * there are **four** of them rather than the three this list used to name:
  * `MEDICATION_PRODUCT_ARM_CONFLICT` where the arms named different products and
  * nothing was selected, `MISSING_PRODUCT_CODE` where no arm carried a `<code>`
- * at all, and `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY` where an element was
- * selected but the product is named only in a `<translation>`. All three are in
- * `SAFETY_CRITICAL_CODES`, so tolerating this one can never buy silence about a
- * withheld, absent, or unselected drug. (A selected `<code>` that merely asserts
- * a `nullFlavor` and nothing else is not one of those states: that is the
- * document completely stating the product is unknown, and it reads here exactly
- * as it would on a single arm.)
+ * at all, `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY` where an element was
+ * selected but the product is named only in a `<translation>`, and
+ * `MISSING_CODE_VALUE` where the selected element asserts neither a symbol nor a
+ * `nullFlavor` (two empty-`<code/>` material arms is exactly that shape, and
+ * this code fires on it). The fourth was the one this enumeration omitted; it is
+ * also the companion `CCDA-PLANNED-CODE-SLOT` had to make reachable on a planned
+ * medication for the argument to hold at every consumable call site. All four
+ * are in `SAFETY_CRITICAL_CODES`, so tolerating this one can never buy silence
+ * about a withheld, absent, unselected, or unnamed drug. (A selected `<code>`
+ * that merely asserts a `nullFlavor` and nothing else is not one of those
+ * states: that is the document completely stating the product is unknown, and it
+ * reads here exactly as it would on a single arm.)
  *
  * **Provenance:** that `ManufacturedProduct` models one participant rather than
  * a list is base CDA R2 structure. Whether a C-CDA template *forbids* the repeat

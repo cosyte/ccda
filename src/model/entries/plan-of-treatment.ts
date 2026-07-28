@@ -1,10 +1,49 @@
 /**
- * Plan of Treatment extraction, the six planned-entry templates a Plan of
- * Treatment section (`…22.2.10`) can carry: Planned Act (`…22.4.39`), Planned
- * Encounter (`…22.4.40`), Planned Procedure (`…22.4.41`), Planned Medication
- * Activity (`…22.4.42`), Planned Supply (`…22.4.43`), and Planned Observation
- * (`…22.4.44`). They share a shape, a `code`, `statusCode`, `effectiveTime`,
- * and differ only in element name + template.
+ * Plan of Treatment extraction. This module returns a {@link PlannedItem} for
+ * **seven** entry templates: Planned Act (`…22.4.39`), Planned Encounter
+ * (`…22.4.40`), Planned Procedure (`…22.4.41`), Planned Medication Activity
+ * (`…22.4.42`), Planned Supply (`…22.4.43`), Planned Observation (`…22.4.44`),
+ * and Planned Immunization Activity (`…22.4.120`). They share a shape, a `code`,
+ * `statusCode`, `effectiveTime`, and differ in element name, template, and where
+ * the `code` is read from.
+ *
+ * **Seven is not the number of entry templates the section can carry, and this
+ * docblock used to conflate the two.** It said "the six planned-entry templates
+ * a Plan of Treatment section can carry", which was wrong twice over: it named
+ * six of the seven this module models, and it described that list as the
+ * section's catalog. The Plan of Treatment Section (V2, `…22.2.10`) admits
+ * **eleven** entry templates. Four of them are deliberately **not**
+ * {@link PlannedItem}s and are not returned here: Instruction (`…22.4.20`),
+ * Handoff Communication Participants (`…22.4.141`), Nutrition Recommendation
+ * (`…22.4.130`), and Goal Observation (`…22.4.121`). A Goal Observation is the
+ * clearest of the four: it is `moodCode="GOL"`, which
+ * {@link classifyDisposition} classifies as **neither** performed nor planned,
+ * so calling it a planned item would contradict this package's own mood model.
+ * The other three describe an instruction, a communication, and a dietary
+ * recommendation rather than an act to be performed on the patient at a future
+ * time, which is the question `getPlannedItems()` answers. **Whether they should
+ * be reported as dropped is an open decision, not a settled one**, and it is
+ * recorded as such rather than silently taken here.
+ *
+ * **Nor does this reach a planned entry that is NESTED rather than a direct
+ * `<entry>` act**, for any of the seven kinds: {@link extractPlannedItems} reads
+ * an `<entry>`'s own act and goes no deeper, so a Planned Immunization Activity
+ * inside a Planned Intervention Act (`…22.4.146`, which R2.1 lets contain one) is
+ * still returned as nothing with nothing said. That is a standing limitation of
+ * this accessor, older than any of these variants and deliberately not addressed
+ * here. (A Goal Observation is **not** a second such container: its
+ * `plannedComponent` entryRelationship targets Entry Reference, so it references
+ * a planned entry rather than nesting one.)
+ *
+ * **Planned Immunization Activity was the one genuinely missing member**, and it
+ * matched no root at all until this was fixed: `getPlannedItems()` returned
+ * nothing for it and raised no warning, so a scheduled vaccination vanished from
+ * the model in complete silence while round-tripping byte-for-byte through
+ * `serializeCcda`. A consumer reading `getPlannedItems()` to answer "what is this
+ * patient scheduled to receive" got a clean, warning-free answer with the
+ * vaccination missing from it, which is the confident-wrong reading this package
+ * exists to refuse. Nothing was corrupted, which is exactly why nothing caught
+ * it.
  *
  * **Everything here is future/ordered, never performed.** Each item's
  * `@moodCode` is read into the same performed-vs-planned {@link EventDisposition}
@@ -24,6 +63,7 @@ import { missingProductCode } from "../../parser/warnings.js";
 import {
   PLANNED_ACT,
   PLANNED_ENCOUNTER,
+  PLANNED_IMMUNIZATION_ACTIVITY,
   PLANNED_MEDICATION_ACTIVITY,
   PLANNED_OBSERVATION,
   PLANNED_PROCEDURE,
@@ -59,7 +99,8 @@ export type PlannedItemKind =
   | "procedure"
   | "medicationActivity"
   | "supply"
-  | "observation";
+  | "observation"
+  | "immunizationActivity";
 
 /**
  * A single planned item from the Plan of Treatment. `kind` is the template
@@ -68,12 +109,17 @@ export type PlannedItemKind =
  * the observation variant. `negated` and `nullFlavor` are kept distinct, never
  * collapsed.
  *
- * `code` is the planned act's own `<code>` for five of the six variants. For a
- * `medicationActivity` it is the **drug**, read from
- * `consumable/manufacturedProduct`, and never the `substanceAdministration`'s
- * own `<code>`: that element is an `ActSubstanceAdministrationCode` (the kind of
- * administration act), not the substance. An act `<code>` present on that
- * variant is not read into this field; it round-trips through `doc.toString()`.
+ * `code` is the planned act's own `<code>` for five of the seven variants. For
+ * the two `substanceAdministration` variants, `medicationActivity` and
+ * `immunizationActivity`, it is the **product** (the drug, or the vaccine), read
+ * from `consumable/manufacturedProduct`, and never the
+ * `substanceAdministration`'s own `<code>`: that element is an
+ * `ActSubstanceAdministrationCode` (the kind of administration act), not the
+ * substance. That `[0..1]` cardinality and that binding are **base CDA R2's
+ * `SubstanceAdministration` class**, not a C-CDA constraint: R2.1 constrains
+ * `code` on neither template, which is precisely why an act `<code>` is legal on
+ * both. An act `<code>` present on either variant is not read into this field;
+ * it round-trips through `doc.toString()`.
  *
  * **Absence has three shapes there and only two of them are `undefined`, so do
  * not test this field for truthiness and stop.** It is `undefined` when no arm
@@ -84,14 +130,20 @@ export type PlannedItemKind =
  * marking. Neither is `MISSING_PRODUCT_CODE`, an arm did carry a `<code>`. Read
  * `code?.code`, not `code`.
  *
- * On the `medicationActivity` variant that empty shape is **no longer silent**:
- * the field is slot-checked against the `medication` binding exactly as a
- * performed Medication Activity's `drug` is, so it draws `MISSING_CODE_VALUE`,
- * and a drug code carrying no `@codeSystem` or one outside RxNorm/NDC draws
- * `MISSING_CODE_SYSTEM` or `UNEXPECTED_CODE_SYSTEM`. A `nullFlavor`-only `CD` is
- * a complete statement and stays silent, as it does everywhere else. The other
- * five variants are **not** slot-checked: their `code` is the planned act, which
- * is not one of the five bound `CodeSlot`s.
+ * On the two `substanceAdministration` variants that empty shape is **no longer
+ * silent**: the field is slot-checked exactly as its performed twin's product
+ * is, so it draws `MISSING_CODE_VALUE`. `medicationActivity` is checked at the
+ * `medication` binding (RxNorm/NDC, as a performed Medication Activity's `drug`
+ * is) and `immunizationActivity` at the `vaccine` binding (**CVX only**, as an
+ * Immunization Activity's `vaccine` is), so a product code carrying no
+ * `@codeSystem` or one outside its binding draws `MISSING_CODE_SYSTEM` or
+ * `UNEXPECTED_CODE_SYSTEM`. The two bindings differ: **NDC is expected on a drug
+ * and unexpected on a vaccine**, so an NDC-coded planned vaccine draws
+ * `UNEXPECTED_CODE_SYSTEM` where an NDC-coded planned drug does not, matching
+ * each variant's performed twin rather than each other. A `nullFlavor`-only `CD`
+ * is a complete statement and stays silent, as it does everywhere else. The
+ * other five variants are **not** slot-checked: their `code` is the planned act,
+ * which is not one of the five bound `CodeSlot`s.
  *
  * @example
  * ```ts
@@ -115,7 +167,24 @@ export interface PlannedItem {
   readonly narrative?: string;
 }
 
-/** The element name + template root for each planned-entry variant. @internal */
+/**
+ * The element name + template root for each planned-entry variant.
+ *
+ * **Order is load-bearing and the immunization variant is deliberately last.**
+ * {@link extractPlannedItems} takes the first root an entry's act matches and
+ * stops, so this array ranks the templates for an act that declares more than
+ * one of them. Both `substanceAdministration` variants read the same
+ * `consumable/manufacturedProduct`, so an act carrying **both** `…22.4.42` and
+ * `…22.4.120` yields the same `code` either way; what the ranking decides is the
+ * reported `kind` and, with it, which binding the slot check uses (RxNorm/NDC
+ * against CVX). Appending rather than inserting keeps that act reading exactly
+ * as it read before `…22.4.120` was recognized at all, which is the difference
+ * between a measured no-op and a row that could go from warned to silent (a
+ * CVX-coded act read as a planned medication draws `UNEXPECTED_CODE_SYSTEM`;
+ * read as a planned immunization it draws nothing). Nothing in a document that
+ * stacks the two templates ranks them, so the tie is broken by not moving.
+ * A matrix row pins it. @internal
+ */
 const PLANNED_VARIANTS: ReadonlyArray<{
   readonly element: string;
   readonly root: string;
@@ -131,12 +200,46 @@ const PLANNED_VARIANTS: ReadonlyArray<{
   },
   { element: "supply", root: PLANNED_SUPPLY, kind: "supply" },
   { element: "observation", root: PLANNED_OBSERVATION, kind: "observation" },
+  {
+    element: "substanceAdministration",
+    root: PLANNED_IMMUNIZATION_ACTIVITY,
+    kind: "immunizationActivity",
+  },
 ];
 
 /**
+ * The planned variants whose `code` is the **product in the `consumable`**, not
+ * the act's own `<code>`. Both are `substanceAdministration`s; C-CDA puts the
+ * substance in `consumable/manufacturedProduct` for each, and the act's own
+ * `<code>` is base CDA R2's `ActSubstanceAdministrationCode` on both (R2.1
+ * constrains `code` on neither template). @internal
+ */
+const CONSUMABLE_KINDS: ReadonlySet<PlannedItemKind> = new Set<PlannedItemKind>([
+  "medicationActivity",
+  "immunizationActivity",
+]);
+
+/**
+ * The `CodeSlot` each planned variant's `code` is checked against, for the two
+ * variants that have one. Every other kind is absent here and unchecked; see
+ * {@link checkPlannedCodeSlot} for why that is a choice rather than a
+ * necessity. @internal
+ */
+const PLANNED_CODE_SLOTS: ReadonlyMap<PlannedItemKind, "medication" | "vaccine"> = new Map([
+  ["medicationActivity", "medication"],
+  ["immunizationActivity", "vaccine"],
+]);
+
+/**
  * Extract every planned item from a Plan of Treatment `<section>` element. Each
- * `<entry>` whose act carries one of the six planned-entry templates becomes a
- * {@link PlannedItem}. Never throws.
+ * `<entry>` whose act carries one of the seven templates in
+ * {@link PLANNED_VARIANTS} becomes a {@link PlannedItem}. Two shapes are
+ * deliberately **not** returned, and neither raises a warning. The section's four
+ * other admissible entry templates (Instruction, Handoff Communication
+ * Participants, Nutrition Recommendation, Goal Observation) are not planned
+ * items. And only an `<entry>`'s **own** act is read: a planned entry nested
+ * inside another act (a Planned Intervention Act, `…22.4.146`) is not reached, for
+ * any of the seven kinds. Never throws.
  *
  * @example
  * ```ts
@@ -210,28 +313,47 @@ function buildPlannedItem(
 
 /**
  * Slot-check a planned item's `code` against the terminologies C-CDA expects
- * there. Only the `medicationActivity` variant is wired, and only to the
- * `medication` slot.
+ * there. Two of the seven variants are wired: `medicationActivity` to the
+ * `medication` slot, `immunizationActivity` to the `vaccine` slot.
  *
- * **Why that variant and no other.** A planned item's `code` is the planned act
- * itself for five of the six variants: a LOINC observation, a SNOMED act, a CPT
+ * **Why those two and no others.** A planned item's `code` is the planned act
+ * itself for the other five variants: a LOINC observation, a SNOMED act, a CPT
  * encounter, a SNOMED or ICD-10-PCS procedure, a SNOMED supply. None of those is
- * one of the five bound `CodeSlot`s, and there is no binding to check them
- * against that this repo can cite without the normative R2.1 value sets, so
- * inventing one would flag conformant documents. The `medicationActivity`
- * variant is the exception because its `code` is not an act at all: it is the
- * **drug**, read from `consumable/manufacturedProduct` exactly as a performed
- * Medication Activity's `drug` is (see {@link plannedCodeElement}), so it is the
- * same coded value in the same terminology at the same slot, and it gets the
- * same check.
+ * one of the five bound `CodeSlot`s. The two `substanceAdministration` variants
+ * are the exception because their `code` is not an act at all: it is the product
+ * from `consumable/manufacturedProduct` (see {@link plannedCodeElement}), the
+ * same coded value in the same terminology at the same slot as its performed
+ * twin's `drug` / `vaccine`, so it gets the same check. **The two bindings are
+ * not the same binding**: `medication` expects RxNorm **or** NDC, `vaccine`
+ * expects CVX alone, so an NDC-coded planned vaccine draws
+ * `UNEXPECTED_CODE_SYSTEM` and an NDC-coded planned drug does not. Each variant
+ * matches its own performed twin, which is the bar; matching each other would
+ * mean inventing a binding for one of them.
+ *
+ * **Leaving the other five unchecked is a CHOICE, not a necessity, and the
+ * earlier wording overstated it.** It used to say binding them "would mean
+ * inventing a value set this repo cannot cite without the normative R2.1
+ * artifacts". That is true of the *system* checks only. `checkCodeSlot` fires
+ * `MISSING_CODE_VALUE` and `MISSING_CODE_SYSTEM` **before** it reads
+ * `SLOT_BINDINGS[slot]` at all: the first asks whether the element names any
+ * symbol or declares a `nullFlavor`, the second whether an asserted symbol names
+ * any system. Neither consults a binding, so both could be raised on a planned
+ * act's `<code>` today without citing a value set. Only
+ * `UNEXPECTED_CODE_SYSTEM`, `DEPRECATED_CODE_SYSTEM` and the adapter tier need
+ * one. So the honest statement is that this package **has chosen** not to report
+ * an empty or system-less `<code>` on the five act-coded planned kinds, not that
+ * it cannot. **Do not quietly widen it either way**: raising those two on five
+ * more kinds changes what conformant documents report and needs its own argued
+ * decision and its own base-measured matrix, exactly as wiring this variant did.
  *
  * **What this makes reachable, stated exactly rather than roundly.** Four codes,
  * not five: `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM`
  * and (with a caller-supplied `TerminologyAdapter`) `SEMANTIC_CODE_INVALID`.
- * `DEPRECATED_CODE_SYSTEM` is **not** among them: the `medication` slot's
- * binding declares no deprecated systems, so that code cannot fire at this slot
- * on a *performed* medication either, and parity is the whole claim here. An
- * ICD-9 OID on a drug draws `UNEXPECTED_CODE_SYSTEM` in both places.
+ * `DEPRECATED_CODE_SYSTEM` is **not** among them: neither the `medication` nor
+ * the `vaccine` binding declares any deprecated system, so that code cannot fire
+ * at either slot on a *performed* medication or immunization either, and parity
+ * is the whole claim here. An ICD-9 OID on a drug or a vaccine draws
+ * `UNEXPECTED_CODE_SYSTEM` in both places.
  *
  * **The gap it closes.** `MEDICATION_PRODUCT_ARM_UNEXPECTED` and
  * `MEDICATION_PRODUCT_ARM_REPEATED` are deliberately tolerable, and that rests
@@ -245,11 +367,15 @@ function buildPlannedItem(
  * which the documented filter-the-expected-noise pattern reduces to silence. On
  * the Plan of Treatment, which says what a patient is about to be given.
  *
- * **Monotone by construction, not by argument.** `checkCodeSlot` only ever
- * emits; it selects nothing, withholds nothing, and does not touch the returned
- * `CD`. So no document can go from warned to silent here and none can lose a
- * product code. The matrix in `test/entries.test.ts` measures that against base
- * rather than asserting it. @internal
+ * **This function is monotone by construction; the slice that added the
+ * `vaccine` row is not, and the two must not be run together.**
+ * `checkCodeSlot` only ever emits: it selects nothing, withholds nothing, and
+ * does not touch the returned `CD`, so nothing routed through here can go from
+ * warned to silent. Recognizing a **new template** is a different kind of
+ * change, because it moves what is extracted, so it can move rows in both
+ * directions and the ordering rule on {@link PLANNED_VARIANTS} exists to bound
+ * that. Both are measured against base by the matrices in
+ * `test/entries.test.ts` rather than argued. @internal
  */
 function checkPlannedCodeSlot(
   code: CD | undefined,
@@ -257,18 +383,20 @@ function checkPlannedCodeSlot(
   position: { readonly path?: string; readonly line?: number; readonly column?: number },
   ctx: ParseCtx,
 ): void {
-  if (kind !== "medicationActivity") return;
-  checkCodeSlot(code, "medication", position, ctx);
+  const slot = PLANNED_CODE_SLOTS.get(kind);
+  if (slot === undefined) return;
+  checkCodeSlot(code, slot, position, ctx);
 }
 
 /**
- * The code element for a planned item: the direct `<code>` for five of the six
- * variants, and the `consumable/manufacturedProduct` product code for a Planned
- * Medication Activity (whose drug lives in the consumable, on either arm of the
- * CDA R2 `ManufacturedProduct` choice).
+ * The code element for a planned item: the direct `<code>` for five of the seven
+ * variants, and the `consumable/manufacturedProduct` product code for the two
+ * `substanceAdministration` variants, a Planned Medication Activity (drug) and a
+ * Planned Immunization Activity (vaccine), each of whose product lives in the
+ * consumable, on either arm of the CDA R2 `ManufacturedProduct` choice.
  *
- * **A Planned Medication Activity's drug is never the act's own `<code>`, so
- * the consumable is read whether or not one is present.** In CDA R2
+ * **Neither one's product is ever the act's own `<code>`, so the consumable is
+ * read whether or not one is present.** In CDA R2
  * `SubstanceAdministration.code` is an `ActSubstanceAdministrationCode`, the
  * *kind of administration act* ("drug therapy", "immunization"); the substance
  * itself participates through `consumable/manufacturedProduct`. Nothing about
@@ -304,28 +432,41 @@ function checkPlannedCodeSlot(
  * why no round-trip test could ever exercise the defect.
  *
  * What is given up is stated rather than hidden: the act `<code>`'s coding is
- * not on the model for this variant, as it is not for the other two call sites.
- * It survives verbatim, `serializeCcda` re-emits the parsed DOM, so
- * `doc.toString()` still carries it. Promoting it into the drug slot is the
- * manufactured reading this area refuses everywhere else. The other five
- * planned kinds are untouched: their `<code>` *is* the planned act, and they
- * have no consumable to read. @internal
+ * not on the model for either consumable-bearing variant, as it is not for the
+ * other two call sites. It survives verbatim, `serializeCcda` re-emits the
+ * parsed DOM, so `doc.toString()` still carries it. Promoting it into the
+ * product slot is the manufactured reading this area refuses everywhere else.
+ * The other five planned kinds are untouched: their `<code>` *is* the planned
+ * act, and they have no consumable to read.
+ *
+ * **The Planned Immunization Activity joined this path rather than getting one
+ * of its own, because it has the identical shape**: a `substanceAdministration`
+ * in a planned mood, base CDA R2's `code` `[0..1]` `ActSubstanceAdministrationCode`
+ * (R2.1 constrains `code` on neither template), and C-CDA's
+ * `consumable/manufacturedProduct`
+ * `[1..1]` carrying Immunization Medication Information (`…22.4.54`), whose
+ * `manufacturedMaterial/code` is the CVX. So every product warning
+ * {@link consumableProductCode} raises, which was reachable on a planned
+ * medication only from `CCDA-PLANNED-MED-ARM-CONFLICT-UNREACHABLE` onwards,
+ * reaches a planned vaccination too; before this it reached nothing there,
+ * because the entry was never matched at all. @internal
  */
 function plannedCodeElement(
   el: Element,
   kind: PlannedItemKind,
   ctx: ParseCtx,
 ): Element | undefined {
-  // The five non-medication kinds: the direct <code> is the planned act itself,
-  // and an absence there is not a lost drug, so nothing is flagged.
-  if (kind !== "medicationActivity") return child(el, "code");
+  // The five act-coded kinds: the direct <code> is the planned act itself, and
+  // an absence there is not a lost product, so nothing is flagged.
+  if (!CONSUMABLE_KINDS.has(kind)) return child(el, "code");
   const { el: productEl, conflicted } = consumableProductCode(el, ctx);
-  // A planned medication with no product code on any arm has no drug at all,
-  // which is flagged for the same reason it is on a performed Medication
-  // Activity: a planned dose of nothing is not a lesser gap. The one exception
-  // is a product withheld because the arms named different drugs, which already
-  // drew the stronger `MEDICATION_PRODUCT_ARM_CONFLICT`; "no arm yielded a
-  // code" would be false there, so the backstop stands down.
+  // A planned medication or vaccination with no product code on any arm has no
+  // product at all, which is flagged for the same reason it is on a performed
+  // Medication or Immunization Activity: a planned dose of nothing is not a
+  // lesser gap. The one exception is a product withheld because the arms named
+  // different products, which already drew the stronger
+  // `MEDICATION_PRODUCT_ARM_CONFLICT`; "no arm yielded a code" would be false
+  // there, so the backstop stands down.
   if (productEl === undefined && conflicted !== true) ctx.emit(missingProductCode(positionOf(el)));
   return productEl;
 }

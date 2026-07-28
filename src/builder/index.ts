@@ -28,6 +28,7 @@ export type {
   BuildCcdaPlannedAct,
   BuildCcdaPlannedOrder,
   BuildCcdaPlannedObservation,
+  BuildCcdaPlannedImmunization,
   BuildCcdaFamilyHistory,
   BuildCcdaFamilyMember,
   BuildCcdaFamilyHistoryObservation,

@@ -15,7 +15,7 @@ lenient parser that turns real-world, vendor-quirky input into **warnings** rath
 [`@xmldom/xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) (exact-pinned), the hardened W3C-DOM
 substrate for C-CDA's XML.
 
-> **Status:** **published on npm at `0.0.1`** and **public**, still pre-alpha on the cosyte `0.0.x`
+> **Status:** **published on npm at `0.0.2`** and **public**, still pre-alpha on the cosyte `0.0.x`
 > version ladder (`0.0.x` until first alpha). The parser ships
 > document recognition, the US Realm header + patient demographics, section framing, the
 > reconciliation triad (Problems / Medications / Allergies), the discrete-data families
@@ -155,10 +155,13 @@ behind it because "no arm yielded a code" would be false. Nothing is lost, `seri
 the parsed DOM, so every arm round-trips byte-for-byte. The cost is stated rather than hidden: with
 no code selected, the code-system and terminology checks have nothing to run on for that slot, which
 is why the conflict warning is safety-critical and why it is scoped this narrowly. It is also why
-`MEDICATION_PRODUCT_ARM_UNEXPECTED` can stay tolerable: wherever no code was selected it is not
-alone, because either `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed) or
-`MISSING_PRODUCT_CODE` (no arm carried a `<code>` at all, which is what a name-only `LabeledDrug`
-produces) is beside it, and both are safety-critical and unquietable by a profile.
+`MEDICATION_PRODUCT_ARM_UNEXPECTED` can stay tolerable: wherever no product identity comes back it is
+not alone, because `MEDICATION_PRODUCT_ARM_CONFLICT` (the arms disagreed), `MISSING_PRODUCT_CODE` (no
+arm carried a `<code>` at all, which is what a name-only `LabeledDrug` produces) or
+`MISSING_CODE_VALUE` (an element was selected and asserts neither a symbol nor a `nullFlavor`) is
+beside it, and all three are safety-critical and unquietable by a profile. That third one belongs in
+the list and was missing from it until `0.0.3`: the enumeration covered the shapes where _selection_
+failed, not every shape where _identity_ is absent.
 
 **What an arm names is its `<code>`'s own `@code`, or, when it asserts none, its `<translation>`
 alternates.** `nullFlavor="OTH"` beside a `<translation>` is the documented C-CDA idiom for "not
@@ -195,7 +198,8 @@ it is not (two arms, neither asserting a primary, the translation on the one tha
 no product-naming coding is on the returned `CD` at all and the coding is reachable only through
 `doc.toString()`, which re-emits every arm verbatim. On the `nullFlavor`-marked idiom it is the lone
 signal; on the variant that asserts neither a symbol nor a `nullFlavor`, `MISSING_CODE_VALUE` fires
-beside it, at all three call sites alike, a planned medication's drug included (see above). It stands
+beside it, at every consumable call site alike, a planned medication's drug and a planned
+vaccination's vaccine included (see above). It stands
 down behind `MEDICATION_PRODUCT_ARM_CONFLICT`, the stronger statement about the same slot.
 
 **A repeated arm is reported whether or not it agrees** (`MEDICATION_PRODUCT_ARM_REPEATED`, tolerable
@@ -281,13 +285,23 @@ normalized away**. An unrecognized `value xsi:type` is kept as `unsupported`; no
 
 ## What it extracts: plan of treatment, status, and history sections
 
-- **Plan of Treatment** via `getPlannedItems()`: the six planned-entry templates a Plan of Treatment
-  section (`…22.2.10`) can carry: Planned Act (`…22.4.39`), Encounter (`…22.4.40`), Procedure
-  (`…22.4.41`), Medication Activity (`…22.4.42`), Supply (`…22.4.43`), and Observation (`…22.4.44`),
-  kept apart by a `kind` discriminant. **Everything here is future/ordered, never performed:** each
-  item's `moodCode` is read into the same performed-vs-planned `disposition` as Procedures (a planned
-  mood → `"planned"`), and the two are **never conflated**; a missing/unrecognized mood leaves
-  `disposition` undefined rather than guessing.
+- **Plan of Treatment** via `getPlannedItems()`: seven planned-entry templates, kept apart by a `kind`
+  discriminant: Planned Act (`…22.4.39`), Encounter (`…22.4.40`), Procedure (`…22.4.41`), Medication
+  Activity (`…22.4.42`), Supply (`…22.4.43`), Observation (`…22.4.44`), and Immunization Activity
+  (`…22.4.120`). **Seven is what this returns, not what the section can hold.** A Plan of Treatment
+  section (`…22.2.10`) admits eleven entry templates; the four it does not return are Instruction
+  (`…22.4.20`), Handoff Communication Participants (`…22.4.141`), Nutrition Recommendation
+  (`…22.4.130`) and Goal Observation (`…22.4.121`), none of which is an act to be performed on the
+  patient at a future time. A Goal Observation is the clearest: it is `moodCode="GOL"`, which this
+  parser classifies as neither performed nor planned. Only an `<entry>`'s **own** act is read, so a
+  planned entry nested inside another act (a Planned Intervention Act, `…22.4.146`) is not returned
+  either, for any of the seven kinds, and nothing is raised about it. **The Planned Immunization Activity was missing
+  until `0.0.3`**, matching no template at all, so a scheduled vaccination was absent from
+  `getPlannedItems()` with no warning to find it by. Its `code` is the **vaccine** from the
+  `consumable`, checked against CVX, exactly as a performed Immunization Activity's `vaccine` is.
+  **Everything here is future/ordered, never performed:** each item's `moodCode` is read into the same
+  performed-vs-planned `disposition` as Procedures (a planned mood → `"planned"`), and the two are
+  **never conflated**; a missing/unrecognized mood leaves `disposition` undefined rather than guessing.
 - **Functional Status** / **Mental Status** via `getFunctionalStatus()` / `getMentalStatus()`: the
   Functional/Mental Status Observations (`…22.4.67` / `…22.4.74`), read whether standalone or clustered
   in a status Organizer (`…22.4.66` / `…22.4.75`), plus **direct-entry Assessment Scale Observations**
@@ -453,10 +467,14 @@ Supporting Observations `…22.4.86` as scored components; read back `assessment
 `domain`-tagged from its section, the score never fabricated). It also emits **Past Medical History** (historical problems as
 **bare** Problem Observations `…22.4.4` directly under `<entry>`, **not** wrapped in a Problem Concern
 Act, read back via `getPastMedicalHistory` and never double-counted as an active `getProblems`
-concern), **Plan of Treatment** (the six planned-entry templates: Planned Act / Encounter / Procedure /
-Medication Activity / Supply / Observation, each future/ordered with `statusCode` fixed to `active`,
-read back via `getPlannedItems` as `disposition: "planned"` and never conflated with a performed
-Procedure/Encounter), and **Family History** (a Family History Organizer `…22.4.45` per relative,
+concern), **Plan of Treatment** (the seven planned-entry templates: Planned Act / Encounter / Procedure /
+Medication Activity / Supply / Observation / Immunization Activity, each future/ordered with
+`statusCode` fixed to `active`, read back via `getPlannedItems` as `disposition: "planned"` and never
+conflated with a performed Procedure/Encounter; the immunization variant's `effectiveTime` is required
+rather than optional, because its template makes it `[1..1]`. Planned Medication Activity is
+`[1..1]` too and its builder input still types the field as optional, so a planned medication can be
+built short that element; the five non-`substanceAdministration` variants are genuinely `[0..1]`), and
+**Family History** (a Family History Organizer `…22.4.45` per relative,
 carrying the `relatedSubject` relationship (SNOMED CT), optional gender/birthTime/`sdtc:deceasedInd`,
 with Family History Observations `…22.4.46` for each condition, optionally nesting an Age Observation
 `…22.4.31` (age at onset) and a Family History Death Observation `…22.4.47` (cause of death); read back

@@ -20,7 +20,7 @@ product and discarded the other, in complete silence. That is exactly the failur
 that rule could not see. It is the same failure as the repeated _arm_, one markup layer further in.
 
 Every `<code>` on every arm now reaches the comparison, so that shape conflicts and no product is
-returned. Applies at all three consumable call sites. It did so with one pre-existing limit this
+returned. Applies at every consumable call site. It did so with one pre-existing limit this
 slice did not close, Planned Medication Activity only when the planned act carried no `<code>` of
 its own, because a direct `<code>` short-circuited the consumable read before any arm was looked at;
 that limit is closed in the same release by `CCDA-PLANNED-MED-ARM-CONFLICT-UNREACHABLE`.

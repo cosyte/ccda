@@ -1471,7 +1471,8 @@ describe("buildCcda, past medical history round-trip", () => {
 });
 
 describe("buildCcda, plan of treatment round-trip", () => {
-  /** A build carrying all six planned-entry variants AND a *performed* procedure,
+  /** A build carrying six of the seven planned-entry variants AND a *performed* procedure,
+   * (the seventh, `immunizationActivity`, has its own round-trip test in `entries.test.ts`),
    * to prove the planned items are never conflated with the performed acts, each
    * reads back with disposition "planned", statusCode "active", and a planned mood,
    * while the performed procedure stays disposition "performed". */
@@ -1572,7 +1573,7 @@ describe("buildCcda, plan of treatment round-trip", () => {
     expect(obs?.value?.kind === "coded" ? obs.value.code.code : undefined).toBe("281900007");
   });
 
-  it("emits the Plan of Treatment section (LOINC 18776-5, 2014-06-09, six planned templates, no entries-required variant)", () => {
+  it("emits the Plan of Treatment section (LOINC 18776-5, 2014-06-09, six of the seven planned templates, no entries-required variant)", () => {
     const doc = buildCcda(PLAN_INIT);
     expect(doc.findSection("planOfTreatment")?.code?.code).toBe("18776-5");
     const xml = serializeCcda(doc);

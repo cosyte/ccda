@@ -71,8 +71,8 @@ immutability + explicit mutation, and the profile system.
     `ClinicalDocument.id` (`CcdaEditError` `SOURCE_MISSING_ID`) and treats a null-marked `setId` as
     absent, rather than copying `root`/`extension` forward and laundering the marking away.
   - A medication/vaccine product is read from **either** arm of the CDA R2 `ManufacturedProduct`
-    choice, at all three consumable call sites (Medication Activity, Immunization Activity, Planned
-    Medication Activity). The **presence** of a `manufacturedLabeledDrug` arm is flagged
+    choice, at every consumable call site (Medication Activity, Immunization Activity, Planned
+    Medication Activity, Planned Immunization Activity). The **presence** of a `manufacturedLabeledDrug` arm is flagged
     `MEDICATION_PRODUCT_ARM_UNEXPECTED` (deliberately tolerable; keyed to the arm, not its `<code>`,
     so a name-only `LabeledDrug` is reported too). **Its tolerability is argued conditionally, and
     must stay that way:** wherever it fires _alone_ a `<code>` element was selected and read exactly
@@ -152,13 +152,20 @@ immutability + explicit mutation, and the profile system.
     the **same kind** is `MEDICATION_PRODUCT_ARM_REPEATED`, **not** safety-critical, keyed to the
     arms rather than to their codings exactly as the presence warning is; where it fires alone a
     `<code>` was selected and read exactly as a single-arm document's would have been, and each state
-    where that would not be enough carries an unquietable companion
+    where that would not be enough carries an unquietable companion, and there are **four** of them
+    rather than the three this list named until `CCDA-PLANNED-IMMUNIZATION-DROPPED`
     (`MEDICATION_PRODUCT_ARM_CONFLICT`, `MISSING_PRODUCT_CODE`,
-    `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`). A selected `<code>` asserting only a `nullFlavor`
+    `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`, and `MISSING_CODE_VALUE` where the selected `<code>`
+    asserts neither a symbol nor a `nullFlavor`, which is what two empty-`<code/>` material arms
+    produce). A selected `<code>` asserting only a `nullFlavor`
     and no `<translation>` is **not** one of those states: that is the document completely stating
     the product is unknown, and it reads exactly as it would on a single arm. **`MEDICATION_PRODUCT_ARM_UNEXPECTED`'s
-    own argument is unchanged and still names two companions**, because it enumerates the states in
-    which **nothing is selected**, and the translation-only state does select an element.
+    own argument names three, not two**: it used to enumerate only the states in
+    which **nothing is selected** (`MEDICATION_PRODUCT_ARM_CONFLICT`, `MISSING_PRODUCT_CODE`), which
+    made it read as exhaustive when it was not. The third is `MISSING_CODE_VALUE`, where an element
+    **is** selected and still names nothing. The translation-only state also selects an element, but
+    it is not one of that code's companions, because a translation-only slot did yield a coding.
+    All of them are safety-critical, so no classification moved; the argument was incomplete.
   - **A repeated `<code>` on ONE arm is the same cardinality fact one markup layer in**
     (`MEDICATION_PRODUCT_CODE_REPEATED`, **safety-critical**). It is emitted **per arm** and
     positioned on the arm that carries the repeat, because it states a fact about that arm rather
@@ -240,10 +247,15 @@ immutability + explicit mutation, and the profile system.
     drug, read from the same `consumable/manufacturedProduct` a performed Medication Activity reads,
     so it is the same coded value in the same terminology at the same slot and gets the same check.
     The other five carry the planned act itself (LOINC observation, CPT encounter, SNOMED
-    act/procedure/supply); none is one of the five bound `CodeSlot`s, and binding them would mean
-    inventing a value set this repo cannot cite without the normative R2.1 artifacts, so an empty or
+    act/procedure/supply); none is one of the five bound `CodeSlot`s, so an empty or
     unexpectedly-coded `<code>` on those five is still read and unremarked. **Do not "finish the job"
-    by wiring them.**
+    by wiring them.** **But state WHY correctly, because this bullet overstated it until
+    `CCDA-PLANNED-IMMUNIZATION-DROPPED`.** "Binding them would mean inventing a value set this repo
+    cannot cite" is true of the **system** checks only. `checkCodeSlot` emits `MISSING_CODE_VALUE` and
+    `MISSING_CODE_SYSTEM` **before** it reads `SLOT_BINDINGS[slot]`, so both could be raised on an
+    act-coded planned `<code>` today without citing any value set. Leaving those five unchecked is a
+    **choice, not a necessity**; widening it is a separate argued decision with its own matrix, not a
+    tidy-up.
     **Four codes became newly reachable, not five, and the difference is worth keeping straight:**
     `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM` and (with an adapter)
     `SEMANTIC_CODE_INVALID`. `DEPRECATED_CODE_SYSTEM` is **not** among them, because the `medication`
@@ -258,7 +270,7 @@ immutability + explicit mutation, and the profile system.
     at all** and drew `MEDICATION_PRODUCT_ARM_UNEXPECTED` alone; two empty-`<code/>` material arms drew
     `MEDICATION_PRODUCT_ARM_REPEATED` alone. Neither is in `SAFETY_CRITICAL_CODES`, so a profile plus
     the documented filter-the-expected-noise pattern reduced both to silence. Both now carry
-    `MISSING_CODE_VALUE`. The argument holds at all three consumable call sites.
+    `MISSING_CODE_VALUE`. The argument holds at every consumable call site.
     **This is the one slice in the series that satisfies the monotonicity invariant WHOLE, and that
     is a property of the change rather than a claim about it:** `checkCodeSlot` only emits. It selects
     nothing, withholds nothing and never touches the `CD`, so no row can go warned to silent, trade a
@@ -268,6 +280,67 @@ immutability + explicit mutation, and the profile system.
     moving, every one of them by gaining the code its twin already drew, and after the change the two
     columns of all thirteen shapes agree exactly. The pre-existing 27-row planned-arm matrix moved
     three rows, each purely gaining `MISSING_CODE_VALUE`.
+  - **`getPlannedItems()` returns SEVEN templates, and the Plan of Treatment section admits ELEVEN.
+    Keep those two numbers apart.** The module docblock said "the six planned-entry templates a Plan
+    of Treatment section can carry" and was wrong twice: it named six of the seven modelled, and it
+    called that list the section's catalog. The seventh is **Planned Immunization Activity
+    (`…22.4.120`)**, which matched no root at all until `CCDA-PLANNED-IMMUNIZATION-DROPPED`: a
+    scheduled vaccination came back as **no item and no warning**, so a consumer asking
+    `getPlannedItems()` what a patient was scheduled to receive got a clean, warning-free answer with
+    the vaccination missing. It round-tripped byte-for-byte, which is exactly why nothing caught it.
+    Its `code` is the **vaccine from the `consumable`**, never the act's own `<code>` (identical in
+    shape to a Planned Medication Activity: base CDA R2's `code` `[0..1]`
+    `ActSubstanceAdministrationCode`, which R2.1 constrains on **neither** template, and C-CDA's
+    `consumable` `[1..1]` carrying Immunization Medication Information `…22.4.54`), and it is
+    slot-checked at the **`vaccine`** binding, **CVX only**. So an
+    NDC-coded planned vaccine draws `UNEXPECTED_CODE_SYSTEM` where an NDC-coded planned drug does not:
+    **parity is with each variant's own performed twin, never between the two planned variants.**
+    The four the section admits and this does **not** return are Instruction (`…22.4.20`), Handoff
+    Communication Participants (`…22.4.141`), Nutrition Recommendation (`…22.4.130`) and Goal
+    Observation (`…22.4.121`). Goal Observation is the load-bearing one: it is `moodCode="GOL"`, which
+    `classifyDisposition` calls **neither** performed nor planned, so returning it would contradict
+    this repo's own mood model. **Whether the other three should be REPORTED as dropped is open, not
+    settled** and deliberately not decided in that slice.
+    **`PLANNED_VARIANTS` is ORDERED and the immunization row is deliberately LAST.** Extraction takes
+    the first matching root and stops, so an act stacking `…22.4.42` and `…22.4.120` still reads as a
+    `medicationActivity`, exactly as it did before `…22.4.120` was recognized at all. Both variants
+    read the same consumable so the `CD` is identical either way; the ranking decides the `kind` and
+    with it the binding, and inserting the row earlier would take a CVX-coded stacked act from
+    `UNEXPECTED_CODE_SYSTEM` to silent. A test pins it, and it **passes against base**, which is what
+    makes it a measured no-op rather than an argument.
+    **Monotonicity, measured, and this slice does NOT get `CCDA-PLANNED-CODE-SLOT`'s free pass.** That
+    one was monotone by construction because `checkCodeSlot` only emits. This one changes what is
+    **extracted**, so it could move rows in both directions. A 26-row matrix (thirteen arm shapes,
+    each as a Planned Immunization Activity **and** as its performed Immunization Activity twin) run
+    against base `src/`: all thirteen performed rows byte-identical, and all thirteen planned rows
+    moving from the **same** base reading, `DROPPED (no PlannedItem) | silent`. No row loses a warning
+    because no row had one; no row stops handing back a product because none handed one back. Every
+    pre-existing inline-snapshot matrix in `test/entries.test.ts` still passes unchanged.
+    **`ENTRY_ROOT_TO_SECTION` gained the root too**, so a Planned Immunization Activity as a direct
+    entry of some other recognized section draws `SECTION_PLACEMENT_SUSPECT` (tolerable). That map can
+    only ever make it fire more: the loop reports the first root whose home disagrees and merely
+    continues past one that agrees. The catalog's one other container of `…22.4.120`, Planned
+    Intervention Act, holds it as a **nested** act, which that check never inspects. **A Goal
+    Observation is not a second container** and do not write that it is: its `plannedComponent`
+    entryRelationship targets **Entry Reference**, so it _references_ a planned entry rather than
+    nesting one. (That error was proposed by a refuter, adopted without re-checking, and shipped to
+    five sites before the next pass caught it. Re-check a refuter's spec claim exactly as hard as your
+    own.) Nested planned entries are not returned by `getPlannedItems()` either, for any of the seven
+    kinds: `extractPlannedItems` reads an `<entry>`'s own act and no deeper. **That is PRE-EXISTING and
+    architectural, filed rather than fixed**, and the docs bound the claim so nobody reads "a planned
+    immunization now comes back" as covering the nested shape.
+    **The builder gained the variant in the same slice, deliberately**, because until it could emit
+    the shape no round-trip fixture could exercise it, and an un-emittable shape is precisely what hid
+    `CCDA-PLANNED-MED-ARM-CONFLICT-UNREACHABLE` for so long. Two things there are the template's, not
+    house style: the `templateId` is **root-only** (`…22.4.120` is unversioned, unlike the six
+    `…22.4.39`-`…22.4.44` templates that carry `2014-06-09`), and `effectiveTime` is **required** on
+    `BuildCcdaPlannedImmunization`, because the template makes it `[1..1]`.
+    **That last point was published wrong first and the correction is worth keeping:** `[1..1]` is not
+    unique to `…22.4.120`. Planned Medication Activity (`…22.4.42`) SHALL carry exactly one too
+    (CONF:1098-30468); it is the other **five** that are `[0..1]`. `BuildCcdaPlannedOrder` still types
+    the field optional, so `buildCcda` emits a Planned Medication Activity short a SHALL element.
+    **PRE-EXISTING, filed, deliberately not closed here** (requiring it is a breaking change to a
+    published input type). Do not re-derive "the other six are `[0..1]`" from anything.
   - **`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`'s precondition is each arm's LEAD `<code>`, and the
     message now says so.** It used to open "No manufacturedProduct arm asserts a primary `@code`" and
     call the translation the _only_ place the product was named. Both are false on an arm whose

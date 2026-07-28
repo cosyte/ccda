@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCcda as realBuildCcda,
   parseCcda,
   SAFETY_CRITICAL_CODES,
   WARNING_CODES,
@@ -1577,7 +1578,7 @@ describe("clinical entries, arm disagreement through <translation> and repeated 
     });
 
     it("reports a translation-only vaccine and a translation-only planned drug", () => {
-      // Same three consumable call sites the rest of this area covers.
+      // Same consumable call sites the rest of this area covers.
       const immunization = parseCcda(
         buildCcda({
           sections: IMMUNIZATIONS_SECTION.replace(
@@ -2652,7 +2653,7 @@ describe("clinical entries, a Planned Medication Activity carrying its own act <
     // the section that says what a patient is ABOUT TO BE GIVEN.
     //
     // The slot is wired now, so the named companion fires and the argument holds
-    // at all three consumable call sites. What is READ is unchanged in both
+    // at every consumable call site. What is READ is unchanged in both
     // shapes: `checkCodeSlot` only emits.
     const labeled = parseCcda(
       buildCcda({
@@ -2686,11 +2687,13 @@ describe("clinical entries, a Planned Medication Activity carrying its own act <
   });
 
   it("leaves the other five planned kinds unchecked, because their <code> is the planned ACT", () => {
-    // The wiring is scoped to `medicationActivity` on purpose. The other five
-    // carry the planned act itself: a LOINC observation, a SNOMED act, a CPT
-    // encounter, a SNOMED procedure, a SNOMED supply. None is one of the five
-    // bound CodeSlots, and picking one for them would flag conformant documents,
-    // so an empty <code> on those variants stays silent exactly as it always has.
+    // The wiring is scoped to the two consumable-bearing variants on purpose.
+    // The other five carry the planned act itself: a LOINC observation, a SNOMED
+    // act, a CPT encounter, a SNOMED procedure, a SNOMED supply. None is one of
+    // the five bound CodeSlots, so an empty <code> on those variants stays silent
+    // exactly as it always has. That is a CHOICE, not a necessity: MISSING_CODE_VALUE
+    // fires before checkCodeSlot reads a binding at all, so it COULD be raised
+    // there without citing a value set. Widening it is its own decision.
     const emptyCoded = PLAN_OF_TREATMENT_SECTION.replace(
       /<code code="58410-2"[^/]*\/>/u,
       "<code/>",
@@ -3168,10 +3171,11 @@ describe("clinical entries, the drug slot on a Planned Medication Activity", () 
   });
 
   it("is not reachable through the act <code> on the other five planned kinds", () => {
-    // The wiring is scoped to the one variant whose `code` is a drug. A planned
+    // The wiring is scoped to the variants whose `code` is a product. A planned
     // observation carries LOINC, a planned encounter CPT, a planned act/procedure/
-    // supply SNOMED, and none of the five bound CodeSlots binds any of those, so
-    // checking them would mean inventing a binding this repo cannot cite.
+    // supply SNOMED, and none of the five bound CodeSlots binds any of those. Only
+    // the SYSTEM checks need a binding this repo cannot cite; MISSING_CODE_VALUE
+    // does not, so their silence is a choice this test pins rather than a limit.
     const doc = parseCcda(buildCcda({ sections: PLAN_OF_TREATMENT_SECTION }));
     const said = relevant(doc.warnings);
     expect(said).toStrictEqual([]);
@@ -3180,5 +3184,382 @@ describe("clinical entries, the drug slot on a Planned Medication Activity", () 
     expect(byKind.get("observation")).toBe("58410-2");
     expect(byKind.get("encounter")).toBe("99213");
     expect(byKind.get("supply")).toBe("58938008");
+  });
+});
+
+/**
+ * `CCDA-PLANNED-IMMUNIZATION-DROPPED`. A Planned Immunization Activity
+ * (`…22.4.120`) matched no root in `PLANNED_VARIANTS`, so `getPlannedItems()`
+ * returned **nothing** for it and raised **no warning at all**. A scheduled
+ * vaccination vanished from the model in complete silence while round-tripping
+ * byte-for-byte, which is exactly why nothing caught it: nothing was corrupted.
+ *
+ * What a consumer could have concluded from the old behaviour, stated plainly:
+ * reading `getPlannedItems()` to answer "what is this patient scheduled to
+ * receive" returned a clean, warning-free list with the vaccination absent from
+ * it. There was no `undefined` to test for and no code to filter on. That is the
+ * confident-wrong reading this package exists to refuse, in the direction that
+ * costs a missed dose rather than a spurious alert.
+ *
+ * **Support, not warn.** The variant is a `substanceAdministration` in a planned
+ * mood whose product is in `consumable/manufacturedProduct`, which is the shape
+ * `plannedCodeElement` already reads for a Planned Medication Activity, so
+ * "report that we dropped it" would have been a warning about a gap that took
+ * fewer lines to close than to describe. The four Plan of Treatment entry
+ * templates that remain unmodelled (Instruction `…22.4.20`, Handoff
+ * Communication Participants `…22.4.141`, Nutrition Recommendation `…22.4.130`,
+ * Goal Observation `…22.4.121`) are a different question, deliberately left
+ * open: a Goal Observation is `moodCode="GOL"`, which `classifyDisposition`
+ * calls neither performed nor planned, so returning it here would contradict
+ * this package's own mood model.
+ *
+ * The bar this block measures is **parity**, exactly as `CCDA-PLANNED-CODE-SLOT`
+ * measured it for the drug: a planned vaccine is the same coded value in the
+ * same terminology at the same slot as a performed one, so it must draw the same
+ * codes, arm for arm.
+ */
+describe("clinical entries, a Planned Immunization Activity", () => {
+  const CVX = "2.16.840.1.113883.12.292";
+  const RXNORM = "2.16.840.1.113883.6.88";
+  const NDC = "2.16.840.1.113883.6.69";
+  const SNOMED_CT = "2.16.840.1.113883.6.96";
+  /**
+   * CVX 140 and its own display name, both already established in this repo and
+   * re-verified against the CDC IIS code set when `c815a5c` corrected 140's
+   * label from 141's. No new CVX code is minted here on purpose: mislabelled
+   * fixture codes are this area's repeat defect class, and CVX is the system
+   * with the worst record in it.
+   */
+  const FLU_PF = "140";
+  const FLU_PF_LABEL = "Influenza, split virus, trivalent, injectable, preservative free";
+  /** CVX 141, the preservative-containing sibling: a different vaccine, for the conflict row. */
+  const FLU_PRESERVED = "141";
+  /**
+   * A placeholder in NDC's 5-4-2 shape with no `displayName`, reused verbatim
+   * from the planned-drug matrix. It asserts no product identity, so this file
+   * makes no claim about which product (if any) it is assigned to. The row
+   * measures one thing: NDC is in the `medication` binding's expected set and
+   * **not** in the `vaccine` binding's, so the same coding that is clean on a
+   * drug is `UNEXPECTED_CODE_SYSTEM` on a vaccine.
+   */
+  const PLACEHOLDER_NDC = "12345-6789-01";
+  /** RxNorm Lisinopril 10 MG Oral Tablet: a drug written into a vaccine slot. */
+  const LISINOPRIL = "314076";
+  /** SNOMED CT "Administration of drug or medicament (procedure)", an act concept. */
+  const ADMIN_OF_DRUG = "18629005";
+
+  const material = (codeXml: string): string =>
+    `<manufacturedMaterial>${codeXml}</manufacturedMaterial>`;
+
+  /** One Planned Immunization Activity, arms as given. Root-only templateId, per the template. */
+  const plannedImm = (arms: string): string => `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.10" extension="2014-06-09"/>
+          <code code="18776-5" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Plan of Treatment</title>
+          <text><content ID="pimm1">${FLU_PF_LABEL}</content></text>
+          <entry>
+            <substanceAdministration classCode="SBADM" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.120"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="plan-imm-1"/>
+              <statusCode code="active"/>
+              <effectiveTime value="20241001"/>
+              <consumable><manufacturedProduct>${arms}</manufacturedProduct></consumable>
+            </substanceAdministration>
+          </entry>
+        </section>
+      </component>`;
+
+  /** The performed twin: the SAME arms on an Immunization Activity (`…22.4.52`). */
+  const performedImm = (arms: string): string => `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.2.1" extension="2015-08-01"/>
+          <code code="11369-6" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Immunizations</title>
+          <text><content ID="imm9">${FLU_PF_LABEL}</content></text>
+          <entry>
+            <substanceAdministration classCode="SBADM" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.52" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.8" extension="perf-imm-1"/>
+              <statusCode code="completed"/>
+              <effectiveTime value="20240101"/>
+              <routeCode code="C28161" codeSystem="2.16.840.1.113883.3.26.1.1" displayName="Intramuscular"/>
+              <doseQuantity value="0.5" unit="mL"/>
+              <consumable><manufacturedProduct>${arms}</manufacturedProduct></consumable>
+            </substanceAdministration>
+          </entry>
+        </section>
+      </component>`;
+
+  /**
+   * The codes under measurement: every product warning plus the whole slot-check
+   * tier, so a row trading one family for the other would be visible rather than
+   * filtered away.
+   */
+  const relevant = (warnings: readonly CcdaWarning[]): string[] =>
+    codes(warnings)
+      .filter(
+        (c) =>
+          c.startsWith("MEDICATION_PRODUCT") ||
+          c === "MISSING_PRODUCT_CODE" ||
+          c === "MISSING_CODE_VALUE" ||
+          c === "MISSING_CODE_SYSTEM" ||
+          c === "UNEXPECTED_CODE_SYSTEM" ||
+          c === "DEPRECATED_CODE_SYSTEM" ||
+          c === "SEMANTIC_CODE_INVALID" ||
+          c === "CONTRADICTORY_NULL_FLAVOR",
+      )
+      .sort();
+
+  const shapes: readonly (readonly [string, string])[] = [
+    [
+      "CVX vaccine, clean",
+      material(`<code code="${FLU_PF}" codeSystem="${CVX}" displayName="${FLU_PF_LABEL}"/>`),
+    ],
+    [
+      // THE ROW THAT PROVES WHICH BINDING IS WIRED. NDC is expected on the
+      // `medication` slot and absent from the `vaccine` slot's expected set, so
+      // this coding is silent on a planned DRUG and UNEXPECTED on a planned
+      // VACCINE. Parity is with each variant's own performed twin, never between
+      // the two planned variants.
+      "NDC on a vaccine, expected for a drug and not for a vaccine",
+      material(`<code code="${PLACEHOLDER_NDC}" codeSystem="${NDC}"/>`),
+    ],
+    [
+      "RxNorm drug code in the vaccine slot",
+      material(`<code code="${LISINOPRIL}" codeSystem="${RXNORM}"/>`),
+    ],
+    [
+      "SNOMED act concept in the vaccine slot",
+      material(`<code code="${ADMIN_OF_DRUG}" codeSystem="${SNOMED_CT}"/>`),
+    ],
+    ["@code with no @codeSystem", material(`<code code="${FLU_PF}"/>`)],
+    ["empty <code/>", material(`<code/>`)],
+    ["@codeSystem with no @code", material(`<code codeSystem="${CVX}"/>`)],
+    // A complete statement ("this vaccine is unknown"), silent by design at every slot.
+    ["nullFlavor only", material(`<code nullFlavor="UNK"/>`)],
+    [
+      // A nullFlavor beside an asserted symbol buys no silence: the symbol is
+      // still unreadable without a system.
+      "@code beside a nullFlavor, no system",
+      material(`<code code="${FLU_PF}" nullFlavor="UNK"/>`),
+    ],
+    ["no arm at all", ``],
+    ["labeled arm only, empty code", `<manufacturedLabeledDrug><code/></manufacturedLabeledDrug>`],
+    [
+      "two material arms naming different vaccines",
+      `${material(`<code code="${FLU_PF}" codeSystem="${CVX}"/>`)}${material(
+        `<code code="${FLU_PRESERVED}" codeSystem="${CVX}"/>`,
+      )}`,
+    ],
+    [
+      "vaccine named only in a <translation>",
+      material(`<code nullFlavor="OTH"><translation code="${FLU_PF}" codeSystem="${CVX}"/></code>`),
+    ],
+  ];
+
+  it("pins the vaccine-slot matrix, planned against its performed twin, arm for arm", () => {
+    // THE BASE-MEASURED MATRIX for this slice, twenty-six rows over thirteen
+    // shapes, measured by running this block against base `src/` rather than
+    // argued. Unlike CCDA-PLANNED-CODE-SLOT, this slice changes what is
+    // EXTRACTED, so it could move rows in both directions and was budgeted as if
+    // it would.
+    //
+    // AGAINST BASE, ALL THIRTEEN `performed` ROWS COME BACK BYTE-IDENTICAL: this
+    // slice touches no performed path.
+    //
+    // ALL THIRTEEN `planned` ROWS MOVE, and every one of them moves from the
+    // SAME base reading: `DROPPED (no PlannedItem)  | silent`. Base matched no
+    // root, so it built no item, read no consumable, and emitted nothing. There
+    // is no row that loses a warning here because there is no row that had one,
+    // and no row that stops handing back a product because none handed one back.
+    // That is the whole shape of the defect in one column.
+    //
+    // AFTER, THE TWO COLUMNS OF ALL THIRTEEN SHAPES AGREE EXACTLY, which is the
+    // acceptance bar. The `read` half of each row is in the frame for the same
+    // reason it is in the drug matrix: it must be identical across the two
+    // columns, and a future change that made the slot check select rather than
+    // merely emit would show up here first.
+    const matrix = shapes.flatMap(([name, arms]) => {
+      const p = parseCcda(buildCcda({ sections: plannedImm(arms) }));
+      const q = parseCcda(buildCcda({ sections: performedImm(arms) }));
+      const item = p.getPlannedItems().find((i) => i.kind === "immunizationActivity");
+      const perfVaccine = q.getImmunizations()[0]?.vaccine;
+      const render = (cd: CD | undefined, said: readonly string[]): string =>
+        `${
+          cd === undefined
+            ? "no CD"
+            : `code=${cd.code ?? "none"} sys=${cd.codeSystem ?? "none"} nullFlavor=${cd.nullFlavor ?? "none"}`
+        } | ${said.join(" ") || "silent"}`;
+      return [
+        // "DROPPED" and "no CD" are deliberately different strings: base could
+        // not tell a consumer the difference between an entry it never modelled
+        // and one it modelled with no product, and that conflation is the defect.
+        `${name} / planned:   ${item === undefined ? "DROPPED (no PlannedItem) | silent" : render(item.code, relevant(p.warnings))}`,
+        `${name} / performed: ${render(perfVaccine, relevant(q.warnings))}`,
+      ];
+    });
+    expect(matrix).toMatchInlineSnapshot(`
+      [
+        "CVX vaccine, clean / planned:   code=140 sys=2.16.840.1.113883.12.292 nullFlavor=none | silent",
+        "CVX vaccine, clean / performed: code=140 sys=2.16.840.1.113883.12.292 nullFlavor=none | silent",
+        "NDC on a vaccine, expected for a drug and not for a vaccine / planned:   code=12345-6789-01 sys=2.16.840.1.113883.6.69 nullFlavor=none | UNEXPECTED_CODE_SYSTEM",
+        "NDC on a vaccine, expected for a drug and not for a vaccine / performed: code=12345-6789-01 sys=2.16.840.1.113883.6.69 nullFlavor=none | UNEXPECTED_CODE_SYSTEM",
+        "RxNorm drug code in the vaccine slot / planned:   code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | UNEXPECTED_CODE_SYSTEM",
+        "RxNorm drug code in the vaccine slot / performed: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | UNEXPECTED_CODE_SYSTEM",
+        "SNOMED act concept in the vaccine slot / planned:   code=18629005 sys=2.16.840.1.113883.6.96 nullFlavor=none | UNEXPECTED_CODE_SYSTEM",
+        "SNOMED act concept in the vaccine slot / performed: code=18629005 sys=2.16.840.1.113883.6.96 nullFlavor=none | UNEXPECTED_CODE_SYSTEM",
+        "@code with no @codeSystem / planned:   code=140 sys=none nullFlavor=none | MISSING_CODE_SYSTEM",
+        "@code with no @codeSystem / performed: code=140 sys=none nullFlavor=none | MISSING_CODE_SYSTEM",
+        "empty <code/> / planned:   code=none sys=none nullFlavor=none | MISSING_CODE_VALUE",
+        "empty <code/> / performed: code=none sys=none nullFlavor=none | MISSING_CODE_VALUE",
+        "@codeSystem with no @code / planned:   code=none sys=2.16.840.1.113883.12.292 nullFlavor=none | MISSING_CODE_VALUE",
+        "@codeSystem with no @code / performed: code=none sys=2.16.840.1.113883.12.292 nullFlavor=none | MISSING_CODE_VALUE",
+        "nullFlavor only / planned:   code=none sys=none nullFlavor=UNK | silent",
+        "nullFlavor only / performed: code=none sys=none nullFlavor=UNK | silent",
+        "@code beside a nullFlavor, no system / planned:   code=140 sys=none nullFlavor=UNK | CONTRADICTORY_NULL_FLAVOR MISSING_CODE_SYSTEM",
+        "@code beside a nullFlavor, no system / performed: code=140 sys=none nullFlavor=UNK | CONTRADICTORY_NULL_FLAVOR MISSING_CODE_SYSTEM",
+        "no arm at all / planned:   no CD | MISSING_PRODUCT_CODE",
+        "no arm at all / performed: no CD | MISSING_PRODUCT_CODE",
+        "labeled arm only, empty code / planned:   code=none sys=none nullFlavor=none | MEDICATION_PRODUCT_ARM_UNEXPECTED MISSING_CODE_VALUE",
+        "labeled arm only, empty code / performed: code=none sys=none nullFlavor=none | MEDICATION_PRODUCT_ARM_UNEXPECTED MISSING_CODE_VALUE",
+        "two material arms naming different vaccines / planned:   no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_ARM_REPEATED",
+        "two material arms naming different vaccines / performed: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_ARM_REPEATED",
+        "vaccine named only in a <translation> / planned:   code=none sys=none nullFlavor=OTH | MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
+        "vaccine named only in a <translation> / performed: code=none sys=none nullFlavor=OTH | MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
+      ]
+    `);
+  });
+
+  it("draws the same codes on a planned vaccine as on a performed one, for every shape", () => {
+    // The invariant itself, asserted per shape so a failure names the shape
+    // rather than a snapshot line.
+    for (const [name, arms] of shapes) {
+      const p = relevant(parseCcda(buildCcda({ sections: plannedImm(arms) })).warnings);
+      const q = relevant(parseCcda(buildCcda({ sections: performedImm(arms) })).warnings);
+      expect(`${name}: ${p.join(" ")}`).toBe(`${name}: ${q.join(" ")}`);
+    }
+  });
+
+  it("reads the vaccine, the mood, and the ids off a planned immunization", () => {
+    const doc = parseCcda(
+      buildCcda({
+        sections: plannedImm(
+          material(`<code code="${FLU_PF}" codeSystem="${CVX}" displayName="${FLU_PF_LABEL}"/>`),
+        ),
+      }),
+    );
+    const item = doc.getPlannedItems().find((i) => i.kind === "immunizationActivity");
+    expect(item?.code?.code).toBe(FLU_PF);
+    expect(item?.code?.codeSystem).toBe(CVX);
+    // Future/ordered, never performed: the planned mood reads through to the
+    // same disposition every other planned kind gets.
+    expect(item?.moodCode).toBe("INT");
+    expect(item?.disposition).toBe("planned");
+    expect(item?.statusCode).toBe("active");
+    expect(item?.effectiveTime?.value?.raw).toBe("20241001");
+    expect(item?.ids[0]?.extension).toBe("plan-imm-1");
+  });
+
+  it("does not read the act <code> into the vaccine slot, and round-trips it", () => {
+    // Identical to the Planned Medication Activity's rule and for the identical
+    // reason: SubstanceAdministration.code is an ActSubstanceAdministrationCode,
+    // the KIND of administration act, not the substance. That [0..1] and that
+    // binding are base CDA R2's class definition; R2.1 constrains `code` on
+    // neither template, which is why an act <code> is legal on both.
+    const withActCode = plannedImm(
+      material(`<code code="${FLU_PF}" codeSystem="${CVX}" displayName="${FLU_PF_LABEL}"/>`),
+    ).replace(
+      '<statusCode code="active"/>',
+      `<code code="${ADMIN_OF_DRUG}" codeSystem="${SNOMED_CT}"/><statusCode code="active"/>`,
+    );
+    const doc = parseCcda(buildCcda({ sections: withActCode }));
+    const item = doc.getPlannedItems().find((i) => i.kind === "immunizationActivity");
+    expect(item?.code?.code).toBe(FLU_PF);
+    // The act code is not on the model, and it is not silently lost either.
+    const out = doc.toString();
+    expect(out).toContain(`code="${ADMIN_OF_DRUG}"`);
+    expect(parseCcda(out).toString()).toBe(out);
+  });
+
+  it("keeps a stacked …4.42 + …4.120 act reading as a medicationActivity, exactly as base did", () => {
+    // PLANNED_VARIANTS is ordered and the immunization row is deliberately LAST.
+    // An act declaring both templates matched `medicationActivity` before
+    // `…22.4.120` was recognized at all; appending keeps it there. Both variants
+    // read the same consumable, so the CD is identical either way. What the
+    // ranking decides is the reported `kind` and, with it, the binding: a
+    // CVX-coded product read as a planned medication draws UNEXPECTED_CODE_SYSTEM
+    // and read as a planned immunization draws nothing, so inserting the row
+    // earlier would have taken this row from warned to silent. Nothing in the
+    // document ranks the two templates, so the tie is broken by not moving.
+    const stacked = plannedImm(
+      material(`<code code="${FLU_PF}" codeSystem="${CVX}" displayName="${FLU_PF_LABEL}"/>`),
+    ).replace(
+      '<templateId root="2.16.840.1.113883.10.20.22.4.120"/>',
+      '<templateId root="2.16.840.1.113883.10.20.22.4.42" extension="2014-06-09"/><templateId root="2.16.840.1.113883.10.20.22.4.120"/>',
+    );
+    const doc = parseCcda(buildCcda({ sections: stacked }));
+    const items = doc.getPlannedItems();
+    expect(items).toHaveLength(1);
+    expect(items[0]?.kind).toBe("medicationActivity");
+    expect(items[0]?.code?.code).toBe(FLU_PF);
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.UNEXPECTED_CODE_SYSTEM);
+  });
+
+  it("flags a planned immunization sitting outside the Plan of Treatment", () => {
+    // The seventh planned root joins the other six in ENTRY_ROOT_TO_SECTION. The
+    // Plan of Treatment Section is the only SECTION the catalog lets carry this
+    // template as a direct entry (its one other listed container, Planned
+    // Intervention Act, holds it as a NESTED act, which this check never inspects
+    // and which getPlannedItems() does not return either; a Goal Observation
+    // REFERENCES a planned entry via Entry Reference, it does not nest one).
+    const misplaced = performedImm(
+      material(`<code code="${FLU_PF}" codeSystem="${CVX}" displayName="${FLU_PF_LABEL}"/>`),
+    ).replace(
+      '<templateId root="2.16.840.1.113883.10.20.22.4.52" extension="2015-08-01"/>',
+      '<templateId root="2.16.840.1.113883.10.20.22.4.120"/>',
+    );
+    const doc = parseCcda(buildCcda({ sections: misplaced }));
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.SECTION_PLACEMENT_SUSPECT);
+    // A profile may quiet it: this is placement, not a lost or mis-read product.
+    expect(SAFETY_CRITICAL_CODES.has(WARNING_CODES.SECTION_PLACEMENT_SUSPECT)).toBe(false);
+  });
+
+  it("builds a Planned Immunization Activity that parses back to the same vaccine", () => {
+    // The builder gained this variant with the parser, deliberately: until it
+    // could emit the shape, no round-trip fixture could exercise it, and an
+    // un-emittable shape is exactly what hid the defect this series' previous
+    // slice fixed. `effectiveTime` is required on this variant because the
+    // template makes it [1..1]. That is NOT unique to it: `…22.4.42` is [1..1]
+    // too (CONF:1098-30468); the five non-substanceAdministration planned
+    // templates are the [0..1] ones.
+    const built = realBuildCcda({
+      patient: { mrn: "MRN-PLAN-IMM" },
+      planOfTreatment: [
+        {
+          kind: "immunizationActivity",
+          code: { code: FLU_PF, displayName: FLU_PF_LABEL },
+          effectiveTime: "20241001",
+        },
+      ],
+    });
+    expect(built.warnings).toStrictEqual([]);
+    const xml = built.toString();
+    // Root-only templateId: this template asserts no @extension, unlike the six
+    // `…22.4.39`-`…22.4.44` planned templates.
+    expect(xml).toContain('<templateId root="2.16.840.1.113883.10.20.22.4.120"/>');
+    // The vaccine is in the consumable under Immunization Medication Information,
+    // defaulting to CVX rather than the medication variant's RxNorm.
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.4.54"');
+    expect(xml).toContain(`code="${FLU_PF}" codeSystem="${CVX}"`);
+
+    const doc = parseCcda(xml);
+    expect(doc.warnings).toStrictEqual([]);
+    const item = doc.getPlannedItems().find((i) => i.kind === "immunizationActivity");
+    expect(item?.code?.code).toBe(FLU_PF);
+    expect(item?.disposition).toBe("planned");
+    expect(parseCcda(doc.toString()).toString()).toBe(doc.toString());
   });
 });
