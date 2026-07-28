@@ -133,7 +133,10 @@ const RICH_INIT: BuildCcdaInit = {
   ],
   immunizations: [
     {
-      vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" },
+      vaccine: {
+        code: "140",
+        displayName: "Influenza, split virus, trivalent, injectable, preservative free",
+      },
       dose: { value: 0.5, unit: "mL" },
       route: { code: "C28161", displayName: "Intramuscular" },
       effectiveTime: "20240101",
@@ -688,7 +691,7 @@ describe("buildCcda, immunizations round-trip", () => {
     expect(flu?.route?.code).toBe("C28161");
     expect(flu?.route?.codeSystem).toBe("2.16.840.1.113883.3.26.1.1"); // NCI Thesaurus
     expect(flu?.effectiveTime?.value?.raw).toBe("20240101");
-    expect(flu?.narrative).toBe("Influenza, seasonal, injectable");
+    expect(flu?.narrative).toBe("Influenza, split virus, trivalent, injectable, preservative free");
     // An administered shot carries no negationInd, so `refused` is absent (not false).
     expect(flu?.refused).toBeUndefined();
   });
@@ -710,7 +713,13 @@ describe("buildCcda, immunizations round-trip", () => {
     const doc = buildCcda({
       patient: { mrn: "M" },
       immunizations: [
-        { vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" }, refused: true },
+        {
+          vaccine: {
+            code: "140",
+            displayName: "Influenza, split virus, trivalent, injectable, preservative free",
+          },
+          refused: true,
+        },
       ],
     });
     const shot = doc.getImmunizations()[0];
@@ -730,7 +739,14 @@ describe("buildCcda, immunizations round-trip", () => {
   it("fills the SHALL administration effectiveTime with nullFlavor when omitted, read back as absent", () => {
     const doc = buildCcda({
       patient: { mrn: "M" },
-      immunizations: [{ vaccine: { code: "140", displayName: "Influenza, seasonal, injectable" } }],
+      immunizations: [
+        {
+          vaccine: {
+            code: "140",
+            displayName: "Influenza, split virus, trivalent, injectable, preservative free",
+          },
+        },
+      ],
     });
     // A clean administered shot with no date is warning-free (dose/route optional here).
     expect(doc.warnings).toEqual([]);
