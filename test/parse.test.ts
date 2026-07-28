@@ -5,6 +5,8 @@ import {
   CcdaParseError,
   WARNING_CODES,
   FATAL_CODES,
+  sectionForLoinc,
+  sectionForTemplateRoot,
   type CcdaWarning,
 } from "../src/index.js";
 import { buildCcda, DOC_TYPES, LOINC_ONLY_SECTION, UNKNOWN_SECTION } from "./__fixtures__/ccda.js";
@@ -115,6 +117,170 @@ describe("parseCcda, sections", () => {
     expect(doc.sections[0]?.key).toBeUndefined();
     expect(doc.sections[0]?.narrativeText).toBe("Unknown content.");
     expect(codes(doc.warnings)).toContain(WARNING_CODES.UNKNOWN_SECTION_CODE);
+  });
+});
+
+describe("parseCcda, the Interventions Section joins the catalog", () => {
+  /**
+   * An Interventions Section (`…21.2.3`, LOINC `62387-6`), with each recognition
+   * signal independently switchable so the matrix below can vary one at a time.
+   * `entry` defaults to the section's own conformant content, a Planned
+   * Intervention Act (`…22.4.146`); the misplacement rows swap in an act whose
+   * home section is elsewhere.
+   */
+  const interventionsSection = (opts: {
+    readonly templateExtension?: string | null;
+    readonly withTemplate?: boolean;
+    readonly loinc?: string;
+    readonly entry?: string;
+  }): string => {
+    const version = opts.templateExtension === undefined ? "2015-08-01" : opts.templateExtension;
+    const ext = version === null ? "" : ` extension="${version}"`;
+    const tid =
+      opts.withTemplate === false
+        ? ""
+        : `<templateId root="2.16.840.1.113883.10.20.21.2.3"${ext}/>`;
+    const entry =
+      opts.entry ??
+      `<act classCode="ACT" moodCode="INT">
+             <templateId root="2.16.840.1.113883.10.20.22.4.146" extension="2015-08-01"/>
+             <statusCode code="active"/>
+           </act>`;
+    return `
+      <component>
+        <section>
+          ${tid}
+          <code code="${opts.loinc ?? "62387-6"}" codeSystem="2.16.840.1.113883.6.1" displayName="Interventions Provided"/>
+          <title>Interventions</title>
+          <text><content ID="ivn1">Planned toward the recorded goal</content></text>
+          <entry>${entry}</entry>
+        </section>
+      </component>`;
+  };
+
+  /** A Planned Act (`…22.4.39`), whose home section is the Plan of Treatment. */
+  const plannedAct = `<act classCode="ACT" moodCode="INT">
+             <templateId root="2.16.840.1.113883.10.20.22.4.39" extension="2014-06-09"/>
+             <code code="409073007" codeSystem="2.16.840.1.113883.6.96" displayName="Education"/>
+             <statusCode code="active"/>
+           </act>`;
+
+  /**
+   * A Results Section, whose root `…22.2.3` differs from the Interventions
+   * Section's `…21.2.3` by exactly one arc. It is the control that rules out the
+   * confusion the new entry is most exposed to, so it carries the OID rather
+   * than relying on a LOINC fallback.
+   */
+  const resultsSection = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.3" extension="2015-08-01"/>
+          <code code="30954-2" codeSystem="2.16.840.1.113883.6.1" displayName="Results"/>
+          <title>Results</title>
+          <text>No results recorded.</text>
+        </section>
+      </component>`;
+
+  it("pins the section-framing matrix: what is recognized, and what is said about it", () => {
+    // MEASURED against base `src/` (f653606), not argued. The catalog gained one
+    // entry, so the only honest question is which documents move and in which
+    // direction. Base read, in full:
+    //
+    //   rows 1-4, 6, 7  key=none by=none | UNKNOWN_SECTION_CODE
+    //   row 5           key=problems by=loinc | SECTION_MATCHED_BY_LOINC_FALLBACK
+    //   row 8           key=none by=none | UNKNOWN_SECTION_CODE
+    //   rows 9, 10      unchanged (see 1)
+    //
+    // 1. EVERY ROW THAT MOVES IS AN INTERVENTIONS SECTION. Rows 8, 9 and 10 are
+    //    byte-identical to base. Row 10 is the one that matters: a Results
+    //    section's root `…22.2.3` differs from Interventions' `…21.2.3` by a
+    //    single arc, and it still resolves to `results`, which is what rules out
+    //    a collision with the OID this entry is most confusable with.
+    //
+    // 2. `UNKNOWN_SECTION_CODE` IS WITHDRAWN ONLY WHERE IT WAS FIRING
+    //    UNCONDITIONALLY. Before this change no `templateRoot` matched `…21.2.3`
+    //    and `sectionForLoinc("62387-6")` was always `undefined`, so EVERY
+    //    section carrying that code drew it, on every shape here, with no input
+    //    that avoided it. That is this repo's bar for withdrawing a warning, and
+    //    it is met by construction rather than by sampling: for `62387-6` the
+    //    code was reachable only through a catalog miss that can no longer
+    //    happen.
+    //
+    // 3. ROW 5 IS THE OTHER WITHDRAWAL, AND IT NEEDS ITS OWN ARGUMENT, because
+    //    unlike the above it is a warning that base fired on a document that
+    //    base ALSO recognized. A section carrying the Interventions templateId
+    //    under a Problems `<code>` was framed by base as `key=problems`, off the
+    //    LOINC fallback, because the root matched nothing. It now matches, so
+    //    recognition resolves on the PRIMARY path and the fallback is not taken.
+    //    `SECTION_MATCHED_BY_LOINC_FALLBACK` says "no recognized templateId was
+    //    present, the code was used instead"; after this change that sentence is
+    //    simply false about this document, so emitting it would be a warning
+    //    misdescribing what it is about. This is a subject correction of the same
+    //    kind the planned-medication slice made, not a signal traded away -- and
+    //    the reading it replaces was the worse one: base handed back an
+    //    Interventions Section framed as a patient's Problems list.
+    //
+    // 4. THE REMAINING TWO MOVES ARE PURE GAINS.
+    //    `SECTION_MATCHED_BY_LOINC_FALLBACK` on row 4 replaces the unknown-code
+    //    warning on the code-only shape: the section is still reported as
+    //    deviating, now as the narrower and truer fact. And
+    //    `SECTION_PLACEMENT_SUSPECT` on row 7 fires where base was silent,
+    //    because `flagMisplacedEntries` returns early on an unrecognized section
+    //    -- recognizing the section is what makes a misplaced entry inside it
+    //    visible at all. A Planned Act is not an entry the Interventions Section
+    //    admits. Its conformant entries (rows 1-3, 5, 6) are `…22.4.146` and
+    //    `…22.4.131`, which are in no home-section map, so they stay silent.
+    const shapes: readonly (readonly [string, string])[] = [
+      ["V3 stamp + LOINC (conformant)", interventionsSection({})],
+      [
+        "V2 stamp (HL7's own Care Plan example)",
+        interventionsSection({ templateExtension: "2014-06-09" }),
+      ],
+      ["unversioned root (R1.1)", interventionsSection({ templateExtension: null })],
+      ["LOINC only, no templateId", interventionsSection({ withTemplate: false })],
+      ["templateId + a wrong section code", interventionsSection({ loinc: "11450-4" })],
+      ["conformant entry (Planned Intervention Act)", interventionsSection({})],
+      ["misplaced entry (a Planned Act)", interventionsSection({ entry: plannedAct })],
+      ["control: unrecognized LOINC", UNKNOWN_SECTION],
+      ["control: Problems by LOINC fallback", LOINC_ONLY_SECTION],
+      ["control: Results (…22.2.3, one arc away)", resultsSection],
+    ];
+    const matrix = shapes.map(([name, sections]) => {
+      const doc = parseCcda(buildCcda({ sections }));
+      const section = doc.sections[0];
+      const said = codes(doc.warnings)
+        .filter((c) => c.startsWith("SECTION_") || c === "UNKNOWN_SECTION_CODE")
+        .sort()
+        .join(" ");
+      const read = `key=${section?.key ?? "none"} by=${section?.recognizedBy ?? "none"}`;
+      return `${name}: ${read} | ${said || "silent"}`;
+    });
+    expect(matrix).toMatchInlineSnapshot(`
+      [
+        "V3 stamp + LOINC (conformant): key=interventions by=templateId | silent",
+        "V2 stamp (HL7's own Care Plan example): key=interventions by=templateId | silent",
+        "unversioned root (R1.1): key=interventions by=templateId | silent",
+        "LOINC only, no templateId: key=interventions by=loinc | SECTION_MATCHED_BY_LOINC_FALLBACK",
+        "templateId + a wrong section code: key=interventions by=templateId | silent",
+        "conformant entry (Planned Intervention Act): key=interventions by=templateId | silent",
+        "misplaced entry (a Planned Act): key=interventions by=templateId | SECTION_PLACEMENT_SUSPECT",
+        "control: unrecognized LOINC: key=none by=none | UNKNOWN_SECTION_CODE",
+        "control: Problems by LOINC fallback: key=problems by=loinc | SECTION_MATCHED_BY_LOINC_FALLBACK",
+        "control: Results (…22.2.3, one arc away): key=results by=templateId | silent",
+      ]
+    `);
+  });
+
+  it("resolves the section through both recognition surfaces", () => {
+    // The public tables, checked directly rather than only through a parse, so a
+    // consumer branching on `sectionForLoinc("62387-6")` is covered too.
+    expect(sectionForTemplateRoot("2.16.840.1.113883.10.20.21.2.3")?.key).toBe("interventions");
+    expect(sectionForLoinc("62387-6")?.key).toBe("interventions");
+    // The near-miss OID this one is genuinely confusable with stays Results.
+    expect(sectionForTemplateRoot("2.16.840.1.113883.10.20.22.2.3")?.key).toBe("results");
+    // There is no entries-optional sibling root: Interventions has exactly one,
+    // and expresses optionality as [0..*] on its entries.
+    expect(sectionForTemplateRoot("2.16.840.1.113883.10.20.21.2.3.1")).toBeUndefined();
   });
 });
 

@@ -45,8 +45,12 @@ function toleranceApplies(tolerance: QuirkTolerance, warning: CcdaWarning): bool
  *
  * @example
  * ```ts
- * import { applyProfile, ccdaProfiles, deprecatedLoinc } from "@cosyte/ccda";
- * const w = deprecatedLoinc({ path: "code" }, "41909-3");
+ * import { applyProfile, ccdaProfiles, WARNING_CODES, type CcdaWarning } from "@cosyte/ccda";
+ * const w: CcdaWarning = {
+ *   code: WARNING_CODES.DEPRECATED_LOINC,
+ *   message: 'LOINC code "41909-3" is deprecated; prefer its current successor. Code preserved.',
+ *   position: { path: "code" },
+ * };
  * const out = applyProfile(ccdaProfiles.smartScorecard, w);
  * console.log(out.code); // "PROFILE_QUIRK_APPLIED"
  * console.log(out.toleratedCode); // "DEPRECATED_LOINC"

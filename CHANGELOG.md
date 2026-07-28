@@ -1075,6 +1075,55 @@ statusCode, effectiveTime, component+`).
 
 ### Fixed
 
+- **The Interventions Section (`2.16.840.1.113883.10.20.21.2.3`, LOINC `62387-6`) is in the section
+  catalog, so the container this package descends into is no longer framed as an unknown section.**
+  The read path was taught to find the planned entries nested in a Planned Intervention Act while the
+  section framing still called that act's home unrecognized, so a document placing the container
+  exactly where C-CDA R2.1 puts it drew `UNKNOWN_SECTION_CODE`. It now resolves on the primary
+  `templateId` path, through `sectionForTemplateRoot` and `sectionForLoinc`, and is reachable as
+  `doc.findSection("interventions")`.
+  **Its root sits in the `…10.20.21.2.*` arc, not the `…10.20.22.2.*` arc every other C-CDA section
+  in this catalog uses**, which matters because `…10.20.22.2.3` (`22`, not `21`) is the **Results**
+  section already in the table; a matrix row exists solely to fail if those two are ever confused.
+  Matching is on the root alone, so all three version stamps in circulation are accepted (unversioned
+  from R1.1, `2014-06-09`, and R2.1's `2015-08-01`), which is not a theoretical tolerance: HL7's own
+  published Care Plan example carries the older stamp. **There is no entries-optional sibling root**
+  for this section, unlike Allergies (`…22.2.6` / `…22.2.6.1`); it has exactly one root and expresses
+  optionality as `[0..*]` on its entries, so `…21.2.3.1` stays unrecognized. `62387-6` is
+  "Interventions Narrative" in LOINC itself and `displayName="Interventions Provided"` in C-CDA's own
+  conformance statement (CONF:1198-15378); nothing here matches on either string, and neither was
+  "corrected" into the other. R3.0+ renamed the same root and extension to **Activities Section**,
+  keeping the LOINC; this catalog is R2.1.
+  **Measured against the previous release across ten section shapes, not argued.** Only Interventions
+  Sections move. `UNKNOWN_SECTION_CODE` is withdrawn only where it had been firing **unconditionally**
+  (no root matched and no LOINC did either, so every document carrying the code drew it, with no input
+  that avoided it). Two further moves are worth knowing before upgrading. A section carrying the
+  Interventions `templateId` under some **other** section's `<code>` was framed as that other section
+  off the LOINC fallback and drew `SECTION_MATCHED_BY_LOINC_FALLBACK`; it is now framed as an
+  Interventions Section on the `templateId` and that warning correctly stands down, because no
+  fallback was taken and the sentence it asserts is false about the document. The reading it replaces
+  was the worse one: an Interventions Section handed back as a patient's Problems list. And
+  `SECTION_PLACEMENT_SUSPECT` can now fire on an entry inside an Interventions Section, because
+  misplaced entries are only checked in sections that are recognized; a conformant one stays silent.
+  No warning code was added, renamed or reclassified.
+
+- **64 `@example` blocks cited an import that does not resolve, across four modules** (44 in `parser/warnings.ts`, 17 in `model/entries/shared.ts`, 2 in `builder/build-ccda.ts`, 1 in `profiles/apply.ts`). They wrote
+  `import { X } from "@cosyte/ccda"` for internal helpers, warning factories and builder types the
+  package entry point does not export. These ship in the published `.d.ts`, where they are
+  copy-pasteable, so a consumer following one got an import error. Each is now either a
+  module-relative import, where the symbol is deliberately internal, or an example rebuilt from the
+  public surface alone (the two that documented `applyProfile` and `profileQuirkApplied`, both public,
+  now construct a `CcdaWarning` literal from the exported `WARNING_CODES` rather than reaching for an
+  unexported factory). **`BuildCcdaAssessmentScale` and `BuildCcdaAssessmentScaleItem` were the two
+  whose right answer was to export the symbol instead**: both are already the element type of public
+  `buildCcda` fields (`functionalStatusScales`, `mentalStatusScales`), so a caller populating either
+  had no way to name what it was constructing. Purely additive.
+  **A gate now pins it.** `docs-content/` snippets were already compiled and executed against the
+  built artifact, but TSDoc examples were ungated, which is how these shipped. Every documented import
+  under `src/` is resolved through the TypeScript checker against the module its specifier names, the
+  package entry point for `"@cosyte/ccda"` and the module itself for a relative path, so a stale
+  symbol fails either way. It is mutation-tested three ways so the pin is not vacuous.
+
 - **Clinical safety: a planned entry nested in a Planned Intervention Act is no longer dropped from
   the model in silence, for any of the seven planned templates.** `getPlannedItems()` read an
   `<entry>`'s own act and went **no deeper**. C-CDA groups the interventions planned toward a goal in

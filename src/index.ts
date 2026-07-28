@@ -92,6 +92,8 @@ export type {
   BuildCcdaFunctionalStatusOrganizer,
   BuildCcdaMentalStatus,
   BuildCcdaMentalStatusOrganizer,
+  BuildCcdaAssessmentScale,
+  BuildCcdaAssessmentScaleItem,
   BuildCcdaPlannedItem,
   BuildCcdaPlannedAct,
   BuildCcdaPlannedOrder,

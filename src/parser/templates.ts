@@ -250,6 +250,46 @@ const SECTION_CATALOG: readonly SectionInfo[] = [
     templateRoots: ["2.16.840.1.113883.10.20.22.2.60"],
   },
   {
+    // Interventions Section (V3). **Its root sits in the `…10.20.21.2.*` arc,
+    // not the `…10.20.22.2.*` arc every other C-CDA section here uses** (only
+    // Reason for Referral and History of Present Illness also depart, and those
+    // are IHE PCC roots). That is the template's own OID, not a typo, and it is
+    // worth stating because `2.16.840.1.113883.10.20.22.2.3` (`22`, not `21`) is
+    // the **Results** section already in this catalog, four entries up.
+    //
+    // This is the conformant home of the Planned Intervention Act (`…22.4.146`),
+    // the container `extractPlannedItems` descends into. The read path was taught
+    // to find those nested entries before the section framing knew their home, so
+    // a document putting the container exactly where R2.1 puts it drew
+    // `UNKNOWN_SECTION_CODE`.
+    //
+    // **Three `@extension`s are in circulation on this one root** and matching
+    // ignores all of them (root-primary contract): unversioned (R1.1),
+    // `2014-06-09` (V2), `2015-08-01` (V3, the R2.1 stamp). That tolerance is
+    // load-bearing rather than theoretical, because HL7's own published Care Plan
+    // example carries the `2014-06-09` stamp. **There is no entries-optional
+    // sibling root**: unlike Allergies (`…22.2.6` / `…22.2.6.1`), Interventions
+    // has exactly one root and expresses optionality as `[0..*]` on the entries
+    // themselves, so a `…21.2.3.1` would be a document's invention, not a
+    // template.
+    //
+    // **`loinc` is the section code; `title` is this catalog's own human label,
+    // and neither is the C-CDA `displayName`.** LOINC's name for `62387-6` is
+    // "Interventions Narrative" (LOINC 2.82); C-CDA's conformance statement
+    // requires `displayName="Interventions Provided"` (CONF:1198-15378). Nothing
+    // in this package matches on either string: `SectionInfo.title` is read
+    // nowhere in `src/`, it is a label consumers get back from
+    // {@link sectionForTemplateRoot}, while a framed `CcdaSection.title` is the
+    // document's own `<title>`. So the divergence costs nothing, but do not
+    // "correct" one of these strings into the other. R3.0+ renamed the same
+    // root+extension to **Activities Section**, keeping LOINC `62387-6`; this
+    // catalog is R2.1.
+    key: "interventions",
+    title: "Interventions",
+    loinc: "62387-6",
+    templateRoots: ["2.16.840.1.113883.10.20.21.2.3"],
+  },
+  {
     key: "healthConcerns",
     title: "Health Concerns",
     loinc: "75310-3",

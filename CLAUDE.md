@@ -389,6 +389,44 @@ immutability + explicit mutation, and the profile system.
     escape hatch, and emitting a _conformant_ Planned Intervention Act means satisfying its `[1..*]`
     `RSON` Entry Reference to a Goal Observation, which means modelling goals. That is a feature, not a
     fixture, and it is filed rather than smuggled in.
+  - **The Interventions Section (`…21.2.3`, LOINC `62387-6`) is in the catalog, and its OID is the
+    trap.** It lives in the `…10.20.21.2.*` arc, not the `…10.20.22.2.*` arc every other C-CDA section
+    in `SECTION_CATALOG` uses, and `…10.20.22.2.3` (`22`, not `21`) is **Results**, already in the
+    table. A matrix row exists solely to fail if those two are ever confused; do not "normalize" the
+    arc. Matching is on root alone, so all three stamps in circulation are accepted (unversioned,
+    `2014-06-09`, `2015-08-01`) and that is load-bearing because HL7's own published Care Plan example
+    carries the middle one. **There is no entries-optional sibling root** here, unlike Allergies:
+    exactly one root, optionality expressed as `[0..*]` on the entries. `62387-6` is "Interventions
+    Narrative" in LOINC and `displayName="Interventions Provided"` in C-CDA (CONF:1198-15378);
+    `SectionInfo.title` is read **nowhere** in `src/` (a framed `CcdaSection.title` is the document's
+    own `<title>`), so nothing matches on either string and neither was corrected into the other. R3.0+
+    renamed the same root to **Activities Section**, keeping the LOINC; this catalog is R2.1.
+    **Monotonicity, measured over ten section shapes against base `src/`.** Only Interventions Sections
+    move; the Results control and the unrecognized-LOINC control are byte-identical.
+    `UNKNOWN_SECTION_CODE` was withdrawn only where it fired **unconditionally** (no root and no LOINC
+    matched, so no input avoided it). Two moves need their own argument and have it in the test:
+    `SECTION_MATCHED_BY_LOINC_FALLBACK` **stands down** on a section carrying this `templateId` under
+    another section's `<code>`, because the sentence it asserts ("no recognized templateId, matched on
+    the code") became false about that document, a subject correction rather than a lost signal, and
+    the reading it replaces framed an Interventions Section as the patient's Problems list; and
+    `SECTION_PLACEMENT_SUSPECT` becomes **newly reachable** inside it, because `flagMisplacedEntries`
+    returns early on an unrecognized section. Recognizing the section did **not** change what
+    `getPlannedItems()` returns or reach `…22.4.130` / `…22.4.131`; those stay pinned as unreached.
+  - **An `@example` import is a claim about the module graph, and it is now gated.** Every `@example`
+    ships in the published `.d.ts` and is copy-pasteable, so `import { X } from "@cosyte/ccda"` for a
+    symbol the entry point does not export hands a consumer an import error. 64 of them did (44 in `parser/warnings.ts`, 17 in `model/entries/shared.ts`, 2 in `builder/build-ccda.ts`, 1 in `profiles/apply.ts`).
+    `test/tsdoc-examples.test.ts` resolves **every** documented import under `src/` through the
+    TypeScript checker against the module its specifier names (the entry point for `"@cosyte/ccda"`,
+    the module itself for a relative path), so a stale symbol fails either way; it is mutation-tested
+    three ways. **The fix is per symbol and the two answers are different acts:** an internal helper
+    gets a module-relative import, a genuinely public symbol gets exported. Only
+    `BuildCcdaAssessmentScale` / `BuildCcdaAssessmentScaleItem` warranted the second, because both were
+    already the element type of public `buildCcda` fields (`functionalStatusScales`,
+    `mentalStatusScales`) and a caller had no way to name what it was constructing. Do **not** reach
+    for the export answer to silence the gate: exporting the 40-odd warning factories would put the
+    parser's internals on the public surface, and `src/index.ts` deliberately exports exactly two
+    (`profileQuirkApplied`, `semanticCodeInvalid`), the two a consumer writing a profile or an adapter
+    actually constructs.
   - **`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`'s precondition is each arm's LEAD `<code>`, and the
     message now says so.** It used to open "No manufacturedProduct arm asserts a primary `@code`" and
     call the translation the _only_ place the product was named. Both are false on an arm whose

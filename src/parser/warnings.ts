@@ -146,7 +146,7 @@ export interface CcdaWarning {
  *
  * @example
  * ```ts
- * import { unknownDocumentTemplate } from "@cosyte/ccda";
+ * import { unknownDocumentTemplate } from "./warnings.js";
  * const w = unknownDocumentTemplate({ path: "/ClinicalDocument" }, "1.2.3.4");
  * ```
  */
@@ -165,7 +165,7 @@ export function unknownDocumentTemplate(position: CcdaPosition, observedOid: str
  *
  * @example
  * ```ts
- * import { missingTemplateId } from "@cosyte/ccda";
+ * import { missingTemplateId } from "./warnings.js";
  * const w = missingTemplateId({ path: "/ClinicalDocument" }, "ClinicalDocument");
  * ```
  */
@@ -185,7 +185,7 @@ export function missingTemplateId(position: CcdaPosition, elementName: string): 
  *
  * @example
  * ```ts
- * import { templateExtensionAbsent } from "@cosyte/ccda";
+ * import { templateExtensionAbsent } from "./warnings.js";
  * const w = templateExtensionAbsent(
  *   { path: "/ClinicalDocument" },
  *   "2.16.840.1.113883.10.20.22.1.2",
@@ -208,7 +208,7 @@ export function templateExtensionAbsent(position: CcdaPosition, oid: string): Cc
  *
  * @example
  * ```ts
- * import { unknownSectionCode } from "@cosyte/ccda";
+ * import { unknownSectionCode } from "./warnings.js";
  * const w = unknownSectionCode({ sectionCode: "99999-9" }, "99999-9");
  * ```
  */
@@ -227,7 +227,7 @@ export function unknownSectionCode(position: CcdaPosition, loincCode: string): C
  *
  * @example
  * ```ts
- * import { sectionMatchedByLoincFallback } from "@cosyte/ccda";
+ * import { sectionMatchedByLoincFallback } from "./warnings.js";
  * const w = sectionMatchedByLoincFallback({ sectionCode: "48765-2" }, "48765-2");
  * ```
  */
@@ -250,7 +250,7 @@ export function sectionMatchedByLoincFallback(
  *
  * @example
  * ```ts
- * import { invalidNullFlavor } from "@cosyte/ccda";
+ * import { invalidNullFlavor } from "./warnings.js";
  * const w = invalidNullFlavor({ path: "/ClinicalDocument/effectiveTime" }, "NOPE");
  * ```
  */
@@ -294,7 +294,7 @@ export function invalidNullFlavor(position: CcdaPosition, observed: string): Ccd
  *
  * @example
  * ```ts
- * import { contradictoryNullFlavor } from "@cosyte/ccda";
+ * import { contradictoryNullFlavor } from "./warnings.js";
  * const w = contradictoryNullFlavor({ path: "doseQuantity" }, "PQ", "UNK");
  * ```
  */
@@ -318,7 +318,7 @@ export function contradictoryNullFlavor(
  *
  * @example
  * ```ts
- * import { unknownNamespacePrefix } from "@cosyte/ccda";
+ * import { unknownNamespacePrefix } from "./warnings.js";
  * const w = unknownNamespacePrefix({ path: "/ClinicalDocument" }, "vendor");
  * ```
  */
@@ -338,7 +338,7 @@ export function unknownNamespacePrefix(position: CcdaPosition, prefix: string): 
  *
  * @example
  * ```ts
- * import { malformedDateTime } from "@cosyte/ccda";
+ * import { malformedDateTime } from "./warnings.js";
  * const w = malformedDateTime({ path: "/ClinicalDocument/effectiveTime" });
  * ```
  */
@@ -357,7 +357,7 @@ export function malformedDateTime(position: CcdaPosition): CcdaWarning {
  *
  * @example
  * ```ts
- * import { multipleRecordTargets } from "@cosyte/ccda";
+ * import { multipleRecordTargets } from "./warnings.js";
  * const w = multipleRecordTargets({ path: "/ClinicalDocument" }, 2);
  * ```
  */
@@ -376,7 +376,7 @@ export function multipleRecordTargets(position: CcdaPosition, count: number): Cc
  *
  * @example
  * ```ts
- * import { missingAssigningAuthority } from "@cosyte/ccda";
+ * import { missingAssigningAuthority } from "./warnings.js";
  * const w = missingAssigningAuthority({ path: "/ClinicalDocument/recordTarget" });
  * ```
  */
@@ -395,7 +395,7 @@ export function missingAssigningAuthority(position: CcdaPosition): CcdaWarning {
  *
  * @example
  * ```ts
- * import { encodingBomStripped } from "@cosyte/ccda";
+ * import { encodingBomStripped } from "./warnings.js";
  * const w = encodingBomStripped({});
  * ```
  */
@@ -415,7 +415,7 @@ export function encodingBomStripped(position: CcdaPosition): CcdaWarning {
  *
  * @example
  * ```ts
- * import { negationVsNullFlavorAmbiguous } from "@cosyte/ccda";
+ * import { negationVsNullFlavorAmbiguous } from "./warnings.js";
  * const w = negationVsNullFlavorAmbiguous({ path: "observation" }, "NI");
  * ```
  */
@@ -438,7 +438,7 @@ export function negationVsNullFlavorAmbiguous(
  *
  * @example
  * ```ts
- * import { allergenGranularitySuspect } from "@cosyte/ccda";
+ * import { allergenGranularitySuspect } from "./warnings.js";
  * const w = allergenGranularitySuspect({ path: "playingEntity" });
  * ```
  */
@@ -458,7 +458,7 @@ export function allergenGranularitySuspect(position: CcdaPosition): CcdaWarning 
  *
  * @example
  * ```ts
- * import { codeNarrativeMismatch } from "@cosyte/ccda";
+ * import { codeNarrativeMismatch } from "./warnings.js";
  * const w = codeNarrativeMismatch({ path: "value" }, "problem");
  * ```
  */
@@ -478,7 +478,7 @@ export function codeNarrativeMismatch(position: CcdaPosition, slot: string): Ccd
  *
  * @example
  * ```ts
- * import { narrativeReferenceBroken } from "@cosyte/ccda";
+ * import { narrativeReferenceBroken } from "./warnings.js";
  * const w = narrativeReferenceBroken({ path: "reference" }, "prob1");
  * ```
  */
@@ -498,7 +498,7 @@ export function narrativeReferenceBroken(position: CcdaPosition, referenceId: st
  *
  * @example
  * ```ts
- * import { unexpectedCodeSystem } from "@cosyte/ccda";
+ * import { unexpectedCodeSystem } from "./warnings.js";
  * const w = unexpectedCodeSystem({ path: "value" }, "1.2.3", "problem");
  * ```
  */
@@ -521,7 +521,7 @@ export function unexpectedCodeSystem(
  *
  * @example
  * ```ts
- * import { deprecatedCodeSystem } from "@cosyte/ccda";
+ * import { deprecatedCodeSystem } from "./warnings.js";
  * const w = deprecatedCodeSystem({ path: "value" }, "2.16.840.1.113883.6.103", "problem");
  * ```
  */
@@ -559,7 +559,7 @@ export function deprecatedCodeSystem(
  *
  * @example
  * ```ts
- * import { missingCodeSystem } from "@cosyte/ccda";
+ * import { missingCodeSystem } from "./warnings.js";
  * const w = missingCodeSystem({ path: "value" }, "problem");
  * ```
  */
@@ -595,7 +595,7 @@ export function missingCodeSystem(position: CcdaPosition, slot: string): CcdaWar
  *
  * @example
  * ```ts
- * import { missingCodeValue } from "@cosyte/ccda";
+ * import { missingCodeValue } from "./warnings.js";
  * const w = missingCodeValue({ path: "value" }, "problem");
  * ```
  */
@@ -629,7 +629,7 @@ export function missingCodeValue(position: CcdaPosition, slot: string): CcdaWarn
  *
  * @example
  * ```ts
- * import { missingProductCode } from "@cosyte/ccda";
+ * import { missingProductCode } from "./warnings.js";
  * const w = missingProductCode({ path: "substanceAdministration" });
  * ```
  */
@@ -718,7 +718,7 @@ export function missingProductCode(position: CcdaPosition): CcdaWarning {
  *
  * @example
  * ```ts
- * import { medicationProductArmUnexpected } from "@cosyte/ccda";
+ * import { medicationProductArmUnexpected } from "./warnings.js";
  * const w = medicationProductArmUnexpected({ path: "consumable" });
  * ```
  */
@@ -827,7 +827,7 @@ export function medicationProductArmUnexpected(position: CcdaPosition): CcdaWarn
  *
  * @example
  * ```ts
- * import { medicationProductArmConflict } from "@cosyte/ccda";
+ * import { medicationProductArmConflict } from "./warnings.js";
  * const w = medicationProductArmConflict({ path: "manufacturedProduct" });
  * ```
  */
@@ -892,7 +892,7 @@ export function medicationProductArmConflict(position: CcdaPosition): CcdaWarnin
  *
  * @example
  * ```ts
- * import { medicationProductArmRepeated } from "@cosyte/ccda";
+ * import { medicationProductArmRepeated } from "./warnings.js";
  * const w = medicationProductArmRepeated({ path: "manufacturedProduct" });
  * ```
  */
@@ -988,7 +988,7 @@ export function medicationProductArmRepeated(position: CcdaPosition): CcdaWarnin
  *
  * @example
  * ```ts
- * import { medicationProductCodeRepeated } from "@cosyte/ccda";
+ * import { medicationProductCodeRepeated } from "./warnings.js";
  * const w = medicationProductCodeRepeated({ path: "manufacturedMaterial" });
  * ```
  */
@@ -1075,7 +1075,7 @@ export function medicationProductCodeRepeated(position: CcdaPosition): CcdaWarni
  *
  * @example
  * ```ts
- * import { medicationProductCodeTranslationOnly } from "@cosyte/ccda";
+ * import { medicationProductCodeTranslationOnly } from "./warnings.js";
  * const w = medicationProductCodeTranslationOnly({ path: "code" }, true);
  * ```
  */
@@ -1100,7 +1100,7 @@ export function medicationProductCodeTranslationOnly(
  *
  * @example
  * ```ts
- * import { missingDoseQuantity } from "@cosyte/ccda";
+ * import { missingDoseQuantity } from "./warnings.js";
  * const w = missingDoseQuantity({ path: "substanceAdministration" });
  * ```
  */
@@ -1119,7 +1119,7 @@ export function missingDoseQuantity(position: CcdaPosition): CcdaWarning {
  *
  * @example
  * ```ts
- * import { missingRouteCode } from "@cosyte/ccda";
+ * import { missingRouteCode } from "./warnings.js";
  * const w = missingRouteCode({ path: "substanceAdministration" });
  * ```
  */
@@ -1140,7 +1140,7 @@ export function missingRouteCode(position: CcdaPosition): CcdaWarning {
  *
  * @example
  * ```ts
- * import { multipleEffectiveTimesUnresolved } from "@cosyte/ccda";
+ * import { multipleEffectiveTimesUnresolved } from "./warnings.js";
  * const w = multipleEffectiveTimesUnresolved({ path: "substanceAdministration" }, 3);
  * ```
  */
@@ -1163,7 +1163,7 @@ export function multipleEffectiveTimesUnresolved(
  *
  * @example
  * ```ts
- * import { problemStatusIndeterminate } from "@cosyte/ccda";
+ * import { problemStatusIndeterminate } from "./warnings.js";
  * const w = problemStatusIndeterminate({ path: "act" });
  * ```
  */
@@ -1183,7 +1183,7 @@ export function problemStatusIndeterminate(position: CcdaPosition): CcdaWarning 
  *
  * @example
  * ```ts
- * import { sectionPlacementSuspect } from "@cosyte/ccda";
+ * import { sectionPlacementSuspect } from "./warnings.js";
  * const w = sectionPlacementSuspect({ path: "entry" }, "medications", "problems");
  * ```
  */
@@ -1208,7 +1208,7 @@ export function sectionPlacementSuspect(
  *
  * @example
  * ```ts
- * import { nonUcumUnit } from "@cosyte/ccda";
+ * import { nonUcumUnit } from "./warnings.js";
  * const w = nonUcumUnit({ path: "value" }, "cc");
  * ```
  */
@@ -1228,7 +1228,7 @@ export function nonUcumUnit(position: CcdaPosition, unit: string): CcdaWarning {
  *
  * @example
  * ```ts
- * import { ucumCaseSuspect } from "@cosyte/ccda";
+ * import { ucumCaseSuspect } from "./warnings.js";
  * const w = ucumCaseSuspect({ path: "value" }, "ML");
  * ```
  */
@@ -1248,7 +1248,7 @@ export function ucumCaseSuspect(position: CcdaPosition, unit: string): CcdaWarni
  *
  * @example
  * ```ts
- * import { missingUnitOnPq } from "@cosyte/ccda";
+ * import { missingUnitOnPq } from "./warnings.js";
  * const w = missingUnitOnPq({ path: "value" });
  * ```
  */
@@ -1268,7 +1268,7 @@ export function missingUnitOnPq(position: CcdaPosition): CcdaWarning {
  *
  * @example
  * ```ts
- * import { freeTextReferenceRange } from "@cosyte/ccda";
+ * import { freeTextReferenceRange } from "./warnings.js";
  * const w = freeTextReferenceRange({ path: "referenceRange" });
  * ```
  */
@@ -1289,7 +1289,7 @@ export function freeTextReferenceRange(position: CcdaPosition): CcdaWarning {
  *
  * @example
  * ```ts
- * import { resultValueTypeUnhandled } from "@cosyte/ccda";
+ * import { resultValueTypeUnhandled } from "./warnings.js";
  * const w = resultValueTypeUnhandled({ path: "value" }, "RTO");
  * ```
  */
@@ -1309,7 +1309,7 @@ export function resultValueTypeUnhandled(position: CcdaPosition, xsiType: string
  *
  * @example
  * ```ts
- * import { immunizationRefused } from "@cosyte/ccda";
+ * import { immunizationRefused } from "./warnings.js";
  * const w = immunizationRefused({ path: "substanceAdministration" });
  * ```
  */
@@ -1329,7 +1329,7 @@ export function immunizationRefused(position: CcdaPosition): CcdaWarning {
  *
  * @example
  * ```ts
- * import { deprecatedLoinc } from "@cosyte/ccda";
+ * import { deprecatedLoinc } from "./warnings.js";
  * const w = deprecatedLoinc({ path: "code" }, "41909-3");
  * ```
  */
@@ -1350,7 +1350,7 @@ export function deprecatedLoinc(position: CcdaPosition, loincCode: string): Ccda
  *
  * @example
  * ```ts
- * import { requiredSectionMissing } from "@cosyte/ccda";
+ * import { requiredSectionMissing } from "./warnings.js";
  * const w = requiredSectionMissing({ path: "/ClinicalDocument" }, "ccd", "problems");
  * ```
  */
@@ -1375,7 +1375,7 @@ export function requiredSectionMissing(
  *
  * @example
  * ```ts
- * import { procedureMoodUnexpected } from "@cosyte/ccda";
+ * import { procedureMoodUnexpected } from "./warnings.js";
  * const w = procedureMoodUnexpected({ path: "procedure" }, "GOL");
  * ```
  */
@@ -1396,7 +1396,7 @@ export function procedureMoodUnexpected(position: CcdaPosition, moodCode: string
  *
  * @example
  * ```ts
- * import { plannedVsPerformedAmbiguous } from "@cosyte/ccda";
+ * import { plannedVsPerformedAmbiguous } from "./warnings.js";
  * const w = plannedVsPerformedAmbiguous({ path: "procedure" });
  * ```
  */
@@ -1417,7 +1417,7 @@ export function plannedVsPerformedAmbiguous(position: CcdaPosition): CcdaWarning
  *
  * @example
  * ```ts
- * import { smokingStatusUnknown } from "@cosyte/ccda";
+ * import { smokingStatusUnknown } from "./warnings.js";
  * const w = smokingStatusUnknown({ path: "observation/value" });
  * ```
  */
@@ -1438,7 +1438,7 @@ export function smokingStatusUnknown(position: CcdaPosition): CcdaWarning {
  *
  * @example
  * ```ts
- * import { smokingStatusCodeUnrecognized } from "@cosyte/ccda";
+ * import { smokingStatusCodeUnrecognized } from "./warnings.js";
  * const w = smokingStatusCodeUnrecognized({ path: "observation/value" }, "12345678");
  * ```
  */
@@ -1494,8 +1494,12 @@ export function semanticCodeInvalid(
  *
  * @example
  * ```ts
- * import { profileQuirkApplied, deprecatedLoinc } from "@cosyte/ccda";
- * const original = deprecatedLoinc({ path: "code" }, "41909-3");
+ * import { profileQuirkApplied, WARNING_CODES, type CcdaWarning } from "@cosyte/ccda";
+ * const original: CcdaWarning = {
+ *   code: WARNING_CODES.DEPRECATED_LOINC,
+ *   message: 'LOINC code "41909-3" is deprecated; prefer its current successor. Code preserved.',
+ *   position: { path: "code" },
+ * };
  * const w = profileQuirkApplied(original, "smartScorecard");
  * ```
  */
