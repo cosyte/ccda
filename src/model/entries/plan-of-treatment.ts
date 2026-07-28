@@ -62,10 +62,28 @@ export type PlannedItemKind =
 
 /**
  * A single planned item from the Plan of Treatment. `kind` is the template
- * variant; `code` is the planned act/observation/drug code; `disposition` is the
- * performed-vs-planned reading of `moodCode` (normally `"planned"`, never
- * guessed); `value` carries the expected result for the observation variant.
- * `negated` and `nullFlavor` are kept distinct, never collapsed.
+ * variant; `disposition` is the performed-vs-planned reading of `moodCode`
+ * (normally `"planned"`, never guessed); `value` carries the expected result for
+ * the observation variant. `negated` and `nullFlavor` are kept distinct, never
+ * collapsed.
+ *
+ * `code` is the planned act's own `<code>` for five of the six variants. For a
+ * `medicationActivity` it is the **drug**, read from
+ * `consumable/manufacturedProduct`, and never the `substanceAdministration`'s
+ * own `<code>`: that element is an `ActSubstanceAdministrationCode` (the kind of
+ * administration act), not the substance. An act `<code>` present on that
+ * variant is not read into this field; it round-trips through `doc.toString()`.
+ *
+ * **Absence has three shapes there and only two of them are `undefined`, so do
+ * not test this field for truthiness and stop.** It is `undefined` when no arm
+ * carries a `<code>` at all (beside `MISSING_PRODUCT_CODE`) and when the arms
+ * name different drugs (beside `MEDICATION_PRODUCT_ARM_CONFLICT`). But an arm
+ * whose `<code>` asserts neither a symbol nor a `nullFlavor` yields a **truthy
+ * but empty `CD`**, and a `nullFlavor`-only one yields a `CD` carrying just that
+ * marking. Neither is `MISSING_PRODUCT_CODE` (an arm did carry a `<code>`), and
+ * unlike a performed Medication Activity's `drug` this field is **not** one of
+ * the five wired `CodeSlot`s, so `MISSING_CODE_VALUE` cannot fire on it either
+ * and the empty shape is silent. Read `code?.code`, not `code`.
  *
  * @example
  * ```ts
@@ -181,30 +199,70 @@ function buildPlannedItem(
 }
 
 /**
- * The code element for a planned item, the direct `<code>` for most variants,
- * or the `consumable/manufacturedProduct` product code for a Planned Medication
- * Activity (whose drug lives in the consumable, on either arm of the CDA R2
- * `ManufacturedProduct` choice). @internal
+ * The code element for a planned item: the direct `<code>` for five of the six
+ * variants, and the `consumable/manufacturedProduct` product code for a Planned
+ * Medication Activity (whose drug lives in the consumable, on either arm of the
+ * CDA R2 `ManufacturedProduct` choice).
+ *
+ * **A Planned Medication Activity's drug is never the act's own `<code>`, so
+ * the consumable is read whether or not one is present.** In CDA R2
+ * `SubstanceAdministration.code` is an `ActSubstanceAdministrationCode`, the
+ * *kind of administration act* ("drug therapy", "immunization"); the substance
+ * itself participates through `consumable/manufacturedProduct`. Nothing about
+ * the planned mood changes that, so an act `<code>` is not a weaker drug code
+ * to fall back on, it is a different fact about a different thing.
+ *
+ * This used to return the direct `<code>` first and only fall through to the
+ * consumable when there was none, which made a planned medication carrying an
+ * act `<code>` (CDA R2 gives `SubstanceAdministration.code` `[0..1]`, and the C-CDA
+ * templates are open, so it is legal; how often vendors write one is not a claim
+ * this repo can cite) read its *act type* into the drug slot
+ * and never call {@link consumableProductCode} at all. Everything that function
+ * says was therefore unreachable at this call site:
+ * `MEDICATION_PRODUCT_ARM_CONFLICT` above all, so two `manufacturedProduct`
+ * arms naming two **different drugs** went completely unmentioned on the Plan
+ * of Treatment, which is the section describing what a patient is about to be
+ * given; and with it `MISSING_PRODUCT_CODE`, `MEDICATION_PRODUCT_ARM_UNEXPECTED`,
+ * `MEDICATION_PRODUCT_ARM_REPEATED`, `MEDICATION_PRODUCT_CODE_REPEATED` and
+ * `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`. `CODE_NARRATIVE_MISMATCH` was
+ * reachable but blind to its subject: it reconciled the act code's label
+ * against a narrative that describes the drug, so it could not see a structured
+ * drug contradicting the narrative drug, and fired on well-formed documents
+ * instead.
+ *
+ * The model was incoherent in the same way. `code` was the drug on a planned
+ * medication with no act `<code>` and the act type on one with it, so a
+ * consumer reading `code` off a `medicationActivity` could not rely on it being
+ * either. It is now always the drug there, exactly as `drug` is on a performed
+ * Medication Activity and `vaccine` is on an Immunization Activity, the other
+ * two `consumable` call sites, both of which have always ignored the act's own
+ * `<code>`. The builder already assumed this reading: it emits the drug in the
+ * `consumable` and **no** direct `<code>` for this variant, which is precisely
+ * why no round-trip test could ever exercise the defect.
+ *
+ * What is given up is stated rather than hidden: the act `<code>`'s coding is
+ * not on the model for this variant, as it is not for the other two call sites.
+ * It survives verbatim, `serializeCcda` re-emits the parsed DOM, so
+ * `doc.toString()` still carries it. Promoting it into the drug slot is the
+ * manufactured reading this area refuses everywhere else. The other five
+ * planned kinds are untouched: their `<code>` *is* the planned act, and they
+ * have no consumable to read. @internal
  */
 function plannedCodeElement(
   el: Element,
   kind: PlannedItemKind,
   ctx: ParseCtx,
 ): Element | undefined {
-  const direct = child(el, "code");
-  if (direct !== undefined) return direct;
-  // Only a planned medication reads the consumable, so only it can trip the
-  // alternate-arm warning; the other planned kinds never reach this helper. A
-  // planned medication with neither a direct <code> nor a product code on any
-  // arm has no drug at all, which is flagged here for the same reason it is on a
-  // performed Medication Activity: a planned dose of nothing is not a lesser
-  // gap. The other planned kinds are left alone, their code is optional and an
-  // absence there is not a lost drug.
-  if (kind !== "medicationActivity") return undefined;
+  // The five non-medication kinds: the direct <code> is the planned act itself,
+  // and an absence there is not a lost drug, so nothing is flagged.
+  if (kind !== "medicationActivity") return child(el, "code");
   const { el: productEl, conflicted } = consumableProductCode(el, ctx);
-  // A product withheld because both arms named different drugs already drew the
-  // stronger `MEDICATION_PRODUCT_ARM_CONFLICT`; "no arm yielded a code" would be
-  // false there, so the backstop stands down.
+  // A planned medication with no product code on any arm has no drug at all,
+  // which is flagged for the same reason it is on a performed Medication
+  // Activity: a planned dose of nothing is not a lesser gap. The one exception
+  // is a product withheld because the arms named different drugs, which already
+  // drew the stronger `MEDICATION_PRODUCT_ARM_CONFLICT`; "no arm yielded a
+  // code" would be false there, so the backstop stands down.
   if (productEl === undefined && conflicted !== true) ctx.emit(missingProductCode(positionOf(el)));
   return productEl;
 }

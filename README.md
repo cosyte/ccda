@@ -115,6 +115,27 @@ code-system checks, so reading it is strictly safer than the alternative of retu
 `drug: undefined` while dose and route survive. If no arm yields a code, that is
 `MISSING_PRODUCT_CODE` (safety-critical), never a silent `undefined`.
 
+**Which arm is read, and every `MEDICATION_PRODUCT_*` / `MISSING_PRODUCT_CODE` warning below, applies
+at the three `consumable` call sites equally**: a performed Medication Activity, an Immunization
+Activity, and a **Planned Medication Activity**. On the planned one, `code` on a `getPlannedItems()`
+entry of kind `medicationActivity` is the **drug**, read from the consumable, and never the
+`substanceAdministration`'s own `<code>`: CDA R2 makes that element an
+`ActSubstanceAdministrationCode`, the kind of administration act ("drug therapy"), while the
+substance participates through `consumable/manufacturedProduct`. A planned medication that carries
+one is therefore not a lesser reading to fall back on, and the act code is not on the model for that
+variant (it round-trips through `doc.toString()`, as every unmodelled element does). Until `0.0.3`
+the act `<code>` was preferred when present, so on those documents the planned item's `code` was an
+act type rather than a drug, and none of the product warnings on this page could fire there at all.
+
+**The code-system and terminology checks do NOT generalize with it, and that limit is older and
+wider than this page.** `checkCodeSlot` and your `TerminologyAdapter` run at the five wired
+`CodeSlot`s only (problem, medication, allergen, route, vaccine), and a `PlannedItem.code` is not one
+of them, as "Known limitations" already says. So `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`,
+`UNEXPECTED_CODE_SYSTEM`, `DEPRECATED_CODE_SYSTEM` and `SEMANTIC_CODE_INVALID` **cannot fire on a
+planned medication's drug**, where they do fire on a performed one's. A planned drug asserting a
+`@code` with no `@codeSystem`, or an empty `<code/>`, is read and left unremarked. Treat a quiet
+`getPlannedItems()` accordingly.
+
 A document carrying **more than one arm** is handled on what the arms say. That means both arms of
 the choice, and a **repeated** arm of one kind: two sibling `manufacturedMaterial`s naming different
 drugs is the same silent pick, one arm kind in. `MEDICATION_PRODUCT_ARM_UNEXPECTED` fires on the
@@ -148,8 +169,13 @@ fire more, never less. **Selection is a narrower question again and stays keyed 
 in, never lifted out of a `<translation>` (which this package preserves but never slot-checks).
 Among repeated arms of one kind, the first that names a product is the one read.
 
-**When no arm asserts a primary `@code` and the product is named only in a `<translation>`, that is
-`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY` (safety-critical).** The reading is unchanged: `med.drug`
+**When no arm's lead `<code>` asserts a primary `@code` and the product is named in a
+`<translation>`, that is `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY` (safety-critical).** Read that as
+written: selection looks at each arm's **first** `<code>` and no other, so an arm carrying a _second_
+`<code>` that does assert a primary is still a slot with no selected product and still draws this
+code (with `MEDICATION_PRODUCT_CODE_REPEATED` beside it). The message said "no arm asserts a primary
+`@code`" and called the translation the _only_ place the product was named until `0.0.3`, both of
+which were false on exactly that shape. The reading is unchanged: `med.drug`
 comes back as the selection rule always picked it, and `drug.code` is `undefined`. Only the silence
 changes. `MISSING_PRODUCT_CODE` cannot fire, an arm did carry a `<code>`, and the code-system checks
 are quiet by design on a `nullFlavor`-only slot, so a consumer reading `med.drug?.code` used to get a
@@ -161,9 +187,11 @@ have to **search that list** rather than read `[0]`, because a `<code>` may carr
 `<translation>`s and the first can be `nullFlavor`-marked or in a code system you did not want. When
 it is not (two arms, neither asserting a primary, the translation on the one that was not selected),
 no product-naming coding is on the returned `CD` at all and the coding is reachable only through
-`doc.toString()`, which re-emits every arm verbatim. On the `nullFlavor`-marked idiom it is the lone signal; on the
-variant that asserts neither a symbol nor a `nullFlavor`, `MISSING_CODE_VALUE` fires beside it. It
-stands down behind `MEDICATION_PRODUCT_ARM_CONFLICT`, the stronger statement about the same slot.
+`doc.toString()`, which re-emits every arm verbatim. On the `nullFlavor`-marked idiom it is the lone
+signal; on the variant that asserts neither a symbol nor a `nullFlavor`, `MISSING_CODE_VALUE` fires
+beside it **at a wired slot**, so on a performed medication or an immunization but not on a planned
+one, whose `code` is not slot-checked at all (see above). It stands down behind
+`MEDICATION_PRODUCT_ARM_CONFLICT`, the stronger statement about the same slot.
 
 **A repeated arm is reported whether or not it agrees** (`MEDICATION_PRODUCT_ARM_REPEATED`, tolerable
 by a profile). Repeated arms that disagree are refused as above; repeated arms that agree used to be

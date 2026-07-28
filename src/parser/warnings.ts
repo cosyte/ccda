@@ -977,8 +977,19 @@ export function medicationProductCodeRepeated(position: CcdaPosition): CcdaWarni
 
 /**
  * Build a `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY` warning. Emitted when
- * **no** arm of a `manufacturedProduct` asserts a primary `@code` and at least
- * one of them names a product in a `<translation>` alternate instead.
+ * **no** arm's **lead** `<code>` asserts a primary `@code` and at least one of
+ * them names a product in a `<translation>` alternate instead.
+ *
+ * **"Lead `<code>`", not "arm", and the message says so.** Selection reads each
+ * arm's first `<code>` and no other, so an arm carrying a *second* `<code>` that
+ * does assert a primary is still a slot with no selected product, and this
+ * warning still fires. The message used to open "No manufacturedProduct arm
+ * asserts a primary `@code`" and say the product was named "only" in a
+ * translation, both of which are false on that shape, where a sibling `<code>`
+ * asserts one and `MEDICATION_PRODUCT_CODE_REPEATED` fires beside this warning
+ * to say so. Narrowed here rather than left, because a safety-critical warning
+ * that misdescribes the document it is about is the same defect as one that
+ * points at a coding that is not there.
  *
  * `nullFlavor="OTH"` beside a `<translation>` is the documented C-CDA idiom for
  * "not codable in the bound value set, here is an alternate coding", so on that
@@ -1052,7 +1063,7 @@ export function medicationProductCodeTranslationOnly(
     : `this arm is not the one returned as the product CD, so the coding is reachable only in the re-serialized document`;
   return {
     code: WARNING_CODES.MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY,
-    message: `No manufacturedProduct arm asserts a primary @code, and the product is named only in a <translation> alternate at this position; translations are preserved and re-serialized but are never slot-checked, so no product code is selected and ${where}.`,
+    message: `No manufacturedProduct arm's lead <code> asserts a primary @code, and the product is named in a <translation> alternate at this position; selection reads each arm's lead <code> only, and translations are preserved and re-serialized but are never slot-checked, so no product code is selected and ${where}.`,
     position,
   };
 }

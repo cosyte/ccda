@@ -8,7 +8,13 @@
 
 import { describe, expect, it } from "vitest";
 
-import { parseCcda, WARNING_CODES, type CcdaWarning } from "../src/index.js";
+import {
+  parseCcda,
+  SAFETY_CRITICAL_CODES,
+  WARNING_CODES,
+  type CcdaWarning,
+  type CD,
+} from "../src/index.js";
 import {
   buildCcda,
   NO_REQUIRED_SECTIONS_DOC_OID,
@@ -2001,13 +2007,14 @@ describe("clinical entries, arm disagreement through <translation> and repeated 
       // would let it land on a non-lead <code> that asserts a PRIMARY, and the
       // message would then send a reader to a <translation> that does not exist.
       //
-      // What it does NOT buy, stated so nobody reads more into it: the message's
-      // opening clause, "No manufacturedProduct arm asserts a primary @code", is
-      // FALSE on this very fixture, whose arm asserts one on its second <code>.
-      // That is PRE-EXISTING (base emits the identical message on the identical
-      // input) and this slice only improves the disclosure around it, since
-      // MEDICATION_PRODUCT_CODE_REPEATED now fires beside it. Narrowing that
-      // clause to the lead <code>s is a separate change to a separate warning.
+      // The message's opening clause used to read "No manufacturedProduct arm
+      // asserts a primary @code", which is FALSE on this very fixture, whose arm
+      // asserts one on its second <code>, and it called the translation the
+      // ONLY place the product was named, false on the same shape.
+      // CCDA-ARM-MULTI-CODE improved the disclosure around it (a
+      // MEDICATION_PRODUCT_CODE_REPEATED now fires beside it) and deliberately
+      // left the clause; CCDA-PLANNED-MED-ARM-CONFLICT-UNREACHABLE narrows it to
+      // the LEAD <code>s, which is what selection actually reads.
       const doc = parseCcda(
         buildCcda({
           sections: materialCode(
@@ -2023,6 +2030,12 @@ describe("clinical entries, arm disagreement through <translation> and repeated 
       // the translation the message sends the reader to.
       expect(translationOnly[0]?.message).toContain("returned CD's translation list");
       expect(doc.getMedications()[0]?.drug?.translation?.[0]?.code).toBe(ASPIRIN);
+      // And the message no longer says a thing this document contradicts: the
+      // arm DOES assert a primary @code, on its second <code>, and the product
+      // is named there as well as in the translation.
+      expect(translationOnly[0]?.message).toContain("arm's lead <code> asserts a primary @code");
+      expect(translationOnly[0]?.message).not.toContain("named only in a <translation>");
+      expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_CODE_REPEATED);
     });
 
     it("pins the whole product-arm matrix: what is read, and what is said about it", () => {
@@ -2379,5 +2392,469 @@ describe("clinical entries, arm disagreement through <translation> and repeated 
     expect(doc.getMedications()[0]?.drug?.code).toBe(LISINOPRIL);
     expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
     expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED);
+  });
+});
+
+/**
+ * `CCDA-PLANNED-MED-ARM-CONFLICT-UNREACHABLE`. The Plan of Treatment is the
+ * third `consumable` call site, and it was the one where none of the product
+ * warnings could fire.
+ *
+ * `plannedCodeElement` returned the act's direct `<code>` **before** it ever
+ * called `consumableProductCode`, so a Planned Medication Activity carrying its
+ * own `<code>` (legal, `SubstanceAdministration.code` being `[0..1]` in CDA R2, and one it defines as the *kind of
+ * administration act* rather than the substance) read that act type into the
+ * drug slot and skipped the consumable entirely. Every warning that function
+ * raises was unreachable there, `MEDICATION_PRODUCT_ARM_CONFLICT` above all:
+ * two `manufacturedProduct` arms naming two different drugs went completely
+ * unmentioned, on the section that says what a patient is **about to be given**.
+ *
+ * The builder is what hid it. It emits the drug in the `consumable` and no
+ * direct `<code>` for this variant, so no round-trip fixture could produce the
+ * shape.
+ */
+describe("clinical entries, a Planned Medication Activity carrying its own act <code>", () => {
+  const RXNORM = "2.16.840.1.113883.6.88";
+  const SNOMED_CT = "2.16.840.1.113883.6.96";
+  /** Aspirin, the RxNorm code this repo's tolerance notes already use. */
+  const ASPIRIN = "1191";
+  /** The fixture's drug, Lisinopril 10 MG Oral Tablet. */
+  const LISINOPRIL = "314076";
+  /** SNOMED CT "Administration of drug or medicament (procedure)". */
+  const ADMIN_OF_DRUG = "18629005";
+
+  /**
+   * `SubstanceAdministration.code`: an `ActSubstanceAdministrationCode`, the
+   * kind of administration act, NOT the substance. The `displayName` is the
+   * concept's own label, and it is deliberately nothing like a drug name, which
+   * is the whole point of the reconciliation rows below.
+   *
+   * `18629005` is "Administration of drug or medicament (procedure)", verified
+   * against SNOMED CT rather than carried over. Do NOT use `416118004` here:
+   * that is "Administration (procedure)", a different and now-inactive concept
+   * (inactivated 2021-09-30), and pairing it with this label would be the third
+   * instance of the fixture defect this area has already produced twice (RXCUI
+   * `197361` labelled as lisinopril, CVX `140` labelled with CVX `141`'s name).
+   */
+  const ACT_CODE = `<code code="${ADMIN_OF_DRUG}" codeSystem="${SNOMED_CT}" displayName="Administration of drug or medicament"/>`;
+  /** A narrative reference, so `reconcileCode` has something to compare against. */
+  const TEXT_REF = `<text><reference value="#planmed1"/></text>`;
+  const MATERIAL_ARM = `<manufacturedMaterial><code code="${LISINOPRIL}" codeSystem="${RXNORM}" displayName="Lisinopril 10 MG Oral Tablet"/></manufacturedMaterial>`;
+
+  /**
+   * A Plan of Treatment section carrying exactly ONE Planned Medication
+   * Activity, so a warning set reads only that entry rather than the six-entry
+   * fixture's other five. Synthetic throughout, per the PHI-by-default rule:
+   * the drug and the narrative line are the same Lisinopril the canonical
+   * "Jane Doe" fixtures already use.
+   */
+  const plannedMed = (arms: string, sbadmExtra = ""): string => `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.10" extension="2014-06-09"/>
+          <code code="18776-5" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Plan of Treatment</title>
+          <text><content ID="planmed1">Lisinopril 10 MG Oral Tablet</content></text>
+          <entry>
+            <substanceAdministration classCode="SBADM" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.42" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="plan-med-1"/>
+              ${sbadmExtra}
+              <statusCode code="active"/>
+              <consumable>
+                <manufacturedProduct>
+                  ${arms}
+                </manufacturedProduct>
+              </consumable>
+            </substanceAdministration>
+          </entry>
+        </section>
+      </component>`;
+
+  const plannedDrug = (sections: string): CD | undefined =>
+    parseCcda(buildCcda({ sections }))
+      .getPlannedItems()
+      .find((p) => p.kind === "medicationActivity")?.code;
+
+  it("reads the DRUG, not the act code, when the planned medication carries both", () => {
+    // The reading the model always claimed and only sometimes delivered: `code`
+    // was the drug on a planned medication with no act <code> and the act TYPE
+    // on one with it, so a consumer could not rely on it being either.
+    const drug = plannedDrug(plannedMed(MATERIAL_ARM, ACT_CODE));
+    expect(drug?.code).toBe(LISINOPRIL);
+    expect(drug?.codeSystem).toBe(RXNORM);
+    expect(drug?.code).not.toBe(ADMIN_OF_DRUG);
+  });
+
+  it("refuses to pick between two arms naming different drugs, which it never could before", () => {
+    // THE DEFECT. Base returns code=18629005 (the act type) and says NOTHING:
+    // one planned medication, two named drugs, silently reduced to neither of
+    // them without a warning of any kind.
+    const doc = parseCcda(
+      buildCcda({
+        sections: plannedMed(
+          `${MATERIAL_ARM}<manufacturedLabeledDrug><code code="${ASPIRIN}" codeSystem="${RXNORM}"/></manufacturedLabeledDrug>`,
+          ACT_CODE,
+        ),
+      }),
+    );
+    const planned = doc.getPlannedItems().find((p) => p.kind === "medicationActivity");
+    expect(planned).toBeDefined();
+    expect(planned?.code).toBeUndefined();
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT);
+    // The conflict is the stronger, more specific statement; "no arm yielded a
+    // code" would be false, exactly as at the other two call sites.
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.MISSING_PRODUCT_CODE);
+  });
+
+  it("flags a planned medication whose consumable names no product on any arm", () => {
+    const doc = parseCcda(buildCcda({ sections: plannedMed("<manufacturedMaterial/>", ACT_CODE) }));
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.MISSING_PRODUCT_CODE);
+    expect(plannedDrug(plannedMed("<manufacturedMaterial/>", ACT_CODE))).toBeUndefined();
+  });
+
+  it("flags a planned medication with an act code and no consumable at all", () => {
+    const noConsumable = plannedMed(MATERIAL_ARM, ACT_CODE).replace(
+      /<consumable>[\s\S]*?<\/consumable>/u,
+      "",
+    );
+    expect(codes(parseCcda(buildCcda({ sections: noConsumable })).warnings)).toContain(
+      WARNING_CODES.MISSING_PRODUCT_CODE,
+    );
+  });
+
+  it("reaches every other product warning too, not just the conflict", () => {
+    // The short-circuit skipped the whole function, so all of these were
+    // unreachable on this variant, not merely the headline one.
+    const unexpected = codes(
+      parseCcda(
+        buildCcda({
+          sections: plannedMed(
+            `${MATERIAL_ARM}<manufacturedLabeledDrug><code code="${LISINOPRIL}" codeSystem="${RXNORM}"/></manufacturedLabeledDrug>`,
+            ACT_CODE,
+          ),
+        }),
+      ).warnings,
+    );
+    expect(unexpected).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED);
+
+    const repeated = codes(
+      parseCcda(
+        buildCcda({
+          sections: plannedMed(
+            `${MATERIAL_ARM}<manufacturedMaterial><code code="${LISINOPRIL}" codeSystem="${RXNORM}"/></manufacturedMaterial>`,
+            ACT_CODE,
+          ),
+        }),
+      ).warnings,
+    );
+    expect(repeated).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_REPEATED);
+
+    const codeRepeated = codes(
+      parseCcda(
+        buildCcda({
+          sections: plannedMed(
+            `<manufacturedMaterial><code code="${LISINOPRIL}" codeSystem="${RXNORM}"/><code code="${LISINOPRIL}" codeSystem="${RXNORM}"/></manufacturedMaterial>`,
+            ACT_CODE,
+          ),
+        }),
+      ).warnings,
+    );
+    expect(codeRepeated).toContain(WARNING_CODES.MEDICATION_PRODUCT_CODE_REPEATED);
+
+    const translationOnly = codes(
+      parseCcda(
+        buildCcda({
+          sections: plannedMed(
+            `<manufacturedMaterial><code nullFlavor="OTH"><translation code="${LISINOPRIL}" codeSystem="${RXNORM}"/></code></manufacturedMaterial>`,
+            ACT_CODE,
+          ),
+        }),
+      ).warnings,
+    );
+    expect(translationOnly).toContain(WARNING_CODES.MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY);
+  });
+
+  it("points CODE_NARRATIVE_MISMATCH at the drug, the only thing it can usefully compare", () => {
+    // Reachable before, but blind to its subject: it reconciled the ACT code's
+    // label against a narrative that names the DRUG, so it fired on every
+    // well-formed document carrying both and could not see the one failure it
+    // exists to catch. Now the drug is what is compared, so a structured drug
+    // agreeing with the narrative is quiet...
+    const agreeing = codes(
+      parseCcda(buildCcda({ sections: plannedMed(MATERIAL_ARM, `${ACT_CODE}${TEXT_REF}`) }))
+        .warnings,
+    );
+    expect(agreeing).not.toContain(WARNING_CODES.CODE_NARRATIVE_MISMATCH);
+
+    // ...and a structured drug CONTRADICTING the narrative is not. Base is
+    // silent on this document: it compared "Administration of drug or
+    // medicament" against "Lisinopril 10 MG Oral Tablet", found them different,
+    // and fired for the wrong reason on both of these, which is the same
+    // warning being useless in both directions.
+    const contradicting = codes(
+      parseCcda(
+        buildCcda({
+          sections: plannedMed(
+            `<manufacturedMaterial><code code="${ASPIRIN}" codeSystem="${RXNORM}" displayName="Aspirin"/></manufacturedMaterial>`,
+            `${ACT_CODE}${TEXT_REF}`,
+          ),
+        }),
+      ).warnings,
+    );
+    expect(contradicting).toContain(WARNING_CODES.CODE_NARRATIVE_MISMATCH);
+  });
+
+  it("leaves the other five planned kinds reading their own <code>", () => {
+    // Only the medication variant has a consumable, and only it changed. The
+    // other five carry the planned act itself in <code>, and an absence there
+    // is not a lost drug, so nothing is flagged for them either.
+    const doc = parseCcda(buildCcda({ sections: PLAN_OF_TREATMENT_SECTION }));
+    const byKind = new Map(doc.getPlannedItems().map((p) => [p.kind, p.code?.code]));
+    expect(byKind.get("observation")).toBe("58410-2");
+    expect(byKind.get("act")).toBe("409073007");
+    expect(byKind.get("encounter")).toBe("99213");
+    expect(byKind.get("procedure")).toBe("73761001");
+    expect(byKind.get("supply")).toBe("58938008");
+    expect(byKind.get("medicationActivity")).toBe(LISINOPRIL);
+  });
+
+  it("loses nothing: the act code and both arms round-trip verbatim", () => {
+    // The act <code> is not on the model for this variant, exactly as it is not
+    // on a performed Medication Activity or an Immunization Activity. Dropping
+    // it from the model is only defensible because the document itself survives.
+    const doc = parseCcda(
+      buildCcda({
+        sections: plannedMed(
+          `${MATERIAL_ARM}<manufacturedLabeledDrug><code code="${ASPIRIN}" codeSystem="${RXNORM}"/></manufacturedLabeledDrug>`,
+          ACT_CODE,
+        ),
+      }),
+    );
+    const out = doc.toString();
+    expect(out).toContain(`code="${ADMIN_OF_DRUG}"`);
+    expect(out).toContain(`code="${LISINOPRIL}"`);
+    expect(out).toContain(`code="${ASPIRIN}"`);
+    expect(parseCcda(out).toString()).toBe(out);
+  });
+
+  it("pins what is NOT covered here: a drugless planned medication can carry only a tolerable code", () => {
+    // PRE-EXISTING and deliberately NOT fixed by this slice, pinned so it is a
+    // measured limit rather than a discovery. `checkCodeSlot` is not called on a
+    // PlannedItem.code (it is not one of the five wired CodeSlots), so the
+    // untolerable companion that carries the tolerability argument for
+    // MEDICATION_PRODUCT_ARM_UNEXPECTED and MEDICATION_PRODUCT_ARM_REPEATED at
+    // the other two call sites, MISSING_CODE_VALUE, cannot fire here. An arm
+    // whose <code> asserts neither a symbol nor a nullFlavor therefore leaves a
+    // planned medication with NO drug identity and only a PROFILE-QUIETABLE
+    // warning, so a profile plus the documented "filter the expected noise"
+    // pattern reduces it to total silence. Base behaves identically, so this
+    // slice does not cause it; it makes it reachable on more documents, which is
+    // why it is written down here and queued rather than left implicit.
+    const labeled = parseCcda(
+      buildCcda({
+        sections: plannedMed("<manufacturedLabeledDrug><code/></manufacturedLabeledDrug>"),
+      }),
+    );
+    const fromLabeled = labeled.getPlannedItems().find((p) => p.kind === "medicationActivity");
+    expect(fromLabeled?.code).toStrictEqual({});
+    expect(fromLabeled?.code?.code).toBeUndefined();
+    expect(codes(labeled.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED);
+    expect(codes(labeled.warnings)).not.toContain(WARNING_CODES.MISSING_CODE_VALUE);
+    expect(codes(labeled.warnings)).not.toContain(WARNING_CODES.MISSING_PRODUCT_CODE);
+
+    const repeated = parseCcda(
+      buildCcda({
+        sections: plannedMed(
+          "<manufacturedMaterial><code/></manufacturedMaterial><manufacturedMaterial><code/></manufacturedMaterial>",
+        ),
+      }),
+    );
+    expect(codes(repeated.warnings)).toContain(WARNING_CODES.MEDICATION_PRODUCT_ARM_REPEATED);
+    expect(codes(repeated.warnings)).not.toContain(WARNING_CODES.MISSING_CODE_VALUE);
+
+    // Neither companion is unquietable here, which is exactly the gap.
+    expect(SAFETY_CRITICAL_CODES.has(WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED)).toBe(false);
+    expect(SAFETY_CRITICAL_CODES.has(WARNING_CODES.MEDICATION_PRODUCT_ARM_REPEATED)).toBe(false);
+    expect(SAFETY_CRITICAL_CODES.has(WARNING_CODES.MISSING_CODE_VALUE)).toBe(true);
+  });
+
+  it("pins the planned-medication matrix: what is read, and what is said about it", () => {
+    // The monotonicity argument for THIS call site as a diffable artifact
+    // rather than a claim, MEASURED by running this block against base `src/`.
+    // Every arm shape appears three times, once with no act <code>, once with
+    // one, and once with an act <code> plus a narrative reference. The triple IS
+    // the defect: against base the three variants of a row disagree, and after
+    // the fix they agree except where the narrative reconciliation legitimately
+    // separates them. Nine shapes, twenty-seven rows; eighteen move.
+    //
+    // 1. THE NINE "no act code" ROWS COME BACK BYTE-IDENTICAL. Nothing on that
+    //    path changed, and the performed-medication matrix above is unchanged
+    //    too, so this slice moves one call site and no other.
+    //
+    // 2. THE NINE "act code present" ROWS ARE PURE GAIN. Base reads
+    //    code=18629005 (a value in the ActSubstanceAdministrationCode slot: the
+    //    binding is extensible, the value set itself being HL7 ActCode
+    //    DRUG/FD/IMMUNIZ, so a SNOMED procedure concept is permitted there but
+    //    is not a member of the domain) into the drug slot on all nine and is
+    //    SILENT on
+    //    all nine. Each now matches its "no act code" twin, which across the
+    //    nine is two MEDICATION_PRODUCT_ARM_CONFLICTs (the headline defect,
+    //    twice: two arms, and two <code>s on one arm), a MISSING_PRODUCT_CODE,
+    //    two MEDICATION_PRODUCT_ARM_UNEXPECTEDs, a MEDICATION_PRODUCT_ARM_REPEATED,
+    //    a MEDICATION_PRODUCT_CODE_REPEATED and a
+    //    MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY, eight warnings across six
+    //    rows. Not one loses a warning. THREE stop handing back a code, and
+    //    each does so beside a safety-critical warning that says why: the
+    //    conflict rule's standing trade twice over, and the missing product.
+    //    The remaining THREE are silent before and after and still move,
+    //    because reading an act type as the drug was wrong even where nothing
+    //    was said about it.
+    //
+    // 3. THE NINE "act code + narrative" ROWS MOVE ONLY ON CODE_NARRATIVE_MISMATCH,
+    //    AND THAT IS THIS SLICE'S EXCEPTION TO THE INVARIANT. Base fires it on
+    //    NINE OF NINE, including the clean single arm and including the row
+    //    whose structured drug contradicts the narrative. It could not do
+    //    otherwise: it was comparing an act type's displayName against a
+    //    narrative that names a drug, which no conformant document will ever
+    //    match. It was a constant, not a predicate. After, it fires on ONE of
+    //    nine, exactly the row whose drug contradicts the narrative, which is
+    //    the failure the code exists to catch and the one base reported
+    //    identically to the clean document.
+    //
+    //    So eight rows lose it. TWO of those go WARNED TO SILENT ("clean single
+    //    arm" and "single arm, empty code"), and TWO trade a safety-critical
+    //    code for a tolerable one (MEDICATION_PRODUCT_ARM_UNEXPECTED,
+    //    MEDICATION_PRODUCT_ARM_REPEATED). Both halves of the invariant are
+    //    broken by those four rows and it is stated rather than hidden: what is
+    //    removed is a false positive that fired on every well-formed document of
+    //    this shape, not a signal. No row loses a PRODUCT warning, and the code
+    //    that moved is now reachable on its subject for the first time.
+    //
+    //    THAT ENUMERATION IS THE MATRIX'S, NOT THE UNIVERSE'S. It counts the
+    //    rows of THIS fixture, whose act <code> is an act type. A vendor writing
+    //    a DRUG code into SubstanceAdministration.code, contradicting its own
+    //    consumable, is a third warned-to-silent shape base reported and head
+    //    does not. Head is still the safer answer there (base handed back a
+    //    confidently wrong drug), and warning on it would mean treating that
+    //    element as a rival drug assertion, the manufactured reading this area
+    //    refuses, with no de-identified document to ground it. Stated, not
+    //    quietly excluded.
+    const armShapes: readonly (readonly [string, string])[] = [
+      ["clean single arm", MATERIAL_ARM],
+      [
+        // THE DEFECT. Base: code=18629005, silent.
+        "two arms naming different drugs",
+        `${MATERIAL_ARM}<manufacturedLabeledDrug><code code="${ASPIRIN}" codeSystem="${RXNORM}"/></manufacturedLabeledDrug>`,
+      ],
+      [
+        "two arms naming the same drug",
+        `${MATERIAL_ARM}<manufacturedLabeledDrug><code code="${LISINOPRIL}" codeSystem="${RXNORM}"/></manufacturedLabeledDrug>`,
+      ],
+      ["no code on any arm", "<manufacturedMaterial/>"],
+      [
+        "two materials agreeing",
+        `${MATERIAL_ARM}<manufacturedMaterial><code code="${LISINOPRIL}" codeSystem="${RXNORM}"/></manufacturedMaterial>`,
+      ],
+      [
+        "one material, two codes naming different drugs",
+        `<manufacturedMaterial><code code="${LISINOPRIL}" codeSystem="${RXNORM}"/><code code="${ASPIRIN}" codeSystem="${RXNORM}"/></manufacturedMaterial>`,
+      ],
+      [
+        "single arm, translation only",
+        `<manufacturedMaterial><code nullFlavor="OTH"><translation code="${LISINOPRIL}" codeSystem="${RXNORM}"/></code></manufacturedMaterial>`,
+      ],
+      [
+        // THE ROW THAT PINS WHAT DID *NOT* GENERALIZE. An arm whose <code>
+        // asserts neither a symbol nor a nullFlavor comes back as a truthy but
+        // empty CD in TOTAL SILENCE here, where the performed twin draws
+        // MISSING_CODE_VALUE: `checkCodeSlot` is never called on a
+        // PlannedItem.code, which is not one of the five wired CodeSlots.
+        // PRE-EXISTING and unchanged by this slice (base is silent on the "no
+        // act code" variant too), but reachable on strictly more documents now,
+        // so it is measured rather than left for someone to discover.
+        "single arm, empty code (NOT slot-checked here)",
+        `<manufacturedMaterial><code/></manufacturedMaterial>`,
+      ],
+      [
+        // THE ROW THAT MEASURES THE RECONCILIATION MOVE. Every other shape here
+        // names the Lisinopril the narrative names; this one names Aspirin, so
+        // the structured drug CONTRADICTS the narrative. Base reports it
+        // identically to the clean row above, which is the whole problem.
+        "single arm whose drug contradicts the narrative",
+        `<manufacturedMaterial><code code="${ASPIRIN}" codeSystem="${RXNORM}" displayName="Aspirin"/></manufacturedMaterial>`,
+      ],
+    ];
+    const variants: readonly (readonly [string, string])[] = [
+      ["no act code", ""],
+      ["act code present", ACT_CODE],
+      ["act code + narrative", `${ACT_CODE}${TEXT_REF}`],
+    ];
+    const matrix = armShapes.flatMap(([name, arms]) =>
+      variants.map(([label, extra]) => {
+        const doc = parseCcda(buildCcda({ sections: plannedMed(arms, extra) }));
+        const drug = doc.getPlannedItems().find((p) => p.kind === "medicationActivity")?.code;
+        // CODE_NARRATIVE_MISMATCH is in the frame deliberately: it is the one
+        // warning whose SUBJECT this change moves, from the act code's label to
+        // the drug's, so a matrix that filtered it out could not measure the
+        // thing most likely to go wrong here.
+        //
+        // MISSING_CODE_SYSTEM and MISSING_CODE_VALUE are in the frame for the
+        // OPPOSITE reason, and their absence from every row is a MEASUREMENT
+        // rather than a clean bill of health: neither can fire at this call
+        // site at all, because `checkCodeSlot` is only called at the five wired
+        // CodeSlots and a PlannedItem.code is not one of them. The
+        // "single arm, empty code" row above is what makes that visible instead
+        // of implied. If wiring the slot is ever taken up as its own item,
+        // these two columns are where it will show.
+        const said = codes(doc.warnings)
+          .filter(
+            (c) =>
+              c.startsWith("MEDICATION_PRODUCT") ||
+              c === "MISSING_PRODUCT_CODE" ||
+              c === "MISSING_CODE_SYSTEM" ||
+              c === "MISSING_CODE_VALUE" ||
+              c === "CODE_NARRATIVE_MISMATCH",
+          )
+          .sort()
+          .join(" ");
+        const read =
+          drug === undefined
+            ? "no CD"
+            : `code=${drug.code ?? "none"} sys=${drug.codeSystem ?? "none"} nullFlavor=${drug.nullFlavor ?? "none"}`;
+        return `${name} / ${label}: ${read} | ${said || "silent"}`;
+      }),
+    );
+    expect(matrix).toMatchInlineSnapshot(`
+      [
+        "clean single arm / no act code: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | silent",
+        "clean single arm / act code present: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | silent",
+        "clean single arm / act code + narrative: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | silent",
+        "two arms naming different drugs / no act code: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_ARM_UNEXPECTED",
+        "two arms naming different drugs / act code present: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_ARM_UNEXPECTED",
+        "two arms naming different drugs / act code + narrative: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_ARM_UNEXPECTED",
+        "two arms naming the same drug / no act code: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | MEDICATION_PRODUCT_ARM_UNEXPECTED",
+        "two arms naming the same drug / act code present: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | MEDICATION_PRODUCT_ARM_UNEXPECTED",
+        "two arms naming the same drug / act code + narrative: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | MEDICATION_PRODUCT_ARM_UNEXPECTED",
+        "no code on any arm / no act code: no CD | MISSING_PRODUCT_CODE",
+        "no code on any arm / act code present: no CD | MISSING_PRODUCT_CODE",
+        "no code on any arm / act code + narrative: no CD | MISSING_PRODUCT_CODE",
+        "two materials agreeing / no act code: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | MEDICATION_PRODUCT_ARM_REPEATED",
+        "two materials agreeing / act code present: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | MEDICATION_PRODUCT_ARM_REPEATED",
+        "two materials agreeing / act code + narrative: code=314076 sys=2.16.840.1.113883.6.88 nullFlavor=none | MEDICATION_PRODUCT_ARM_REPEATED",
+        "one material, two codes naming different drugs / no act code: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_CODE_REPEATED",
+        "one material, two codes naming different drugs / act code present: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_CODE_REPEATED",
+        "one material, two codes naming different drugs / act code + narrative: no CD | MEDICATION_PRODUCT_ARM_CONFLICT MEDICATION_PRODUCT_CODE_REPEATED",
+        "single arm, translation only / no act code: code=none sys=none nullFlavor=OTH | MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
+        "single arm, translation only / act code present: code=none sys=none nullFlavor=OTH | MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
+        "single arm, translation only / act code + narrative: code=none sys=none nullFlavor=OTH | MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY",
+        "single arm, empty code (NOT slot-checked here) / no act code: code=none sys=none nullFlavor=none | silent",
+        "single arm, empty code (NOT slot-checked here) / act code present: code=none sys=none nullFlavor=none | silent",
+        "single arm, empty code (NOT slot-checked here) / act code + narrative: code=none sys=none nullFlavor=none | silent",
+        "single arm whose drug contradicts the narrative / no act code: code=1191 sys=2.16.840.1.113883.6.88 nullFlavor=none | silent",
+        "single arm whose drug contradicts the narrative / act code present: code=1191 sys=2.16.840.1.113883.6.88 nullFlavor=none | silent",
+        "single arm whose drug contradicts the narrative / act code + narrative: code=1191 sys=2.16.840.1.113883.6.88 nullFlavor=none | CODE_NARRATIVE_MISMATCH",
+      ]
+    `);
   });
 });

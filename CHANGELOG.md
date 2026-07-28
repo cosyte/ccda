@@ -1062,6 +1062,59 @@ statusCode, effectiveTime, component+`).
 
 ### Fixed
 
+- **Clinical safety: `MEDICATION_PRODUCT_ARM_CONFLICT` had NEVER been reachable on a Planned
+  Medication Activity, so two `manufacturedProduct` arms naming two different drugs went completely
+  unmentioned on the Plan of Treatment.** `plannedCodeElement` returned the planned act's direct
+  `<code>` **before** it ever called `consumableProductCode`, so a planned medication carrying one
+  (legal, `SubstanceAdministration.code` being `[0..1]` in CDA R2) never had its consumable looked
+  at. **Every** warning that function raises
+  was unreachable there, not merely the headline one: `MEDICATION_PRODUCT_ARM_CONFLICT`,
+  `MISSING_PRODUCT_CODE`, `MEDICATION_PRODUCT_ARM_UNEXPECTED`, `MEDICATION_PRODUCT_ARM_REPEATED`,
+  `MEDICATION_PRODUCT_CODE_REPEATED` and `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`. Same harm class
+  as the rest of this area, a silent pick between two named drugs, on the section describing what a
+  patient is **about to be given**. Reproduced on base before it was touched.
+  - **The root cause is a semantic one: `SubstanceAdministration.code` is not the drug.** CDA R2
+    types it as an `ActSubstanceAdministrationCode`, the _kind of administration act_ ("drug
+    therapy"), while the substance participates through `consumable/manufacturedProduct`. So the
+    direct `<code>` was never a weaker drug code to fall back on, and preferring it read an act type
+    into the drug slot. The model was incoherent in the same way: `code` on a planned
+    `medicationActivity` was the drug on a document with no act `<code>` and the act type on one with
+    it, so a consumer could not rely on it being either. It is now always the drug, exactly as `drug`
+    is on a performed Medication Activity and `vaccine` is on an Immunization Activity, the other two
+    `consumable` call sites, both of which have always ignored the act's own `<code>`.
+  - **The builder is what hid it.** `buildCcda` emits the drug in the `consumable` and **no** direct
+    `<code>` for this variant, so no round-trip fixture could ever produce the shape, and every
+    existing planned-medication test exercised the fall-through path.
+  - **`CODE_NARRATIVE_MISMATCH` was reachable there and blind to its subject.** It reconciled the act
+    code's `displayName` against a narrative that names the drug, so it fired on well-formed
+    documents and could not see a structured drug contradicting the narrative. It now reads the drug.
+  - **What is given up is stated rather than hidden**: the act `<code>`'s coding is not on the model
+    for this variant, as it is not for the other two call sites. `serializeCcda` re-emits the parsed
+    DOM, so it survives `doc.toString()` byte-for-byte. Promoting it into the drug slot is the
+    manufactured reading this area refuses everywhere else. The other five planned kinds are
+    untouched: their `<code>` _is_ the planned act, and they have no consumable to read.
+  - **Monotonicity is measured, and this slice has one exception to it.** A 27-row matrix (three
+    variants of nine arm shapes) run against the previous release's `src/`: the nine "no act
+    `<code>`" rows come back byte-identical and the performed-medication matrix is untouched, so one
+    call site moved and no other. The nine "act `<code>` present" rows are pure gain, base being
+    silent on all nine while reading an act type as the drug. The nine "act `<code>` + narrative"
+    rows move on `CODE_NARRATIVE_MISMATCH` alone, **eight losing it, two of those going warned to
+    silent and two trading it for a tolerable code**. That is a false positive removed rather than a
+    signal lost, and the matrix is what shows it: base fires that code on **nine of nine** rows,
+    the clean document included, because an act type's label can never match a narrative naming a
+    drug. It was a constant, not a predicate. After, it fires on **one of nine**, exactly the row
+    whose structured drug contradicts the narrative. No row loses a product warning.
+
+- **`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`'s message no longer asserts two things that are false
+  on a repeated `<code>`.** It opened "No manufacturedProduct arm asserts a primary `@code`" and
+  called the `<translation>` the _only_ place the product was named. Both are false on an arm whose
+  **second** `<code>` asserts a primary: selection reads each arm's lead `<code>` and no other, so
+  that document still has no selected product and still draws this code, with
+  `MEDICATION_PRODUCT_CODE_REPEATED` beside it saying why. The message is narrowed to the lead
+  `<code>`. Message text only, no code change and no behaviour change: a safety-critical warning that
+  misdescribes the document it is about is the same defect as one that points at a coding that is not
+  there.
+
 - **Clinical safety: an arm carrying two `<code>` children no longer has the second silently
   dropped.** Arm selection read only the **first** `<code>` child of each `manufacturedMaterial` and
   `manufacturedLabeledDrug`. `Material.code` and `LabeledDrug.code` are each at most one in CDA R2,
@@ -1074,9 +1127,11 @@ statusCode, effectiveTime, component+`).
   in. Every `<code>` on every arm now reaches the **comparison**, so that shape conflicts and no
   product is returned. `MEDICATION_PRODUCT_ARM_CONFLICT` therefore fires on strictly more documents
   than before, never fewer. Applies at all three consumable call sites, with one pre-existing limit
-  this slice does not change: Medication Activity and Immunization Activity always, and Planned
-  Medication Activity only when the planned act carries no `<code>` of its own, because a direct
-  `<code>` short-circuits the consumable read before any arm is looked at.
+  this slice did not change: Medication Activity and Immunization Activity always, and Planned
+  Medication Activity only when the planned act carried no `<code>` of its own, because a direct
+  `<code>` short-circuited the consumable read before any arm was looked at. **That limit is closed
+  by `CCDA-PLANNED-MED-ARM-CONFLICT-UNREACHABLE`, entered above; it now applies at all three call
+  sites unconditionally.**
   - **Selection was deliberately not widened with it, and nothing about what is read changes**,
     except where the conflict rule now withholds a product it previously picked. "Disagreement is
     read across every arm, selection is not" is the split this area is built on, and a second
