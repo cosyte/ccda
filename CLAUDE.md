@@ -412,13 +412,27 @@ immutability + explicit mutation, and the profile system.
     `SECTION_PLACEMENT_SUSPECT` becomes **newly reachable** inside it, because `flagMisplacedEntries`
     returns early on an unrecognized section. Recognizing the section did **not** change what
     `getPlannedItems()` returns or reach `…22.4.130` / `…22.4.131`; those stay pinned as unreached.
-  - **An `@example` import is a claim about the module graph, and it is now gated.** Every `@example`
-    ships in the published `.d.ts` and is copy-pasteable, so `import { X } from "@cosyte/ccda"` for a
-    symbol the entry point does not export hands a consumer an import error. 64 of them did (44 in `parser/warnings.ts`, 17 in `model/entries/shared.ts`, 2 in `builder/build-ccda.ts`, 1 in `profiles/apply.ts`).
-    `test/tsdoc-examples.test.ts` resolves **every** documented import under `src/` through the
-    TypeScript checker against the module its specifier names (the entry point for `"@cosyte/ccda"`,
-    the module itself for a relative path), so a stale symbol fails either way; it is mutation-tested
-    three ways. **The fix is per symbol and the two answers are different acts:** an internal helper
+  - **An `@example` import is a claim about the module graph, and it is now gated.**
+    `import { X } from "@cosyte/ccda"` for a symbol the entry point does not export hands a consumer
+    an import error. **64** examples did that (44 in `parser/warnings.ts`, 17 in
+    `model/entries/shared.ts`, 2 in `builder/build-ccda.ts`, 1 in `profiles/apply.ts`).
+    **"Every `@example` ships in the published `.d.ts`" is FALSE and was published here before it was
+    measured; do not restore it.** `tsup` rolls the declarations up and drops any the entry point does
+    not reach, **taking their TSDoc with them**. Of every `export function` in `parser/warnings.ts` and
+    `model/entries/shared.ts`, exactly **two** survive the rollup (`profileQuirkApplied`,
+    `semanticCodeInvalid`). So of the 64, **four** reached consumers
+    (`warnings.ts:1497`, `apply.ts:48`, and the two `build-ccda.ts` types) and **60 never shipped at
+    all**: wrong in the repo, not wrong on npm. Verified against the published `0.0.2` tarball.
+    **The predicate is "reaches `dist`", NOT "is on the entry point"** and the difference is the whole
+    lesson: both `BuildCcdaAssessmentScale` types shipped while **unexported**, because
+    `BuildCcdaInit` references them, and they were two of the four.
+    `test/tsdoc-examples.test.ts` gates both halves: every documented import under `src/` is resolved
+    through the TypeScript checker against the module its specifier names (the entry point for
+    `"@cosyte/ccda"`, the module itself for a relative path), **and** the built `dist/index.d.ts` is
+    checked to carry no example import naming anything but `@cosyte/ccda`. That second half exists
+    because **exporting a previously internal symbol drags its TSDoc onto the published surface**, and
+    a surviving `"./shared.js"` would silently reopen the defect. The source half cannot see it: it is
+    a statement about the bundle. **The fix is per symbol and the two answers are different acts:** an internal helper
     gets a module-relative import, a genuinely public symbol gets exported. Only
     `BuildCcdaAssessmentScale` / `BuildCcdaAssessmentScaleItem` warranted the second, because both were
     already the element type of public `buildCcda` fields (`functionalStatusScales`,

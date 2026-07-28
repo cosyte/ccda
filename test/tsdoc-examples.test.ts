@@ -1,28 +1,38 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
 import ts from "typescript";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 /**
  * TSDoc `@example` import gate: **never tell a reader where something lives unless it is there.**
  *
- * Every `@example` block in `src/` ships in the published `.d.ts`, where it is copy-pasteable. An
- * example that writes `import { X } from "@cosyte/ccda"` for a symbol the package entry point does
- * not export hands a consumer an import error, and it is the same defect class as pointing at a
- * coding that is not on the model, aimed at the module graph instead.
+ * An example that writes `import { X } from "@cosyte/ccda"` for a symbol the package entry point
+ * does not export hands a consumer an import error. It is the same defect class as pointing at a
+ * coding that is not on the model, aimed at the module graph instead. 64 examples did exactly that.
  *
- * `docs-content/` snippets are already compiled and executed against the built artifact
- * (`docs-content.test.ts`), but TSDoc examples were ungated, which is how 63 of them shipped naming
- * symbols that are not on the entry point. This resolves each example's import **for real**, through
- * the TypeScript checker, against the same module the specifier names:
+ * **Be precise about which of them a consumer could ever have seen, because the loose claim is
+ * false.** `tsup` rolls the declarations up, and a declaration the entry point does not reach is
+ * dropped from `dist/index.d.ts` **with its TSDoc**. Measured against the previous release: of the
+ * 64, **four** reached the published `.d.ts` and **60 never shipped at all** (of every `export
+ * function` in `parser/warnings.ts` and `model/entries/shared.ts`, exactly two survive the rollup).
+ * The 60 were wrong in the repo rather than wrong on npm. So this file gates two different things:
  *
- * - `"@cosyte/ccda"` resolves to `src/index.ts`, the package entry point.
- * - a relative specifier (`"./shared.js"`) resolves to that module, so an internal helper documented
- *   with a module-relative import is checked too, and a stale symbol name there fails just as loudly.
+ * 1. **Source truth, for every example.** Each import is resolved **for real**, through the
+ *    TypeScript checker, against the module its specifier names: `"@cosyte/ccda"` against
+ *    `src/index.ts`, a relative specifier (`"./shared.js"`) against that module. A stale symbol
+ *    fails either way. Type-only and value imports are both covered, because
+ *    `getExportsOfModule` is the checker's own answer.
  *
- * Type-only and value imports are both covered: `getExportsOfModule` is the checker's own answer, so
- * a `export type { ... }` re-export counts exactly as the consumer experiences it.
+ * 2. **Published truth, for what actually ships.** A relative specifier is meaningless inside the
+ *    rolled-up `.d.ts`, so no example carrying one may survive into it. This is the half that
+ *    catches the move this very slice made twice: **exporting a previously internal symbol drags
+ *    its TSDoc into the published surface**, and if that TSDoc still said `"./shared.js"` the defect
+ *    would reopen silently. Check 1 cannot see that, because it is a statement about the bundle.
+ *    Note the predicate is "reaches `dist`", not "is on the entry point": both
+ *    `BuildCcdaAssessmentScale` types shipped while unexported, because `BuildCcdaInit` references
+ *    them, and they were two of the four that reached consumers.
  */
 
 const root = join(import.meta.dirname, "..");
@@ -97,7 +107,9 @@ describe("TSDoc @example imports", () => {
     // A guard that silently matched nothing would pass forever. Both halves must be non-empty.
     expect(imports.length).toBeGreaterThan(200);
     expect(imports.filter((i) => i.specifier === "@cosyte/ccda").length).toBeGreaterThan(150);
-    expect(imports.filter((i) => i.specifier.startsWith(".")).length).toBeGreaterThan(0);
+    // 60 module-relative examples exist by construction (the internal helpers whose declarations
+    // the rollup drops), so a bound of "> 0" would survive losing almost all of them.
+    expect(imports.filter((i) => i.specifier.startsWith(".")).length).toBeGreaterThan(50);
   });
 
   it("names only symbols the module it cites actually exports", () => {
@@ -127,5 +139,36 @@ describe("TSDoc @example imports", () => {
     }
 
     expect(broken).toEqual([]);
+  });
+
+  describe("the published .d.ts", () => {
+    // The shared CI gate runs `test` before `build`, so provision `dist/` on demand here rather
+    // than assuming order, exactly as the docs-content snippet gate does.
+    beforeAll(() => {
+      execFileSync("pnpm", ["build"], { cwd: root, stdio: "inherit" });
+    }, 300_000);
+
+    it("carries no documented import a consumer cannot resolve", () => {
+      // A relative specifier is meaningless once the declarations are rolled up into one file:
+      // there is no `./shared.js` next to an installed `dist/index.d.ts`. Only the package's own
+      // name can appear. This is what fails if a future slice exports an internal symbol and drags
+      // its module-relative example onto the published surface with it.
+      const dts = readFileSync(join(root, "dist", "index.d.ts"), "utf8").split("\n");
+      const offenders = dts
+        .map((text, index) => ({ text, line: index + 1 }))
+        .filter(({ text }) => /^\s*\*\s*import\s+(?:type\s+)?\{[^}]*\}\s+from\s+"/.test(text))
+        .filter(({ text }) => !/from\s+"@cosyte\/ccda";/.test(text))
+        .map(({ text, line }) => `dist/index.d.ts:${line} ${text.trim()}`);
+
+      expect(offenders).toEqual([]);
+    });
+
+    it("still carries the examples this is meant to guard", () => {
+      // Guards the guard: if the rollup ever stopped emitting TSDoc, the check above would pass
+      // vacuously forever.
+      const dts = readFileSync(join(root, "dist", "index.d.ts"), "utf8");
+      const shipped = dts.match(/^\s*\*\s*import\s+(?:type\s+)?\{[^}]*\}\s+from\s+"/gm) ?? [];
+      expect(shipped.length).toBeGreaterThan(100);
+    });
   });
 });

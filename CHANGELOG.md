@@ -1109,8 +1109,18 @@ statusCode, effectiveTime, component+`).
 
 - **64 `@example` blocks cited an import that does not resolve, across four modules** (44 in `parser/warnings.ts`, 17 in `model/entries/shared.ts`, 2 in `builder/build-ccda.ts`, 1 in `profiles/apply.ts`). They wrote
   `import { X } from "@cosyte/ccda"` for internal helpers, warning factories and builder types the
-  package entry point does not export. These ship in the published `.d.ts`, where they are
-  copy-pasteable, so a consumer following one got an import error. Each is now either a
+  package entry point does not export.
+  **Four of the 64 reached consumers; the other 60 never shipped, and the loose claim that they all
+  did was published here before it was measured.** `tsup` rolls the declarations up and drops any the
+  entry point does not reach, **taking their TSDoc with it**: of every `export function` in
+  `parser/warnings.ts` and `model/entries/shared.ts`, exactly two survive (`profileQuirkApplied`,
+  `semanticCodeInvalid`). The four that reached the published `.d.ts` are the examples on
+  `profileQuirkApplied`, `applyProfile`, and the two assessment-scale builder types above, verified
+  against the published `0.0.2` tarball; following any of them produced an import error. The other 60
+  documented internal helpers that are not published at all, so they were wrong in the repository
+  rather than wrong on npm. **Note the predicate is "reaches `dist`", not "is on the entry point"**:
+  both `BuildCcdaAssessmentScale` types shipped while unexported, because `BuildCcdaInit` references
+  them, which is why they are two of the four. All 64 are corrected. Each is now either a
   module-relative import, where the symbol is deliberately internal, or an example rebuilt from the
   public surface alone (the two that documented `applyProfile` and `profileQuirkApplied`, both public,
   now construct a `CcdaWarning` literal from the exported `WARNING_CODES` rather than reaching for an
@@ -1118,11 +1128,15 @@ statusCode, effectiveTime, component+`).
   whose right answer was to export the symbol instead**: both are already the element type of public
   `buildCcda` fields (`functionalStatusScales`, `mentalStatusScales`), so a caller populating either
   had no way to name what it was constructing. Purely additive.
-  **A gate now pins it.** `docs-content/` snippets were already compiled and executed against the
-  built artifact, but TSDoc examples were ungated, which is how these shipped. Every documented import
-  under `src/` is resolved through the TypeScript checker against the module its specifier names, the
-  package entry point for `"@cosyte/ccda"` and the module itself for a relative path, so a stale
-  symbol fails either way. It is mutation-tested three ways so the pin is not vacuous.
+  **A gate now pins both halves.** `docs-content/` snippets were already compiled and executed against
+  the built artifact, but TSDoc examples were ungated, which is how these shipped. Every documented
+  import under `src/` is now resolved through the TypeScript checker against the module its specifier
+  names, the package entry point for `"@cosyte/ccda"` and the module itself for a relative path, so a
+  stale symbol fails either way. **And the built `dist/index.d.ts` is separately checked to carry no
+  example import naming anything but `@cosyte/ccda`**, because a relative specifier is meaningless in
+  a rolled-up declaration file and **exporting a previously internal symbol drags its TSDoc onto the
+  published surface**, exactly the move made twice above. A source-only check cannot see that; it is a
+  statement about the bundle. Mutation-tested so neither pin is vacuous.
 
 - **Clinical safety: a planned entry nested in a Planned Intervention Act is no longer dropped from
   the model in silence, for any of the seven planned templates.** `getPlannedItems()` read an

@@ -3,7 +3,7 @@
 ---
 
 Recognize the C-CDA R2.1 **Interventions Section** (`2.16.840.1.113883.10.20.21.2.3`, LOINC
-`62387-6`), and correct 63 documentation examples that told a reader to import symbols the package
+`62387-6`), and correct 64 documentation examples that told a reader to import symbols the package
 does not export.
 
 **The section catalog gains one entry, and no existing entry changes.** The Interventions Section is
@@ -43,12 +43,21 @@ the value being constructed. Purely additive.
 
 **64 `@example` blocks across four modules cited an import that does not resolve.** They wrote
 `import { X } from "@cosyte/ccda"` for internal helpers, warning factories and builder types that the
-package entry point does not export. These ship in the published type declarations, where they are
-copy-pasteable, so following one produced an import error. Each is now either a module-relative
-import, for a symbol that is deliberately internal, or a corrected example built only from the public
-surface; the two builder types named above were the ones whose right answer was to export the symbol
-instead. A new test resolves every documented import through the TypeScript checker against the
-module it names, so an example can no longer claim a symbol lives somewhere it does not.
+package entry point does not export.
+
+**Four of those 64 reached you; the other 60 never left the repository.** The type declarations are
+rolled up, and a declaration the entry point does not reach is dropped from the published `.d.ts`
+along with its documentation. The four that shipped are the examples on `profileQuirkApplied`,
+`applyProfile`, and the two assessment-scale builder types above, and following any of them produced
+an import error. The remaining 60 documented internal helpers whose declarations are not published at
+all, so they were wrong in the source rather than wrong in the package. All 64 are corrected: each is
+now either a module-relative import, where the symbol is deliberately internal, or an example built
+only from the public surface.
+
+A new test resolves every documented import through the TypeScript checker against the module it
+names, and separately checks the built declarations carry no example import naming anything but
+`@cosyte/ccda`. The second half matters because exporting a previously internal symbol also publishes
+its documentation, which would otherwise reintroduce an unresolvable import unnoticed.
 
 No warning code was added, renamed or reclassified, no existing type changed, and nothing about how
 entries are read has changed.
