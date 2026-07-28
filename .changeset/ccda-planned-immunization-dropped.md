@@ -56,14 +56,12 @@ had one, and no row stops handing back a product because none handed one back. A
 two columns of all thirteen shapes agree exactly, which is the acceptance bar. Every pre-existing
 matrix snapshot in the suite still passes unchanged.
 
-WHAT THIS STILL DOES NOT REACH: a planned entry that is nested rather than a direct `<entry>` act.
-`getPlannedItems()` reads an `<entry>`'s own act and no deeper, so a Planned Immunization Activity
-inside a Planned Intervention Act (`…22.4.146`, which R2.1 lets contain one) is still returned as
-nothing, with nothing said. That is a standing limitation of the accessor for all seven kinds rather
-than something this change introduced, and it is written down so nobody reads "a planned immunization
-now comes back" as covering the nested shape. A Goal Observation is not a second such container: its
-`plannedComponent` entryRelationship targets Entry Reference, so it references a planned entry rather
-than nesting one.
+WHAT THIS CHANGE ON ITS OWN DOES NOT REACH: a planned entry that is nested rather than a direct
+`<entry>` act, for any of the seven kinds. That is a standing limitation of the accessor rather than
+something this change introduced. A separate change in the same release closes it for the Planned
+Intervention Act (`…22.4.146`); the rest of the nested surface stays out of reach. A Goal Observation
+is not one of those containers: its `plannedComponent` entryRelationship targets Entry Reference, so
+it references a planned entry rather than nesting one.
 
 A Planned Immunization Activity sitting as a direct entry of another recognized section now draws
 `SECTION_PLACEMENT_SUSPECT` (tolerable by a profile), joining the six planned roots already mapped to

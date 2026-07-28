@@ -66,6 +66,19 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Documentation
 
+- **Two published bounds that were misstated, corrected without a behaviour change.**
+  `BuildCcdaPlannedItemBase.effectiveTime` documented itself as `SHOULD [0..1]` flatly. That is the
+  cardinality on five of the seven planned templates: **both** `substanceAdministration` variants
+  SHALL carry exactly one (Planned Medication Activity `…22.4.42`, CONF:1098-30468, and Planned
+  Immunization Activity `…22.4.120`). `BuildCcdaPlannedImmunization` already redeclares the field as
+  required; `BuildCcdaPlannedOrder` does not, so `buildCcda` can still emit a Planned Medication
+  Activity short that SHALL element. The field's own docblock now says so instead of leaving the
+  correction to sit only on the sibling type. **Closing the gap is a breaking change to a published
+  input type and is deliberately not taken here.** And `CcdaDocument.getPlannedItems()` carried
+  **neither** of the accessor's two bounds: that it returns seven of the section's eleven admissible
+  entry templates, and how deep it reads. Both are on it now, at the surface a consumer actually
+  reads, rather than only in the extractor that implements them.
+
 - **`CLAUDE.md` Status section and `README.md` headings corrected (CCDA-P7 stale-status residual).**
   These were the last two files still misdescribing the package. `CLAUDE.md` governs every agent
   session in this repo, so a wrong claim there propagates into work rather than just into a reader's
@@ -1062,6 +1075,60 @@ statusCode, effectiveTime, component+`).
 
 ### Fixed
 
+- **Clinical safety: a planned entry nested in a Planned Intervention Act is no longer dropped from
+  the model in silence, for any of the seven planned templates.** `getPlannedItems()` read an
+  `<entry>`'s own act and went **no deeper**. C-CDA groups the interventions planned toward a goal in
+  a **Planned Intervention Act** (`…22.4.146`), which carries an `entryRelationship` for each of the
+  seven planned templates and holds the planned act **inline** in every one of them. So a planned
+  drug order or a scheduled vaccination hanging off an intervention came back as **no item and no
+  warning**: no `undefined` to test for, no code to filter on, and a document that round-tripped
+  byte-for-byte through `serializeCcda`, which is exactly why nothing caught it. That is the same
+  silence as the missing Planned Immunization Activity, one markup layer in and across all seven
+  templates instead of one. A nested act now reads exactly as the same act reads as a direct
+  `<entry>`: same `kind`, same `code`, same slot check, same product warnings.
+  `MEDICATION_PRODUCT_ARM_CONFLICT` on a planned medication whose two `manufacturedProduct` arms name
+  two different drugs is reachable there for the first time, as is the `vaccine` binding's
+  `UNEXPECTED_CODE_SYSTEM` on a planned vaccination.
+  - **It is the only container descended into, and R2.1 has others, so this does NOT solve nesting in
+    general.** A Nutrition Recommendation (`…22.4.130`) inline-holds **six** of the seven (every
+    planned template except `…22.4.120`) by the identical `entryRelationship` pattern, and an
+    Intervention Act (`…22.4.131`), the performed sibling and the `SHOULD` entry of an Interventions
+    Section, inline-holds a Planned Intervention Act. A planned entry in either still comes back as
+    nothing with nothing said, unchanged from base, and a test pins **both** as unreached so the bound
+    is measured rather than asserted. Widening to them is a decision with its own base-measured matrix.
+    The container that **is** read is reached at all because `extractPlannedItems` runs on **every**
+    `<section>` rather than on a recognized Plan of Treatment alone: the Plan of Treatment Section's
+    eleven entry templates do not include it, and the Interventions Section (`…21.2.3`, LOINC
+    `62387-6`) admits it as a direct entry.
+  - **An `entryRelationship` is read for what it CONTAINS and never followed for what it REFERENCES.**
+    The template's `[1..*]` `typeCode="RSON"` relationship holds an **Entry Reference** (`…22.4.122`)
+    whose own SHALL names a Goal Observation recorded elsewhere. It carries an `<id>` and a
+    `nullFlavor="NP"` `<code>` and no planned template, so it is stepped over rather than resolved:
+    resolving it would hand back an item the container does not hold.
+  - **Matching is on the `templateId` root alone**, which is what keeps the performed acts the same
+    container also admits out of the result. A Medication Activity (`…22.4.16`) and a Planned
+    Medication Activity (`…22.4.42`) are both `substanceAdministration`s, so an element-name or
+    `@moodCode` test would either admit the performed one or start guessing at a mood the template
+    already settles. `@moodCode` is still read onto `disposition`, so a planned template carrying a
+    performed mood reports what it says rather than what its template promised.
+  - **A returned item does not say whether it was direct or nested, deliberately.** The Planned
+    Intervention Act is not modelled: no container type, no goal linkage, no flag, so the grouping
+    toward the goal is available only from `doc.toString()`. What the accessor answers is which acts
+    are planned, and a nested one is planned on the same terms as a direct one. Each item keeps its
+    own `ids`, so a caller that needs the grouping can correlate.
+  - **Still not returned, and still open.** Instruction (`…22.4.20`), Handoff Communication
+    Participants (`…22.4.141`) and Nutrition Recommendation (`…22.4.130`) are admitted by the
+    container exactly as by the section, and are still excluded without a warning at **both** levels.
+    Whether they should be reported as dropped is left open rather than quietly decided, and a test
+    pins the current answer instead of settling it. Goal Observation (`…22.4.121`) stays excluded on
+    its own grounds: `moodCode="GOL"` is neither performed nor planned in this parser's mood model.
+  - **Nothing a direct entry already returned changed.** The same act read as an `<entry>` reads
+    identically before and after, across all seven templates.
+  - **`buildCcda` cannot emit the container.** Emitting a conformant Planned Intervention Act means
+    satisfying its `[1..*]` reference to a Goal Observation, which means modelling goals; that is not
+    part of this change.
+  - No warning code was added, renamed or reclassified, and no published type changed.
+
 - **Clinical safety: a planned immunization is no longer dropped from the model in silence.** A Plan
   of Treatment entry carrying the Planned Immunization Activity template (`…22.4.120`) matched no
   template this parser recognized, so `getPlannedItems()` returned **no item for it at all** and
@@ -1118,11 +1185,9 @@ statusCode, effectiveTime, component+`).
     because requiring the field is a breaking change to a published input type. New exported type:
     `BuildCcdaPlannedImmunization`. `PlannedItemKind` gains `"immunizationActivity"`.
   - **What this does not reach:** a planned entry that is **nested** rather than a direct `<entry>`
-    act. `getPlannedItems()` reads an `<entry>`'s own act and no deeper, so a Planned Immunization
-    Activity hanging off a Planned Intervention Act (`…22.4.146`, which R2.1 lets contain one) is
-    still returned as nothing, with nothing said. That is a standing limitation of the accessor for
-    all seven kinds, not something this entry changed, and it is written down rather than left to be
-    inferred from "a planned immunization now comes back".
+    act, for any of the seven kinds. That is a standing limitation of the accessor rather than
+    something this entry changed. **The Planned Intervention Act case is closed by the entry above,
+    which ships in the same release; the rest of the nested surface is not.**
 - **Documentation: the enumeration of unquietable companions behind the tolerable product-arm codes
   listed three and there are four.** `MEDICATION_PRODUCT_ARM_UNEXPECTED` and
   `MEDICATION_PRODUCT_ARM_REPEATED` are tolerable by a profile only because every state in which no

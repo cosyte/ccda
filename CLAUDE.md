@@ -325,10 +325,8 @@ immutability + explicit mutation, and the profile system.
     entryRelationship targets **Entry Reference**, so it _references_ a planned entry rather than
     nesting one. (That error was proposed by a refuter, adopted without re-checking, and shipped to
     five sites before the next pass caught it. Re-check a refuter's spec claim exactly as hard as your
-    own.) Nested planned entries are not returned by `getPlannedItems()` either, for any of the seven
-    kinds: `extractPlannedItems` reads an `<entry>`'s own act and no deeper. **That is PRE-EXISTING and
-    architectural, filed rather than fixed**, and the docs bound the claim so nobody reads "a planned
-    immunization now comes back" as covering the nested shape.
+    own.) Nested planned entries were not returned by `getPlannedItems()` either, for any of the seven
+    kinds, and `CCDA-NESTED-PLANNED-ENTRIES` closed that separately. See the entry below.
     **The builder gained the variant in the same slice, deliberately**, because until it could emit
     the shape no round-trip fixture could exercise it, and an un-emittable shape is precisely what hid
     `CCDA-PLANNED-MED-ARM-CONFLICT-UNREACHABLE` for so long. Two things there are the template's, not
@@ -341,6 +339,56 @@ immutability + explicit mutation, and the profile system.
     the field optional, so `buildCcda` emits a Planned Medication Activity short a SHALL element.
     **PRE-EXISTING, filed, deliberately not closed here** (requiring it is a breaking change to a
     published input type). Do not re-derive "the other six are `[0..1]`" from anything.
+    **Still open after `CCDA-NESTED-PLANNED-ENTRIES`**, which corrected the `BuildCcdaPlannedItemBase`
+    JSDoc that stated `SHOULD [0..1]` flatly (false on two of the seven) but did **not** make the field
+    required. The false claim and the breaking change are separate acts and only the first was cheap.
+  - **A planned entry NESTED in a Planned Intervention Act (`…22.4.146`) is returned, for all seven
+    kinds; nothing else nested is.** `extractPlannedItems` read an `<entry>`'s own act and no deeper,
+    so all seven vanished from that shape with nothing raised, the `…22.4.120` silence one markup layer
+    in and seven times the surface. R2.1 gives the container an `entryRelationship` for each of the
+    seven and each holds the planned act **inline**, which is what makes them reachable; the container
+    lives in an Interventions Section (`…21.2.3`), **not** the Plan of Treatment Section, whose eleven
+    entry templates do not include it, and it is reached anyway because `extractPlannedItems` runs on
+    every `<section>` rather than on a recognized Plan of Treatment alone.
+    **Three bounds, each a decision rather than an oversight.** (1) **Only that container is descended
+    into**, recursively for itself, and **R2.1 has other containers, so nesting is NOT solved in
+    general.** A Nutrition Recommendation (`…22.4.130`) inline-holds six of the seven by the identical
+    pattern (all but `…22.4.120`), and an Intervention Act (`…22.4.131`, the performed sibling and the
+    `SHOULD` entry of an Interventions Section) inline-holds a Planned Intervention Act. A planned
+    entry in either is still returned as nothing with nothing said, unchanged from base, and a test
+    pins both as unreached so the bound is measured rather than asserted. Widening to them is a
+    decision with its own base-measured matrix, not a tidy-up.
+    (2) **An `entryRelationship` is read for what it CONTAINS and never followed for what it
+    REFERENCES.** The template's `[1..*]` `typeCode="RSON"` relationship holds an **Entry Reference**
+    (`…22.4.122`) whose own SHALL names a Goal Observation; it carries no planned root, so root-matching
+    steps over it. Resolving it would hand back an item the container does not hold. (3) **Matching is
+    on the `templateId` root alone**, which is what keeps the performed acts the same container admits
+    (Medication Activity `…22.4.16`, Immunization Activity `…22.4.52`, and the rest) out of the result:
+    a performed and a planned medication are both `substanceAdministration`s, so an element-name or
+    `@moodCode` test would either admit the performed one or start guessing at a mood the template
+    already settles. `@moodCode` is still read onto `disposition`, so a planned template carrying a
+    performed mood reports what it says.
+    **A returned item does not say whether it was direct or nested, deliberately.** The Planned
+    Intervention Act is not modelled at all: no container type, no goal linkage, no `nested` flag, so
+    the grouping toward the goal is available only from `doc.toString()`. What `getPlannedItems()`
+    answers is which acts are planned, and a nested one is planned on the same terms as a direct one.
+    **The three open non-item templates stay open at both levels**: Instruction (`…22.4.20`), Handoff
+    Communication Participants (`…22.4.141`) and Nutrition Recommendation (`…22.4.130`) are admitted by
+    the container exactly as by the section, still not returned and still silent, and a test pins that
+    rather than settling it.
+    **Monotone, measured rather than argued.** A 14-row matrix (each of the seven acts placed as a
+    direct `<entry>` and as the same element nested in an intervention) run against base `src/`: all
+    seven direct rows byte-identical, all seven nested rows moving from the **same** base reading,
+    `DROPPED (no PlannedItem) | silent`. No row loses a warning because no row had one; no row stops
+    handing back a code because none handed one back. After the change the two columns agree exactly,
+    which is the bar: nesting is a statement about grouping, never about the act. Every pre-existing
+    inline-snapshot matrix in `test/entries.test.ts` still passes unchanged.
+    **The builder did NOT gain the container, and that is a departure from the `…22.4.120` precedent
+    with a reason.** There the builder had to learn the variant because no round-trip fixture could
+    otherwise produce the shape; here the shape is reachable from the test fixture builder's raw-section
+    escape hatch, and emitting a _conformant_ Planned Intervention Act means satisfying its `[1..*]`
+    `RSON` Entry Reference to a Goal Observation, which means modelling goals. That is a feature, not a
+    fixture, and it is filed rather than smuggled in.
   - **`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`'s precondition is each arm's LEAD `<code>`, and the
     message now says so.** It used to open "No manufacturedProduct arm asserts a primary `@code`" and
     call the translation the _only_ place the product was named. Both are false on an arm whose

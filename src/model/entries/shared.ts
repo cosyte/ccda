@@ -100,6 +100,24 @@ export const PLANNED_OBSERVATION = "2.16.840.1.113883.10.20.22.4.44";
  * invent one.
  */
 export const PLANNED_IMMUNIZATION_ACTIVITY = "2.16.840.1.113883.10.20.22.4.120";
+/**
+ * Planned Intervention Act (V2), the `<act>` that groups the interventions
+ * planned toward a goal. **It is a CONTAINER, not a planned item**: R2.1 gives
+ * it an `entryRelationship` for each of the seven planned templates this package
+ * models, and each of those relationships holds the planned act **inline**, so a
+ * planned entry can sit one markup layer below an `<entry>`. It is not itself a
+ * {@link PlannedItem} kind, it carries no `code` of its own to return, and it is
+ * not admissible as a direct `<entry>` of the Plan of Treatment Section (whose
+ * eleven entry templates do not include it).
+ *
+ * **Its `[1..*]` `typeCode="RSON"` relationship targets Entry Reference
+ * (`…22.4.122`), not a Goal Observation directly** (the Entry Reference SHALL in
+ * turn point at one). An Entry Reference carries an `<id>` and a
+ * `nullFlavor="NP"` `<code>` and no planned template root, so root-matching walks
+ * past it without following the pointer, which is the correct reading: the target
+ * is elsewhere in the document and is reached on its own terms or not at all.
+ */
+export const PLANNED_INTERVENTION_ACT = "2.16.840.1.113883.10.20.22.4.146";
 /** Functional Status Organizer, clusters Functional Status Observations. */
 export const FUNCTIONAL_STATUS_ORGANIZER = "2.16.840.1.113883.10.20.22.4.66";
 /** Functional Status Observation, a single coded functional-status finding + value. */
@@ -941,6 +959,53 @@ export function relatedObservations(el: Element, root: string): readonly Element
   for (const er of children(el, "entryRelationship")) {
     const obs = child(er, "observation");
     if (obs !== undefined && hasTemplateRoot(obs, root)) out.push(obs);
+  }
+  return out;
+}
+
+/**
+ * The clinical act each of an element's `entryRelationship` children holds, in
+ * the order those relationships appear, regardless of template or `@typeCode`.
+ * The counterpart of {@link relatedObservations} for callers that must match on
+ * the nested act's own `templateId` rather than on a root supplied up front, and
+ * that must see `act` / `substanceAdministration` / `procedure` / `encounter` /
+ * `supply` / `organizer` as well as `observation`.
+ *
+ * **One act per relationship, chosen exactly as {@link anyEntryAct} chooses an
+ * `<entry>`'s, and the wording matters.** CDA gives `entryRelationship` a single
+ * act, so on any conformant document "one per relationship" and "every act it
+ * holds" are the same set. They part company only on a malformed relationship
+ * carrying two, where this returns the first in {@link ACT_NAMES} order and not
+ * the first in document order, and says nothing about the other. That is the
+ * same reading every `<entry>` already gets rather than a new rule, but do not
+ * describe this as returning everything nested: it does not.
+ *
+ * **This returns what an `entryRelationship` CONTAINS; it never follows what one
+ * REFERENCES.** A C-CDA pointer is an Entry Reference (`…22.4.122`) act carrying
+ * an `<id>`, and the element handed back here is that Entry Reference itself, not
+ * whatever it names. Resolving the pointer is the caller's decision and no caller
+ * makes it today.
+ *
+ * Not on the published entry point, so the example imports the module rather
+ * than the package: saying `@cosyte/ccda` here would name a place this does not
+ * live.
+ *
+ * @example
+ * ```ts
+ * import { relatedEntryActs } from "./shared.js";
+ * const nested = relatedEntryActs(plannedInterventionActEl);
+ * ```
+ */
+export function relatedEntryActs(el: Element): readonly Element[] {
+  const out: Element[] = [];
+  for (const er of children(el, "entryRelationship")) {
+    for (const name of ACT_NAMES) {
+      const act = child(er, name);
+      if (act !== undefined) {
+        out.push(act);
+        break;
+      }
+    }
   }
   return out;
 }

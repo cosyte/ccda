@@ -310,12 +310,23 @@ milestone it stopped at.
   (`…22.4.130`) and Goal Observation (`…22.4.121`); a Goal Observation is `moodCode="GOL"`, which this
   parser calls neither performed nor planned. Their narrative and structure are preserved and they
   re-serialize faithfully, but they are not planned items, and nothing is raised about them.
-  **Nor is any planned entry that is NESTED rather than a direct `<entry>` act**, for any of the seven
-  kinds: `getPlannedItems()` reads an `<entry>`'s own act and goes no deeper, so a planned flu shot
-  hanging off a Planned Intervention Act (`…22.4.146`, which R2.1 lets contain one) still comes back
-  as no item and no warning. That is the same silence, one level in, and it is a standing limitation
-  of this accessor rather than something the `…22.4.120` fix changed. If your senders nest, read
-  `doc.toString()`.
+- **A planned entry nested in a Planned Intervention Act was dropped in silence, for all seven kinds
+  (fixed in `0.0.3`).** `getPlannedItems()` used to read an `<entry>`'s own act and go no deeper, so a
+  planned flu shot or drug order hanging off a **Planned Intervention Act** (`…22.4.146`, the act that
+  groups the interventions planned toward a goal) came back as no item and no warning, round-tripping
+  byte-for-byte. That was the same silence as the missing Planned Immunization Activity, one markup
+  layer in and across all seven templates. Those entries are now returned, and they read exactly as the
+  same act reads as a direct `<entry>`: same `kind`, same `code`, same slot check, same product
+  warnings. If you kept a workaround that read intervention components out of `doc.toString()`, you can
+  drop it. **Three bounds still apply.** A pointer is never followed: the container's
+  `typeCode="RSON"` relationship holds an Entry Reference (`…22.4.122`) naming a goal recorded
+  elsewhere, and that is stepped over rather than resolved. **It is the only container descended into,
+  and C-CDA has others, so nesting is not solved in general.** A Nutrition Recommendation
+  (`…22.4.130`) inline-holds six of the seven planned templates, and an Intervention Act (`…22.4.131`)
+  inline-holds a Planned Intervention Act; a planned entry in either still comes back as nothing, with
+  nothing said, exactly as it did before. Read `doc.toString()` if your senders nest that way. A
+  returned item does not say whether it was direct or nested, either: the intervention itself is not
+  modelled, so the grouping toward the goal is available only from `doc.toString()`.
 - **UCUM validation is grammatical, on a curated atom subset.** The validator checks well-formed UCUM
   against the prefixes/atoms that appear in lab Results and Vital Signs, not the full UCUM registry. A
   valid-but-uncurated atom may read as `NON_UCUM_UNIT`; the raw unit is always preserved. It does not
