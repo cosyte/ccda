@@ -1,0 +1,94 @@
+name: Public-surface gate
+
+# Founder directive 2026-07-27: no internal project bookkeeping on any surface a consumer
+# reads. Item identifiers (`CCDA-P7`), phase and wave language, ADR numbers, meta-repo
+# paths, prose roadmap citations and process commentary belong in the changeset,
+# CHANGELOG.md, the commit, the PR and the roadmap, never in README.md, docs-content/, the
+# npm description, a JSDoc block a consumer's editor renders, or a warning message a
+# consumer reads in their logs. The rule is written out in the meta-repo's
+# `documentation/conventions.md` ("No internal project bookkeeping on a public surface");
+# `scripts/check-no-internal-refs.sh` is what enforces it.
+#
+# WHY A GATE AND NOT A NOTE. The founder, on the sweep that removed these across the
+# ecosystem: "it needs to not just be a memory note, but something that is addressed in the
+# workflow accordingly. This needs to not happen again." A sweep regresses the first time
+# someone writes `(CCDA-P8)` into a README; a job that reds does not.
+#
+# READ THIS BEFORE TRUSTING IT TO BLOCK ANYTHING, and the wording is deliberate because the
+# em-dash gate next door had to correct an overstatement of exactly this kind. This job runs
+# on every PR and it REPORTS; it is not a required status check today, so it does not stop a
+# merge. `cosyte/ccda` is governed by two organization-level rulesets and the required
+# contexts are `ci / verify (22, ubuntu-latest)`, `ci / verify (24, ubuntu-latest)` and
+# `ci / actionlint`. This job's context, `Public-surface gate / no-internal-refs`, is not
+# among them, and auto-merge is on with zero required approvals. Closing that is a GitHub
+# settings change (add the context to the org ruleset `parser-ci-required-checks`, which
+# needs `admin:org`, or add a repository-level ruleset here), not a file change, and it is
+# out of scope for a change that ships files. Until then the honest claim is that a
+# violation is VISIBLE on every PR, not that it is impossible. The em-dash gate sits behind
+# the identical gap.
+#
+# WHY A SEPARATE WORKFLOW, and not a job in ci.yml. Same reasoning as the em-dash gate next
+# door, and the first half is the deciding one:
+#
+#   The reusable pipeline is not an option. ccda's `ci` job calls
+#   cosyte/.github/.github/workflows/ci.yml@main, which runs a fixed ladder and no arbitrary
+#   repo script. Adding this there would also flip other callers red on their next run,
+#   since each repo's remediation is its own deliberate piece of work. A shared pipeline is
+#   the wrong place to land a rule several of its callers cannot yet satisfy.
+#
+#   Within ccda, keeping it out of ci.yml also keeps it cheap: this job is a checkout and a
+#   handful of greps over 12 markdown/JSON files and 65 source files, while ci.yml drives
+#   the full Node 22 + 24 matrix plus the release-dry-run job.
+#
+# WHAT THIS DOES NOT CHECK, deliberately: the PR title, the PR body, and commit messages.
+# The em-dash gate scans all three because the brand rule names commit messages explicitly.
+# THIS rule says the opposite: identifiers BELONG in the commit, the PR and the changeset,
+# so a PR-text half here would red on correct work. That is also why there is no `edited`
+# trigger: nothing here reads PR text, so retitling a PR cannot change the result. It is
+# the one place this gate and the em-dash gate next door disagree about their triggers, and
+# the disagreement is the rule, not an oversight.
+#
+# It does not check `CHANGELOG.md` either, and that one is SETTLED rather than deferred:
+# the founder exempted CHANGELOG.md org-wide on 2026-07-29, because an item reference in a
+# changelog reads as provenance rather than as the company talking to itself. The exemption
+# is that file and nothing else.
+#
+# The other half of this rule, the one that keeps identifiers out of a published RELEASE
+# BODY, lives in the shared pipeline: `cosyte/.github` `scripts/release-notes.mjs assert`
+# re-reads the finished body bytes and refuses to publish a violating one. This job covers
+# the repo's own files; that one covers what gets published to the releases page.
+#
+# Run it locally with `pnpm check:no-internal-refs`, which is also on the meta-repo's
+# `scripts/verify.sh ccda` ladder.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # The job id is the check-run context name a branch ruleset requires. Renaming it
+  # silently detaches the required check, so the ruleset stops protecting anything while
+  # still looking configured. Rename both together or neither.
+  no-internal-refs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      # The script self-tests before it reports: it proves each of the seven rules still
+      # matches its own positive sample AND still lets through the reference material it was
+      # most likely to destroy (`CONF:1098-30468`, `ICD-10-CM`, `CPT-4`, `PHQ-9`, `UTF-8`,
+      # `MRN-00042`, `SYNTH-9`, a Phase III trial). It refuses to print OK from a scan that
+      # did not read all of its input, and it refuses outright if the roadmap-citation rule
+      # has been dropped. No `|| true`, no `continue-on-error`: a check that cannot fail is
+      # documentation.
+      - name: Check the public surface
+        run: bash scripts/check-no-internal-refs.sh

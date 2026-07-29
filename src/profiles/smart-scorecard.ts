@@ -2,7 +2,7 @@
  * The `smartScorecard` profile, deprecated-terminology tolerance grounded in
  * **public conformance evidence**, not an invented vendor deviation matrix.
  *
- * Grounding (per ADR 0018, public artifacts are valid grounding):
+ * Grounding (public artifacts are valid grounding):
  * - **SMART C-CDA Scorecard** (SMART Health IT / Boston Children's), the public
  *   rubric that scores real C-CDA documents and explicitly flags **deprecated
  *   codes** (notably the deprecated BMI LOINC **41909-3** in place of the current

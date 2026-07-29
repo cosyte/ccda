@@ -12,7 +12,70 @@ this file is maintained by hand (Changesets handles the version bump and publish
 The first pre-alpha release (`0.0.1`) will ship the initial public API surface. The package begins
 its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until first alpha).
 
+### Changed
+
+- **Public-surface hygiene (`PUBLIC-SURFACE-HYGIENE`, founder directive 2026-07-27).** Internal
+  project bookkeeping is gone from every surface a consumer reads: `README.md`, `docs-content/`, the
+  JSDoc compiled into `dist/index.d.ts` and `dist/index.d.cts`, and one runtime error message. No
+  API, type, or parsing behaviour changed.
+  - **`CcdaDocument.toString()`'s error text changed.** It ended "; a document builder API lands in
+    a later phase", which was stale as well as internal: `buildCcda` had already shipped. The
+    stable part a caller might match on, `no source document retained`, is unchanged, and
+    `test/serialize.test.ts` asserts on that substring rather than on the sentence.
+  - **Two published JSDoc claims were false, not merely noisy, and were deleted rather than
+    reworded.** `CcdaDocument` claimed it framed "identity + narrative only" with clinical entry
+    extraction still to come (`Phase 2+`), and `model/types/bl.ts` claimed BL was modelled "even
+    though Phase 1 does not yet extract clinical entries". Fourteen entry families are extracted.
+    Stale bookkeeping does not just leak process; it misdescribes the software, and a consumer's
+    editor was rendering both on hover.
+  - **`docs-content/installation.md` said the package was published at `0.0.1`.** Re-derived from
+    the registry: `0.0.2`.
+  - Removed with them: 11 `**This slice adds ...**` paragraph openers in the `buildCcda` docblock,
+    `CCDA-P7` / `CCDA-PLANNED-CODE-SLOT` /
+    `CCDA-PLANNED-MED-ARM-CONFLICT-UNREACHABLE` item identifiers, six `ADR 0018` and
+    `docs/adr/0001-xml-parser.md` citations, four prose citations of the roadmap, and the
+    "no phase numbers here on purpose" paragraph on the troubleshooting page, which explained our
+    release bookkeeping to a consumer.
+  - **What was deliberately kept.** The "this repo cannot settle X without the normative R2.1
+    Schematron" clauses in `parser/warnings.ts` and `model/entries/plan-of-treatment.ts` read like
+    process commentary and are not: each bounds a safety-critical claim, and deleting one would
+    silently promote "this may be a template violation" into "this is one". Cutting a qualifier is
+    not the same act as cutting a claim.
+
 ### Tooling
+
+- **Public-surface gate (`scripts/check-no-internal-refs.sh`, `pnpm check:no-internal-refs`, plus
+  `.github/workflows/no-internal-refs.yml`).** Enforces the founder directive above so the sweep
+  cannot regress ("it needs to not just be a memory note, but something that is addressed in the
+  workflow accordingly"). Seven rules over four passes: the public markdown surface plus the npm
+  metadata, line by line and paragraph-joined; `src/` doc comments, which tsup compiles into both
+  declaration files; and `src/` string literals, which reach a consumer's terminal. Ported from
+  `ncpdp`'s copy rather than `hl7`'s, because `ncpdp`'s carries the string-literal pass, the plural
+  `phases?` stem and `/` in the ADR separator class, and this repo needed all three. Rule 7, the
+  prose roadmap citation, is taken from `cli`'s copy and is the highest-yield rule here: this repo
+  cites the roadmap in prose and never by path, so the path-keyed rule is structurally blind to it.
+  - **The scan surface, the standards-designation exclusions, the phase rule's clinical guards and
+    its roman-numeral arm, and every self-test sample are re-derived for C-CDA, not inherited.** A
+    naive `WORD-N` identifier rule matches 21 distinct tokens on the scanned markdown surface and
+    all 21 are the reader's reference material (`ICD-10-CM`, `ICD-9-CM`, `PHQ-9`, `UTF-8`,
+    `W3C-DOM`, `MRN-00042`, `DOC-0001`). `CPT-4`, `ICD-10-PCS`, `TOP-LEVEL` and `SYNTH-9` are
+    `src/`-only and are not among those 21.
+  - **The wrapped-hit de-duplication is per-rule, which is a fix to the ported code.** The sibling
+    copies test the cumulative hit list, so a doc block already carrying an earlier rule's hit
+    swallowed every later rule's wrapped hit in the same block. Measured, not theorised:
+    the doc block opening at `src/model/section.ts:1` carried `Phase 1` on its line 3, which rule 2
+    reported against the block, and a roadmap citation wrapped across its lines 5 and 6, which rule 7
+    could then not report at all. The red survived; the report did not, and the citation would have
+    shipped.
+  - **It reports; it does not yet block.** `Public-surface gate / no-internal-refs` is not among the
+    required contexts on `cosyte/ccda`, exactly as with the em-dash gate next door. Closing that is
+    a GitHub ruleset change, not a file change.
+  - **`CHANGELOG.md` is exempt org-wide** (founder, 2026-07-29): an item reference in a changelog
+    reads as provenance. The exemption is this file and nothing else.
+  - **Known residual, stated rather than discovered later.** `//` line comments are not swept, and
+    five are live (one roadmap citation, four `slice` references). They reach `dist/index.mjs`
+    verbatim but are not what a consumer is _shown_, and the convention names source comments as a
+    place the traceability belongs.
 
 - **Em-dash brand gate (`scripts/check-no-emdash.sh`, `pnpm check:no-emdash`, plus
   `.github/workflows/no-emdash.yml`).** Checks the founder directive banning `U+2014` outright

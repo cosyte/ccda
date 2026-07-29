@@ -9,9 +9,9 @@ sidebar_position: 1
 `@cosyte/ccda` is a TypeScript C-CDA toolkit for Node.js. It ships dual **ESM + CJS** builds with
 per-condition type declarations, so it works from either module system without configuration, and it
 has a **single** exact-pinned runtime dependency: the hardened W3C-DOM substrate `@xmldom/xmldom`
-(ratified by an ADR for C-CDA's XML; C-CDA is XML, so a DOM is unavoidable).
+(C-CDA is XML, so a DOM is unavoidable).
 
-> **Status:** **published on npm at `0.0.1`** and **public**, still pre-alpha on the cosyte `0.0.x`
+> **Status:** **published on npm at `0.0.2`** and **public**, still pre-alpha on the cosyte `0.0.x`
 > version ladder (`0.0.x` until first alpha). The install command below is live.
 
 ## Prerequisites
@@ -19,7 +19,7 @@ has a **single** exact-pinned runtime dependency: the hardened W3C-DOM substrate
 - **Node.js >= 22.** The whole `@cosyte/*` suite targets ES2023 / Node 22+.
 - A package manager: `pnpm`, `npm`, or `yarn`.
 - **One runtime dependency.** `@xmldom/xmldom` (exact-pinned) is the only runtime dep; the parser
-  caps itself at **≤ 3** justified deps and adds none without an ADR. There is no native build and no
+  caps itself at **≤ 3** justified deps. There is no native build and no
   post-install script.
 
 ## Install

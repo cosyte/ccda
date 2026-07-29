@@ -59,7 +59,7 @@ export interface PQ {
  * the value-bearing field *is* the document's own text (`@code`, `@extension`,
  * the element's content), with no second copy, so withholding it would delete
  * what the document said rather than decline to embellish it. Those datatypes
- * therefore warn and keep the field: after this change a naive consumer reading
+ * therefore warn and keep the field: a naive consumer reading
  * `allergy.allergen.code` still gets the code, with `nullFlavor` on the same
  * object and `CONTRADICTORY_NULL_FLAVOR` in `warnings`.
  *

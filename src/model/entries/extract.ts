@@ -3,7 +3,7 @@
  * `<section>` (depth-first, including nested subsections), resolves each
  * section's narrative index, and runs the Problems / Medications / Allergies /
  * Results / Vital Signs / Immunizations extractors. Section recognition here is
- * **silent**, Phase 1's `buildSection` already emitted the section-level
+ * **silent**, `buildSection` already emitted the section-level
  * warnings (LOINC fallback, unknown code), so re-emitting them would
  * double-count. The only new section-level signal is `SECTION_PLACEMENT_SUSPECT`:
  * an entry whose home section differs from the section it was found in.
@@ -39,9 +39,9 @@ import type { Element } from "@xmldom/xmldom";
 /**
  * The clinical entries extracted from a document body: the reconciliation triad
  * (Problems, Medications, Allergies), the discrete-data sections (Results, Vital
- * Signs, Immunizations), the Phase-5 sections (Procedures, Encounters,
- * Social-History smoking status), and the deferred clinical sections (Plan of
- * Treatment, Functional/Mental Status, Family/Past Medical History). Empty
+ * Signs, Immunizations), Procedures, Encounters, Social-History smoking
+ * status, and the remaining clinical sections (Plan of Treatment,
+ * Functional/Mental Status, Family/Past Medical History). Empty
  * arrays when a body carries none.
  *
  * @example

@@ -3,7 +3,7 @@
  * documents, grounded in the regulation and a public corpus rather than an
  * invented vendor deviation.
  *
- * Grounding (per ADR 0018, public artifacts are valid grounding):
+ * Grounding (public artifacts are valid grounding):
  * - **ONC 2015 Edition §170.315(b)(1) Transitions of Care.** Certified systems
  *   must *produce* C-CDA **R2.1** but must *receive and validate* **both R2.1 and
  *   R1.1**. So a conformant receiver genuinely encounters R1.1-origin documents

@@ -14,8 +14,9 @@
  * `parseCcda(doc.toString()).toString() === doc.toString()` (the serializer
  * fixed-point) holds automatically. A clean build produces **zero warnings**.
  *
- * **Scope (builder, second slice).** This slice emits a **Continuity of Care
- * Document (CCD)** with the full US Realm Header and populated **discrete-data**
+ * **Scope.** The builder's default document is a **Continuity of Care
+ * Document (CCD)**, emitted with the full US Realm Header and populated
+ * **discrete-data**
  * sections: the reconciliation triad **Problems** and **Allergies** (including
  * the `negationInd` "No Known Allergies" form, the single most safety-critical
  * emit rule), plus **Medications** (RxNorm drug, dose, route, and the two
@@ -33,7 +34,7 @@
  * `nullFlavor="NI"` section so the document stays conformant. The Immunizations
  * section, not a CCD SHALL section, is emitted only when populated.
  *
- * **This slice adds Procedures and Encounters.** A **Procedures** section emits
+ * **Procedures and Encounters.** A **Procedures** section emits
  * one of the three Procedure Activity variants, an operative `<procedure>`
  * (`…22.4.14`), a non-altering `<act>` service (`…22.4.12`), or an assessment
  * `<observation>` (`…22.4.13`), each with its coded procedure, the
@@ -48,7 +49,7 @@
  * The Procedures section and its entry templates carry the R2.1 `2014-06-09`
  * stamp (not the `2015-08-01` stamp the other sections use).
  *
- * **This slice adds Social History (Smoking Status).** A **Social History**
+ * **Social History (Smoking Status).** A **Social History**
  * section (`…22.2.17`, LOINC `29762-2`) emits one or more Smoking Status,
  * Meaningful Use observations (`…22.4.78`, the `2014-06-09` stamp), each with
  * the fixed LOINC `code` (`72166-2` "Tobacco smoking status"), a SHALL
@@ -63,7 +64,7 @@
  * History is emitted only when populated; it is a CCD SHOULD section, so an empty
  * one is never fabricated.
  *
- * **This slice adds Functional Status.** A **Functional Status** section
+ * **Functional Status.** A **Functional Status** section
  * (`…22.2.14`, LOINC `47420-5`, the `2014-06-09` stamp) emits one or more
  * standalone Functional Status Observations (`…22.4.67`), each with the
  * template-**fixed** LOINC `code` (`54522-8` "Functional status"), a SHALL
@@ -78,7 +79,7 @@
  * Functional Status Section has no entries-required variant, so only the base
  * `templateId` is emitted even when it carries entries.
  *
- * **This slice adds Mental Status.** A **Mental Status** section (`…22.2.56`,
+ * **Mental Status.** A **Mental Status** section (`…22.2.56`,
  * LOINC `10190-7`, the R2.1 `2015-08-01` stamp) emits one or more standalone
  * Mental Status Observations (`…22.4.74`), each with the R2.1 template-**fixed**
  * SNOMED CT `code` (`373930000` "Cognitive function finding"), a SHALL `statusCode`
@@ -93,7 +94,7 @@
  * status. Like the other non-SHALL sections it is emitted only when populated, and
  * its section has no entries-required variant.
  *
- * **This slice adds Past Medical History.** A **Past Medical History** section
+ * **Past Medical History.** A **Past Medical History** section
  * (`…22.2.20`, LOINC `11348-0`, the R2.1 `2015-08-01` stamp) emits one or more
  * historical problems as **bare** Problem Observations (`…22.4.4`) directly under
  * each `<entry>`, reusing the exact observation the Problems section builds, but
@@ -108,7 +109,7 @@
  * never invented. The section has no entries-required variant and, like the other
  * non-SHALL sections, is emitted only when populated.
  *
- * **This slice adds Plan of Treatment.** A **Plan of Treatment** section (V2,
+ * **Plan of Treatment.** A **Plan of Treatment** section (V2,
  * `…22.2.10`, LOINC `18776-5`, the R2.1 `2014-06-09` stamp) emits one or more of
  * the seven planned-entry templates, a Planned Act (`…4.39`), Encounter
  * (`…4.40`), Procedure (`…4.41`), Medication Activity (`…4.42`), Supply
@@ -133,13 +134,13 @@
  * **both** `substanceAdministration` variants, `…4.120` and `…4.42`
  * (CONF:1098-30468); only the first has a required field on its input type, so a
  * Planned Medication Activity built without one is emitted short that SHALL
- * element, a pre-existing gap whose fix is a breaking input-type change. The
+ * element, a known gap whose fix is a breaking input-type change. The
  * Planned Observation's
  * expected coded result `value` [0..1] is emitted only when supplied, never
  * invented. Like the other non-SHALL sections it is emitted only when populated,
  * and its section has no entries-required variant.
  *
- * **This slice adds Family History.** A **Family History** section (V3,
+ * **Family History.** A **Family History** section (V3,
  * `…22.2.15`, LOINC `10157-6`, the R2.1 `2015-08-01` stamp) emits one or more
  * Family History Organizers (`…22.4.45`), one per relative. Each organizer names
  * the relative through its `subject/relatedSubject` (`@classCode="PRS"`): a coded
@@ -156,8 +157,8 @@
  * emitted only when supplied. Like the other non-SHALL sections it is emitted only
  * when populated, and its section has no entries-required variant.
  *
- * **This slice adds direct-entry Assessment Scale Observations.** The Functional
- * Status and Mental Status sections can now carry **Assessment Scale
+ * **Direct-entry Assessment Scale Observations.** The Functional
+ * Status and Mental Status sections can carry **Assessment Scale
  * Observations** (`…22.4.69`), formal scored instruments such as a PHQ-9
  * depression screen or a Glasgow Coma scale. C-CDA R2.1 places these as **direct
  * section entries** (`entry/observation`), **not** as Functional/Mental Status
@@ -173,8 +174,7 @@
  * nullFlavor="UNK"`, an explicit unknown the parser reads back as an `integer`
  * value with no number, never a guessed reading. Because only the carrying
  * section's templates are emitted, the parser tags each scale `domain:
- * "functional"` or `"mental"` from its section, never conflating the two, exactly
- * the placement the slice-11 organizers deferred to here.
+ * "functional"` or `"mental"` from its section, never conflating the two.
  *
  * **SHALL `effectiveTime` on every entry.** Each act/observation the builder
  * emits carries the `effectiveTime` its C-CDA R2.1 template requires, the
@@ -186,8 +186,8 @@
  * mirroring how the header's SHALL `addr`/`telecom` and the never-guessed
  * dose/route are handled.
  *
- * **This slice adds a second document type: the Referral Note.** `buildCcda`
- * now emits either a **CCD** (default) or a **Referral Note**
+ * **A second document type: the Referral Note.** `buildCcda`
+ * emits either a **CCD** (default) or a **Referral Note**
  * (`documentType: "referralNote"`), establishing the multi-document-type pattern
  * in the builder. The Referral Note specializes the US Realm Header, its own
  * document `templateId` root (`…22.1.14`, the R2.1 `2015-08-01` stamp), LOINC
@@ -205,10 +205,10 @@
  * always emitted, they appear only when the caller supplies content. Every
  * emitted section is one the parser recognizes, so a clean Referral Note build
  * round-trips through {@link parseCcda} with **zero warnings**, exactly like a
- * CCD. The remaining ten document types are deferred to a later CCDA-P7 increment.
+ * CCD. The remaining ten document types are not emitted.
  *
- * **This slice adds the bring-your-own terminology adapter (validation path).**
- * `buildCcda` (and `parseCcda`) now accept an optional {@link TerminologyAdapter}
+ * **The bring-your-own terminology adapter (validation path).**
+ * `buildCcda` (and `parseCcda`) accept an optional {@link TerminologyAdapter}
  *, a small, dependency-free interface a consumer implements to plug in their own
  * licensed terminology service (`@cosyte/ccda` imports none). When supplied, each
  * recognized coded value is semantically validated: a code the adapter rejects is
@@ -216,7 +216,7 @@
  * guessed value. The builder emits every code verbatim regardless; the adapter can
  * only add a flag, never change a safety-critical code.
  *
- * **This slice consumes the adapter's `translate` (`$translate`) to emit
+ * **The adapter's `translate` (`$translate`) emits
  * `<translation>` alternates.** When the supplied adapter's optional `translate`
  * returns alternate codings for a clinical coded slot, `buildCcda` emits a
  * spec-clean CDA R2 `<translation>` child (a CD/CE alternate coding) beside the
@@ -228,9 +228,9 @@
  * concrete adapter-supplied coding produces one. The alternates round-trip through
  * {@link parseCcda} into `CD.translation`. The `buildSectionComponent` edit/append
  * path and the non-`checkCodeSlot` slots (results/vitals LOINC, reaction/severity)
- * are out of this slice's scope.
+ * are out of scope.
  *
- * **This slice adds caller-supplied problem/allergy resolution + onset dates.**
+ * **Caller-supplied problem/allergy resolution + onset dates.**
  * A {@link BuildCcdaProblem} takes a `resolution` date (and an
  * {@link BuildCcdaAllergy} now takes both `onset` and `resolution`) so a resolved
  * concern's `effectiveTime/high`, the C-CDA "resolution date", carries a real
@@ -1045,8 +1045,8 @@ export interface BuildCcdaMentalStatus {
  * [1..\*] Functional Status Observation; an empty organizer is a `TypeError`
  * (never an organizer emitted with zero members). The Assessment Scale Observation
  * (`…22.4.69`), a scored scale such as a Barthel index, is a *direct section
- * entry* in C-CDA R2.1, **not** an organizer component, and is deferred to a later
- * increment; only status observations are grouped here.
+ * entry* in C-CDA R2.1, **not** an organizer component; only status observations
+ * are grouped here.
  *
  * @example
  * ```ts
@@ -1096,7 +1096,7 @@ export interface BuildCcdaFunctionalStatusOrganizer {
  * **`findings` must be non-empty.** The organizer SHALL contain at least one
  * [1..\*] Mental Status Observation; an empty organizer is a `TypeError`. The
  * Assessment Scale Observation (`…22.4.69`) is a *direct section entry* in R2.1,
- * **not** an organizer component, and is deferred to a later increment.
+ * **not** an organizer component.
  *
  * @example
  * ```ts
@@ -1348,7 +1348,7 @@ interface BuildCcdaPlannedItemBase {
    * fabricated.
    *
    * **`[0..1]` is the cardinality on five of the seven templates, not on all of
-   * them, and this said "SHOULD [0..1]" flatly until the claim was checked.**
+   * them.**
    * Both `substanceAdministration` variants SHALL carry exactly one:
    * Planned Medication Activity (`…4.42`, CONF:1098-30468) and Planned
    * Immunization Activity (`…4.120`). {@link BuildCcdaPlannedImmunization}
@@ -1420,19 +1420,16 @@ export interface BuildCcdaPlannedOrder extends BuildCcdaPlannedItemBase {
  * a date the caller never supplied. C-CDA makes `effectiveTime` `[1..1]` on this
  * template, "the time that the immunization activity should occur".
  *
- * **Do not read that as "this is the only planned template that requires it",
- * which is what this docblock claimed until the claim was checked.** C-CDA makes
+ * **Do not read that as "this is the only planned template that requires it".**
+ * C-CDA makes
  * `effectiveTime` `[1..1]` on **both** `substanceAdministration` planned
  * variants: Planned Medication Activity (`…4.42`) SHALL carry exactly one too
  * (CONF:1098-30468). It is the other **five** (`…4.39`, `…4.40`, `…4.41`,
  * `…4.43`, `…4.44`) that make it `[0..1]`. {@link BuildCcdaPlannedOrder} still
  * types `effectiveTime` as optional for its `medicationActivity` arm, so
  * `buildCcda` can emit a Planned Medication Activity short that SHALL element.
- * **That gap predates this type and is deliberately not closed here:** making
- * the field required on `BuildCcdaPlannedOrder` is a breaking change to a
- * published type and belongs in its own slice. It is written down rather than
- * left for the next reader to re-derive "the other six are `[0..1]`" from a
- * sentence that was wrong.
+ * Making the field required on `BuildCcdaPlannedOrder` would be a breaking
+ * change to a published type, so the gap stands.
  *
  * @example
  * ```ts
@@ -1539,7 +1536,7 @@ export interface BuildCcdaInit {
   /**
    * The document type, `"ccd"` (default) or `"referralNote"`. Each specializes
    * the US Realm Header (its own document `templateId` + LOINC `code`) and its
-   * SHALL section set; the other ten C-CDA R2.1 document types are deferred.
+   * SHALL section set; the other ten C-CDA R2.1 document types are not emitted.
    */
   readonly documentType?: "ccd" | "referralNote";
   /** The document `id`'s extension; a synthetic id is generated when omitted. */
@@ -2221,8 +2218,8 @@ type Translate = TerminologyAdapter["translate"];
  * The parser reads each emitted `<translation>` back into `CD.translation`
  * (`code`/`codeSystem`/`codeSystemName`/`displayName`), so the alternates
  * round-trip; a match's `version` is emitted as the spec `@codeSystemVersion`
- * (which the parser's shallow translation read does not currently surface, a
- * pre-existing read scope, not a regression). @internal
+ * (which the parser's shallow translation read does not currently surface).
+ * @internal
  */
 function appendTranslations(
   doc: Document,

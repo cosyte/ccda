@@ -2,8 +2,7 @@
  * BL, HL7 v3 Boolean. A `@value` of `"true"` / `"false"`, with optional
  * `nullFlavor`. Distinct from `nullFlavor` itself: `negationInd` on a clinical
  * act is a BL-valued attribute (parsed via {@link parseBlAttr}), which is why
- * the suite models BL as a first-class datatype even though Phase 1 does not
- * yet extract clinical entries.
+ * the suite models BL as a first-class datatype.
  */
 
 import { attr } from "../dom.js";

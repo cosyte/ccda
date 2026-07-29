@@ -3,7 +3,7 @@
  * Each encounter is one visit/admission: its type `code` (CPT / SNOMED CT / HL7
  * ActEncounterCode), `statusCode`, and the visit period `effectiveTime`
  * (`IVL_TS`). Scope here is the encounter envelope; nested Encounter Diagnosis
- * acts are left for a later phase (their problems already surface through the
+ * acts are not modeled (their problems already surface through the
  * Problems section).
  */
 
