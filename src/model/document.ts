@@ -1,14 +1,13 @@
 /**
  * `CcdaDocument`, the immutable parsed-document model produced by `parseCcda`.
- * It ties the Phase 1 pieces together: the recognized {@link DocumentType}
+ * It ties the parsed pieces together: the recognized {@link DocumentType}
  * (from the root `templateId` OID, with the R2.1 `@extension` stamp checked),
  * the US Realm {@link CcdaHeader}, the framed top-level {@link CcdaSection}s
  * from a `structuredBody` (or the quarantined `nonXMLBody` content for an
  * unstructured document), and the lenient-parse warnings, frozen at the model
  * boundary so callers cannot mutate parser output after handoff.
  *
- * Phase 1 frames identity + narrative only; clinical entry extraction is
- * Phase 2+. The convenience accessors (`getPatient`, `getMrn`, `findSection`,
+ * The convenience accessors (`getPatient`, `getMrn`, `findSection`,
  * `allSections`) answer the archetype's "whose document, what kind, what's in
  * it" in one call without re-walking the DOM.
  */
@@ -232,8 +231,7 @@ export class CcdaDocument {
    *
    * @returns The spec-clean XML text.
    * @throws {Error} If this document was hand-constructed (not produced by
-   *   {@link parseCcda}) and so retains no source document to emit, a document
-   *   builder API lands in a later phase.
+   *   {@link parseCcda}) and so retains no source document to emit.
    * @example
    * ```ts
    * const doc = parseCcda(xml);
@@ -244,7 +242,7 @@ export class CcdaDocument {
     if (this.#serialized === undefined) {
       throw new Error(
         "CcdaDocument.toString: no source document retained. Only documents produced " +
-          "by parseCcda can be serialized; a document builder API lands in a later phase.",
+          "by parseCcda can be serialized.",
       );
     }
     return this.#serialized;
@@ -254,8 +252,7 @@ export class CcdaDocument {
    * Return a **new** `CcdaDocument` with `additional` warnings appended,
    * structurally sharing every parsed field (header, sections, entries, and the
    * serialized snapshot) with this instance by reference. The original is never
-   * mutated, the immutable copy-with foundation a later builder phase extends
-   * to content edits. A downstream pass (e.g. profile-aware validation) uses
+   * mutated. A downstream pass (e.g. profile-aware validation) uses
    * this to annotate a document without re-parsing.
    *
    * @param additional - Warnings to append after the existing ones.

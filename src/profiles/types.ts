@@ -25,7 +25,7 @@ import type { WarningCode } from "../parser/warnings.js";
 
 /**
  * Provenance for a {@link CcdaProfile}, the **real, cited public artifact** a
- * profile's quirks are grounded in. Per ADR 0018, a quirk is encoded only when a
+ * profile's quirks are grounded in. A quirk is encoded only when a
  * real document (including a public HL7/ONC/IHE sample or a published
  * conformance study) grounds it; this record is where that grounding is stated,
  * so a reviewer can trace every tolerated deviation back to evidence rather than

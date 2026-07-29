@@ -2,7 +2,7 @@
  * US Realm Header model + extraction for `@cosyte/ccda`. The C-CDA header is
  * the CDA R2 wrapper around every document type: the document `id`/`code`/
  * `title`/`effectiveTime`, and one or more `recordTarget` participations
- * carrying the patient. Phase 1 extracts the header fields most consumers
+ * carrying the patient. The parser extracts the header fields most consumers
  * reach for first, enough to answer "whose document is this, what kind, and
  * when" in one line.
  */

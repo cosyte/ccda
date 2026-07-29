@@ -1,7 +1,7 @@
 /**
  * Hardened XML substrate for `@cosyte/ccda`. This is the single place the
  * package constructs a DOM from untrusted input, and it owns the security
- * posture recorded in `docs/adr/0001-xml-parser.md`:
+ * posture:
  *
  * - **No DTD / DOCTYPE.** Any `<!DOCTYPE` or `<!ENTITY` declaration is rejected
  *   outright (`XXE_OR_DTD_PRESENT`) before the DOM is built, this is the

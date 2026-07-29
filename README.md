@@ -781,18 +781,17 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
   organizers + observations. When the caller supplied a time it is used; when a `SHALL` requires the
   element but no time is known the slot is `nullFlavor="UNK"` (satisfying the cardinality without inventing
   a clinical time, read back as absent), the same fail-safe as the header's `SHALL` `addr`/`telecom` and
-  the never-guessed `dose`/`route`. **Residual (not yet closed):** the builder does not assert full XSD
+  the never-guessed `dose`/`route`. **Limitation:** the builder does not assert full XSD
   element-order or the complete Schematron rule set, and this gap was grounded against the raw C-CDA R2.1
-  IG text rather than a validator run (no external C-CDA/Schematron IG validator was reachable in the
-  build environment), so a `buildCcda` document is expected-but-not-proven to pass an external IG
-  validator. The reaction/severity/criticality sub-observations' optional (`0..1`, non-`SHALL`)
+  IG text rather than a validator run, so a `buildCcda` document is expected-but-not-proven to pass an
+  external IG validator. The reaction/severity/criticality sub-observations' optional (`0..1`, non-`SHALL`)
   `effectiveTime` is not emitted.
 - **Vendor profiles tolerate, they never relax safety**: a `CcdaProfile` only downgrades the
   **non-safety-critical** deviations it expects (re-badged `PROFILE_QUIRK_APPLIED`, flagged
   `expected`); it can never tolerate a dose/allergen/unit/identity/code-system warning (refused at
   `defineCcdaProfile()` time) and never changes an extracted value. Two built-ins ship
   (`ccdaProfiles.smartScorecard`, `ccdaProfiles.legacyR11`), each grounded in a cited public source;
-  named per-vendor profiles await a real vendor-attributed grounding document (ADR 0018).
+  named per-vendor profiles await a real vendor-attributed grounding document.
 
 ## The cosyte parser archetype
 

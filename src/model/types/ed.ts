@@ -5,7 +5,7 @@
  * **Base64 quarantine:** when `representation` is `B64`, the inline content is
  * captured verbatim into `value` and **never decoded** here, decoding hostile
  * base64 (which may carry images or arbitrary bytes) is out of scope for the
- * parser and a deliberate safety boundary (see `docs/adr/0001-xml-parser.md`).
+ * parser and a deliberate safety boundary.
  */
 
 import { attr, child, text } from "../dom.js";

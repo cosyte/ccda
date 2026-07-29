@@ -2,8 +2,8 @@
  * The **bring-your-own (BYO) terminology adapter** contract for `@cosyte/ccda`.
  *
  * C-CDA binds its coded slots to licensed terminologies, SNOMED CT and RxNorm
- * (UMLS-gated), CPT (AMA-licensed), whose *content* this suite never bundles
- * (see the roadmap §5 licensing matrix). Structural recognition
+ * (UMLS-gated), CPT (AMA-licensed), whose *content* this suite never bundles.
+ * Structural recognition
  * ({@link ../model/code-systems.checkCodeSlot}) can confirm a value's
  * `@codeSystem` OID and code *shape*, but it cannot confirm a code is a real,
  * active member of its system. That last tier is **semantic validation**, and it
@@ -122,7 +122,7 @@ export interface CodeTranslationResult {
  * imports one, it only *calls* the one you supply, and only where a coded value
  * carries both a `code` and a `system`.
  *
- * **`validateCode` is the one method this slice consumes.** For each recognized
+ * **`validateCode` is the one method the parser consumes.** For each recognized
  * coded slot (problem, medication, allergen, route, vaccine), the parser calls
  * `validateCode` and, on a `result: false`, emits `SEMANTIC_CODE_INVALID` with
  * the code **preserved verbatim**, it never rewrites the value. Returning

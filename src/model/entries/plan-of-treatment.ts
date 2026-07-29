@@ -457,8 +457,8 @@ function buildPlannedItem(
  * which the documented filter-the-expected-noise pattern reduces to silence. On
  * the Plan of Treatment, which says what a patient is about to be given.
  *
- * **This function is monotone by construction; the slice that added the
- * `vaccine` row is not, and the two must not be run together.**
+ * **This function is monotone by construction; recognizing a new template is
+ * not, and a change must not do both at once.**
  * `checkCodeSlot` only ever emits: it selects nothing, withholds nothing, and
  * does not touch the returned `CD`, so nothing routed through here can go from
  * warned to silent. Recognizing a **new template** is a different kind of
@@ -536,10 +536,9 @@ function checkPlannedCodeSlot(
  * `consumable/manufacturedProduct`
  * `[1..1]` carrying Immunization Medication Information (`…22.4.54`), whose
  * `manufacturedMaterial/code` is the CVX. So every product warning
- * {@link consumableProductCode} raises, which was reachable on a planned
- * medication only from `CCDA-PLANNED-MED-ARM-CONFLICT-UNREACHABLE` onwards,
- * reaches a planned vaccination too; before this it reached nothing there,
- * because the entry was never matched at all. @internal
+ * {@link consumableProductCode} raises
+ * reaches a planned vaccination too; until this template was matched at all,
+ * none of them reached one. @internal
  */
 function plannedCodeElement(
   el: Element,

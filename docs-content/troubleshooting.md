@@ -66,10 +66,7 @@ and any snippet would risk leaking PHI.
 ## What it does, and does not do, today
 
 Depth tracks the code, and never leads it. Everything below is a deliberate boundary rather than a
-bug, and every claim was checked against the shipped source before it was written. Where a boundary
-is genuinely open, this page says so instead of resolving it in your favor. There are no phase
-numbers here on purpose: a version you can install should tell you what it does, not which
-milestone it stopped at.
+bug. Where a boundary is genuinely open, this page says so instead of resolving it in your favor.
 
 ### Reading a document
 

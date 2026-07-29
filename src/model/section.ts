@@ -1,10 +1,10 @@
 /**
  * Section model + framing for `@cosyte/ccda`. A C-CDA structured body is a tree
- * of `<section>` elements; Phase 1 frames them down to recognized identity +
- * narrative (no clinical entry extraction, that is Phase 2+). Recognition is
- * `templateId`-root primary with a LOINC `code` fallback, matching the
- * roadmap's section-framing contract; the captured narrative `<text>` is
- * indexed by content `ID` so Phase 2 entries can resolve `<reference value="#id">`.
+ * of `<section>` elements; framing reduces them to recognized identity +
+ * narrative, without clinical entry extraction. Recognition is
+ * `templateId`-root primary with a LOINC `code` fallback; the captured
+ * narrative `<text>` is indexed by content `ID` so clinical entries can
+ * resolve `<reference value="#id">`.
  */
 
 import { sectionForLoinc, sectionForTemplateRoot, type SectionInfo } from "../parser/templates.js";

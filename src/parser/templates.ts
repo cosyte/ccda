@@ -7,7 +7,7 @@
  *   document types are recognized; the R2.1 version stamp lives in the
  *   `@extension` (`2015-08-01`) and is checked separately.
  * - **Section**, keyed by section `templateId` root (primary) with a LOINC
- *   `code` fallback (secondary), per the roadmap's section-framing contract.
+ *   `code` fallback (secondary).
  *
  * These tables are pure data; the matching logic that consumes them lives in
  * `model/section.ts` and `model/document.ts`.

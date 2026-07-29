@@ -492,6 +492,40 @@ immutability + explicit mutation, and the profile system.
   DOM round-trip + a hardenable (XXE-safe) posture. The parse layer configures and consumes
   it; do **not** add a _second_ XML library. Reuse this one (and coordinate `@cosyte/ncpdp` onto the
   same substrate).
+- **Public-surface gate present and reporting, but NOT yet blocking** (`PUBLIC-SURFACE-HYGIENE`).
+  `scripts/check-no-internal-refs.sh` (`pnpm check:no-internal-refs`) plus
+  `.github/workflows/no-internal-refs.yml` enforce the founder directive of 2026-07-27: no internal
+  project bookkeeping on a surface a consumer reads. It is **on the meta-repo's `verify.sh` ladder**,
+  so it runs locally before a push. Same not-a-required-check gap as the em-dash gate below: the
+  context `Public-surface gate / no-internal-refs` is not in `parser-ci-required-checks`, so it is
+  visible on every PR and blocks nothing. Closing it is a ruleset change, not a file change.
+  - **Ported from `ncpdp`'s copy, NOT `hl7`'s**, and re-port from `ncpdp` or later if you ever
+    resync. `hl7`'s lacks the `src/` string-literal fourth pass, the plural `phases?` stem and `/`
+    in the ADR separator class; this repo needed all three. **Rule 7 (prose roadmap citation) comes
+    from `cli`** and is the highest-yield rule here, because this repo cites the roadmap in prose and
+    never by path, which the path-keyed rule 5 cannot see. A "resync with hl7" that restores
+    `RULE_COUNT=6` deletes it; the script refuses to run if that happens.
+  - **The recorded backlog for this item was `1`. Running the gate against base `2a32309` reported
+    67 hits**: 2 on the public markdown surface and **65 in `src/` doc comments** (over 61 distinct
+    locations), which compile into both declaration files. The string-literal pass found 0 by rule;
+    the one real string defect was a by-hand catch. A count taken from the markdown alone
+    under-counts by roughly 30:1 here. **Measure the doc comments first, and quote a count with the
+    tree it was taken on.**
+  - **Two of those doc comments were factually FALSE**, not merely internal (`CcdaDocument` and
+    `model/types/bl.ts` both claimed clinical entry extraction had not shipped), and a runtime error
+    message told a caller to wait for a builder that already existed. Stale bookkeeping misdescribes
+    the software; that is the argument for the gate, not tidiness.
+  - **The prefix list, designation exclusions, phase guards and self-test samples are re-derived for
+    C-CDA and must not be inherited wholesale.** A naive `WORD-N` rule matches 21 distinct tokens on
+    the scanned markdown surface. Across markdown plus `src/` it matches 30, of which 27 are the
+    reader's reference material (`ICD-10-CM`, `CPT-4`, `PHQ-9`, `UTF-8`, `TOP-LEVEL`, the synthetic
+    `MRN-*`/`DOC-*`/`SYNTH-9` example ids) and only 3 are ours, all `CCDA-` prefixed. That ratio is
+    the whole argument for keying on prefixes. The reasoning for every divergence is in the script
+    header; read it before editing a pattern.
+  - **`CHANGELOG.md` is exempt org-wide** (founder, 2026-07-29). Do not re-litigate it, do not sweep
+    it. The exemption is that file and nothing else.
+  - **Known residual:** `//` line comments are out of scope by convention and five are live. They
+    reach `dist/index.mjs` but are not what a consumer is shown.
 - **Em-dash gate present and reporting, but NOT yet blocking.** `scripts/check-no-emdash.sh`
   (`pnpm check:no-emdash`) plus `.github/workflows/no-emdash.yml` check the founder directive banning
   `U+2014` outright (`knowledgebase/06-brand/voice-and-tone.md`, "No em dashes. Ever."). Read the

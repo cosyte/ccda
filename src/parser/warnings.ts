@@ -877,7 +877,7 @@ export function medicationProductArmConflict(position: CcdaPosition): CcdaWarnin
  * `MISSING_CODE_VALUE` where the selected element asserts neither a symbol nor a
  * `nullFlavor` (two empty-`<code/>` material arms is exactly that shape, and
  * this code fires on it). The fourth was the one this enumeration omitted; it is
- * also the companion `CCDA-PLANNED-CODE-SLOT` had to make reachable on a planned
+ * also the companion that had to be made reachable on a planned
  * medication for the argument to hold at every consumable call site. All four
  * are in `SAFETY_CRITICAL_CODES`, so tolerating this one can never buy silence
  * about a withheld, absent, unselected, or unnamed drug. (A selected `<code>`
@@ -973,8 +973,8 @@ export function medicationProductArmRepeated(position: CcdaPosition): CcdaWarnin
  * `<code>`s were considered. The exception is the shapes where the widened
  * comparison now finds a disagreement: there
  * {@link medicationProductArmConflict} withholds the product outright, so a
- * document that used to yield a coded `CD` yields none. That is this slice's
- * whole point, not a side effect. Admitting the newly-visible
+ * document that used to yield a coded `CD` yields none. That is intended,
+ * not a side effect. Admitting the newly-visible
  * candidates into selection would have displaced richer sibling codings on equal
  * symbols and taken `CODE_NARRATIVE_MISMATCH` and `MISSING_CODE_VALUE` down with
  * them. What changed beside this code is only that every `<code>` now reaches

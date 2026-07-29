@@ -3,10 +3,11 @@
  * profile is **forbidden** to tolerate. A vendor profile exists to quiet known,
  * benign structural/version/deprecation noise, never to hide a deviation that
  * could change a clinical reading. Every code below flags a **safety-critical**
- * condition from the roadmap's §4 harm-ordered list (patient identity, the
+ * condition, among them patient identity, drug and allergen identity, the
  * allergy negation/granularity distinction, dose/route/unit, planned-vs-
- * performed, code↔narrative disagreement, unhandled value types, or a missing
- * required section); tolerating any of them is refused at *definition time* by
+ * performed, code↔narrative disagreement, an absent or unexpected code system,
+ * unhandled value types, and a missing required section. The list below is the
+ * authority, not that summary; tolerating any of it is refused at *definition time* by
  * `defineCcdaProfile`, so no profile, built-in or user-authored, can ever
  * downgrade one to an "expected" quirk.
  *
