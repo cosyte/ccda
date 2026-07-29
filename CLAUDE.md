@@ -34,6 +34,31 @@ immutability + explicit mutation, and the profile system.
   complete than these:
   - `buildCcda` emits **two of the twelve** document types (CCD, Referral Note). The other ten are
     not implemented. Parsing **recognizes** all twelve; only building is limited.
+  - **OPEN DEFECT, filed rather than fixed: 64 `@example` blocks cite an import that does not
+    resolve**, across four modules (44 `parser/warnings.ts`, 17 `model/entries/shared.ts`, 2
+    `builder/build-ccda.ts`, 1 `profiles/apply.ts`). They write `import { X } from "@cosyte/ccda"` for
+    internal helpers and builder types the entry point does not export. **Four of the 64 reach
+    consumers** in the published `.d.ts` (`profileQuirkApplied`, `applyProfile`, and the two
+    assessment-scale builder types), verified against the published `0.0.2` tarball; the other 60
+    document declarations `tsup` drops from the rollup, so they are wrong in the repo rather than
+    wrong on npm. **The predicate is "reaches `dist`", NOT "is on the entry point"** -- both
+    `BuildCcdaAssessmentScale` types shipped while unexported, because `BuildCcdaInit` references
+    them. A fix plus a TSDoc gate was written, refused twice, and dropped by founder call rather than
+    shipped ungraded: the gate was a specifier regex over single-line named imports, blind to
+    multi-line, `import X from`, and `import * as X from`. **If you pick this back up, parse the TSDoc
+    properly; do not grow that regex.** The per-symbol fix is the easy half (internal symbol gets a
+    module-relative import, genuinely public symbol gets exported) and does not need the gate to land.
+  - **Recognition resolves a disagreeing section silently, in BOTH of its two shapes, with no warning
+    for the disagreement.** `recognize()` returns on the first matching `templateId` and never
+    consults `<code>`, and there is no code for "these signals disagree". The gap has two halves and
+    an eventual warning code should be scoped to both: (a) **`templateId` vs LOINC** -- a recognized
+    root and a recognized section code naming DIFFERENT catalog sections resolves on the root; (b)
+    **root vs root** -- a section double-stamped with two recognized roots resolves on whichever
+    appears FIRST in document order, so the document's element order silently decides the `key`.
+    Pre-existing in both halves and not introduced by any one section, but the Interventions entry
+    moves one more real-world shape into each, so both are pinned in `test/parse.test.ts` (rows 5, 8,
+    9). No clinical fact is lost meanwhile: `extractClinical` runs every extractor on every section
+    regardless of `key`.
   - A `TerminologyAdapter` is consulted at the **five `CodeSlot`s only** (`problem`, `medication`,
     `allergen`, `route`, `vaccine`). Every other coded value is never handed to the adapter, so a
     clean run means those five slots passed, **not** that the document was terminology-verified.
@@ -389,6 +414,53 @@ immutability + explicit mutation, and the profile system.
     escape hatch, and emitting a _conformant_ Planned Intervention Act means satisfying its `[1..*]`
     `RSON` Entry Reference to a Goal Observation, which means modelling goals. That is a feature, not a
     fixture, and it is filed rather than smuggled in.
+  - **The Interventions Section (`…21.2.3`, LOINC `62387-6`) is in the catalog, and its OID is the
+    trap.** It lives in the `…10.20.21.2.*` arc, not the `…10.20.22.2.*` arc every other C-CDA section
+    in `SECTION_CATALOG` uses, and `…10.20.22.2.3` (`22`, not `21`) is **Results**, already in the
+    table. A matrix row exists solely to fail if those two are ever confused; do not "normalize" the
+    arc. Matching is on root alone, so all three stamps in circulation are accepted (unversioned,
+    `2014-06-09`, `2015-08-01`); that is the catalog's uniform root-primary contract, not a tolerance
+    special to this entry. **There is no entries-REQUIRED sibling root** here, unlike Allergies
+    (`…22.2.6` / `…22.2.6.1`) or Results (`…22.2.3` / `…22.2.3.1`): exactly one root. **Mind the
+    direction, an earlier draft had it backwards:** in C-CDA the base root is the entries-optional
+    variant and the `.1` sibling is entries-required. `62387-6` is "Interventions Narrative" in LOINC's
+    long name and the IG labels the section "Interventions Provided"; `SectionInfo.title` is read
+    **nowhere** in `src/` (a framed `CcdaSection.title` is the document's own `<title>`), so nothing
+    matches on either string and neither was corrected into the other. **Do not re-add a CONF id or a
+    LOINC release number here:** the first draft cited `CONF:1198-15378` for a `displayName`
+    requirement and stamped the name "LOINC 2.82", an unverified release number that could not be
+    checked from this repo (LOINC ships each February and August). Both were invented precision,
+    nothing depends on them, and they were removed rather than re-guessed. **Every spec claim on this
+    entry is stated, not traced**, which scopes to this entry only -- `required-sections.ts` cites
+    CONF ids genuinely traced to the normative R2.1 Schematron, and nothing here licenses distrusting
+    those. **The OID is this entry's only real behavioural risk and wants a second source before the
+    next publish.**
+    **Monotonicity, measured over thirteen section shapes by running the same matrix against base
+    `src/` and against the change and diffing.** There are **FOUR** classes of move, and the first cut
+    of this work claimed two, for two reasons worth remembering. The matrix filtered `said` to
+    `SECTION_*` + `UNKNOWN_SECTION_CODE`, which structurally could not see `REQUIRED_SECTION_MISSING`;
+    and the shape set had no double-stamped section. **A filtered projection cannot support a
+    monotonicity claim** -- it only confirms the codes someone already thought of. The matrix now
+    filters nothing. The four:
+    (1) `UNKNOWN_SECTION_CODE` withdrawn where the section resolved to nothing else. **NOT "every
+    document carrying `62387-6`"** -- one stamped with a second recognized root was already silent,
+    because `recognize()` returns on the first matching `templateId` and never reaches the code
+    branch. That universal was published once and is false.
+    (2) `SECTION_MATCHED_BY_LOINC_FALLBACK` **stands down** on a section carrying this `templateId`
+    under another section's `<code>`, because the sentence it asserts ("no recognized templateId,
+    matched on the code") became false about that document; a subject correction rather than a lost
+    signal, and the reading it replaces framed an Interventions Section as the patient's Problems list.
+    (3) **The same document gains `REQUIRED_SECTION_MISSING(problems)`**, because
+    `validateRequiredSections` builds `presentKeys` from the catalog `key`. Safety-critical and
+    unquietable, so the document gets louder, and this is the compensating signal that makes (2) sound
+    rather than a trade.
+    (4) **Recognition flips on a double-stamped section, and document order decides.** Row 8 moves
+    `planOfTreatment` -> `interventions`; the same two roots in the other order do not move. Inherent
+    to first-match recognition, not silent, and no clinical fact is lost because `extractClinical` runs
+    every extractor regardless of `key`. Both orders are pinned so reordering `SECTION_CATALOG` cannot
+    change it unnoticed.
+    Recognizing the section did **not** change what `getPlannedItems()` returns or reach `…22.4.130` /
+    `…22.4.131`; those stay pinned as unreached.
   - **`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`'s precondition is each arm's LEAD `<code>`, and the
     message now says so.** It used to open "No manufacturedProduct arm asserts a primary `@code`" and
     call the translation the _only_ place the product was named. Both are false on an arm whose

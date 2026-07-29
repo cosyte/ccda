@@ -5,6 +5,8 @@ import {
   CcdaParseError,
   WARNING_CODES,
   FATAL_CODES,
+  sectionForLoinc,
+  sectionForTemplateRoot,
   type CcdaWarning,
 } from "../src/index.js";
 import { buildCcda, DOC_TYPES, LOINC_ONLY_SECTION, UNKNOWN_SECTION } from "./__fixtures__/ccda.js";
@@ -115,6 +117,253 @@ describe("parseCcda, sections", () => {
     expect(doc.sections[0]?.key).toBeUndefined();
     expect(doc.sections[0]?.narrativeText).toBe("Unknown content.");
     expect(codes(doc.warnings)).toContain(WARNING_CODES.UNKNOWN_SECTION_CODE);
+  });
+});
+
+describe("parseCcda, the Interventions Section joins the catalog", () => {
+  /**
+   * An Interventions Section (`…21.2.3`, LOINC `62387-6`), with each recognition
+   * signal independently switchable so the matrix below can vary one at a time.
+   * `entry` defaults to the section's own conformant content, a Planned
+   * Intervention Act (`…22.4.146`); the misplacement rows swap in an act whose
+   * home section is elsewhere.
+   */
+  const interventionsSection = (opts: {
+    readonly templateExtension?: string | null;
+    readonly withTemplate?: boolean;
+    readonly loinc?: string;
+    readonly entry?: string;
+  }): string => {
+    const version = opts.templateExtension === undefined ? "2015-08-01" : opts.templateExtension;
+    const ext = version === null ? "" : ` extension="${version}"`;
+    const tid =
+      opts.withTemplate === false
+        ? ""
+        : `<templateId root="2.16.840.1.113883.10.20.21.2.3"${ext}/>`;
+    const entry =
+      opts.entry ??
+      `<act classCode="ACT" moodCode="INT">
+             <templateId root="2.16.840.1.113883.10.20.22.4.146" extension="2015-08-01"/>
+             <statusCode code="active"/>
+           </act>`;
+    return `
+      <component>
+        <section>
+          ${tid}
+          <code code="${opts.loinc ?? "62387-6"}" codeSystem="2.16.840.1.113883.6.1" displayName="Interventions Provided"/>
+          <title>Interventions</title>
+          <text><content ID="ivn1">Planned toward the recorded goal</content></text>
+          <entry>${entry}</entry>
+        </section>
+      </component>`;
+  };
+
+  /** A Planned Act (`…22.4.39`), whose home section is the Plan of Treatment. */
+  const plannedAct = `<act classCode="ACT" moodCode="INT">
+             <templateId root="2.16.840.1.113883.10.20.22.4.39" extension="2014-06-09"/>
+             <code code="409073007" codeSystem="2.16.840.1.113883.6.96" displayName="Education"/>
+             <statusCode code="active"/>
+           </act>`;
+
+  /**
+   * A section stamped with BOTH `…21.2.3` and a second root this catalog already
+   * recognized, in a caller-chosen order. Double-stamping is ordinary in the
+   * wild (an R1.1 root kept beside an R2.1 one, vendor extras), and it is the
+   * one shape where adding a root can *move* a document that base already
+   * recognized: `recognize()` returns on the FIRST matching `templateId`, so
+   * before this change a foreign root always won by default, and now order
+   * decides. Both orders are pinned.
+   */
+  const doubleStamped = (first: "interventions" | "foreign", loinc = "18776-5"): string => {
+    const interventions = `<templateId root="2.16.840.1.113883.10.20.21.2.3" extension="2015-08-01"/>`;
+    // Plan of Treatment (`…22.2.10`), a section already in the catalog.
+    const foreign = `<templateId root="2.16.840.1.113883.10.20.22.2.10" extension="2014-06-09"/>`;
+    const stamps =
+      first === "interventions" ? `${interventions}${foreign}` : `${foreign}${interventions}`;
+    return `
+      <component>
+        <section>
+          ${stamps}
+          <code code="${loinc}" codeSystem="2.16.840.1.113883.6.1" displayName="Plan of Treatment"/>
+          <title>Plan of Treatment</title>
+          <text>Planned care.</text>
+        </section>
+      </component>`;
+  };
+
+  /**
+   * A Results Section, whose root `…22.2.3` differs from the Interventions
+   * Section's `…21.2.3` by exactly one arc. It is the control that rules out the
+   * confusion the new entry is most exposed to, so it carries the OID rather
+   * than relying on a LOINC fallback.
+   */
+  const resultsSection = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.3" extension="2015-08-01"/>
+          <code code="30954-2" codeSystem="2.16.840.1.113883.6.1" displayName="Results"/>
+          <title>Results</title>
+          <text>No results recorded.</text>
+        </section>
+      </component>`;
+
+  it("pins the section-framing matrix: what is recognized, and what is said about it", () => {
+    // MEASURED against base `src/` (f653606), not argued: this exact matrix was
+    // run against base, then against the change, and the two readings diffed.
+    // The catalog gained one entry, so the only honest question is which
+    // documents move and in which direction. Base read, in full (every row also
+    // carries the fixture's own constant `MISSING_ASSIGNING_AUTHORITY`, and
+    // `RSM` abbreviates `REQUIRED_SECTION_MISSING`):
+    //
+    //   rows 1-4, 6, 7  key=none by=none        | RSM(a,m,p,r) UNKNOWN_SECTION_CODE
+    //   row 5           key=problems by=loinc   | RSM(a,m,r)   SECTION_MATCHED_BY_LOINC_FALLBACK
+    //   rows 8, 9, 10   key=planOfTreatment     | RSM(a,m,p,r)
+    //   row 11          key=none by=none        | RSM(a,m,p,r) UNKNOWN_SECTION_CODE
+    //   row 12          key=problems by=loinc   | RSM(a,m,r)   SECTION_MATCHED_BY_LOINC_FALLBACK
+    //   row 13          key=results by=templateId | RSM(a,m,p)
+    //
+    // THERE ARE FOUR CLASSES OF MOVE, NOT TWO. An earlier cut of this test
+    // claimed two, because `said` filtered to `SECTION_*` + `UNKNOWN_SECTION_CODE`
+    // and the shape set had no double-stamped section. Both holes are closed
+    // above: nothing is filtered, and rows 8-10 exist.
+    //
+    // 1. `UNKNOWN_SECTION_CODE` IS WITHDRAWN (rows 1-4, 6, 7). For a section
+    //    resolving to nothing else, base had no root matching `…21.2.3` and
+    //    `sectionForLoinc("62387-6")` was `undefined`, so it always fell through
+    //    to the unknown-code branch. NOTE THE PRECISE SCOPE: this is NOT "every
+    //    document carrying `62387-6` drew it". Row 10 is the counterexample and
+    //    is in the matrix for that reason -- a section carrying `62387-6`
+    //    alongside some other recognized root resolved on that other root and
+    //    was silent at base, because `recognize()` returns on the first matching
+    //    `templateId` and never reaches the code branch.
+    //
+    // 2. ROW 5: `SECTION_MATCHED_BY_LOINC_FALLBACK` STANDS DOWN, AND IT NEEDS
+    //    ITS OWN ARGUMENT, because unlike the above it is a warning base fired
+    //    on a document base ALSO recognized. A section carrying the Interventions
+    //    templateId under a Problems `<code>` was framed by base as
+    //    `key=problems`, off the LOINC fallback, because the root matched
+    //    nothing. It now matches, so recognition resolves on the PRIMARY path
+    //    and the fallback is not taken. `SECTION_MATCHED_BY_LOINC_FALLBACK` says
+    //    "no recognized templateId was present, the code was used instead";
+    //    after this change that sentence is simply false about this document, so
+    //    emitting it would be a warning misdescribing what it is about. This is
+    //    a subject correction of the same kind the planned-medication slice
+    //    made, not a signal traded away -- and the reading it replaces was the
+    //    worse one: base handed back an Interventions Section framed as a
+    //    patient's Problems list.
+    //
+    // 3. ROW 5 ALSO GAINS `REQUIRED_SECTION_MISSING(problems)`, AND THIS IS THE
+    //    MOVE THE OLD FILTER HID. `validateRequiredSections` builds `presentKeys`
+    //    from the very `key` the catalog assigns, so re-framing this section from
+    //    `problems` to `interventions` means the CCD's SHALL Problems section is
+    //    now correctly reported absent. It is safety-critical (`profiles/safety.ts`,
+    //    "Conformance floor") and unquietable under every profile, so it is a
+    //    louder document, not a quieter one. It is also the compensating signal
+    //    that makes point 2 sound: the fallback warning stands down, and a
+    //    strictly more specific warning takes its place saying the document has
+    //    no Problems section at all -- which is true, and is what a consumer
+    //    branching on `findSection("problems")` needs to hear.
+    //
+    // 4. ROW 8: RECOGNITION FLIPS ON A DOUBLE-STAMPED SECTION, AND ORDER DECIDES.
+    //    `recognize()` returns on the first matching `templateId`. At base
+    //    `…21.2.3` matched nothing, so a foreign root always won; now whichever
+    //    root appears first wins. Row 8 (Interventions stamped first) moves
+    //    `planOfTreatment` -> `interventions`; row 9 (the same two roots, other
+    //    order) does not move. This is the one shape where this change alters a
+    //    document base already recognized, and a consumer calling
+    //    `findSection("planOfTreatment")` on row 8's document now gets
+    //    `undefined`. It is inherent to first-match recognition rather than new
+    //    here, it is not silent (the section is still framed and its narrative
+    //    retained), and no clinical fact is lost because `extractClinical` runs
+    //    every extractor on every section regardless of `key`. Pinned in both
+    //    orders so a future reordering of `SECTION_CATALOG` cannot change it
+    //    unnoticed.
+    //
+    // 5. EVERYTHING ELSE IS BYTE-IDENTICAL. Rows 11, 12 and 13 do not move. Row
+    //    13 is the one that matters: a Results section's root `…22.2.3` differs
+    //    from Interventions' `…21.2.3` by a single arc, and it still resolves to
+    //    `results`, which is what rules out a collision with the OID this entry
+    //    is most confusable with.
+    //
+    // 6. THE LAST MOVE IS A PURE GAIN.
+    //    `SECTION_MATCHED_BY_LOINC_FALLBACK` on row 4 replaces the unknown-code
+    //    warning on the code-only shape: the section is still reported as
+    //    deviating, now as the narrower and truer fact. And
+    //    `SECTION_PLACEMENT_SUSPECT` on row 7 fires where base was silent,
+    //    because `flagMisplacedEntries` returns early on an unrecognized section
+    //    -- recognizing the section is what makes a misplaced entry inside it
+    //    visible at all. A Planned Act is not an entry the Interventions Section
+    //    admits. Its conformant entries (rows 1-3, 5, 6) are `…22.4.146` and
+    //    `…22.4.131`, which are in no home-section map, so they stay silent.
+    const shapes: readonly (readonly [string, string])[] = [
+      ["V3 stamp + LOINC (conformant)", interventionsSection({})],
+      ["V2 stamp (2014-06-09)", interventionsSection({ templateExtension: "2014-06-09" })],
+      ["unversioned root (R1.1)", interventionsSection({ templateExtension: null })],
+      ["LOINC only, no templateId", interventionsSection({ withTemplate: false })],
+      ["templateId + a wrong section code", interventionsSection({ loinc: "11450-4" })],
+      ["conformant entry (Planned Intervention Act)", interventionsSection({})],
+      ["misplaced entry (a Planned Act)", interventionsSection({ entry: plannedAct })],
+      ["double-stamped, Interventions first", doubleStamped("interventions")],
+      ["double-stamped, Plan of Treatment first", doubleStamped("foreign")],
+      ["double-stamped, foreign root + 62387-6", doubleStamped("foreign", "62387-6")],
+      ["control: unrecognized LOINC", UNKNOWN_SECTION],
+      ["control: Problems by LOINC fallback", LOINC_ONLY_SECTION],
+      ["control: Results (…22.2.3, one arc away)", resultsSection],
+    ];
+    // NOTHING IS FILTERED OUT OF `said`. An earlier cut of this matrix kept only
+    // `SECTION_*` and `UNKNOWN_SECTION_CODE`, which structurally could not see
+    // `REQUIRED_SECTION_MISSING` -- a safety-critical code (`profiles/safety.ts`,
+    // "Conformance floor") that this change genuinely moves, because
+    // `validateRequiredSections` builds `presentKeys` from the very `key` the
+    // catalog now assigns. A filtered projection cannot support a monotonicity
+    // claim: it can only confirm the codes someone already thought of. Every
+    // code the document raises is snapshotted here.
+    // `REQUIRED_SECTION_MISSING` is emitted once per absent SHALL section, so
+    // the bare code would repeat and say nothing about WHICH section went
+    // missing, which is the entire content of the move. The key is carried in
+    // the message; it is surfaced here so a row that loses `problems` reads as
+    // losing `problems`.
+    const say = (w: CcdaWarning): string => {
+      if (w.code !== WARNING_CODES.REQUIRED_SECTION_MISSING) return w.code;
+      return `${w.code}(${/requires a "([^"]+)" section/.exec(w.message)?.[1] ?? "?"})`;
+    };
+    const matrix = shapes.map(([name, sections]) => {
+      const doc = parseCcda(buildCcda({ sections }));
+      const section = doc.sections[0];
+      const said = doc.warnings.map(say).sort().join(" ");
+      const read = `key=${section?.key ?? "none"} by=${section?.recognizedBy ?? "none"}`;
+      return `${name}: ${read} | ${said || "silent"}`;
+    });
+    expect(matrix).toMatchInlineSnapshot(`
+      [
+        "V3 stamp + LOINC (conformant): key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
+        "V2 stamp (2014-06-09): key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
+        "unversioned root (R1.1): key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
+        "LOINC only, no templateId: key=interventions by=loinc | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) SECTION_MATCHED_BY_LOINC_FALLBACK",
+        "templateId + a wrong section code: key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
+        "conformant entry (Planned Intervention Act): key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
+        "misplaced entry (a Planned Act): key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) SECTION_PLACEMENT_SUSPECT",
+        "double-stamped, Interventions first: key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
+        "double-stamped, Plan of Treatment first: key=planOfTreatment by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
+        "double-stamped, foreign root + 62387-6: key=planOfTreatment by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
+        "control: unrecognized LOINC: key=none by=none | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) UNKNOWN_SECTION_CODE",
+        "control: Problems by LOINC fallback: key=problems by=loinc | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(results) SECTION_MATCHED_BY_LOINC_FALLBACK",
+        "control: Results (…22.2.3, one arc away): key=results by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems)",
+      ]
+    `);
+  });
+
+  it("resolves the section through both recognition surfaces", () => {
+    // The public tables, checked directly rather than only through a parse, so a
+    // consumer branching on `sectionForLoinc("62387-6")` is covered too.
+    expect(sectionForTemplateRoot("2.16.840.1.113883.10.20.21.2.3")?.key).toBe("interventions");
+    expect(sectionForLoinc("62387-6")?.key).toBe("interventions");
+    // The near-miss OID this one is genuinely confusable with stays Results.
+    expect(sectionForTemplateRoot("2.16.840.1.113883.10.20.22.2.3")?.key).toBe("results");
+    // There is no entries-REQUIRED sibling root: Interventions has exactly one.
+    // (In C-CDA the base root is the entries-optional variant and the `.1`
+    // sibling is the entries-required one, as with Allergies …22.2.6/.6.1.)
+    expect(sectionForTemplateRoot("2.16.840.1.113883.10.20.21.2.3.1")).toBeUndefined();
   });
 });
 

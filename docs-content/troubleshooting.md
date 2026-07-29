@@ -80,7 +80,7 @@ milestone it stopped at.
   History, and Past Medical History decode to structured entries. Every other section is framed and
   its narrative retained, but its entries are not modeled, and recognition of those sections has
   three outcomes. A catalog section matched on its `templateId` (Advance Directives, Medical
-  Equipment, Payers, Instructions, Nutrition, Goals, and the rest) gets a stable `key` and no
+  Equipment, Payers, Instructions, Nutrition, Goals, Interventions, and the rest) gets a stable `key` and no
   warning. A catalog section matched only by its LOINC code also gets its `key`, but raises
   `SECTION_MATCHED_BY_LOINC_FALLBACK`; Reason for Visit and Chief Complaint carry no recognized
   `templateId` at all, so they always take this path. A section the catalog does not recognize
