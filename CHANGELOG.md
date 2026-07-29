@@ -1075,6 +1075,55 @@ statusCode, effectiveTime, component+`).
 
 ### Fixed
 
+- **The Interventions Section (`2.16.840.1.113883.10.20.21.2.3`, LOINC `62387-6`) is in the section
+  catalog, so the container this package descends into is no longer framed as an unknown section.**
+  The read path was taught to find the planned entries nested in a Planned Intervention Act while the
+  section framing still called that act's home unrecognized, so a document placing the container
+  exactly where C-CDA R2.1 puts it drew `UNKNOWN_SECTION_CODE`. It now resolves on the primary
+  `templateId` path, through `sectionForTemplateRoot` and `sectionForLoinc`, and is reachable as
+  `doc.findSection("interventions")`.
+  **Its root sits in the `…10.20.21.2.*` arc, not the `…10.20.22.2.*` arc every other C-CDA section
+  in this catalog uses**, which matters because `…10.20.22.2.3` (`22`, not `21`) is the **Results**
+  section already in the table; a matrix row exists solely to fail if those two are ever confused.
+  Matching is on the root alone, so all three version stamps in circulation are accepted (unversioned
+  from R1.1, `2014-06-09`, and R2.1's `2015-08-01`); that is this catalog's uniform root-primary
+  contract, not a tolerance granted specially to this entry. **There is no entries-required sibling
+  root** for this section, unlike Allergies (`…22.2.6` entries-optional / `…22.2.6.1` entries-required)
+  or Results (`…22.2.3` / `…22.2.3.1`); it has exactly one root, so `…21.2.3.1` stays unrecognized.
+  `62387-6` is "Interventions Narrative" in LOINC's own long name, while the C-CDA IG labels the
+  section "Interventions Provided"; nothing here matches on either string, and neither was "corrected"
+  into the other. R3.0+ renamed the same root and extension to **Activities Section**, keeping the
+  LOINC; this catalog is R2.1.
+  **Measured against the previous release across thirteen section shapes, not argued: the same matrix
+  was run before and after and the two readings diffed.** There are **four** classes of move, all
+  confined to sections carrying this `templateId` or this LOINC.
+  (1) `UNKNOWN_SECTION_CODE` is withdrawn where a section carrying `62387-6` previously resolved to
+  nothing at all. Note the scope carefully, because a looser version of this sentence was wrong: this
+  is **not** "every document carrying the code drew it". A section stamped with `…21.2.3` _alongside_
+  another recognized root resolved on that other root and was already silent, since recognition
+  returns on the first matching `templateId` and never reaches the code.
+  (2) A section carrying the Interventions `templateId` under some **other** section's `<code>` was
+  framed as that other section off the LOINC fallback and drew `SECTION_MATCHED_BY_LOINC_FALLBACK`; it
+  is now framed as an Interventions Section on the `templateId` and that warning correctly stands
+  down, because no fallback was taken and the sentence it asserts is false about the document. The
+  reading it replaces was the worse one: an Interventions Section handed back as a patient's Problems
+  list.
+  (3) **That same document now raises `REQUIRED_SECTION_MISSING` for the section it used to be
+  mistaken for.** Required-section validation is driven by the keys the catalog assigns, so a CCD
+  whose only "Problems" section was really an Interventions Section is now correctly told its SHALL
+  Problems section is absent. This is safety-critical and unquietable under every profile, so such a
+  document gets **louder**, not quieter, and this is the signal that makes (2) safe rather than a
+  trade.
+  (4) **On a section double-stamped with `…21.2.3` and another recognized root, whichever root is
+  listed first now wins.** Previously `…21.2.3` matched nothing so the other root always won. If you
+  have documents stamped that way and you branch on `findSection(...)`, check them: the section is
+  still framed and its narrative retained, and no clinical fact is lost (entry extraction does not
+  depend on the section key), but the `key` can change.
+  Additionally `SECTION_PLACEMENT_SUSPECT` can now fire on an entry inside an Interventions Section,
+  because misplaced entries are only checked in sections that are recognized; a conformant one stays
+  silent. No warning code was added, renamed or reclassified, no existing type changed, and nothing
+  about how entries are read has changed.
+
 - **Clinical safety: a planned entry nested in a Planned Intervention Act is no longer dropped from
   the model in silence, for any of the seven planned templates.** `getPlannedItems()` read an
   `<entry>`'s own act and went **no deeper**. C-CDA groups the interventions planned toward a goal in
