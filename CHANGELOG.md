@@ -162,10 +162,9 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
      `vaccine` binding, exactly as its performed twin is. All three copies of the note now say so
      (the callout under "Code systems & provenance", the "Known limitations" bullet, and the one on
      `docs-content/troubleshooting.md`), which is what makes the "five variants whose `code` is the
-     planned act" arithmetic hold where it is written rather than three sections away. The third
-     copy was found by the gate refuter after the first two were fixed: correcting two of three
-     copies of a sentence leaves the surfaces disagreeing, which is the same defect as leaving all
-     three wrong, one degree quieter.
+     planned act" arithmetic hold where it is written rather than three sections away. Correcting
+     two of the three copies would leave the public surfaces disagreeing, which is the same defect
+     as leaving all three wrong, one degree quieter.
   4. **The `ObservationValue` union was enumerated one arm short.** The Results bullet listed
      `physicalQuantity` / `coded` / `string` / `range` / `unsupported`. There are **six**; the
      missing one is `integer`, the arm that carries integer lab values and assessment-scale scores

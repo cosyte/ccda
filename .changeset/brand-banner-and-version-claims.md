@@ -2,7 +2,7 @@
 "@cosyte/ccda": patch
 ---
 
-Correct four stale claims on the npm package page (the published version, the `ObservationValue` arms, and two about where the medication-product warnings reach), and head it with the brand banner.
+Correct four stale claims on the npm package page (the published version, the `ObservationValue` arms, and two about how far the parser's checks reach), and head it with the brand banner.
 
 The four claims, in full: the status line said the package was published at `0.0.2` when the registry says `0.0.3`; the discriminated `ObservationValue` union was enumerated as five arms when it has six; the `ManufacturedProduct` arm rules were said to apply at three `consumable` call sites when there are four; and the terminology-adapter note named only the planned medication as the exception when the planned immunization is one too.
 
