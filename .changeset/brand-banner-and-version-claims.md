@@ -2,7 +2,9 @@
 "@cosyte/ccda": patch
 ---
 
-Correct four stale claims on the package page and head the README with the cosyte brand banner, so the npm page opens with the mark and no longer misstates the published version, the arms of the `ObservationValue` union, or where the medication-product warnings fire.
+Correct four stale claims on the npm package page (the published version, the `ObservationValue` arms, and two about where the medication-product warnings reach), and head it with the brand banner.
+
+The four claims, in full: the status line said the package was published at `0.0.2` when the registry says `0.0.3`; the discriminated `ObservationValue` union was enumerated as five arms when it has six; the `ManufacturedProduct` arm rules were said to apply at three `consumable` call sites when there are four; and the terminology-adapter note named only the planned medication as the exception when the planned immunization is one too.
 
 ASSETS-P8, the consuming half. Four corrections and one addition:
 
