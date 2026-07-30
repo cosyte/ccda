@@ -142,7 +142,7 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
   The **alt text is content, not decoration**: it names the package and its one-line purpose,
   because it is what a screen reader on the npm page reads out.
 
-- **Three stale claims on the package page, corrected against the registry and the source.**
+- **Four stale claims on the package page, corrected against the registry and the source.**
   1. **The status line said `0.0.2`.** Re-derived with `npm view @cosyte/ccda version`: **`0.0.3`**.
      The same claim was stale on three docs pages at two different wrong values
      (`docs-content/installation.md` said `0.0.2`; `docs-content/intro.md` and
@@ -159,10 +159,21 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
      the two public surfaces disagreed with each other as well as with the code.
   3. **The terminology-adapter note named only the planned medication as the exception.** A planned
      immunization's `code` is the vaccine from the same `consumable` and is slot-checked at the
-     `vaccine` binding, exactly as its performed twin is. Both copies of the note (the callout under
-     "Code systems & provenance" and the "Known limitations" bullet) now say so, which is what makes
-     the "five variants whose `code` is the planned act" arithmetic hold where it is written rather
-     than three sections away.
+     `vaccine` binding, exactly as its performed twin is. All three copies of the note now say so
+     (the callout under "Code systems & provenance", the "Known limitations" bullet, and the one on
+     `docs-content/troubleshooting.md`), which is what makes the "five variants whose `code` is the
+     planned act" arithmetic hold where it is written rather than three sections away. The third
+     copy was found by the gate refuter after the first two were fixed: correcting two of three
+     copies of a sentence leaves the surfaces disagreeing, which is the same defect as leaving all
+     three wrong, one degree quieter.
+  4. **The `ObservationValue` union was enumerated one arm short.** The Results bullet listed
+     `physicalQuantity` / `coded` / `string` / `range` / `unsupported`. There are **six**; the
+     missing one is `integer`, the arm that carries integer lab values and assessment-scale scores
+     (a PHQ-9 or Glasgow Coma total), so a consumer writing an exhaustive `switch` on the documented
+     five would silently drop them. This is the one place the README enumerates a discriminated
+     union a consumer is meant to branch on, and the page already documented the `integer` arm
+     correctly in three other places, so the enumeration disagreed with its own page as well as with
+     `src/model/entries/observation.ts`. It now names all six, and says that it is all six.
 
 - **Two published bounds that were misstated, corrected without a behaviour change.**
   `BuildCcdaPlannedItemBase.effectiveTime` documented itself as `SHOULD [0..1]` flatly. That is the

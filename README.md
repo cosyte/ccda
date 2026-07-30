@@ -258,7 +258,8 @@ loud safety-critical code, under-firing costs one of two strengths handed back i
 
 - **Results**: Result Organizers via `getResults()`: the LOINC-coded analyte, the polymorphic
   observation `value` as a discriminated `ObservationValue` (`physicalQuantity` / `coded` / `string` /
-  `range` / `unsupported`, selected by `xsi:type`), the `referenceRange` (structured `IVL_PQ` bounds,
+  `integer` / `range` / `unsupported`, selected by `xsi:type`; those are **all six** arms, so an
+  exhaustive `switch` on `kind` is complete), the `referenceRange` (structured `IVL_PQ` bounds,
   else free-text), and the `interpretation`.
 - **Vital Signs**: Vital Signs Organizers via `getVitals()`: the same UCUM-checked `ObservationValue`
   machinery, no reference range.
