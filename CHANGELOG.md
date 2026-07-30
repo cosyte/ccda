@@ -129,6 +129,51 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Documentation
 
+- **The cosyte brand banner heads `README.md` (`ASSETS-P8`, the consuming half).** A plain markdown
+  image on the first line of the file, above the H1, pointing at the absolute HTTPS URL published
+  for `ccda` in the `assets` repo's `published-urls.json` contract
+  (`https://cosyte.com/social/cosyte-banner-ccda-1200x300.png`, `status: live` on
+  `website#59 01f988b`). Re-verified `200 image/png`, 18977 bytes, immediately before the push.
+  The shape matches the one `hl7` set for the other consuming READMEs: a markdown image, **not
+  `<img>` and not `<picture>`**, because whether npm's markdown sanitizer preserves a `<picture>`
+  element is unverified, which is precisely why the artwork is self-grounded and depends on none.
+  No width or height attributes. **PNG only** is a deliberate bounded policy (the format we are
+  willing to assert renders on every README surface), not a demonstrated impossibility for others.
+  The **alt text is content, not decoration**: it names the package and its one-line purpose,
+  because it is what a screen reader on the npm page reads out.
+
+- **Four stale claims on the package page, corrected against the registry and the source.**
+  1. **The status line said `0.0.2`.** Re-derived with `npm view @cosyte/ccda version`: **`0.0.3`**.
+     The same claim was stale on three docs pages at two different wrong values
+     (`docs-content/installation.md` said `0.0.2`; `docs-content/intro.md` and
+     `docs-content/troubleshooting.md` said `0.0.1`). All four now read `0.0.3`. The page's
+     historical references ("until `0.0.3` the act `<code>` was preferred", and the rest) are
+     legitimate and untouched: a stale **current-version** claim and a dated **historical** one are
+     different sentences and only the first was wrong.
+  2. **"The three `consumable` call sites" is four.** A performed Medication Activity, a performed
+     Immunization Activity, a Planned Medication Activity, and a **Planned Immunization Activity**.
+     The fourth arrived with the Planned Immunization Activity and the enumeration was not updated
+     with it, so the README told a consumer that `MEDICATION_PRODUCT_ARM_CONFLICT`,
+     `MISSING_PRODUCT_CODE` and the rest of the `MEDICATION_PRODUCT_*` family could not reach a
+     scheduled vaccination, when they do. `docs-content/troubleshooting.md` already said four, so
+     the two public surfaces disagreed with each other as well as with the code.
+  3. **The terminology-adapter note named only the planned medication as the exception.** A planned
+     immunization's `code` is the vaccine from the same `consumable` and is slot-checked at the
+     `vaccine` binding, exactly as its performed twin is. All three copies of the note now say so
+     (the callout under "Code systems & provenance", the "Known limitations" bullet, and the one on
+     `docs-content/troubleshooting.md`), which is what makes the "five variants whose `code` is the
+     planned act" arithmetic hold where it is written rather than three sections away. Correcting
+     two of the three copies would leave the public surfaces disagreeing, which is the same defect
+     as leaving all three wrong, one degree quieter.
+  4. **The `ObservationValue` union was enumerated one arm short.** The Results bullet listed
+     `physicalQuantity` / `coded` / `string` / `range` / `unsupported`. There are **six**; the
+     missing one is `integer`, the arm that carries integer lab values and assessment-scale scores
+     (a PHQ-9 or Glasgow Coma total), so a consumer writing an exhaustive `switch` on the documented
+     five would silently drop them. This is the one place the README enumerates a discriminated
+     union a consumer is meant to branch on, and the page already documented the `integer` arm
+     correctly in three other places, so the enumeration disagreed with its own page as well as with
+     `src/model/entries/observation.ts`. It now names all six, and says that it is all six.
+
 - **Two published bounds that were misstated, corrected without a behaviour change.**
   `BuildCcdaPlannedItemBase.effectiveTime` documented itself as `SHOULD [0..1]` flatly. That is the
   cardinality on five of the seven planned templates: **both** `substanceAdministration` variants

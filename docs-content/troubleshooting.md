@@ -103,8 +103,9 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   **Those five slots are the whole of it, so read a silent document carefully.** Every other coded
   value is never handed to your adapter and therefore can never raise `SEMANTIC_CODE_INVALID`: the
   Results and Vital Signs LOINC codes, the procedure, encounter, and family-history codes, the
-  planned-item codes for the five variants whose `code` is the planned act (a planned **medication**'s
-  `code` is the drug, so it is checked at the `medication` slot like any other),
+  planned-item codes for the five variants whose `code` is the planned act (the other two are
+  exceptions: a planned **medication**'s `code` is the drug and a planned **immunization**'s is the
+  vaccine, so those are checked at the `medication` and `vaccine` slots like any other),
   the smoking-status, functional-status, and mental-status observation values, the allergy
   propensity type, and the reaction, severity, and criticality observations. Within the five, the
   checks apply to the slot's **primary** coding; alternate codings carried in `<translation>` are
@@ -422,7 +423,7 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
 - **C-CDA R2.1, US Realm.** Other CDA templates and realms are out of the current scope.
 - **A parser + serializer, not a transport or a validator suite.** No MLLP/XDS delivery, no Schematron
   conformance report: this reads and re-emits documents.
-- **Pre-alpha on the `0.0.x` ladder.** `@cosyte/ccda` is **published on npm at `0.0.1`** and **public**,
+- **Pre-alpha on the `0.0.x` ladder.** `@cosyte/ccda` is **published on npm at `0.0.3`** and **public**,
   but still pre-alpha: on the `0.0.x`-until-first-alpha ladder, the API can still change.
 
 For the exact fields each accessor decodes, see [Core Concepts](./spec-notes-clinical); for every
