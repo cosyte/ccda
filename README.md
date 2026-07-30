@@ -1,3 +1,5 @@
+![@cosyte/ccda: a C-CDA parser, serializer, and builder for Node.js and TypeScript, lenient on parse and spec-clean on emit](https://cosyte.com/social/cosyte-banner-ccda-1200x300.png)
+
 # @cosyte/ccda
 
 > C-CDA parser, serializer, and builder for Node.js and TypeScript: **lenient on parse,
@@ -15,7 +17,7 @@ lenient parser that turns real-world, vendor-quirky input into **warnings** rath
 [`@xmldom/xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) (exact-pinned), the hardened W3C-DOM
 substrate for C-CDA's XML.
 
-> **Status:** **published on npm at `0.0.2`** and **public**, still pre-alpha on the cosyte `0.0.x`
+> **Status:** **published on npm at `0.0.3`** and **public**, still pre-alpha on the cosyte `0.0.x`
 > version ladder (`0.0.x` until first alpha). The parser ships
 > document recognition, the US Realm header + patient demographics, section framing, the
 > reconciliation triad (Problems / Medications / Allergies), the discrete-data families
@@ -116,8 +118,9 @@ code-system checks, so reading it is strictly safer than the alternative of retu
 `MISSING_PRODUCT_CODE` (safety-critical), never a silent `undefined`.
 
 **Which arm is read, and every `MEDICATION_PRODUCT_*` / `MISSING_PRODUCT_CODE` warning below, applies
-at the three `consumable` call sites equally**: a performed Medication Activity, an Immunization
-Activity, and a **Planned Medication Activity**. On the planned one, `code` on a `getPlannedItems()`
+at the four `consumable` call sites equally**: a performed Medication Activity, a performed
+Immunization Activity, a **Planned Medication Activity**, and a **Planned Immunization Activity**.
+On a planned medication, `code` on a `getPlannedItems()`
 entry of kind `medicationActivity` is the **drug**, read from the consumable, and never the
 `substanceAdministration`'s own `<code>`: CDA R2 makes that element an
 `ActSubstanceAdministrationCode`, the kind of administration act ("drug therapy"), while the
@@ -126,6 +129,8 @@ one is therefore not a lesser reading to fall back on, and the act code is not o
 variant (it round-trips through `doc.toString()`, as every unmodelled element does). Until `0.0.3`
 the act `<code>` was preferred when present, so on those documents the planned item's `code` was an
 act type rather than a drug, and none of the product warnings on this page could fire there at all.
+A **Planned Immunization Activity** is the same shape one substance over: its `code` is the
+**vaccine** from the `consumable`, never the act's own `<code>` (see "Plan of Treatment" below).
 
 **The code-system and terminology checks apply to a planned drug too.** Because that `code` is the
 drug rather than an act, it is checked against the `medication` binding exactly as a performed
@@ -608,8 +613,9 @@ opinion" (silent).
 > and `vaccine`. Every other coded value is **never handed to your adapter** and therefore can never
 > raise `SEMANTIC_CODE_INVALID`: the Results and Vital Signs LOINC codes, the procedure, encounter and
 > family-history codes, the planned-item codes for the five variants whose `code` is the planned act
-> (a planned **medication**'s `code` is the drug, so it is checked at the `medication` slot like any
-> other), the smoking-status, functional-status and mental-status
+> (the other two are exceptions: a planned **medication**'s `code` is the drug and a planned
+> **immunization**'s is the vaccine, so those are checked at the `medication` and `vaccine` slots
+> like any other), the smoking-status, functional-status and mental-status
 > observation values, the allergy propensity type, and the reaction, severity and criticality
 > observations. Within the five, the checks apply to the slot's **primary** coding; alternate codings
 > carried in `<translation>` are preserved and re-serialized but are not themselves slot-checked.
@@ -749,7 +755,8 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
 - **A terminology adapter is consulted at five coded slots only**: `problem`, `medication`, `allergen`,
   `route`, `vaccine`. Results/Vital Signs LOINC codes, procedure, encounter and
   family-history codes, the planned-item codes for the five variants whose `code` is the planned act
-  (a planned **medication**'s `code` is the drug, so it goes to the `medication` slot),
+  (a planned **medication**'s `code` is the drug and a planned **immunization**'s is the vaccine, so
+  those two go to the `medication` and `vaccine` slots),
   the smoking/functional/mental status values, the allergy propensity type, and
   the reaction/severity/criticality observations are never handed to it. Within the five, the checks
   apply to the slot's primary coding; alternate codings in `<translation>` are preserved but not

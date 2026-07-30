@@ -13,7 +13,7 @@ spec-clean, round-trip serializer. It mirrors the API shape of the reference par
 Its single runtime dependency is the hardened W3C-DOM substrate `@xmldom/xmldom` (exact-pinned),
 configured XXE-safe.
 
-> **Status:** **published on npm at `0.0.1`** and **public**, still pre-alpha on the cosyte `0.0.x`
+> **Status:** **published on npm at `0.0.3`** and **public**, still pre-alpha on the cosyte `0.0.x`
 > version ladder (`0.0.x` until first alpha). The parser ships
 > document recognition (all 12 US Realm types), the US Realm header + patient demographics, section
 > framing, the reconciliation triad (Problems / Medications / Allergies), the discrete-data families
