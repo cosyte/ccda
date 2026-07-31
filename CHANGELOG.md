@@ -129,18 +129,26 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Documentation
 
-- **The cosyte brand banner heads `README.md` (`ASSETS-P8`, the consuming half).** A plain markdown
-  image on the first line of the file, above the H1, pointing at the absolute HTTPS URL published
-  for `ccda` in the `assets` repo's `published-urls.json` contract
-  (`https://cosyte.com/social/cosyte-banner-ccda-1200x300.png`, `status: live` on
-  `website#59 01f988b`). Re-verified `200 image/png`, 18977 bytes, immediately before the push.
-  The shape matches the one `hl7` set for the other consuming READMEs: a markdown image, **not
-  `<img>` and not `<picture>`**, because whether npm's markdown sanitizer preserves a `<picture>`
-  element is unverified, which is precisely why the artwork is self-grounded and depends on none.
-  No width or height attributes. **PNG only** is a deliberate bounded policy (the format we are
-  willing to assert renders on every README surface), not a demonstrated impossibility for others.
-  The **alt text is content, not decoration**: it names the package and its one-line purpose,
-  because it is what a screen reader on the npm page reads out.
+- **The Cosyte mark heads `README.md`, and follows the reader's colour scheme (`ASSETS-P8`, the
+  consuming half).** A `<picture>` block on the first lines of the file, above the H1: the
+  dark-ground org tile behind a `prefers-color-scheme: dark` media query, with the light-ground tile
+  as the inner `<img>` (`https://cosyte.com/tile/cosyte-lockup-tile-on-dark-1200x300.png` and
+  `.../cosyte-lockup-tile-on-light-1200x300.png`). Both re-verified `200 image/png`, 10513 and 10455
+  bytes, immediately before the push. No width or height attributes. **PNG only** is a deliberate
+  bounded policy (the format we are willing to assert renders on every README surface), not a
+  demonstrated impossibility for others. The **alt text is content, not decoration**: it describes
+  the mark itself, a plus set in two overlapping rounded squares beside the Cosyte wordmark, rather
+  than the package, because it is what a screen reader on the npm page reads out and what a reader
+  gets when the image fails. The shared lockup reads "Cosyte" while the H1 reads `@cosyte/ccda`, so
+  the strings differ and the heading stays.
+  - **A per-package banner (`cosyte-banner-ccda-1200x300.png`) landed here first and was superseded
+    before release, and one stated reason with it.** That banner was deliberately a plain markdown
+    image and **not** `<img>` or `<picture>`, on the grounds that whether npm's markdown sanitizer
+    preserves a `<picture>` element was **unverified**. It has since been **measured**: `astm` and
+    `hl7` carry the block on their published pages, GitHub honors the switch, and npm hoists the
+    inner `<img>` out of the `<picture>` so the light cut renders there, which is the correct one
+    because npmjs.com has no dark mode. The premise that made the plain image safer no longer holds.
+    Recorded rather than reversed quietly: it was a technical judgement, not a preference.
 
 - **Four stale claims on the package page, corrected against the registry and the source.**
   1. **The status line said `0.0.2`.** Re-derived with `npm view @cosyte/ccda version`: **`0.0.3`**.

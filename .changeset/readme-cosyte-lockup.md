@@ -2,7 +2,7 @@
 "@cosyte/ccda": patch
 ---
 
-The README now opens with the Cosyte mark, which follows the reader's color scheme, in place of the per-package banner.
+The README now opens with the Cosyte mark, which follows the reader's color scheme.
 
 A `<picture>` block above the H1 offers a dark-ground tile behind a `prefers-color-scheme: dark` media query, and carries the light-ground tile as the inner `<img>`. On a renderer that honors the switch, the mark sits on a ground that matches the page it is read on.
 
