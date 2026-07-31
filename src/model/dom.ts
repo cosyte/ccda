@@ -5,12 +5,15 @@
  * unprefixed accessor (C-CDA attributes like `root`, `code`, `value`,
  * `nullFlavor` carry no namespace) except `xsi:type`, which is namespace-keyed.
  *
- * Every helper is read-only and PHI-safe in the sense that it returns whatever
- * the document carries, callers are responsible for never routing returned
- * *values* into warning/error message strings (only structural locators).
+ * Every helper is read-only and returns whatever the document carries, so a
+ * returned string is document content and must never be routed into a
+ * diagnostic. The warning and fatal registries make that structurally
+ * impossible (they interpolate nothing); {@link positionOf} is the one helper
+ * here that feeds a diagnostic, and it bounds what it puts there.
  */
 
 import { V3_NS, XSI_NS } from "../parser/namespaces.js";
+import { safeElementName } from "../parser/tokens.js";
 import type { CcdaPosition } from "../parser/types.js";
 import type { Element, Node } from "@xmldom/xmldom";
 
@@ -129,9 +132,16 @@ export function text(el: Element): string | undefined {
 }
 
 /**
- * Build a PHI-free structural position for an element, its local name as a
- * path hint plus the locator line/column `@xmldom/xmldom` recorded (when
- * present). Never includes attribute values or text content.
+ * Build a structural position for an element: its local name as a path hint
+ * plus the locator line/column `@xmldom/xmldom` recorded (when present). Never
+ * includes attribute values or text content.
+ *
+ * **`path` is bounded on membership, not copied.** A local name is an XML
+ * NCName, so a sender can call an element anything, and `enforceStructureLimits`
+ * in `../parser/secure-xml.ts` positions on arbitrary elements from a hostile
+ * document. Only a name in the CDA vocabulary this parser navigates is echoed;
+ * anything else becomes `<withheld>` (see `../parser/tokens.ts`). Line and
+ * column still locate it exactly.
  *
  * @example
  * ```ts
@@ -142,7 +152,9 @@ export function text(el: Element): string | undefined {
 export function positionOf(el: Element): CcdaPosition {
   const withLoc = el as Element & { lineNumber?: number; columnNumber?: number };
   const pos: { path?: string; line?: number; column?: number } = {};
-  if (typeof el.localName === "string" && el.localName.length > 0) pos.path = el.localName;
+  if (typeof el.localName === "string" && el.localName.length > 0) {
+    pos.path = safeElementName(el.localName);
+  }
   if (typeof withLoc.lineNumber === "number") pos.line = withLoc.lineNumber;
   if (typeof withLoc.columnNumber === "number") pos.column = withLoc.columnNumber;
   return pos;

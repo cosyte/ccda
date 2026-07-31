@@ -94,7 +94,7 @@ export interface ParseCtx {
 export function readNullFlavor(el: Element, ctx: ParseCtx): string | undefined {
   const nf = attr(el, "nullFlavor");
   if (nf === undefined) return undefined;
-  if (!isNullFlavor(nf)) ctx.emit(invalidNullFlavor(positionOf(el), nf));
+  if (!isNullFlavor(nf)) ctx.emit(invalidNullFlavor(positionOf(el)));
   return nf;
 }
 
@@ -142,7 +142,7 @@ export function contradictsAssertedValue(
   ctx: ParseCtx,
 ): boolean {
   if (nullFlavor === undefined || !asserted) return false;
-  ctx.emit(contradictoryNullFlavor(positionOf(el), datatype, nullFlavor));
+  ctx.emit(contradictoryNullFlavor(positionOf(el), datatype));
   return true;
 }
 

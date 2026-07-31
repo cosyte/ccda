@@ -19,6 +19,7 @@ import {
   type CcdaWarning,
   type WarningCode,
 } from "../src/index.js";
+import { WARNING_MESSAGES } from "../src/parser/warnings.js";
 import {
   buildCcda,
   NO_REQUIRED_SECTIONS_DOC_OID,
@@ -349,7 +350,11 @@ describe("profileQuirkApplied factory", () => {
     const out = profileQuirkApplied(src, "smartScorecard");
     expect(out.code).toBe(WARNING_CODES.PROFILE_QUIRK_APPLIED);
     expect(out.toleratedCode).toBe(WARNING_CODES.DEPRECATED_LOINC);
-    expect(out.message).toContain("41909-3");
+    // The tolerated deviation survives on `toleratedCode` / `profile`, never by
+    // re-interpolating the original message: a re-badged warning is not a hole
+    // in the registry rule.
+    expect(out.message).toBe(WARNING_MESSAGES.PROFILE_QUIRK_APPLIED);
+    expect(out.message).not.toContain("41909-3");
     expect(out.position).toBe(src.position);
   });
 });
@@ -366,7 +371,8 @@ describe("applyProfile, pure warning transform", () => {
     expect(out.expected).toBe(true);
     expect(out.profile).toBe("smartScorecard");
     expect(out.toleratedCode).toBe(WARNING_CODES.DEPRECATED_LOINC);
-    expect(out.message).toContain("41909-3");
+    expect(out.message).toBe(WARNING_MESSAGES.PROFILE_QUIRK_APPLIED);
+    expect(out.message).not.toContain("41909-3");
   });
 
   it("passes an un-tolerated warning through by identity", () => {

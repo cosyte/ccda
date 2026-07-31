@@ -195,6 +195,6 @@ function classifyMood(
   }
   const disposition = classifyDisposition(moodCode);
   if (disposition !== undefined) return disposition;
-  ctx.emit(procedureMoodUnexpected(positionOf(el), moodCode));
+  ctx.emit(procedureMoodUnexpected(positionOf(el)));
   return undefined;
 }

@@ -14,6 +14,97 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Changed
 
+- **Warning and fatal messages no longer echo anything from the parsed document
+  (`PHI-WARNING-MESSAGE-LEAK`).** Every message now comes whole from a frozen registry
+  (`WARNING_MESSAGES`, `FATAL_MESSAGES`) and no factory takes a value parameter, so a template OID, a
+  section `@code`, a `nullFlavor` token, a unit string, an `xsi:type`, a `@moodCode`, a `<reference>`
+  target or an XML element name can no longer reach `.message`, `err.message` or `err.stack`.
+  - **What was wrong.** Thirteen warning factories and the `NOT_A_CLINICAL_DOCUMENT` fatal
+    interpolated a value taken straight from the document. Reproduced against the published
+    `0.0.4`: a 500,000-byte `templateId` root produced a 500,106-byte `.message`, unbounded, against
+    a 30 MB input ceiling, and under `{ strict: true }` it reached `err.stack` as well. There is no
+    `snippet` field on a `CcdaWarning`, so `.message` was the only surface and every leak landed on
+    it. `README.md`, `docs-content/installation.md`, `docs-content/spec-notes-tolerance.md` and
+    `docs-content/troubleshooting.md` all told consumers the opposite, and
+    `docs-content/troubleshooting.md` explicitly green-lit logging the whole `.warnings` array. All
+    four are corrected here, in this commit rather than ahead of it.
+  - **Exactly one exported signature changed**, and it is worth stating narrowly rather than as
+    "the factories changed": `semanticCodeInvalid(position, slot, observedOid)` is now
+    `semanticCodeInvalid(position, slot)`. It and `profileQuirkApplied` are the only two warning
+    factories on the public surface. Internally every factory lost its value parameter; the six
+    code-system ones now take only a `CodeSlot`, `codeNarrativeMismatch` a `NarrativeSlot`, and
+    `sectionPlacementSuspect` / `requiredSectionMissing` a catalog section key. Each such key selects
+    a frozen variant generated from the parser's own tables, so the complete set of strings this
+    package can emit is finite and enumerable. Every warning **code** is unchanged, so a consumer
+    branching on `w.code` sees no difference.
+  - **`PROFILE_QUIRK_APPLIED` stopped restating the tolerated warning's message and stopped naming
+    the profile in its text.** It was the one factory whose output was assembled rather than looked
+    up. Both facts are still carried, as the typed `toleratedCode` and `profile` fields.
+  - **Counts left the messages, and one of them is a real loss.** `MULTIPLE_RECORD_TARGETS` and
+    `MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED` no longer print how many. A count cannot carry PHI, but it
+    is still input-derived, and keeping it would have cost the property that an emitted `message` is
+    a registry member, which is what a tripwire can actually check. For the first the number is on
+    `header.recordTargets`; for the second **nothing on the model counts them**, so it is only in the
+    source. Likewise a `PROFILE_QUIRK_APPLIED` keeps the tolerated `code` and `position` but not its
+    text, so a per-slot wording (which `CodeSlot` an `UNEXPECTED_CODE_SYSTEM` was about) is not
+    recoverable from the re-badged warning. Stated rather than dressed up as "nothing is lost".
+  - **`CcdaPosition` is bounded rather than copied**, because a message registry cannot reach it.
+    `path` (an element local name, which a sender may make anything, and on which
+    `enforceStructureLimits` positions for arbitrary hostile elements) is echoed only for a name in
+    the CDA vocabulary this parser navigates; `sectionCode` is echoed only for a LOINC-shaped code,
+    which matters because `UNKNOWN_SECTION_CODE` fires exactly when the code is unrecognized.
+    Anything else reads `<withheld>`. `line` and `column` are unchanged.
+  - **The model is bounded too, which is the half `@cosyte/hl7` got wrong.** `hl7` bounded its
+    messages, went green, and `@cosyte/deid` still leaked because `Segment.type` stayed unbounded on
+    the model. So `CcdaDocument.templateIds` and `CcdaSection.templateIds` now carry a `root` that
+    must have the shape of a UID and an `extension` that must have the shape of a version stamp; an
+    unsupported observation value's `xsiType` must be a name in a list of HL7 v3 datatypes; an `ED`'s
+    `mediaType` must be a member of a list of media types, its `representation` one of `B64` /
+    `TXT` and its `nullFlavor` a member of this package's `NULL_FLAVORS`; and a `templateId`'s `assigningAuthorityName` (free text, meaningless on a template) is
+    withheld outright while its `nullFlavor` must be in the v3 NullFlavor table. A root that fails
+    the shape could not have matched the template catalog either, so **recognition cannot move**:
+    every OID in `SECTION_CATALOG`, every document-type OID including the IHE PCC arc
+    `1.3.6.1.4.1.19376.1.5.3.1.3.1`, and `R21_EXTENSION` all pass their shapes.
+  - **"A conforming document is untouched" is NOT true as an absolute, and the two membership lists
+    are where it breaks.** They are hand-assembled, so a legitimate but unlisted `xsi:type`
+    (`RTO_MO_PQ`, `IVXB_TS`, `BIN`, `ENXP` and the `SXCM_*` / `URG_*` family were all missing from the
+    first cut and have been added) or an unlisted media type now reads `<withheld>` on the model
+    where `0.0.4` read the document's own token. The datatype list is **stated, not traced**: this
+    repo does not hold `datatypes-base.xsd`, so two further candidates were dropped rather than
+    guessed at (`THUMBNAIL`, whose ITS type is lower case, and `EIVL_event`, which would have been
+    the only entry mixing the dot and underscore conventions). No clinical value moves with it: the value's `raw` text is still there and
+    `doc.toString()` re-emits the DOM. Membership over-withholds by design, and the honest statement
+    is that it costs diagnostic detail rather than that it costs nothing.
+  - **A `type/subtype` shape test was not a bound and has been replaced.** The first cut bounded
+    `ED.mediaType` with `/^[a-zA-Z]{1,20}\/[a-zA-Z0-9.+-]{1,40}$/`, which admits
+    `text/Doe-Jane-1980.01.01-MRN0012345`: 61 characters of legible identifier through a regex that
+    looked tight. The slot probing it planted a marker with no `/`, so it only ever exercised the
+    reject branch and could not have caught this.
+  - **Patient identifiers are deliberately NOT bounded.** An `II.extension` outside a `templateId` is
+    an MRN or an accession number: the identifier the model exists to report, not a locator a
+    downstream package interpolates. Withholding it would delete clinical data rather than decline to
+    echo a locator. The narrative index (`CcdaSection.narrativeById`) is likewise unbounded, and for a
+    sharper reason: its keys are what `<reference value="#id">` resolves against, so collapsing two
+    unrecognized anchors to one `<withheld>` key would resolve a broken reference onto unrelated
+    narrative. That is a clinical-safety regression worse than the leak, so the reference warning
+    stopped naming the id instead.
+  - **`test/phi-guard.test.ts` is replaced, not extended, by `test/phi-diagnostic-surface.test.ts`.**
+    The old guard planted sentinels in patient name, MRN, narrative and birthdate while handing a
+    clean `1.2.3.4.5` to the document-template slot that actually leaked: its sentinel set and its
+    leaking set were disjoint, so it could not fail. The new suite drives
+    `assertNoDiagnosticPhiLeak` from `@cosyte/test-utils` over a 26-slot table covering every position
+    a sender controls, and was run against the unfixed parser first, where **20 of the 29 slots
+    failed**: five model-identifier leaks, one `err.message` (and `err.stack`) leak on the fatal,
+    and fourteen warning-message leaks. A second test asserts every emitted message is a member of the frozen registry, so a
+    factory that starts interpolating again fails without anyone having to think of the slot.
+  - **Known residual, stated rather than papered over.** `UNKNOWN_NAMESPACE_PREFIX` is in
+    `WARNING_CODES` and has a factory, but no call site in `src/` emits it; a foreign namespace prefix
+    is reported nowhere. That is a pre-existing gap this work found rather than introduced, and the
+    slot covering it carries `expectCode: null` for exactly that reason. Second, `CcdaPosition`
+    declares a `templateId` field that **no site in `src/` populates**, so a `QuirkTolerance` keyed
+    on a template OID can never match and silently tolerates nothing. Both are pre-existing, both are
+    now written down on the type's own docblock, and neither is closed here.
+
 - **Public-surface hygiene (`PUBLIC-SURFACE-HYGIENE`, founder directive 2026-07-27).** Internal
   project bookkeeping is gone from every surface a consumer reads: `README.md`, `docs-content/`, the
   JSDoc compiled into `dist/index.d.ts` and `dist/index.d.cts`, and one runtime error message. No

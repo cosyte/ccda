@@ -98,8 +98,10 @@ describe("bring-your-own terminology adapter, parse path", () => {
     // The rejected code is never coerced away, it survives in the model.
     expect(doc.getProblems()[0]?.problems[0]?.value?.code).toBe(HYPERTENSION);
     const w = doc.warnings.find((x) => x.code === WARNING_CODES.SEMANTIC_CODE_INVALID);
-    // PHI-free: the message names the slot + system OID, never the code itself.
-    expect(w?.message).toContain(SNOMED_CT);
+    // The message names the slot and nothing else. It used to carry the observed
+    // `@codeSystem` OID, which is as sender-controlled as the code beside it.
+    expect(w?.message).toContain("problem");
+    expect(w?.message).not.toContain(SNOMED_CT);
     expect(w?.message).not.toContain(HYPERTENSION);
   });
 

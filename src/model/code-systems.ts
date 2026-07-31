@@ -24,6 +24,7 @@ import {
   missingCodeValue,
   semanticCodeInvalid,
   unexpectedCodeSystem,
+  type CodeSlot,
 } from "../parser/warnings.js";
 import type { CcdaPosition } from "../parser/types.js";
 
@@ -54,7 +55,9 @@ export const INTERPRETATION = "2.16.840.1.113883.5.83";
 
 /**
  * The coded slots whose terminology binding the parser checks. Each names a
- * safety-relevant place a `CD` appears in the reconciliation triad.
+ * safety-relevant place a `CD` appears in the reconciliation triad. Defined in
+ * `../parser/warnings.ts` (which generates a frozen message variant per slot)
+ * and re-exported here, its home since the slots were first bound.
  *
  * @example
  * ```ts
@@ -62,7 +65,7 @@ export const INTERPRETATION = "2.16.840.1.113883.5.83";
  * const slot: CodeSlot = "problem";
  * ```
  */
-export type CodeSlot = "problem" | "medication" | "allergen" | "route" | "vaccine";
+export type { CodeSlot };
 
 interface SlotBinding {
   readonly expected: readonly string[];
@@ -144,9 +147,9 @@ export function checkCodeSlot(
   // the exact direction this slice exists to reverse.
   const binding = SLOT_BINDINGS[slot];
   if (binding.deprecated.includes(oid)) {
-    ctx.emit(deprecatedCodeSystem(position, oid, slot));
+    ctx.emit(deprecatedCodeSystem(position, slot));
   } else if (!binding.expected.includes(oid)) {
-    ctx.emit(unexpectedCodeSystem(position, oid, slot));
+    ctx.emit(unexpectedCodeSystem(position, slot));
   }
   // Semantic tier (opt-in): when a consumer supplied a bring-your-own terminology
   // adapter, ask it whether the code is a real member of its system, the check
@@ -192,7 +195,7 @@ function validateCodeSemantically(
   // `undefined` = the adapter has no opinion (system out of its scope) → stay
   // silent. Only an explicit `result: false` is a flagged negative.
   if (verdict !== undefined && !verdict.result) {
-    ctx.emit(semanticCodeInvalid(position, slot, system));
+    ctx.emit(semanticCodeInvalid(position, slot));
   }
 }
 
@@ -251,6 +254,6 @@ export function checkLoincDeprecation(
   if (code?.code === undefined) return;
   if (code.codeSystem !== undefined && code.codeSystem !== LOINC) return;
   if (DEPRECATED_LOINC.has(code.code)) {
-    ctx.emit(deprecatedLoinc(position, code.code));
+    ctx.emit(deprecatedLoinc(position));
   }
 }

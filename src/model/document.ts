@@ -32,7 +32,7 @@ import {
   type VitalSignsOrganizer,
 } from "./entries/index.js";
 import { parseEd, type ED } from "./types/ed.js";
-import { parseIi, type II } from "./types/ii.js";
+import { boundTemplateId, parseIi, type II } from "./types/ii.js";
 import type { ParseCtx } from "./types/_shared.js";
 import { pickMrn } from "../helpers/pick-mrn.js";
 import { documentTypeForOid, R21_EXTENSION, type DocumentType } from "../parser/templates.js";
@@ -627,7 +627,8 @@ export class CcdaDocument {
 export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentInit, "warnings"> {
   const templateIds = children(root, "templateId")
     .map((t) => parseIi(t, ctx))
-    .filter((t): t is II => t !== undefined);
+    .filter((t): t is II => t !== undefined)
+    .map(boundTemplateId);
 
   const documentType = recognizeDocumentType(root, templateIds, ctx);
 
@@ -727,7 +728,7 @@ function recognizeDocumentType(
   ctx: ParseCtx,
 ): DocumentType | undefined {
   if (templateIds.length === 0) {
-    ctx.emit(missingTemplateId(positionOf(root), "ClinicalDocument"));
+    ctx.emit(missingTemplateId(positionOf(root)));
     return undefined;
   }
 
@@ -738,13 +739,13 @@ function recognizeDocumentType(
     const documentType = documentTypeForOid(tid.root);
     if (documentType !== undefined) {
       if (tid.extension !== R21_EXTENSION) {
-        ctx.emit(templateExtensionAbsent(positionOf(root), tid.root));
+        ctx.emit(templateExtensionAbsent(positionOf(root)));
       }
       return documentType;
     }
   }
 
-  ctx.emit(unknownDocumentTemplate(positionOf(root), firstRootedOid ?? ""));
+  ctx.emit(unknownDocumentTemplate(positionOf(root)));
   return undefined;
 }
 
@@ -772,6 +773,6 @@ function validateRequiredSections(
   };
   for (const section of sections) visit(section);
   for (const key of missingRequiredSections(documentType, presentKeys)) {
-    ctx.emit(requiredSectionMissing(positionOf(root), documentType, key));
+    ctx.emit(requiredSectionMissing(positionOf(root), key));
   }
 }

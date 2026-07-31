@@ -74,14 +74,41 @@ export const FATAL_CODES = {
 export type FatalCode = (typeof FATAL_CODES)[keyof typeof FATAL_CODES];
 
 /**
+ * The frozen message registry for the Tier-3 fatals, the mirror of
+ * `WARNING_MESSAGES` in `./warnings.ts`: one constant string per
+ * {@link FatalCode}, and nothing from the document ever contributes a
+ * character.
+ *
+ * `NOT_A_CLINICAL_DOCUMENT` is the reason this registry exists rather than a
+ * set of template literals. It used to report `Root element is <X>`, copying an
+ * XML local name (which a sender controls, unbounded) into `err.message` and,
+ * under `{ strict: true }`, into `err.stack` and whatever an error reporter
+ * ships onward. The limit messages named their byte counts; a caller already
+ * knows the cap it passed, and the size is on the input it holds.
+ *
+ * @internal
+ */
+export const FATAL_MESSAGES: Readonly<Record<FatalCode, string>> = Object.freeze({
+  XXE_OR_DTD_PRESENT:
+    "Input declares a DTD/DOCTYPE or custom entity; rejected to prevent XXE / external-entity attacks.",
+  ENTITY_EXPANSION_LIMIT: "Input exceeds the custom entity-reference cap.",
+  INPUT_SIZE_LIMIT_EXCEEDED: "Input exceeds the byte cap.",
+  ELEMENT_DEPTH_LIMIT_EXCEEDED: "Element nesting exceeds the depth cap.",
+  NODE_COUNT_LIMIT_EXCEEDED: "Element count exceeds the node cap.",
+  NOT_WELL_FORMED_XML: "Input is not well-formed XML.",
+  NOT_A_CLINICAL_DOCUMENT: "The root element is not a ClinicalDocument in the HL7 v3 namespace.",
+});
+
+/**
  * Thrown by `parseCcda` (and the secure XML substrate it calls) when the
  * input violates one of the seven unrecoverable Tier-3 rules, a declared
  * DTD/external entity, entity-expansion or size/depth/node-count limits,
  * malformed XML, or a well-formed document whose root is not
- * `ClinicalDocument`. Carries a
- * **PHI-free** structural `position`; unlike some sibling parsers it does not
- * retain a raw input snippet, precisely because C-CDA payloads are clinical
- * documents and any snippet would risk leaking PHI.
+ * `ClinicalDocument`. Carries a bounded structural {@link CcdaPosition} and a
+ * `message` taken whole from {@link FATAL_MESSAGES}; unlike some sibling parsers
+ * it retains no raw input snippet, precisely because C-CDA payloads are clinical
+ * documents and any snippet would risk leaking PHI. Nothing the document said
+ * reaches `err.message` or, under `{ strict: true }`, `err.stack`.
  *
  * @example
  * ```ts
@@ -101,8 +128,9 @@ export class CcdaParseError extends Error {
 
   /**
    * Construct a new `CcdaParseError`. All three fields are required so every
-   * thrower populates a code, a human-readable (PHI-free) message, and a
-   * structural position.
+   * thrower populates a code, a message (which must come from
+   * {@link FATAL_MESSAGES}, never be built from the input), and a structural
+   * position.
    *
    * @internal
    */

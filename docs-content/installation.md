@@ -89,6 +89,6 @@ actually load.
 Every example in this documentation uses **synthetic** fixtures: an invented patient, obviously-fake
 OIDs and MRNs. Do the same in your own tests: a C-CDA document is a clinical record, and a real one
 committed to a repository is a PHI leak the moment it publishes. The parser helps: every warning and
-error message is **PHI-free by construction**: it carries only structural locators (element names,
-OIDs, LOINC codes, positions), never a patient name, an identifier, or narrative text. See
-[Troubleshooting](./troubleshooting) for the redaction posture.
+error message comes **whole from a frozen registry** and interpolates nothing at all, so no attribute
+value, coded token or element name from your document can reach one. See
+[Troubleshooting](./troubleshooting) for the full posture, including what changed and when.

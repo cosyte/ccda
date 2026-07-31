@@ -469,6 +469,66 @@ immutability + explicit mutation, and the profile system.
     disclosure and deliberately left the clause; it is narrowed now. A safety-critical warning that
     misdescribes the document it is about is the same defect as one that points at a coding that is
     not there.
+  - **No warning or fatal factory takes a value parameter, and no message interpolates one**
+    (`PHI-WARNING-MESSAGE-LEAK`). Every string comes whole from `WARNING_MESSAGES` /
+    `FATAL_MESSAGES`; the handful of codes that name a token take a **closed-set key** the parser
+    owns (a `CodeSlot`, a `NarrativeSlot`, a catalog section key, a v3 datatype, a boolean) which
+    selects a frozen variant generated at module load. **Do not add a parameter carrying document
+    text back to any factory, and do not add a `snippet`-style raw field, not even opt-in.** The
+    claim this replaced ("every message string is PHI-free by construction, factories interpolate
+    only structural values") was false in thirteen factories plus the `NOT_A_CLINICAL_DOCUMENT`
+    fatal: a 500,000-byte `templateId` root produced a 500,106-byte `.message` on the published
+    `0.0.4`. A sender controls a "structural" attribute exactly as it controls a clinical one, so
+    **the bound is the absence of the parameter, not the good behaviour of the caller.**
+    `test/phi-diagnostic-surface.test.ts` pins both halves: a 26-slot table driven by
+    `assertNoDiagnosticPhiLeak` (`@cosyte/test-utils`, **pinned `^0.0.2`; a caret on a `0.0.x`
+    resolves EXACTLY, so `^0.0.1` silently tests against a kit that has no such runner**), and a
+    tripwire asserting every emitted `message` is a member of the frozen registry. It was run
+    against base first and **20 of the 29 slots were red**.
+  - **The bound is applied at the MODEL as well, and that is the load-bearing half.** `hl7` bounded
+    its messages, verified green, and `deid` still leaked because `Segment.type` stayed unbounded on
+    the model. So `src/parser/tokens.ts` (shape tests for a UID / version stamp / LOINC / media
+    type, membership tests for an element name / v3 datatype name / media type / `ED.representation`)
+    is applied to `position.path`, `position.sectionCode`, `CcdaDocument.templateIds`,
+    `CcdaSection.templateIds`, `unsupported.xsiType` and
+    `ED.mediaType`/`representation`/`nullFlavor`.
+    Recognition cannot move: every catalog OID and version stamp passes its shape.
+    **Bound EVERY field of a `templateId`, not the two that look like locators.** The first cut
+    bounded `root` and `extension` and spread the rest through, leaving `assigningAuthorityName`
+    (free text, no shape at all) and `nullFlavor` verbatim on the element the model presents as a
+    structural identifier, and the guard could not see it because `modelIdentifiers` swept only the
+    same two. **The swept set and the leaking set were disjoint, which is the exact defect the
+    deleted `phi-guard.test.ts` had.** When you add a bound, extend the sweep in the same edit.
+    **The membership lists are STATED, not traced.** This repo holds no
+    `datatypes-base.xsd`, so `V3_DATATYPE_NAMES` is written from the v3 ITS naming convention and
+    is incomplete on purpose; `THUMBNAIL` and `EIVL_event` were dropped rather than guessed at.
+    Adding a name is cheap and safe. Inventing one is the invented-precision failure this repo has
+    been burned by, and a missing name only ever costs a `<withheld>`.
+    **A shape test is not automatically a bound, either.** `ED.mediaType` was bounded by
+    `/^[a-zA-Z]{1,20}\/[a-zA-Z0-9.+-]{1,40}$/`, which admits
+    `text/Doe-Jane-1980.01.01-MRN0012345`; the marker carries no `/`, so the slot probing it only
+    ever exercised the reject branch. It is membership now. **Probe the ACCEPT branch of every
+    shape test, or the slot proves nothing.**
+    **"A conforming document is untouched" is FALSE as an absolute** and must not be restored: the
+    membership lists are hand-assembled, so a legitimate but unlisted `xsi:type` or media type reads
+    `<withheld>` where `0.0.4` read the token. Membership over-withholds by design, which costs
+    diagnostic detail rather than data.
+    **Two things are deliberately NOT bounded and must stay that way.** An `II.extension` outside a
+    `templateId` is an MRN or accession number, the identifier the model exists to report, so
+    withholding it deletes clinical data rather than declining to echo a locator. And
+    `CcdaSection.narrativeById`'s keys are what `<reference value="#id">` resolves against, so
+    collapsing two unrecognized anchors onto one `<withheld>` key would resolve a broken reference
+    onto **unrelated narrative**, a clinical-safety regression worse than the leak. The
+    broken-reference warning stopped naming the id instead.
+  - **`UNKNOWN_NAMESPACE_PREFIX` is declared, exported, and emitted by nothing.** No call site in
+    `src/` constructs it, so a foreign namespace prefix is reported nowhere. Pre-existing, found by
+    the slot table rather than introduced by it, and the reason that slot carries `expectCode: null`.
+    Removing the code would be a breaking change to a stable code set; wiring it up is the other
+    option and neither was taken here.
+  - **`CcdaPosition.templateId` is declared and populated by nothing**, so `toleranceApplies` can
+    never satisfy a `QuirkTolerance` keyed on `templateId`: such a profile entry silently tolerates
+    nothing. Pre-existing, found by a refuter on this slice, written onto the type's own docblock and
+    deliberately not closed here (it changes what a position carries).
   - `SAFETY_CRITICAL_CODES` is a frozen read-only view, not a `Set` instance: every read operation
     works (including spread), but `instanceof Set` is `false`.
   - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`

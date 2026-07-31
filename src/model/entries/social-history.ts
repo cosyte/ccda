@@ -154,7 +154,7 @@ function judgeSmokingValue(
     return true;
   }
   if (!SMOKING_STATUS_VALUE_SET.has(code)) {
-    ctx.emit(smokingStatusCodeUnrecognized(position, code));
+    ctx.emit(smokingStatusCodeUnrecognized(position));
   }
   return false;
 }

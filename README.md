@@ -814,8 +814,9 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
   branch on `w.code`, so renaming a code is a breaking change.
 - **Near-zero dependencies**: one exact-pinned runtime dep (`@xmldom/xmldom`) for the XML substrate;
   healthcare integrations vet every dependency, so the cap is **≤ 3** justified deps.
-- **PHI-safe diagnostics**: every warning/fatal message and position carries only structural locators
-  (element names, OIDs, coded tokens, line/column); clinical values never reach a diagnostic.
+- **PHI-safe diagnostics**: warning and fatal messages come whole from a frozen registry and
+  interpolate nothing, so no value from your document reaches one; positions carry a bounded element
+  path plus line/column.
 - **Dual ESM + CJS**: built with `tsup`, validated with `attw`.
 - **Immutability**: parsed models are immutable; mutation is via explicit methods.
 - **Profile system**: a `defineCcdaProfile()` API for vendor/conformance quirks, with a

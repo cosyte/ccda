@@ -24,7 +24,7 @@
 import { DOMParser, type Document, type Element } from "@xmldom/xmldom";
 
 import { positionOf } from "../model/dom.js";
-import { CcdaParseError, FATAL_CODES } from "./errors.js";
+import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES } from "./errors.js";
 import type { CcdaParseLimits } from "./types.js";
 import { encodingBomStripped, type CcdaWarning } from "./warnings.js";
 
@@ -121,17 +121,13 @@ export function parseSecureXml(
   if (byteLength > limits.maxInputBytes) {
     throw new CcdaParseError(
       FATAL_CODES.INPUT_SIZE_LIMIT_EXCEEDED,
-      `Input is ${String(byteLength)} bytes, exceeding the ${String(limits.maxInputBytes)}-byte cap.`,
+      FATAL_MESSAGES.INPUT_SIZE_LIMIT_EXCEEDED,
       {},
     );
   }
 
   if (DTD_RE.test(source)) {
-    throw new CcdaParseError(
-      FATAL_CODES.XXE_OR_DTD_PRESENT,
-      `Input declares a DTD/DOCTYPE or custom entity; rejected to prevent XXE / external-entity attacks.`,
-      {},
-    );
+    throw new CcdaParseError(FATAL_CODES.XXE_OR_DTD_PRESENT, FATAL_MESSAGES.XXE_OR_DTD_PRESENT, {});
   }
 
   countEntityRefs(source, limits);
@@ -160,20 +156,12 @@ function countEntityRefs(source: string, limits: ResolvedLimits): void {
     if (count > limits.maxEntityExpansions) {
       throw new CcdaParseError(
         FATAL_CODES.ENTITY_EXPANSION_LIMIT,
-        `Input contains more than ${String(limits.maxEntityExpansions)} custom entity references.`,
+        FATAL_MESSAGES.ENTITY_EXPANSION_LIMIT,
         {},
       );
     }
   }
 }
-
-/**
- * PHI-safe message for any not-well-formed-XML fatal. The raw `@xmldom/xmldom`
- * error text can echo surrounding source (which for a C-CDA is clinical
- * content), so it is **never** propagated, every malformed-XML path reports
- * this generic, content-free string instead. @internal
- */
-const NOT_WELL_FORMED_MESSAGE = "Input is not well-formed XML.";
 
 /**
  * Construct the DOM with a hardened parser. The `onError` handler tolerates
@@ -190,7 +178,11 @@ function buildDom(source: string): Document {
     locator: true,
     onError: (level: "warning" | "error" | "fatalError"): void => {
       if (level === "fatalError") {
-        throw new CcdaParseError(FATAL_CODES.NOT_WELL_FORMED_XML, NOT_WELL_FORMED_MESSAGE, {});
+        throw new CcdaParseError(
+          FATAL_CODES.NOT_WELL_FORMED_XML,
+          FATAL_MESSAGES.NOT_WELL_FORMED_XML,
+          {},
+        );
       }
     },
   });
@@ -199,7 +191,11 @@ function buildDom(source: string): Document {
     return parser.parseFromString(source, "application/xml");
   } catch (err) {
     if (err instanceof CcdaParseError) throw err;
-    throw new CcdaParseError(FATAL_CODES.NOT_WELL_FORMED_XML, NOT_WELL_FORMED_MESSAGE, {});
+    throw new CcdaParseError(
+      FATAL_CODES.NOT_WELL_FORMED_XML,
+      FATAL_MESSAGES.NOT_WELL_FORMED_XML,
+      {},
+    );
   }
 }
 
@@ -225,14 +221,14 @@ function enforceStructureLimits(doc: Document, limits: ResolvedLimits): void {
       if (depth > limits.maxDepth) {
         throw new CcdaParseError(
           FATAL_CODES.ELEMENT_DEPTH_LIMIT_EXCEEDED,
-          `Element nesting depth exceeds the ${String(limits.maxDepth)}-level cap.`,
+          FATAL_MESSAGES.ELEMENT_DEPTH_LIMIT_EXCEEDED,
           positionOf(node),
         );
       }
       if (nodeCount > limits.maxNodeCount) {
         throw new CcdaParseError(
           FATAL_CODES.NODE_COUNT_LIMIT_EXCEEDED,
-          `Element count exceeds the ${String(limits.maxNodeCount)}-node cap.`,
+          FATAL_MESSAGES.NODE_COUNT_LIMIT_EXCEEDED,
           {},
         );
       }

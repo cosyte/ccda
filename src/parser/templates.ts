@@ -323,6 +323,15 @@ const SECTION_CATALOG: readonly SectionInfo[] = [
   { key: "chiefComplaint", title: "Chief Complaint", loinc: "10154-3", templateRoots: [] },
 ];
 
+/**
+ * Every recognized section catalog `key`. The closed list the warning registry
+ * generates its per-section message variants over, so a section key can be
+ * named in a message without the document ever contributing a character.
+ *
+ * @internal
+ */
+export const SECTION_KEYS: readonly string[] = SECTION_CATALOG.map((s) => s.key);
+
 /** Section `templateId` root OID → {@link SectionInfo}. @internal */
 const SECTION_BY_TEMPLATE: ReadonlyMap<string, SectionInfo> = new Map(
   SECTION_CATALOG.flatMap((s) => s.templateRoots.map((root) => [root, s] as const)),

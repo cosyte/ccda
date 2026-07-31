@@ -17,13 +17,30 @@ import type { CcdaProfile } from "../profiles/types.js";
 import type { TerminologyAdapter } from "../model/terminology.js";
 
 /**
- * Structural locator attached to every warning and fatal error. Every field
- * is optional and **PHI-free by construction**, a `path` carries element
- * names and positional indices (never attribute values or narrative text),
- * and `templateId` / `sectionCode` are OIDs / LOINC codes, not patient data.
- * For a top-level fatal like `INPUT_SIZE_LIMIT_EXCEEDED` no field need be
- * populated; for a section warning deep in the body the `path`, `templateId`,
- * and `sectionCode` may all be set.
+ * Structural locator attached to every warning and fatal error. Every field is
+ * optional. Together with `code` it is the whole contract for locating a
+ * deviation: no diagnostic message names anything the document said.
+ *
+ * **The two string fields the parser populates are bounded, not copied.** `path`
+ * is an element local name, which a sender can make anything, so it is echoed
+ * only when it is a member of the CDA vocabulary this parser navigates and is
+ * `<withheld>` otherwise. `sectionCode` is echoed only when it has the shape of
+ * a LOINC part number, which matters because `UNKNOWN_SECTION_CODE` fires
+ * exactly when the code is unrecognized. See `./tokens.ts` for both, and for why
+ * a shape or membership test is used rather than a length cap. `line` and
+ * `column` are the XML locator and are never derived from content.
+ *
+ * **`templateId` is declared and never populated**, by any site in `src/`. That
+ * is pre-existing and is stated here rather than left to be discovered: it means
+ * a `QuirkTolerance` keyed on `templateId` can never match, so such a profile
+ * entry silently tolerates nothing. Closing it is a change to what a position
+ * carries, not to this bound, and is filed rather than smuggled in here.
+ *
+ * The claim that stood here through `0.0.4`, that the fields were PHI-free "by
+ * construction" because a `path` carries element names and a `sectionCode` is a
+ * LOINC code, was an assumption about the sender rather than a property of the
+ * parser. For a top-level fatal like
+ * `INPUT_SIZE_LIMIT_EXCEEDED` no field need be populated.
  *
  * @remarks
  * With `exactOptionalPropertyTypes: true`, do not pass `line: undefined`

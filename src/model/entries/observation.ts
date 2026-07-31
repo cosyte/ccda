@@ -16,6 +16,7 @@ import { parsePq, type PQ } from "../types/pq.js";
 import { parseIvlPq, type IVL_PQ } from "../types/ivl-pq.js";
 import { contradictsAssertedValue, type ParseCtx } from "../types/_shared.js";
 import { isUcumCaseSuspect, isValidUcumUnit } from "../ucum.js";
+import { safeDatatypeName } from "../../parser/tokens.js";
 import type { CcdaPosition } from "../../parser/types.js";
 import {
   freeTextReferenceRange,
@@ -104,10 +105,10 @@ export function checkUcumUnit(quantity: PQ, position: CcdaPosition, ctx: ParseCt
     return;
   }
   if (isUcumCaseSuspect(unit)) {
-    ctx.emit(ucumCaseSuspect(position, unit));
+    ctx.emit(ucumCaseSuspect(position));
     return;
   }
-  if (!isValidUcumUnit(unit)) ctx.emit(nonUcumUnit(position, unit));
+  if (!isValidUcumUnit(unit)) ctx.emit(nonUcumUnit(position));
 }
 
 /**
@@ -256,10 +257,15 @@ function readUnsupported(
   position: CcdaPosition,
   ctx: ParseCtx,
 ): ObservationValue {
-  if (t !== undefined) ctx.emit(resultValueTypeUnhandled(position, t));
+  if (t !== undefined) ctx.emit(resultValueTypeUnhandled(position));
   const raw = text(valueEl);
   const out: { kind: "unsupported"; xsiType?: string; raw?: string } = { kind: "unsupported" };
-  if (t !== undefined) out.xsiType = t;
+  // `xsiType` is the one *locator* on this value (`raw` is the document's own
+  // text, which the model exists to carry). It is a sender-controlled NCName
+  // and this warning fires exactly when it is a type the model does not
+  // specialize, so no shape distinguishes a datatype name from a word: bounded
+  // on membership in the HL7 v3 datatype names.
+  if (t !== undefined) out.xsiType = safeDatatypeName(t);
   if (raw !== undefined) out.raw = raw;
   return out;
 }
