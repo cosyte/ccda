@@ -5,11 +5,30 @@
  * warning it emits so that messages, payload shape, and positional context
  * stay consistent across stages.
  *
- * Every message string is **PHI-free by construction**, factories interpolate
- * only structural values (OIDs, LOINC codes, element names, namespace
- * prefixes), never attribute values or narrative text from the document.
+ * **No factory here takes a value parameter, and no message interpolates one.**
+ * Every message string comes whole from the frozen {@link WARNING_MESSAGES}
+ * registry below, so the complete set of strings this module can ever produce
+ * is finite, enumerable and visible in one place. A handful of codes carry a
+ * variant per closed-set key (a {@link CodeSlot}, a catalog section key, a
+ * boolean); those variants are generated from the parser's own catalogs at
+ * module load and are registry entries in exactly the same sense.
+ *
+ * This replaces the claim that stood here through `0.0.4`, that messages were
+ * PHI-free "by construction" because factories interpolated only structural
+ * values. That was false: thirteen factories and one fatal took
+ * a value parameter straight from the document, a 500,000-byte templateId root
+ * produced a 500,106-byte `.message`, and in strict mode it reached `err.stack`.
+ * A parser cannot tell a structural value from a clinical one at the point it
+ * echoes one, because a sender controls both. **The bound is the absence of the
+ * parameter, not the good behaviour of the caller.**
+ *
+ * Consumers locate a deviation from `code` + {@link CcdaPosition}. The position
+ * is bounded in its own right (`../parser/tokens.ts`): its `path` is a member of
+ * the CDA element vocabulary or `<withheld>`, and its `sectionCode` is a LOINC
+ * part number or `<withheld>`.
  */
 
+import { SECTION_KEYS } from "./templates.js";
 import type { CcdaPosition } from "./types.js";
 
 /**
@@ -110,7 +129,7 @@ export type WarningCode = (typeof WARNING_CODES)[keyof typeof WARNING_CODES];
  * import type { CcdaWarning } from "@cosyte/ccda";
  * const w: CcdaWarning = {
  *   code: "UNKNOWN_SECTION_CODE",
- *   message: "Section LOINC code 99999-9 is not a recognized C-CDA section.",
+ *   message: "The section's LOINC code is not a recognized C-CDA section; retained as narrative-only.",
  *   position: { sectionCode: "99999-9" },
  * };
  * ```
@@ -139,6 +158,255 @@ export interface CcdaWarning {
 }
 
 /**
+ * The five coded slots a {@link TerminologyAdapter} and the code-system checks
+ * are wired to. A closed set the parser owns: no document text can become one.
+ */
+export const CODE_SLOTS = ["problem", "medication", "allergen", "route", "vaccine"] as const;
+
+/**
+ * Which coded slot a code-system warning is about. Closed by construction, so
+ * naming it in a message names a parser constant rather than document content.
+ *
+ * @example
+ * ```ts
+ * import type { CodeSlot } from "@cosyte/ccda";
+ * const slot: CodeSlot = "problem";
+ * ```
+ */
+export type CodeSlot = (typeof CODE_SLOTS)[number];
+
+/**
+ * The coded slots that are reconciled against the section narrative. Wider than
+ * {@link CODE_SLOTS} (narrative reconciliation runs at slots no
+ * {@link TerminologyAdapter} is bound to) and closed in the same way.
+ */
+export const NARRATIVE_SLOTS = [
+  "problem",
+  "medication",
+  "allergen",
+  "vaccine",
+  "procedure",
+  "encounter",
+  "plannedItem",
+  "statusObservation",
+  "familyHistory",
+] as const;
+
+/** Which coded slot a `CODE_NARRATIVE_MISMATCH` is about. Closed by construction. */
+export type NarrativeSlot = (typeof NARRATIVE_SLOTS)[number];
+
+/**
+ * The frozen message registry: every string this module can put on a
+ * `CcdaWarning.message`, one entry per {@link WarningCode}.
+ *
+ * Six codes additionally carry a per-{@link CodeSlot} variant, two a
+ * per-section-key variant, one a per-datatype variant and one a two-way
+ * variant; each variant table is generated below from a closed list the parser
+ * owns, and the entry here is the generic wording those tables fall back to.
+ * Nothing outside this file, and in particular nothing out of the document,
+ * ever contributes a character.
+ *
+ * @internal
+ */
+export const WARNING_MESSAGES: Readonly<Record<WarningCode, string>> = Object.freeze({
+  UNKNOWN_DOCUMENT_TEMPLATE:
+    "The root templateId set names no recognized C-CDA R2.1 document type; parsed as a generic ClinicalDocument.",
+  MISSING_TEMPLATE_ID: "The element carries no templateId; recognition fell back to other signals.",
+  TEMPLATE_EXTENSION_ABSENT:
+    "The recognized templateId carries no @extension version stamp; matched by root alone (may pre-date R2.1).",
+  UNKNOWN_SECTION_CODE:
+    "The section's LOINC code is not a recognized C-CDA section; retained as narrative-only.",
+  SECTION_MATCHED_BY_LOINC_FALLBACK:
+    "Section identified by its LOINC code fallback (no recognized templateId present).",
+  INVALID_NULL_FLAVOR:
+    "The nullFlavor token is not in the HL7 v3 NullFlavor code system; preserved verbatim.",
+  CONTRADICTORY_NULL_FLAVOR:
+    "The element declares a nullFlavor and asserts a value at the same time; the document contradicts itself, so the value is preserved verbatim but never read as the field's value.",
+  UNKNOWN_NAMESPACE_PREFIX:
+    "A namespace prefix outside the recognized v3/xsi/sdtc set was used; the node is retained.",
+  MALFORMED_DATETIME:
+    "Value does not match the HL7 v3 TS datetime shape; raw preserved, parsed date left undefined.",
+  MULTIPLE_RECORD_TARGETS:
+    "ClinicalDocument carries more than one recordTarget element; getPatient() resolves the first and header.recordTargets carries them all.",
+  MISSING_ASSIGNING_AUTHORITY: "Patient identifier has a root OID but no assigningAuthorityName.",
+  ENCODING_BOM_STRIPPED: "A UTF-8 byte-order mark was stripped from the head of the input.",
+  NEGATION_VS_NULLFLAVOR_AMBIGUOUS:
+    'Act carries both negationInd="true" and a nullFlavor; modeled as distinct fields, not collapsed.',
+  ALLERGEN_GRANULARITY_SUSPECT:
+    "Allergen appears coded at product level where an ingredient-level concept is expected; granularity flagged.",
+  CODE_NARRATIVE_MISMATCH:
+    "A coded value and its referenced narrative disagree; both preserved, no winner chosen.",
+  NARRATIVE_REFERENCE_BROKEN:
+    "The narrative reference does not resolve to any ID in the section narrative.",
+  UNEXPECTED_CODE_SYSTEM: "The code system OID is not expected for this slot; value preserved.",
+  DEPRECATED_CODE_SYSTEM:
+    "The code system OID is deprecated for this slot; prefer its modern successor. Value preserved.",
+  MISSING_CODE_SYSTEM:
+    "The coded value has a @code but no @codeSystem, so the symbol names no terminology; value preserved verbatim, system never inferred, and terminology validation is impossible for it.",
+  MISSING_CODE_VALUE:
+    "The coded value is present but asserts no @code and no @nullFlavor, so nothing distinguishes an absent concept from a lost one; value preserved verbatim, no code inferred.",
+  MISSING_DOSE_QUANTITY:
+    "Medication activity has no doseQuantity; dose preserved as absent, never defaulted.",
+  MISSING_ROUTE_CODE:
+    "Medication activity has no routeCode; route preserved as absent, never defaulted.",
+  MISSING_PRODUCT_CODE:
+    "Substance administration has no coded product on any manufacturedProduct arm the parser reads; the product is preserved as absent, never inferred from narrative or from the entry's other fields.",
+  MEDICATION_PRODUCT_ARM_UNEXPECTED:
+    "manufacturedProduct carries the manufacturedLabeledDrug arm, which C-CDA's medication templates are not written around; the arm is flagged, and unless a companion warning says the product was withheld (MEDICATION_PRODUCT_ARM_CONFLICT), absent (MISSING_PRODUCT_CODE) or unnamed (MISSING_CODE_VALUE) the product code was read and checked as usual.",
+  MEDICATION_PRODUCT_ARM_CONFLICT:
+    "manufacturedProduct carries arms (manufacturedMaterial / manufacturedLabeledDrug, including repeated ones) whose codings name different products, counting each arm's <translation> alternates: they share no coding, or, where both arms name their product only through translations, each also names a coding the other does not and two of those are in the same code system under different symbols. The document contradicts itself and nothing in it ranks the arms, so no product code is selected (every arm survives serialization verbatim).",
+  MEDICATION_PRODUCT_ARM_REPEATED:
+    "manufacturedProduct carries more than one arm of the same kind (manufacturedMaterial or manufacturedLabeledDrug), which CDA R2 models as a choice of one participant; the repeat is reported rather than absorbed, and whether the repeated arms agree is answered separately by MEDICATION_PRODUCT_ARM_CONFLICT.",
+  MEDICATION_PRODUCT_CODE_REPEATED:
+    "The product arm at this position carries more than one <code>, which CDA R2 models as at most one per arm; the repeat is reported rather than absorbed, every <code> on the arm is compared, and whether they agree is answered separately by MEDICATION_PRODUCT_ARM_CONFLICT. No <code> after the first on an arm is ever selected as the product.",
+  MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY:
+    "No manufacturedProduct arm's lead <code> asserts a primary @code, and the product is named in a <translation> alternate at this position; selection reads each arm's lead <code> only, and translations are preserved and re-serialized but are never slot-checked, so no product code is selected.",
+  MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED:
+    "The medication carries effectiveTime siblings that could not be classified as duration vs frequency; all preserved.",
+  PROBLEM_STATUS_INDETERMINATE:
+    "Problem concern statusCode is missing or unrecognized; active/resolved state is indeterminate.",
+  SECTION_PLACEMENT_SUSPECT:
+    "An entry template was found in a section it does not belong to; extracted but flagged.",
+  NON_UCUM_UNIT:
+    "The @unit is not a well-formed UCUM unit; unit and value preserved verbatim, never normalized.",
+  UCUM_CASE_SUSPECT:
+    "The @unit looks like a letter-case slip of a canonical UCUM unit; value preserved, review the casing.",
+  MISSING_UNIT_ON_PQ:
+    "Physical-quantity value has a numeric value but no @unit; preserved as dimensionless, never defaulted.",
+  FREE_TEXT_REFERENCE_RANGE:
+    "Reference range is free text, not a structured low/high interval; preserved as text, not numerically comparable.",
+  RESULT_VALUE_TYPE_UNHANDLED:
+    "The observation value's xsi:type is not specialized; raw value preserved as unsupported.",
+  IMMUNIZATION_REFUSED:
+    'Immunization activity carries negationInd="true" (vaccine not administered / refused); modeled as refused, never as given.',
+  DEPRECATED_LOINC:
+    "The observation's LOINC code is deprecated; prefer its current successor. Code preserved.",
+  REQUIRED_SECTION_MISSING:
+    "The document type requires a section (SHALL) that was not found; parsed without it. missingRequiredSections() names the full set.",
+  PROCEDURE_MOOD_UNEXPECTED:
+    "The procedure's moodCode is neither a performed (EVN) nor a recognized planned mood; extracted but unclassified.",
+  PLANNED_VS_PERFORMED_AMBIGUOUS:
+    "Procedure entry has no moodCode; performed (EVN) vs planned (INT) is ambiguous, never conflated, left unclassified.",
+  SMOKING_STATUS_UNKNOWN:
+    'Smoking status is recorded as unknown (nullFlavor or an "unknown" SNOMED concept); preserved, flagged as unknown.',
+  SMOKING_STATUS_CODE_UNRECOGNIZED:
+    "The smoking status code is not in the recognized Smoking Status value set; preserved verbatim.",
+  SEMANTIC_CODE_INVALID:
+    "The supplied terminology adapter reports the code is not a valid member of its system; code preserved verbatim, never coerced.",
+  PROFILE_QUIRK_APPLIED:
+    "An active profile expected this deviation and downgraded it; the deviation's own code is on `toleratedCode`, the tolerating profile on `profile`, and `expected` is set.",
+});
+
+/**
+ * Look a message variant up by a key drawn from one of the parser's own closed
+ * catalogs, falling back to the generic registry entry. The lookup is a
+ * membership test, so an unlisted key yields a registry string rather than
+ * putting the key itself into a message.
+ *
+ * @internal
+ */
+function variant(table: Readonly<Record<string, string>>, key: string, generic: string): string {
+  return table[key] ?? generic;
+}
+
+/** Freeze a variant table generated over a closed key list. @internal */
+function tableOver(
+  keys: readonly string[],
+  build: (key: string) => string,
+): Readonly<Record<string, string>> {
+  return Object.freeze(Object.fromEntries(keys.map((key) => [key, build(key)])));
+}
+
+const CODE_NARRATIVE_MISMATCH_BY_SLOT = tableOver(
+  NARRATIVE_SLOTS,
+  (slot) =>
+    `Coded ${slot} value and its referenced narrative disagree; both preserved, no winner chosen.`,
+);
+
+const UNEXPECTED_CODE_SYSTEM_BY_SLOT = tableOver(
+  CODE_SLOTS,
+  (slot) => `The code system OID is not expected for the ${slot} slot; value preserved.`,
+);
+
+const DEPRECATED_CODE_SYSTEM_BY_SLOT = tableOver(
+  CODE_SLOTS,
+  (slot) =>
+    `The code system OID is deprecated for the ${slot} slot; prefer its modern successor. Value preserved.`,
+);
+
+const MISSING_CODE_SYSTEM_BY_SLOT = tableOver(
+  CODE_SLOTS,
+  (slot) =>
+    `Coded ${slot} value has a @code but no @codeSystem, so the symbol names no terminology; value preserved verbatim, system never inferred, and terminology validation is impossible for it.`,
+);
+
+const MISSING_CODE_VALUE_BY_SLOT = tableOver(
+  CODE_SLOTS,
+  (slot) =>
+    `Coded ${slot} value is present but asserts no @code and no @nullFlavor, so nothing distinguishes an absent concept from a lost one; value preserved verbatim, no code inferred.`,
+);
+
+const SEMANTIC_CODE_INVALID_BY_SLOT = tableOver(
+  CODE_SLOTS,
+  (slot) =>
+    `The supplied terminology adapter reports the ${slot} code is not a valid member of its system; code preserved verbatim, never coerced.`,
+);
+
+const SECTION_PLACEMENT_SUSPECT_BY_SECTION = tableOver(
+  SECTION_KEYS,
+  (key) =>
+    `An entry template that belongs in the "${key}" section was found in a different section; extracted but flagged.`,
+);
+
+const REQUIRED_SECTION_MISSING_BY_SECTION = tableOver(
+  SECTION_KEYS,
+  (key) =>
+    `The document type requires a "${key}" section (SHALL), but none was found; parsed without it.`,
+);
+
+/**
+ * The HL7 v3 datatypes this parser implements. Closed, and owned here rather
+ * than derived from the datatype modules so that `../model/types/` can keep
+ * importing this module without a cycle.
+ *
+ * @internal
+ */
+const V3_DATATYPES = ["PQ", "TS", "CD", "II", "ST", "ED", "BL", "INT"] as const;
+
+const CONTRADICTORY_NULL_FLAVOR_BY_DATATYPE = tableOver(
+  V3_DATATYPES,
+  (datatype) =>
+    `${datatype} element declares a nullFlavor and asserts a value at the same time; the document contradicts itself, so the value is preserved verbatim but never read as the field's value.`,
+);
+
+/** The two arm-relative wordings of `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`. @internal */
+const TRANSLATION_ONLY_BY_ARM = Object.freeze({
+  selected: `${WARNING_MESSAGES.MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY} The coding is somewhere on the returned CD's translation list rather than on its code (search the list, the first entry need not be the one naming the product).`,
+  otherArm: `${WARNING_MESSAGES.MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY} This arm is not the one returned as the product CD, so the coding is reachable only in the re-serialized document.`,
+});
+
+/**
+ * Every string any factory in this module can produce, for the tripwire that
+ * asserts an emitted `message` is a registry member rather than something built
+ * from a document.
+ *
+ * @internal
+ */
+export const ALL_WARNING_MESSAGES: ReadonlySet<string> = new Set([
+  ...Object.values(WARNING_MESSAGES),
+  ...Object.values(CODE_NARRATIVE_MISMATCH_BY_SLOT),
+  ...Object.values(UNEXPECTED_CODE_SYSTEM_BY_SLOT),
+  ...Object.values(DEPRECATED_CODE_SYSTEM_BY_SLOT),
+  ...Object.values(MISSING_CODE_SYSTEM_BY_SLOT),
+  ...Object.values(MISSING_CODE_VALUE_BY_SLOT),
+  ...Object.values(SEMANTIC_CODE_INVALID_BY_SLOT),
+  ...Object.values(SECTION_PLACEMENT_SUSPECT_BY_SECTION),
+  ...Object.values(REQUIRED_SECTION_MISSING_BY_SECTION),
+  ...Object.values(CONTRADICTORY_NULL_FLAVOR_BY_DATATYPE),
+  ...Object.values(TRANSLATION_ONLY_BY_ARM),
+]);
+
+/**
  * Build an `UNKNOWN_DOCUMENT_TEMPLATE` warning. Emitted when the document's
  * root `templateId` set contains no OID matching one of the 12 recognized
  * C-CDA R2.1 document types, the document is still parsed as a generic
@@ -147,13 +415,13 @@ export interface CcdaWarning {
  * @example
  * ```ts
  * import { unknownDocumentTemplate } from "@cosyte/ccda";
- * const w = unknownDocumentTemplate({ path: "/ClinicalDocument" }, "1.2.3.4");
+ * const w = unknownDocumentTemplate({ path: "/ClinicalDocument" });
  * ```
  */
-export function unknownDocumentTemplate(position: CcdaPosition, observedOid: string): CcdaWarning {
+export function unknownDocumentTemplate(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.UNKNOWN_DOCUMENT_TEMPLATE,
-    message: `Document templateId "${observedOid}" is not a recognized C-CDA R2.1 document type; parsed as a generic ClinicalDocument.`,
+    message: WARNING_MESSAGES.UNKNOWN_DOCUMENT_TEMPLATE,
     position,
   };
 }
@@ -166,13 +434,13 @@ export function unknownDocumentTemplate(position: CcdaPosition, observedOid: str
  * @example
  * ```ts
  * import { missingTemplateId } from "@cosyte/ccda";
- * const w = missingTemplateId({ path: "/ClinicalDocument" }, "ClinicalDocument");
+ * const w = missingTemplateId({ path: "/ClinicalDocument" });
  * ```
  */
-export function missingTemplateId(position: CcdaPosition, elementName: string): CcdaWarning {
+export function missingTemplateId(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MISSING_TEMPLATE_ID,
-    message: `Element "${elementName}" has no templateId; recognition fell back to other signals.`,
+    message: WARNING_MESSAGES.MISSING_TEMPLATE_ID,
     position,
   };
 }
@@ -186,16 +454,13 @@ export function missingTemplateId(position: CcdaPosition, elementName: string): 
  * @example
  * ```ts
  * import { templateExtensionAbsent } from "@cosyte/ccda";
- * const w = templateExtensionAbsent(
- *   { path: "/ClinicalDocument" },
- *   "2.16.840.1.113883.10.20.22.1.2",
- * );
+ * const w = templateExtensionAbsent({ path: "/ClinicalDocument" });
  * ```
  */
-export function templateExtensionAbsent(position: CcdaPosition, oid: string): CcdaWarning {
+export function templateExtensionAbsent(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.TEMPLATE_EXTENSION_ABSENT,
-    message: `templateId "${oid}" has no @extension version stamp; matched by root alone (may pre-date R2.1).`,
+    message: WARNING_MESSAGES.TEMPLATE_EXTENSION_ABSENT,
     position,
   };
 }
@@ -209,13 +474,13 @@ export function templateExtensionAbsent(position: CcdaPosition, oid: string): Cc
  * @example
  * ```ts
  * import { unknownSectionCode } from "@cosyte/ccda";
- * const w = unknownSectionCode({ sectionCode: "99999-9" }, "99999-9");
+ * const w = unknownSectionCode({ sectionCode: "99999-9" });
  * ```
  */
-export function unknownSectionCode(position: CcdaPosition, loincCode: string): CcdaWarning {
+export function unknownSectionCode(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.UNKNOWN_SECTION_CODE,
-    message: `Section LOINC code "${loincCode}" is not a recognized C-CDA section; retained as narrative-only.`,
+    message: WARNING_MESSAGES.UNKNOWN_SECTION_CODE,
     position,
   };
 }
@@ -228,16 +493,13 @@ export function unknownSectionCode(position: CcdaPosition, loincCode: string): C
  * @example
  * ```ts
  * import { sectionMatchedByLoincFallback } from "@cosyte/ccda";
- * const w = sectionMatchedByLoincFallback({ sectionCode: "48765-2" }, "48765-2");
+ * const w = sectionMatchedByLoincFallback({ sectionCode: "48765-2" });
  * ```
  */
-export function sectionMatchedByLoincFallback(
-  position: CcdaPosition,
-  loincCode: string,
-): CcdaWarning {
+export function sectionMatchedByLoincFallback(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.SECTION_MATCHED_BY_LOINC_FALLBACK,
-    message: `Section identified by LOINC code "${loincCode}" fallback (no recognized templateId present).`,
+    message: WARNING_MESSAGES.SECTION_MATCHED_BY_LOINC_FALLBACK,
     position,
   };
 }
@@ -251,13 +513,13 @@ export function sectionMatchedByLoincFallback(
  * @example
  * ```ts
  * import { invalidNullFlavor } from "@cosyte/ccda";
- * const w = invalidNullFlavor({ path: "/ClinicalDocument/effectiveTime" }, "NOPE");
+ * const w = invalidNullFlavor({ path: "effectiveTime" });
  * ```
  */
-export function invalidNullFlavor(position: CcdaPosition, observed: string): CcdaWarning {
+export function invalidNullFlavor(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.INVALID_NULL_FLAVOR,
-    message: `nullFlavor "${observed}" is not in the HL7 v3 NullFlavor code system; preserved verbatim.`,
+    message: WARNING_MESSAGES.INVALID_NULL_FLAVOR,
     position,
   };
 }
@@ -269,9 +531,12 @@ export function invalidNullFlavor(position: CcdaPosition, observed: string): Ccd
  * says two incompatible things about one field: "this quantity is unknown" and
  * "this quantity is 10 mg".
  *
- * `datatype` is the v3 datatype that read the element (`PQ`, `TS`, `CD`, ...)
- * and `observed` is the `nullFlavor` token; both are structural, so the message
- * stays PHI-free. The contradicting content is **never** interpolated.
+ * `datatype` is the v3 datatype that read the element (`PQ`, `TS`, `CD`, ...),
+ * one of a closed list this module owns, and it selects a frozen registry
+ * variant rather than being interpolated. The `nullFlavor` token the element
+ * carried used to be named here and is not: it is sender-controlled text, and
+ * the argument that it was "structural" is exactly the one this whole registry
+ * replaced.
  *
  * **What the parser does with it.** Nothing is coerced and nothing verbatim is
  * dropped: `PQ.raw`, `PQ.unit`, `CD.code`, `II.extension` and friends are all
@@ -295,17 +560,17 @@ export function invalidNullFlavor(position: CcdaPosition, observed: string): Ccd
  * @example
  * ```ts
  * import { contradictoryNullFlavor } from "@cosyte/ccda";
- * const w = contradictoryNullFlavor({ path: "doseQuantity" }, "PQ", "UNK");
+ * const w = contradictoryNullFlavor({ path: "doseQuantity" }, "PQ");
  * ```
  */
-export function contradictoryNullFlavor(
-  position: CcdaPosition,
-  datatype: string,
-  observed: string,
-): CcdaWarning {
+export function contradictoryNullFlavor(position: CcdaPosition, datatype: string): CcdaWarning {
   return {
     code: WARNING_CODES.CONTRADICTORY_NULL_FLAVOR,
-    message: `${datatype} element declares nullFlavor "${observed}" and asserts a value at the same time; the document contradicts itself, so the value is preserved verbatim but never read as the field's value.`,
+    message: variant(
+      CONTRADICTORY_NULL_FLAVOR_BY_DATATYPE,
+      datatype,
+      WARNING_MESSAGES.CONTRADICTORY_NULL_FLAVOR,
+    ),
     position,
   };
 }
@@ -319,13 +584,13 @@ export function contradictoryNullFlavor(
  * @example
  * ```ts
  * import { unknownNamespacePrefix } from "@cosyte/ccda";
- * const w = unknownNamespacePrefix({ path: "/ClinicalDocument" }, "vendor");
+ * const w = unknownNamespacePrefix({ path: "/ClinicalDocument" });
  * ```
  */
-export function unknownNamespacePrefix(position: CcdaPosition, prefix: string): CcdaWarning {
+export function unknownNamespacePrefix(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.UNKNOWN_NAMESPACE_PREFIX,
-    message: `Unknown namespace prefix "${prefix}", not in the recognized v3/xsi/sdtc set; node retained.`,
+    message: WARNING_MESSAGES.UNKNOWN_NAMESPACE_PREFIX,
     position,
   };
 }
@@ -339,13 +604,13 @@ export function unknownNamespacePrefix(position: CcdaPosition, prefix: string): 
  * @example
  * ```ts
  * import { malformedDateTime } from "@cosyte/ccda";
- * const w = malformedDateTime({ path: "/ClinicalDocument/effectiveTime" });
+ * const w = malformedDateTime({ path: "effectiveTime" });
  * ```
  */
 export function malformedDateTime(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MALFORMED_DATETIME,
-    message: `Value does not match the HL7 v3 TS datetime shape; raw preserved, parsed date left undefined.`,
+    message: WARNING_MESSAGES.MALFORMED_DATETIME,
     position,
   };
 }
@@ -358,13 +623,13 @@ export function malformedDateTime(position: CcdaPosition): CcdaWarning {
  * @example
  * ```ts
  * import { multipleRecordTargets } from "@cosyte/ccda";
- * const w = multipleRecordTargets({ path: "/ClinicalDocument" }, 2);
+ * const w = multipleRecordTargets({ path: "/ClinicalDocument" });
  * ```
  */
-export function multipleRecordTargets(position: CcdaPosition, count: number): CcdaWarning {
+export function multipleRecordTargets(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MULTIPLE_RECORD_TARGETS,
-    message: `ClinicalDocument has ${String(count)} recordTarget elements; getPatient() resolves the first.`,
+    message: WARNING_MESSAGES.MULTIPLE_RECORD_TARGETS,
     position,
   };
 }
@@ -377,13 +642,13 @@ export function multipleRecordTargets(position: CcdaPosition, count: number): Cc
  * @example
  * ```ts
  * import { missingAssigningAuthority } from "@cosyte/ccda";
- * const w = missingAssigningAuthority({ path: "/ClinicalDocument/recordTarget" });
+ * const w = missingAssigningAuthority({ path: "patientRole" });
  * ```
  */
 export function missingAssigningAuthority(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MISSING_ASSIGNING_AUTHORITY,
-    message: `Patient identifier has a root OID but no assigningAuthorityName.`,
+    message: WARNING_MESSAGES.MISSING_ASSIGNING_AUTHORITY,
     position,
   };
 }
@@ -402,7 +667,7 @@ export function missingAssigningAuthority(position: CcdaPosition): CcdaWarning {
 export function encodingBomStripped(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.ENCODING_BOM_STRIPPED,
-    message: `A UTF-8 byte-order mark was stripped from the head of the input.`,
+    message: WARNING_MESSAGES.ENCODING_BOM_STRIPPED,
     position,
   };
 }
@@ -416,16 +681,13 @@ export function encodingBomStripped(position: CcdaPosition): CcdaWarning {
  * @example
  * ```ts
  * import { negationVsNullFlavorAmbiguous } from "@cosyte/ccda";
- * const w = negationVsNullFlavorAmbiguous({ path: "observation" }, "NI");
+ * const w = negationVsNullFlavorAmbiguous({ path: "observation" });
  * ```
  */
-export function negationVsNullFlavorAmbiguous(
-  position: CcdaPosition,
-  nullFlavor: string,
-): CcdaWarning {
+export function negationVsNullFlavorAmbiguous(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.NEGATION_VS_NULLFLAVOR_AMBIGUOUS,
-    message: `Act carries both negationInd="true" and nullFlavor "${nullFlavor}"; modeled as distinct fields, not collapsed.`,
+    message: WARNING_MESSAGES.NEGATION_VS_NULLFLAVOR_AMBIGUOUS,
     position,
   };
 }
@@ -445,7 +707,7 @@ export function negationVsNullFlavorAmbiguous(
 export function allergenGranularitySuspect(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.ALLERGEN_GRANULARITY_SUSPECT,
-    message: `Allergen appears coded at product level where an ingredient-level concept is expected; granularity flagged.`,
+    message: WARNING_MESSAGES.ALLERGEN_GRANULARITY_SUSPECT,
     position,
   };
 }
@@ -462,10 +724,14 @@ export function allergenGranularitySuspect(position: CcdaPosition): CcdaWarning 
  * const w = codeNarrativeMismatch({ path: "value" }, "problem");
  * ```
  */
-export function codeNarrativeMismatch(position: CcdaPosition, slot: string): CcdaWarning {
+export function codeNarrativeMismatch(position: CcdaPosition, slot: NarrativeSlot): CcdaWarning {
   return {
     code: WARNING_CODES.CODE_NARRATIVE_MISMATCH,
-    message: `Coded ${slot} value and its referenced narrative disagree; both preserved, no winner chosen.`,
+    message: variant(
+      CODE_NARRATIVE_MISMATCH_BY_SLOT,
+      slot,
+      WARNING_MESSAGES.CODE_NARRATIVE_MISMATCH,
+    ),
     position,
   };
 }
@@ -479,13 +745,13 @@ export function codeNarrativeMismatch(position: CcdaPosition, slot: string): Ccd
  * @example
  * ```ts
  * import { narrativeReferenceBroken } from "@cosyte/ccda";
- * const w = narrativeReferenceBroken({ path: "reference" }, "prob1");
+ * const w = narrativeReferenceBroken({ path: "reference" });
  * ```
  */
-export function narrativeReferenceBroken(position: CcdaPosition, referenceId: string): CcdaWarning {
+export function narrativeReferenceBroken(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.NARRATIVE_REFERENCE_BROKEN,
-    message: `Narrative reference "#${referenceId}" does not resolve to any ID in the section narrative.`,
+    message: WARNING_MESSAGES.NARRATIVE_REFERENCE_BROKEN,
     position,
   };
 }
@@ -499,17 +765,13 @@ export function narrativeReferenceBroken(position: CcdaPosition, referenceId: st
  * @example
  * ```ts
  * import { unexpectedCodeSystem } from "@cosyte/ccda";
- * const w = unexpectedCodeSystem({ path: "value" }, "1.2.3", "problem");
+ * const w = unexpectedCodeSystem({ path: "value" }, "problem");
  * ```
  */
-export function unexpectedCodeSystem(
-  position: CcdaPosition,
-  observedOid: string,
-  slot: string,
-): CcdaWarning {
+export function unexpectedCodeSystem(position: CcdaPosition, slot: CodeSlot): CcdaWarning {
   return {
     code: WARNING_CODES.UNEXPECTED_CODE_SYSTEM,
-    message: `Code system OID "${observedOid}" is not expected for the ${slot} slot; value preserved.`,
+    message: variant(UNEXPECTED_CODE_SYSTEM_BY_SLOT, slot, WARNING_MESSAGES.UNEXPECTED_CODE_SYSTEM),
     position,
   };
 }
@@ -522,17 +784,13 @@ export function unexpectedCodeSystem(
  * @example
  * ```ts
  * import { deprecatedCodeSystem } from "@cosyte/ccda";
- * const w = deprecatedCodeSystem({ path: "value" }, "2.16.840.1.113883.6.103", "problem");
+ * const w = deprecatedCodeSystem({ path: "value" }, "problem");
  * ```
  */
-export function deprecatedCodeSystem(
-  position: CcdaPosition,
-  observedOid: string,
-  slot: string,
-): CcdaWarning {
+export function deprecatedCodeSystem(position: CcdaPosition, slot: CodeSlot): CcdaWarning {
   return {
     code: WARNING_CODES.DEPRECATED_CODE_SYSTEM,
-    message: `Code system OID "${observedOid}" is deprecated for the ${slot} slot; prefer its modern successor. Value preserved.`,
+    message: variant(DEPRECATED_CODE_SYSTEM_BY_SLOT, slot, WARNING_MESSAGES.DEPRECATED_CODE_SYSTEM),
     position,
   };
 }
@@ -563,10 +821,10 @@ export function deprecatedCodeSystem(
  * const w = missingCodeSystem({ path: "value" }, "problem");
  * ```
  */
-export function missingCodeSystem(position: CcdaPosition, slot: string): CcdaWarning {
+export function missingCodeSystem(position: CcdaPosition, slot: CodeSlot): CcdaWarning {
   return {
     code: WARNING_CODES.MISSING_CODE_SYSTEM,
-    message: `Coded ${slot} value has a @code but no @codeSystem, so the symbol names no terminology; value preserved verbatim, system never inferred, and terminology validation is impossible for it.`,
+    message: variant(MISSING_CODE_SYSTEM_BY_SLOT, slot, WARNING_MESSAGES.MISSING_CODE_SYSTEM),
     position,
   };
 }
@@ -599,10 +857,10 @@ export function missingCodeSystem(position: CcdaPosition, slot: string): CcdaWar
  * const w = missingCodeValue({ path: "value" }, "problem");
  * ```
  */
-export function missingCodeValue(position: CcdaPosition, slot: string): CcdaWarning {
+export function missingCodeValue(position: CcdaPosition, slot: CodeSlot): CcdaWarning {
   return {
     code: WARNING_CODES.MISSING_CODE_VALUE,
-    message: `Coded ${slot} value is present but asserts no @code and no @nullFlavor, so nothing distinguishes an absent concept from a lost one; value preserved verbatim, no code inferred.`,
+    message: variant(MISSING_CODE_VALUE_BY_SLOT, slot, WARNING_MESSAGES.MISSING_CODE_VALUE),
     position,
   };
 }
@@ -636,7 +894,7 @@ export function missingCodeValue(position: CcdaPosition, slot: string): CcdaWarn
 export function missingProductCode(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MISSING_PRODUCT_CODE,
-    message: `Substance administration has no coded product on any manufacturedProduct arm the parser reads; the product is preserved as absent, never inferred from narrative or from the entry's other fields.`,
+    message: WARNING_MESSAGES.MISSING_PRODUCT_CODE,
     position,
   };
 }
@@ -725,7 +983,7 @@ export function missingProductCode(position: CcdaPosition): CcdaWarning {
 export function medicationProductArmUnexpected(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MEDICATION_PRODUCT_ARM_UNEXPECTED,
-    message: `manufacturedProduct carries the manufacturedLabeledDrug arm, which C-CDA's medication templates are not written around; the arm is flagged, and unless a companion warning says the product was withheld (MEDICATION_PRODUCT_ARM_CONFLICT), absent (MISSING_PRODUCT_CODE) or unnamed (MISSING_CODE_VALUE) the product code was read and checked as usual.`,
+    message: WARNING_MESSAGES.MEDICATION_PRODUCT_ARM_UNEXPECTED,
     position,
   };
 }
@@ -834,7 +1092,7 @@ export function medicationProductArmUnexpected(position: CcdaPosition): CcdaWarn
 export function medicationProductArmConflict(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MEDICATION_PRODUCT_ARM_CONFLICT,
-    message: `manufacturedProduct carries arms (manufacturedMaterial / manufacturedLabeledDrug, including repeated ones) whose codings name different products, counting each arm's <translation> alternates: they share no coding, or, where both arms name their product only through translations, each also names a coding the other does not and two of those are in the same code system under different symbols. The document contradicts itself and nothing in it ranks the arms, so no product code is selected (every arm survives serialization verbatim).`,
+    message: WARNING_MESSAGES.MEDICATION_PRODUCT_ARM_CONFLICT,
     position,
   };
 }
@@ -899,7 +1157,7 @@ export function medicationProductArmConflict(position: CcdaPosition): CcdaWarnin
 export function medicationProductArmRepeated(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MEDICATION_PRODUCT_ARM_REPEATED,
-    message: `manufacturedProduct carries more than one arm of the same kind (manufacturedMaterial or manufacturedLabeledDrug), which CDA R2 models as a choice of one participant; the repeat is reported rather than absorbed, and whether the repeated arms agree is answered separately by MEDICATION_PRODUCT_ARM_CONFLICT.`,
+    message: WARNING_MESSAGES.MEDICATION_PRODUCT_ARM_REPEATED,
     position,
   };
 }
@@ -995,7 +1253,7 @@ export function medicationProductArmRepeated(position: CcdaPosition): CcdaWarnin
 export function medicationProductCodeRepeated(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MEDICATION_PRODUCT_CODE_REPEATED,
-    message: `The product arm at this position carries more than one <code>, which CDA R2 models as at most one per arm; the repeat is reported rather than absorbed, every <code> on the arm is compared, and whether they agree is answered separately by MEDICATION_PRODUCT_ARM_CONFLICT. No <code> after the first on an arm is ever selected as the product.`,
+    message: WARNING_MESSAGES.MEDICATION_PRODUCT_CODE_REPEATED,
     position,
   };
 }
@@ -1083,12 +1341,9 @@ export function medicationProductCodeTranslationOnly(
   position: CcdaPosition,
   onSelectedArm: boolean,
 ): CcdaWarning {
-  const where = onSelectedArm
-    ? `the coding is somewhere on the returned CD's translation list rather than on its code (search the list, the first entry need not be the one naming the product)`
-    : `this arm is not the one returned as the product CD, so the coding is reachable only in the re-serialized document`;
   return {
     code: WARNING_CODES.MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY,
-    message: `No manufacturedProduct arm's lead <code> asserts a primary @code, and the product is named in a <translation> alternate at this position; selection reads each arm's lead <code> only, and translations are preserved and re-serialized but are never slot-checked, so no product code is selected and ${where}.`,
+    message: onSelectedArm ? TRANSLATION_ONLY_BY_ARM.selected : TRANSLATION_ONLY_BY_ARM.otherArm,
     position,
   };
 }
@@ -1107,7 +1362,7 @@ export function medicationProductCodeTranslationOnly(
 export function missingDoseQuantity(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MISSING_DOSE_QUANTITY,
-    message: `Medication activity has no doseQuantity; dose preserved as absent, never defaulted.`,
+    message: WARNING_MESSAGES.MISSING_DOSE_QUANTITY,
     position,
   };
 }
@@ -1126,7 +1381,7 @@ export function missingDoseQuantity(position: CcdaPosition): CcdaWarning {
 export function missingRouteCode(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MISSING_ROUTE_CODE,
-    message: `Medication activity has no routeCode; route preserved as absent, never defaulted.`,
+    message: WARNING_MESSAGES.MISSING_ROUTE_CODE,
     position,
   };
 }
@@ -1141,16 +1396,13 @@ export function missingRouteCode(position: CcdaPosition): CcdaWarning {
  * @example
  * ```ts
  * import { multipleEffectiveTimesUnresolved } from "@cosyte/ccda";
- * const w = multipleEffectiveTimesUnresolved({ path: "substanceAdministration" }, 3);
+ * const w = multipleEffectiveTimesUnresolved({ path: "substanceAdministration" });
  * ```
  */
-export function multipleEffectiveTimesUnresolved(
-  position: CcdaPosition,
-  count: number,
-): CcdaWarning {
+export function multipleEffectiveTimesUnresolved(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED,
-    message: `Medication carries ${String(count)} effectiveTime elements that could not be classified as duration vs frequency; all preserved.`,
+    message: WARNING_MESSAGES.MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED,
     position,
   };
 }
@@ -1170,7 +1422,7 @@ export function multipleEffectiveTimesUnresolved(
 export function problemStatusIndeterminate(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.PROBLEM_STATUS_INDETERMINATE,
-    message: `Problem concern statusCode is missing or unrecognized; active/resolved state is indeterminate.`,
+    message: WARNING_MESSAGES.PROBLEM_STATUS_INDETERMINATE,
     position,
   };
 }
@@ -1184,17 +1436,20 @@ export function problemStatusIndeterminate(position: CcdaPosition): CcdaWarning 
  * @example
  * ```ts
  * import { sectionPlacementSuspect } from "@cosyte/ccda";
- * const w = sectionPlacementSuspect({ path: "entry" }, "medications", "problems");
+ * const w = sectionPlacementSuspect({ path: "entry" }, "medications");
  * ```
  */
 export function sectionPlacementSuspect(
   position: CcdaPosition,
   entryExpectedSection: string,
-  foundInSection: string,
 ): CcdaWarning {
   return {
     code: WARNING_CODES.SECTION_PLACEMENT_SUSPECT,
-    message: `An entry template that belongs in the "${entryExpectedSection}" section was found in the "${foundInSection}" section; extracted but flagged.`,
+    message: variant(
+      SECTION_PLACEMENT_SUSPECT_BY_SECTION,
+      entryExpectedSection,
+      WARNING_MESSAGES.SECTION_PLACEMENT_SUSPECT,
+    ),
     position,
   };
 }
@@ -1203,19 +1458,21 @@ export function sectionPlacementSuspect(
  * Build a `NON_UCUM_UNIT` warning. Emitted when a `PQ` `@unit` is not a
  * well-formed UCUM unit (validated by the computable grammar). The raw unit
  * string and the value are **preserved verbatim**, never normalized away, so
- * the quantity is never silently re-dimensioned. The `@unit` is structural
- * metadata, not PHI.
+ * the quantity is never silently re-dimensioned. The unit itself is **not
+ * named**: this warning fires precisely when the string is not a UCUM unit, so
+ * at the moment it is reported nothing distinguishes it from any other text a
+ * sender put in the attribute. Read it off the model (`PQ.unit`).
  *
  * @example
  * ```ts
  * import { nonUcumUnit } from "@cosyte/ccda";
- * const w = nonUcumUnit({ path: "value" }, "cc");
+ * const w = nonUcumUnit({ path: "value" });
  * ```
  */
-export function nonUcumUnit(position: CcdaPosition, unit: string): CcdaWarning {
+export function nonUcumUnit(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.NON_UCUM_UNIT,
-    message: `Unit "${unit}" is not a well-formed UCUM unit; value preserved verbatim, never normalized.`,
+    message: WARNING_MESSAGES.NON_UCUM_UNIT,
     position,
   };
 }
@@ -1229,13 +1486,13 @@ export function nonUcumUnit(position: CcdaPosition, unit: string): CcdaWarning {
  * @example
  * ```ts
  * import { ucumCaseSuspect } from "@cosyte/ccda";
- * const w = ucumCaseSuspect({ path: "value" }, "ML");
+ * const w = ucumCaseSuspect({ path: "value" });
  * ```
  */
-export function ucumCaseSuspect(position: CcdaPosition, unit: string): CcdaWarning {
+export function ucumCaseSuspect(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.UCUM_CASE_SUSPECT,
-    message: `Unit "${unit}" looks like a letter-case slip of a canonical UCUM unit; value preserved, review the casing.`,
+    message: WARNING_MESSAGES.UCUM_CASE_SUSPECT,
     position,
   };
 }
@@ -1255,7 +1512,7 @@ export function ucumCaseSuspect(position: CcdaPosition, unit: string): CcdaWarni
 export function missingUnitOnPq(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MISSING_UNIT_ON_PQ,
-    message: `Physical-quantity value has a numeric value but no @unit; preserved as dimensionless, never defaulted.`,
+    message: WARNING_MESSAGES.MISSING_UNIT_ON_PQ,
     position,
   };
 }
@@ -1275,7 +1532,7 @@ export function missingUnitOnPq(position: CcdaPosition): CcdaWarning {
 export function freeTextReferenceRange(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.FREE_TEXT_REFERENCE_RANGE,
-    message: `Reference range is free text, not a structured low/high interval; preserved as text, not numerically comparable.`,
+    message: WARNING_MESSAGES.FREE_TEXT_REFERENCE_RANGE,
     position,
   };
 }
@@ -1285,18 +1542,19 @@ export function freeTextReferenceRange(position: CcdaPosition): CcdaWarning {
  * observation `value` carries an `xsi:type` the model does not specialize
  * (anything beyond `PQ`/`CD`/`CE`/`ST`/`IVL_PQ`). The raw value is preserved as
  * an `unsupported` value so nothing is dropped, only the typed view is absent.
- * The type name is structural metadata, not PHI.
+ * The type name is **not** in the message; it is on the model as
+ * `unsupported.xsiType`, bounded to the HL7 v3 datatype names.
  *
  * @example
  * ```ts
  * import { resultValueTypeUnhandled } from "@cosyte/ccda";
- * const w = resultValueTypeUnhandled({ path: "value" }, "RTO");
+ * const w = resultValueTypeUnhandled({ path: "value" });
  * ```
  */
-export function resultValueTypeUnhandled(position: CcdaPosition, xsiType: string): CcdaWarning {
+export function resultValueTypeUnhandled(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.RESULT_VALUE_TYPE_UNHANDLED,
-    message: `Observation value xsi:type "${xsiType}" is not specialized; raw value preserved as unsupported.`,
+    message: WARNING_MESSAGES.RESULT_VALUE_TYPE_UNHANDLED,
     position,
   };
 }
@@ -1316,7 +1574,7 @@ export function resultValueTypeUnhandled(position: CcdaPosition, xsiType: string
 export function immunizationRefused(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.IMMUNIZATION_REFUSED,
-    message: `Immunization activity carries negationInd="true" (vaccine not administered / refused); modeled as refused, never as given.`,
+    message: WARNING_MESSAGES.IMMUNIZATION_REFUSED,
     position,
   };
 }
@@ -1325,18 +1583,19 @@ export function immunizationRefused(position: CcdaPosition): CcdaWarning {
  * Build a `DEPRECATED_LOINC` warning. Emitted when a result/vital observation
  * `code` is a known-deprecated LOINC (e.g. BMI `41909-3`, superseded by
  * `39156-5`), the code is preserved; the deprecation is flagged for review. The
- * LOINC code is a structural identifier, not PHI.
+ * code is **not** named in the message; it is the observation's own `code`, and
+ * this warning only fires for a member of the curated deprecated set.
  *
  * @example
  * ```ts
  * import { deprecatedLoinc } from "@cosyte/ccda";
- * const w = deprecatedLoinc({ path: "code" }, "41909-3");
+ * const w = deprecatedLoinc({ path: "code" });
  * ```
  */
-export function deprecatedLoinc(position: CcdaPosition, loincCode: string): CcdaWarning {
+export function deprecatedLoinc(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.DEPRECATED_LOINC,
-    message: `LOINC code "${loincCode}" is deprecated; prefer its current successor. Code preserved.`,
+    message: WARNING_MESSAGES.DEPRECATED_LOINC,
     position,
   };
 }
@@ -1346,22 +1605,24 @@ export function deprecatedLoinc(position: CcdaPosition, loincCode: string): Ccda
  * document type's required (SHALL) section is absent from the document, a
  * conformance gap surfaced as a **warning, never a fatal**, so the document
  * still parses (fail-safe: a missing required section never blocks reading the
- * data that *is* present). `sectionKey` is a structural catalog key, not PHI.
+ * data that *is* present). `sectionKey` selects a frozen message variant from
+ * the section catalog's own key list, so an unrecognized key falls back to the
+ * generic registry entry rather than reaching the message.
  *
  * @example
  * ```ts
  * import { requiredSectionMissing } from "@cosyte/ccda";
- * const w = requiredSectionMissing({ path: "/ClinicalDocument" }, "ccd", "problems");
+ * const w = requiredSectionMissing({ path: "/ClinicalDocument" }, "problems");
  * ```
  */
-export function requiredSectionMissing(
-  position: CcdaPosition,
-  documentType: string,
-  sectionKey: string,
-): CcdaWarning {
+export function requiredSectionMissing(position: CcdaPosition, sectionKey: string): CcdaWarning {
   return {
     code: WARNING_CODES.REQUIRED_SECTION_MISSING,
-    message: `Document type "${documentType}" requires a "${sectionKey}" section (SHALL), but none was found; parsed without it.`,
+    message: variant(
+      REQUIRED_SECTION_MISSING_BY_SECTION,
+      sectionKey,
+      WARNING_MESSAGES.REQUIRED_SECTION_MISSING,
+    ),
     position,
   };
 }
@@ -1370,19 +1631,21 @@ export function requiredSectionMissing(
  * Build a `PROCEDURE_MOOD_UNEXPECTED` warning. Emitted when a Procedure entry
  * carries a `@moodCode` outside the recognized performed (`EVN`) or planned
  * (`INT`/`RQO`/`PRMS`/`PRP`/`APT`/`ARQ`) set, the procedure is still extracted,
- * but its performed-vs-planned disposition cannot be classified. The `moodCode`
- * token is structural metadata, not PHI.
+ * but its performed-vs-planned disposition cannot be classified. The observed
+ * `@moodCode` is **not** named: it is an arbitrary attribute value at the point
+ * this fires. It survives on the entry's `disposition` inputs and in
+ * `doc.toString()`.
  *
  * @example
  * ```ts
  * import { procedureMoodUnexpected } from "@cosyte/ccda";
- * const w = procedureMoodUnexpected({ path: "procedure" }, "GOL");
+ * const w = procedureMoodUnexpected({ path: "procedure" });
  * ```
  */
-export function procedureMoodUnexpected(position: CcdaPosition, moodCode: string): CcdaWarning {
+export function procedureMoodUnexpected(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.PROCEDURE_MOOD_UNEXPECTED,
-    message: `Procedure moodCode "${moodCode}" is neither a performed (EVN) nor a recognized planned mood; extracted but unclassified.`,
+    message: WARNING_MESSAGES.PROCEDURE_MOOD_UNEXPECTED,
     position,
   };
 }
@@ -1403,7 +1666,7 @@ export function procedureMoodUnexpected(position: CcdaPosition, moodCode: string
 export function plannedVsPerformedAmbiguous(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.PLANNED_VS_PERFORMED_AMBIGUOUS,
-    message: `Procedure entry has no moodCode; performed (EVN) vs planned (INT) is ambiguous, never conflated, left unclassified.`,
+    message: WARNING_MESSAGES.PLANNED_VS_PERFORMED_AMBIGUOUS,
     position,
   };
 }
@@ -1424,7 +1687,7 @@ export function plannedVsPerformedAmbiguous(position: CcdaPosition): CcdaWarning
 export function smokingStatusUnknown(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.SMOKING_STATUS_UNKNOWN,
-    message: `Smoking status is recorded as unknown (nullFlavor or an "unknown" SNOMED concept); preserved, flagged as unknown.`,
+    message: WARNING_MESSAGES.SMOKING_STATUS_UNKNOWN,
     position,
   };
 }
@@ -1434,18 +1697,19 @@ export function smokingStatusUnknown(position: CcdaPosition): CcdaWarning {
  * Status observation's coded value is not a member of the expected Smoking
  * Status value set (`2.16.840.1.113883.11.20.9.38`), the code is preserved
  * verbatim, but it falls outside the recognized smoking-status concepts. The
- * SNOMED code is a structural identifier, not PHI.
+ * code is **not** named: this warning fires exactly when it is outside the
+ * value set, so nothing at that point distinguishes it from any other text.
  *
  * @example
  * ```ts
  * import { smokingStatusCodeUnrecognized } from "@cosyte/ccda";
- * const w = smokingStatusCodeUnrecognized({ path: "observation/value" }, "12345678");
+ * const w = smokingStatusCodeUnrecognized({ path: "observation/value" });
  * ```
  */
-export function smokingStatusCodeUnrecognized(position: CcdaPosition, code: string): CcdaWarning {
+export function smokingStatusCodeUnrecognized(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.SMOKING_STATUS_CODE_UNRECOGNIZED,
-    message: `Smoking status code "${code}" is not in the recognized Smoking Status value set; preserved verbatim.`,
+    message: WARNING_MESSAGES.SMOKING_STATUS_CODE_UNRECOGNIZED,
     position,
   };
 }
@@ -1458,24 +1722,22 @@ export function smokingStatusCodeUnrecognized(position: CcdaPosition, code: stri
  * terminology. The code is **preserved verbatim** (never coerced to a
  * "corrected" value); this surfaces the adapter's negative verdict so a
  * structurally-valid but wrong code, the highest-severity real-world defect, is
- * not silently trusted. The message carries only the slot and the code-system
- * OID (both structural identifiers); the specific code and any adapter message
- * are never interpolated, so the warning stays PHI-free.
+ * not silently trusted. The message names the {@link CodeSlot} and nothing
+ * else. It used to carry the observed `@codeSystem` OID as a "structural
+ * identifier"; a sender controls that attribute exactly as it controls the code
+ * beside it, so it is gone. The adapter's own `message` has never been
+ * interpolated and still is not: it is consumer text about a coded value.
  *
  * @example
  * ```ts
  * import { semanticCodeInvalid } from "@cosyte/ccda";
- * const w = semanticCodeInvalid({ path: "value" }, "problem", "2.16.840.1.113883.6.96");
+ * const w = semanticCodeInvalid({ path: "value" }, "problem");
  * ```
  */
-export function semanticCodeInvalid(
-  position: CcdaPosition,
-  slot: string,
-  observedOid: string,
-): CcdaWarning {
+export function semanticCodeInvalid(position: CcdaPosition, slot: CodeSlot): CcdaWarning {
   return {
     code: WARNING_CODES.SEMANTIC_CODE_INVALID,
-    message: `The supplied terminology adapter reports the ${slot} code (code system OID "${observedOid}") is not a valid member of its system; code preserved verbatim, never coerced.`,
+    message: variant(SEMANTIC_CODE_INVALID_BY_SLOT, slot, WARNING_MESSAGES.SEMANTIC_CODE_INVALID),
     position,
   };
 }
@@ -1488,21 +1750,34 @@ export function semanticCodeInvalid(
  * profile is named, so a consumer can filter known, grounded noise while the
  * fact of the deviation, and where it was, survive. A profile can only ever
  * reach this path for a **non-safety-critical** code (enforced at profile-
- * definition time); safety-critical warnings can never be tolerated. The
- * original `message` is preserved so the specifics (which OID, which LOINC)
- * are not lost, it is PHI-free by the same construction as every other factory.
+ * definition time); safety-critical warnings can never be tolerated.
+ *
+ * **The original `message` is not carried forward, and `profileName` is not
+ * interpolated.** Both used to be, which made this the one factory whose output
+ * was assembled rather than looked up. What the deviation was is on
+ * `toleratedCode`, who tolerated it is on `profile`, and where it was is on
+ * `position`, all typed fields.
+ *
+ * **Say what that costs rather than "nothing is lost".** Two things do not
+ * survive the re-badge. The tolerated code's own message is not reachable from
+ * the returned warning, because {@link WARNING_MESSAGES} is internal and is not
+ * on the package entry point. And where the original carried a per-closed-key
+ * variant, the key is not recoverable from `toleratedCode` alone: a tolerated
+ * `UNEXPECTED_CODE_SYSTEM` no longer says which {@link CodeSlot} it was about.
+ * The trade is deliberate, and narrow because a profile may only ever tolerate a
+ * **non**-safety-critical code, but it is a trade.
  *
  * @example
  * ```ts
  * import { profileQuirkApplied, deprecatedLoinc } from "@cosyte/ccda";
- * const original = deprecatedLoinc({ path: "code" }, "41909-3");
+ * const original = deprecatedLoinc({ path: "code" });
  * const w = profileQuirkApplied(original, "smartScorecard");
  * ```
  */
 export function profileQuirkApplied(original: CcdaWarning, profileName: string): CcdaWarning {
   return {
     code: WARNING_CODES.PROFILE_QUIRK_APPLIED,
-    message: `Profile "${profileName}" expected ${original.code}: ${original.message}`,
+    message: WARNING_MESSAGES.PROFILE_QUIRK_APPLIED,
     position: original.position,
     expected: true,
     profile: profileName,

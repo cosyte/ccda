@@ -188,7 +188,7 @@ function flagMisplacedEntries(
     for (const root of templateRoots(act)) {
       const home = ENTRY_ROOT_TO_SECTION.get(root);
       if (home !== undefined && home !== sectionKey) {
-        ctx.emit(sectionPlacementSuspect(positionOf(act), home, sectionKey));
+        ctx.emit(sectionPlacementSuspect(positionOf(act), home));
         break;
       }
     }

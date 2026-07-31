@@ -231,7 +231,7 @@ function readTiming(
   }
 
   if (unresolved > 0) {
-    ctx.emit(multipleEffectiveTimesUnresolved(positionOf(sbadm), unresolved));
+    ctx.emit(multipleEffectiveTimesUnresolved(positionOf(sbadm)));
   }
 
   const out: { duration?: IVL_TS; frequency?: MedicationFrequency } = {};

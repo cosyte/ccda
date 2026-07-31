@@ -8,7 +8,13 @@
  */
 
 import { attr } from "../dom.js";
-import { contradictsAssertedValue, readNullFlavor, type ParseCtx } from "./_shared.js";
+import { safeDerivedToken, WITHHELD } from "../../parser/tokens.js";
+import {
+  contradictsAssertedValue,
+  isNullFlavor,
+  readNullFlavor,
+  type ParseCtx,
+} from "./_shared.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
@@ -97,5 +103,65 @@ export function parseIi(el: Element | undefined, ctx: ParseCtx): II | undefined 
   const nullFlavor = readNullFlavor(el, ctx);
   if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
   contradictsAssertedValue(el, "II", nullFlavor, extension !== undefined, ctx);
+  return out;
+}
+
+/**
+ * Bound a `<templateId>` that is about to be kept on the model.
+ *
+ * A `templateId` is the one II whose fields are pure **locators**: it names a
+ * template, so a downstream package describing "where" a deviation was reads
+ * exactly this. Every field on it is consumer-controlled, and through `0.0.4`
+ * every one was copied verbatim onto `CcdaDocument.templateIds` and
+ * `CcdaSection.templateIds`. That is the `@cosyte/hl7` → `@cosyte/deid` failure
+ * precisely: bounding the warning messages leaves the model carrying the same
+ * unbounded string.
+ *
+ * **All four fields, not the obvious two.** The first cut of this bounded `root`
+ * and `extension` and spread the rest through, which left
+ * `assigningAuthorityName` (free text, no shape at all) and `nullFlavor` copied
+ * verbatim on an element the model presents as a structural identifier. Both are
+ * schema-legal here (`root`, `extension`, `assigningAuthorityName` are `II`'s
+ * own attributes and `nullFlavor` is inherited from `ANY`), so a sender can
+ * write anything in either. Neither means anything on a `templateId`: a template
+ * OID has no assigning authority to label, so the label is withheld outright
+ * rather than shape-tested, and the `nullFlavor` is bounded on membership in
+ * `NULL_FLAVORS`, this package's NullFlavor set. Say it that way rather than
+ * "the v3 table, which is closed": `NULL_FLAVORS` is an eight-token **subset**
+ * of the v3 vocabulary (no `PINF`, `NINF`, `TRC`, `DER`, `QS`, `NP`, `INV`), so
+ * a conforming `nullFlavor="PINF"` already draws `INVALID_NULL_FLAVOR` and now
+ * reads `<withheld>` here too. Pre-existing and unchanged by this bound, but it
+ * is load-bearing for the bound, so it should not be described as the whole
+ * table.
+ *
+ * A conforming stamp passes through untouched (`2.16.840.1.113883.10.20.22.1.2`
+ * is a UID, `2015-08-01` is a version, and neither other attribute appears at
+ * all), so recognition is unaffected: a root that fails the shape could not have
+ * matched the catalog either. Only the **other** II uses are left alone, because
+ * there `extension` is the identifier the model exists to report (an MRN, an
+ * accession number) and `assigningAuthorityName` labels the authority that
+ * issued it, so withholding either would delete clinical data instead of
+ * declining to echo a locator.
+ *
+ * @example
+ * ```ts
+ * import { boundTemplateId } from "./ii.js";
+ * const bounded = boundTemplateId({ root: "2.16.840.1.113883.10.20.22.1.2" });
+ * ```
+ *
+ * @internal
+ */
+export function boundTemplateId(id: II): II {
+  const out: {
+    root?: string;
+    extension?: string;
+    assigningAuthorityName?: string;
+    nullFlavor?: string;
+  } = { ...id };
+  if (id.root !== undefined) out.root = safeDerivedToken(id.root, "uid");
+  if (id.extension !== undefined) out.extension = safeDerivedToken(id.extension, "templateVersion");
+  if (id.assigningAuthorityName !== undefined) out.assigningAuthorityName = WITHHELD;
+  if (id.nullFlavor !== undefined)
+    out.nullFlavor = isNullFlavor(id.nullFlavor) ? id.nullFlavor : WITHHELD;
   return out;
 }

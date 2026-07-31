@@ -8,10 +8,11 @@
  */
 
 import { sectionForLoinc, sectionForTemplateRoot, type SectionInfo } from "../parser/templates.js";
+import { safeDerivedToken } from "../parser/tokens.js";
 import { sectionMatchedByLoincFallback, unknownSectionCode } from "../parser/warnings.js";
 import { attr, child, childElements, children, positionOf, text } from "./dom.js";
 import { parseCd, type CD } from "./types/cd.js";
-import { parseIi, type II } from "./types/ii.js";
+import { boundTemplateId, parseIi, type II } from "./types/ii.js";
 import type { ParseCtx } from "./types/_shared.js";
 import type { Element } from "@xmldom/xmldom";
 
@@ -61,7 +62,8 @@ export interface CcdaSection {
 export function buildSection(el: Element, ctx: ParseCtx): CcdaSection {
   const templateIds = children(el, "templateId")
     .map((t) => parseIi(t, ctx))
-    .filter((t): t is II => t !== undefined);
+    .filter((t): t is II => t !== undefined)
+    .map(boundTemplateId);
   const code = parseCd(child(el, "code"), ctx);
   const titleEl = child(el, "title");
   const title = titleEl === undefined ? undefined : text(titleEl);
@@ -121,12 +123,16 @@ function recognize(
   const loinc = code?.code;
   if (loinc !== undefined) {
     const info = sectionForLoinc(loinc);
-    const pos = { ...positionOf(el), sectionCode: loinc };
+    // `sectionCode` is echoed only when it has the shape of a LOINC part number.
+    // `UNKNOWN_SECTION_CODE` fires precisely when the code is unrecognized, so
+    // membership would always withhold here and a sender's arbitrary `@code`
+    // would otherwise reach the position object verbatim.
+    const pos = { ...positionOf(el), sectionCode: safeDerivedToken(loinc, "loinc") };
     if (info !== undefined) {
-      ctx.emit(sectionMatchedByLoincFallback(pos, loinc));
+      ctx.emit(sectionMatchedByLoincFallback(pos));
       return { info, by: "loinc" };
     }
-    ctx.emit(unknownSectionCode(pos, loinc));
+    ctx.emit(unknownSectionCode(pos));
   }
   return undefined;
 }

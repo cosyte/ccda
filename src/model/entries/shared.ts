@@ -23,6 +23,7 @@ import {
   narrativeReferenceBroken,
   negationVsNullFlavorAmbiguous,
   problemStatusIndeterminate,
+  type NarrativeSlot,
 } from "../../parser/warnings.js";
 import type { Element } from "@xmldom/xmldom";
 
@@ -1066,7 +1067,7 @@ export function readNegation(
   const negated = parseBlAttr(el, "negationInd");
   const nullFlavor = attr(el, "nullFlavor");
   if (negated === true && nullFlavor !== undefined) {
-    ctx.emit(negationVsNullFlavorAmbiguous(positionOf(el), nullFlavor));
+    ctx.emit(negationVsNullFlavorAmbiguous(positionOf(el)));
   }
   const out: { negated?: boolean; nullFlavor?: string } = {};
   if (negated !== undefined) out.negated = negated;
@@ -1099,7 +1100,7 @@ export function resolveNarrative(
   const id = value.slice(1);
   const narrative = narrativeById.get(id);
   if (narrative === undefined) {
-    ctx.emit(narrativeReferenceBroken(positionOf(ref), id));
+    ctx.emit(narrativeReferenceBroken(positionOf(ref)));
     return undefined;
   }
   return narrative;
@@ -1121,7 +1122,7 @@ export function resolveNarrative(
 export function reconcileCode(
   code: CD | undefined,
   narrative: string | undefined,
-  slot: string,
+  slot: NarrativeSlot,
   position: CcdaPosition,
   ctx: ParseCtx,
 ): void {

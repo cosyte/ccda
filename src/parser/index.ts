@@ -15,7 +15,7 @@
  * warning to a thrown {@link CcdaParseError} so callers get one catch surface.
  */
 
-import { CcdaParseError, FATAL_CODES, type FatalCode } from "./errors.js";
+import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES, type FatalCode } from "./errors.js";
 import { V3_NS } from "./namespaces.js";
 import { parseSecureXml, resolveLimits } from "./secure-xml.js";
 import type { ParseCcdaOptions } from "./types.js";
@@ -66,14 +66,14 @@ export function parseCcda(raw: string, options: ParseCcdaOptions = {}): CcdaDocu
   if (root === null) {
     throw new CcdaParseError(
       FATAL_CODES.NOT_WELL_FORMED_XML,
-      "Input produced no document element.",
+      FATAL_MESSAGES.NOT_WELL_FORMED_XML,
       {},
     );
   }
   if (root.namespaceURI !== V3_NS || root.localName !== "ClinicalDocument") {
     throw new CcdaParseError(
       FATAL_CODES.NOT_A_CLINICAL_DOCUMENT,
-      `Root element is <${root.localName ?? "?"}>, not a ClinicalDocument in the HL7 v3 namespace.`,
+      FATAL_MESSAGES.NOT_A_CLINICAL_DOCUMENT,
       positionOf(root),
     );
   }

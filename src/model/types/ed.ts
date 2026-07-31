@@ -9,7 +9,13 @@
  */
 
 import { attr, child, text } from "../dom.js";
-import { contradictsAssertedValue, readNullFlavor, type ParseCtx } from "./_shared.js";
+import { safeMediaType, safeRepresentation, WITHHELD } from "../../parser/tokens.js";
+import {
+  contradictsAssertedValue,
+  isNullFlavor,
+  readNullFlavor,
+  type ParseCtx,
+} from "./_shared.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
@@ -58,10 +64,14 @@ export function parseEd(el: Element | undefined, ctx: ParseCtx): ED | undefined 
     nullFlavor?: string;
   } = {};
 
+  // `mediaType`, `representation` and `nullFlavor` describe the *shape* of the
+  // content rather than being the content, so they are the three locators on an
+  // `ED` and are bounded. `value` and `reference` are the document's own text
+  // and are kept verbatim.
   const mediaType = attr(el, "mediaType");
-  if (mediaType !== undefined) out.mediaType = mediaType;
+  if (mediaType !== undefined) out.mediaType = safeMediaType(mediaType);
   const representation = attr(el, "representation");
-  if (representation !== undefined) out.representation = representation;
+  if (representation !== undefined) out.representation = safeRepresentation(representation);
 
   const referenceEl = child(el, "reference");
   if (referenceEl !== undefined) {
@@ -73,8 +83,15 @@ export function parseEd(el: Element | undefined, ctx: ParseCtx): ED | undefined 
   const inline = text(el);
   if (inline !== undefined) out.value = inline;
 
+  // Bounded like the other two, and for the same reason: it rides on the object
+  // the model presents as the body's shape, and `INVALID_NULL_FLAVOR` fires
+  // exactly when the token is outside the set, so at that point nothing
+  // distinguishes it from any other text. Bounded on membership in this
+  // package's `NULL_FLAVORS`; the token itself survives in `doc.toString()`.
   const nullFlavor = readNullFlavor(el, ctx);
-  if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
+  if (nullFlavor !== undefined) {
+    out.nullFlavor = isNullFlavor(nullFlavor) ? nullFlavor : WITHHELD;
+  }
   contradictsAssertedValue(
     el,
     "ED",

@@ -14,19 +14,32 @@ document is a hard failure.
 
 ## The tiers
 
-| Tier | Behavior | Example |
-|---|---|---|
-| **0 / 1** | Accepted silently: conformant or trivially recoverable. | A section recognized by its `templateId`. |
-| **2** | **Warning** with a stable code + PHI-free position; recovery continues. Escalates to a throw under `{ strict: true }`. | An unrecognized section LOINC code, a missing `doseQuantity`, a code/narrative mismatch. |
-| **3** | **Fatal**: a thrown `CcdaParseError`, always (even in lenient mode). | Malformed XML, a non-`ClinicalDocument` root, a security tripwire. |
+| Tier      | Behavior                                                                                                                         | Example                                                                                  |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **0 / 1** | Accepted silently: conformant or trivially recoverable.                                                                          | A section recognized by its `templateId`.                                                |
+| **2**     | **Warning** with a stable code + bounded structural position; recovery continues. Escalates to a throw under `{ strict: true }`. | An unrecognized section LOINC code, a missing `doseQuantity`, a code/narrative mismatch. |
+| **3**     | **Fatal**: a thrown `CcdaParseError`, always (even in lenient mode).                                                             | Malformed XML, a non-`ClinicalDocument` root, a security tripwire.                       |
 
 ## The warning-code model
 
-Every Tier-2 warning carries a **stable string code** (`WARNING_CODES.*`), a PHI-free `message`, and a
-structural `position`. Consumers branch on `w.code`, so **renaming a code is a breaking change**. The
-message and position interpolate only structural values (element names, OIDs, LOINC codes, positions),
-never a patient name, an identifier, or narrative text: you can log the whole `.warnings` array without
-leaking PHI.
+Every Tier-2 warning carries a **stable string code** (`WARNING_CODES.*`), a `message`, and a
+structural `position`. Consumers branch on `w.code`, so **renaming a code is a breaking change**.
+
+The `message` comes whole from a frozen registry and **interpolates nothing**: no warning factory takes
+a value parameter, so no attribute value, coded token or element name from the document can reach one.
+A handful of codes carry a variant per closed-set key (which `CodeSlot`, which catalog section), and
+those variants are generated from the parser's own tables. The `position` is bounded rather than
+copied: `path` is echoed only for an element name this parser navigates, `sectionCode` only for a
+LOINC-shaped code. So you can log the whole `.warnings` array without leaking PHI.
+
+Most of the specifics a message used to name are still on the model: a section's `<code>` is on
+`section.code`, a unit on `PQ.unit`, an unmodelled datatype's raw text on the observation value. Two
+are not, and it is worth naming them rather than implying the model covers everything.
+`MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED` no longer says how many siblings it could not classify and no
+model field counts them, so that number is only in the source. And a `PROFILE_QUIRK_APPLIED` carries
+the tolerated warning's `code` and `position` but not its text, so where the original had a per-slot
+wording (which `CodeSlot` an `UNEXPECTED_CODE_SYSTEM` was about) the slot is not recoverable from the
+re-badged warning. In every case `doc.toString()` re-emits the parsed DOM byte-for-byte.
 
 Warnings are collected on `doc.warnings` and also delivered live to the `onWarning` callback, in
 discovery order:
@@ -93,15 +106,15 @@ Seven Tier-3 codes are unrecoverable and throw a `CcdaParseError` regardless of 
 five are **security fatals** raised by the hardened XML substrate before/while building the DOM, the
 load-bearing defense against hostile XML:
 
-| Fatal code | Meaning |
-|---|---|
-| `XXE_OR_DTD_PRESENT` | The document declared a DTD or an external entity. |
-| `ENTITY_EXPANSION_LIMIT` | Too many `&…;` entity references (billion-laughs). |
-| `INPUT_SIZE_LIMIT_EXCEEDED` | Decoded input exceeds the byte cap. |
-| `ELEMENT_DEPTH_LIMIT_EXCEEDED` | Element nesting too deep. |
-| `NODE_COUNT_LIMIT_EXCEEDED` | Too many element nodes. |
-| `NOT_WELL_FORMED_XML` | The bytes did not parse as XML. |
-| `NOT_A_CLINICAL_DOCUMENT` | Well-formed, but the root element is not `ClinicalDocument`. |
+| Fatal code                     | Meaning                                                      |
+| ------------------------------ | ------------------------------------------------------------ |
+| `XXE_OR_DTD_PRESENT`           | The document declared a DTD or an external entity.           |
+| `ENTITY_EXPANSION_LIMIT`       | Too many `&…;` entity references (billion-laughs).           |
+| `INPUT_SIZE_LIMIT_EXCEEDED`    | Decoded input exceeds the byte cap.                          |
+| `ELEMENT_DEPTH_LIMIT_EXCEEDED` | Element nesting too deep.                                    |
+| `NODE_COUNT_LIMIT_EXCEEDED`    | Too many element nodes.                                      |
+| `NOT_WELL_FORMED_XML`          | The bytes did not parse as XML.                              |
+| `NOT_A_CLINICAL_DOCUMENT`      | Well-formed, but the root element is not `ClinicalDocument`. |
 
 Narrow on `err.code`:
 

@@ -56,12 +56,25 @@ non-UCUM unit) is a warning you triage, not an exception you catch.
 
 ## Keeping PHI out of logs
 
-Every warning `message` and error is **PHI-free by construction**: it carries the stable code and a
-structural position (element path, OID, LOINC code, line/column), never a patient name, an identifier,
-a date, or narrative text. You can log the full `.warnings` array without leaking. Keep the same
-discipline in your own code: log the code and position, not the field content. A `CcdaParseError`
-deliberately retains **no raw input snippet**, precisely because a C-CDA payload is a clinical document
-and any snippet would risk leaking PHI.
+Every warning `message` and every `CcdaParseError` message comes **whole from a frozen registry**. No
+factory takes a value parameter, so nothing the document said, and nothing a sender chose, can reach a
+message: not a template OID, not a `nullFlavor` token, not a unit, not an element name. A diagnostic
+tells you `code` plus `position`, and that is the entire contract.
+
+The `position` is bounded too, rather than copied. Its `path` is an element local name echoed only when
+it is one this parser navigates (`<withheld>` otherwise), and its `sectionCode` is echoed only when it
+has the shape of a LOINC part number. `line` and `column` still locate the element exactly.
+
+So you can log the full `.warnings` array, and a thrown `CcdaParseError`'s `message`, `stack` and
+`position`, without leaking. Keep the same discipline in your own code: log the code and the position,
+not the field content. A `CcdaParseError` deliberately retains **no raw input snippet**, precisely
+because a C-CDA payload is a clinical document and any snippet would risk leaking PHI.
+
+**This page said the opposite through `0.0.4`**, claiming messages were PHI-free "by
+construction" while thirteen warning factories and one fatal interpolated a value straight from the
+document. A 500,000-byte `templateId` root produced a 500,106-byte `.message`, and under
+`{ strict: true }` it reached `err.stack`. If you shipped `.warnings` to a log aggregator on any
+version at or before `0.0.4`, treat those log lines as potentially carrying document content.
 
 ## What it does, and does not do, today
 

@@ -174,7 +174,7 @@ export function buildHeader(root: Element, ctx: ParseCtx): CcdaHeader {
 
   const recordTargets = children(root, "recordTarget");
   if (recordTargets.length > 1) {
-    ctx.emit(multipleRecordTargets(positionOf(root), recordTargets.length));
+    ctx.emit(multipleRecordTargets(positionOf(root)));
   }
   out.recordTargets = recordTargets
     .map((rt) => child(rt, "patientRole"))

@@ -148,7 +148,7 @@ conflicted; // => true
 
 **The problem:** you want to log or triage every tolerated deviation without your pipeline throwing on
 a vendor quirk. `@cosyte/ccda` is liberal on input: only the seven Tier-3 structural/security errors
-ever throw; everything else is a warning carrying a stable code and PHI-free position.
+ever throw; everything else is a warning carrying a stable code and a bounded structural position.
 
 Every warning collects on `doc.warnings`; you can also stream them live via `onWarning`:
 
@@ -184,8 +184,8 @@ const doc = parseCcda(xml, {
   onWarning: (w) => {
     streamed.push(w);
     // w.code: a stable string from WARNING_CODES
-    // w.message: bounded, PHI-free (never echoes names/ids/dates/narrative)
-    // w.position: where in the document it occurred (element path, OID, LOINC)
+    // w.message: a frozen registry string; it interpolates nothing at all
+    // w.position: where in the document it occurred (bounded element path, LOINC, line/column)
   },
 });
 
