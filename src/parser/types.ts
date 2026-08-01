@@ -80,7 +80,15 @@ export interface CcdaPosition {
 /**
  * Callback invoked inline each time the parser emits a Tier-2 warning.
  * Always fires BEFORE the warning is appended to `CcdaDocument.warnings` so
- * consumers observe warnings in the same order the parser discovered them.
+ * consumers observe warnings in the same order the parser emitted them.
+ *
+ * That is emission order, and for one code it is deliberately not discovery
+ * order: `UNKNOWN_NAMESPACE_PREFIX` is found during the pre-parse DOM walk and
+ * replayed **last**, after the model is built. It is a statement about the whole
+ * document, and emitting it where it is found would let it take the place of the
+ * `NOT_A_CLINICAL_DOCUMENT` fatal, or of the first safety-critical per-element
+ * warning, under `{ strict: true }`, where the first warning is the one that
+ * throws. Nothing else is reordered.
  *
  * @example
  * ```ts
@@ -139,7 +147,7 @@ export interface CcdaParseLimits {
 export interface ParseCcdaOptions {
   /** When `true`, escalate every Tier-2 deviation to a thrown error instead of a warning. */
   readonly strict?: boolean;
-  /** Inline callback fired for each Tier-2 warning, in discovery order. */
+  /** Inline callback fired for each Tier-2 warning, in emission order (see {@link OnWarningCallback}). */
   readonly onWarning?: OnWarningCallback;
   /** Override one or more of the default safety caps applied before DOM construction. */
   readonly limits?: CcdaParseLimits;

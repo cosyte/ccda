@@ -435,10 +435,10 @@ describe("applyProfile, pure warning transform", () => {
 /**
  * `CcdaPosition.templateId` was declared and populated by nothing through
  * `0.0.4`, so a `QuirkTolerance` keyed on a template OID could never match and
- * such a profile entry silently tolerated nothing. The four recognition
- * warnings carry it now, and each of them is pinned here alongside a tolerance
- * that keys on it: a test that only checked the field is present would not have
- * caught the inert-match half.
+ * such a profile entry silently tolerated nothing. **Three** codes carry it now
+ * and each is pinned below, along with the two document-level codes that
+ * deliberately carry none, and a tolerance that keys on the field: a test that
+ * only checked the field is present would not have caught the inert-match half.
  */
 describe("position.templateId, and the profile matching it enables", () => {
   const CCD_ROOT = "2.16.840.1.113883.10.20.22.1.2";
@@ -478,11 +478,23 @@ describe("position.templateId, and the profile matching it enables", () => {
     expect(w?.position.templateId).toBeUndefined();
   });
 
-  it("the section recognition warnings name the section's own first root", () => {
+  it("SECTION_MATCHED_BY_LOINC_FALLBACK names the section's own first root", () => {
     const doc = parseCcda(buildCcda({ sections: vendorStampedProblems }));
     const w = find(doc.warnings, WARNING_CODES.SECTION_MATCHED_BY_LOINC_FALLBACK);
     expect(w?.position.templateId).toBe(VENDOR_SECTION_ROOT);
     expect(w?.position.sectionCode).toBe("11450-4");
+  });
+
+  it("UNKNOWN_SECTION_CODE names it too, on a section neither signal recognizes", () => {
+    // Same section stamp, but a LOINC code that is in no catalog either, so
+    // recognition fails on both signals and the other of the two codes fires.
+    const unrecognized = vendorStampedProblems.replace(`code="11450-4"`, `code="99999-9"`);
+    const w = find(
+      parseCcda(buildCcda({ sections: unrecognized })).warnings,
+      WARNING_CODES.UNKNOWN_SECTION_CODE,
+    );
+    expect(w?.position.templateId).toBe(VENDOR_SECTION_ROOT);
+    expect(w?.position.sectionCode).toBe("99999-9");
   });
 
   it("withholds a root that is not shaped like an HL7 v3 UID", () => {

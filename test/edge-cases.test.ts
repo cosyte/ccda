@@ -29,7 +29,7 @@ import {
   type CcdaWarning,
 } from "../src/index.js";
 import { unknownNamespacePrefix } from "../src/parser/warnings.js";
-import { buildCcda } from "./__fixtures__/ccda.js";
+import { buildCcda, NO_REQUIRED_SECTIONS_DOC_OID, PROBLEMS_SECTION } from "./__fixtures__/ccda.js";
 
 function el(fragment: string): Element {
   const doc = new DOMParser().parseFromString(
@@ -228,7 +228,10 @@ describe("warning factory, unknownNamespacePrefix", () => {
 describe("foreign-namespace sweep", () => {
   /** Splice raw XML in after the header's `languageCode`, inside `ClinicalDocument`. */
   const withExtra = (extra: string): string =>
-    buildCcda().replace(`<languageCode code="en-US"/>`, `<languageCode code="en-US"/>${extra}`);
+    buildCcda({
+      docTypeOid: NO_REQUIRED_SECTIONS_DOC_OID,
+      mrnAssigningAuthority: true,
+    }).replace(`<languageCode code="en-US"/>`, `<languageCode code="en-US"/>${extra}`);
 
   const foreign = (xml: string): readonly CcdaWarning[] =>
     parseCcda(xml).warnings.filter((w) => w.code === WARNING_CODES.UNKNOWN_NAMESPACE_PREFIX);
@@ -272,17 +275,47 @@ describe("foreign-namespace sweep", () => {
   it("escalates in strict mode like any other Tier-2 deviation", () => {
     const xml = withExtra(`<vnd:note xmlns:vnd="urn:example:vendor"/>`);
     expect(() => parseCcda(xml, { strict: true })).toThrow(
-      /namespace prefix outside the recognized/u,
+      /outside the recognized v3\/xsi\/sdtc namespaces/u,
     );
   });
 
-  it("leaves the document element to the root gate, in strict mode too", () => {
-    // A root outside v3 is NOT_A_CLINICAL_DOCUMENT, and sweeping it would take
-    // that fatal's place under `strict` (the emitter escalates the first warning).
-    const notCcda = `<?xml version="1.0" encoding="UTF-8"?><Bundle xmlns="http://hl7.org/fhir"/>`;
+  /*
+   * The sweep runs before the root gate and before any clinical parsing, and in
+   * strict mode the emitter escalates the FIRST warning it is handed, so
+   * emitting where it is found took the place of a fatal and of a
+   * safety-critical code. Both fixtures below carry CHILD elements on purpose: a
+   * childless foreign document passes whatever the code does, and that is the
+   * shape of test that let this through the first time.
+   */
+  it("never takes the root gate's place, however deep the foreign document goes", () => {
+    const bundle =
+      `<?xml version="1.0" encoding="UTF-8"?>` +
+      `<Bundle xmlns="http://hl7.org/fhir"><id value="abc"/><entry><resource/></entry></Bundle>`;
     for (const opts of [{}, { strict: true }]) {
-      expect(() => parseCcda(notCcda, opts)).toThrow(/The root element is not a ClinicalDocument/u);
+      expect(() => parseCcda(bundle, opts)).toThrow(/The root element is not a ClinicalDocument/u);
     }
+  });
+
+  it("never takes a safety-critical code's place under strict mode", () => {
+    // The problem observation's value loses its @codeSystem: MISSING_CODE_SYSTEM,
+    // safety-critical and unquietable. The vendor block must not throw first.
+    const xml = buildCcda({
+      docTypeOid: NO_REQUIRED_SECTIONS_DOC_OID,
+      sections: PROBLEMS_SECTION,
+      mrnAssigningAuthority: true,
+    })
+      .replace(
+        `<languageCode code="en-US"/>`,
+        `<languageCode code="en-US"/><vnd:note xmlns:vnd="urn:example:vendor"><vnd:inner/></vnd:note>`,
+      )
+      .replace(`code="59621000" codeSystem="2.16.840.1.113883.6.96"`, `code="59621000"`);
+
+    expect(() => parseCcda(xml, { strict: true })).toThrow(/no @codeSystem/u);
+
+    // Lenient mode still reports both, with the namespace warning replayed last.
+    const codes = parseCcda(xml).warnings.map((w) => w.code);
+    expect(codes).toContain(WARNING_CODES.MISSING_CODE_SYSTEM);
+    expect(codes.at(-1)).toBe(WARNING_CODES.UNKNOWN_NAMESPACE_PREFIX);
   });
 });
 

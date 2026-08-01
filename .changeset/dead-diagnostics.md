@@ -17,6 +17,16 @@ HL7 v3 NullFlavor code system rather than eight of its seventeen concepts.
   so sweeping them would flag every attribute in a conforming document. The node is retained and
   round-trips through `serializeCcda` unchanged.
 
+  It is replayed **after** the model is built rather than emitted where it is found, because under
+  `{ strict: true }` the first warning is the one that throws: a namespace deviation is a statement
+  about the whole document and must not take the place of `NOT_A_CLINICAL_DOCUMENT` on a payload
+  that is not a C-CDA, or of a safety-critical code such as `MISSING_CODE_SYSTEM` on one that is. In
+  lenient mode that means these land last on `doc.warnings`, so `OnWarningCallback` now documents
+  emission order rather than discovery order. The message text also changed, because the code name is
+  historical: it says `PREFIX`, but what is tested is the element's namespace, and an element in no
+  namespace at all raises it with no prefix in sight. Renaming a stable code would be breaking, so
+  the message says what the code does instead.
+
 - **`CcdaPosition.templateId` is populated.** It was declared and set by nothing, so a
   `QuirkTolerance` keyed on a template OID silently tolerated nothing. Three codes carry it now:
   `TEMPLATE_EXTENSION_ABSENT` (the matched document-type root) and `UNKNOWN_SECTION_CODE` /

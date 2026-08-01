@@ -223,7 +223,7 @@ export const WARNING_MESSAGES: Readonly<Record<WarningCode, string>> = Object.fr
   CONTRADICTORY_NULL_FLAVOR:
     "The element declares a nullFlavor and asserts a value at the same time; the document contradicts itself, so the value is preserved verbatim but never read as the field's value.",
   UNKNOWN_NAMESPACE_PREFIX:
-    "A namespace prefix outside the recognized v3/xsi/sdtc set was used; the node is retained.",
+    "An element outside the recognized v3/xsi/sdtc namespaces, or in no namespace at all, was found; the node is retained and reported once per distinct namespace.",
   MALFORMED_DATETIME:
     "Value does not match the HL7 v3 TS datetime shape; raw preserved, parsed date left undefined.",
   MULTIPLE_RECORD_TARGETS:
@@ -581,8 +581,15 @@ export function contradictoryNullFlavor(position: CcdaPosition, datatype: string
  * the XSI namespace and `urn:hl7-org:sdtc`, including an element carrying no
  * namespace at all), the node is still retained and round-trips through
  * `serializeCcda` unchanged. Raised **once per distinct foreign namespace** in a
- * document, positioned on the first element that used it; see the DOM walk in
- * `../parser/secure-xml.ts` for why. Attributes are not swept.
+ * document, positioned on the shallowest element using it rather than the first
+ * in document order, and replayed after the model is built rather than where it
+ * is found; see the DOM walk in `./secure-xml.ts` and `parseCcda` for both
+ * reasons. Attributes are not swept.
+ *
+ * The code name is historical: it says `PREFIX`, but what is tested is the
+ * element's **namespace**, and an element with no namespace at all raises it
+ * with no prefix in sight. Renaming a code is a breaking change, so the message
+ * says what the code does instead.
  *
  * @example
  * ```ts

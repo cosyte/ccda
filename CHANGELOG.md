@@ -25,23 +25,38 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
     is raised from `enforceStructureLimits` in `src/parser/secure-xml.ts`, the depth / node-count
     walk, because that is the package's only exhaustive traversal and the sweep therefore costs no
     second pass.
-  - **The sweep emits once per distinct foreign namespace, not once per node**, positioned on the
-    first element that used it. A vendor extension block is one deviation however many elements it
-    spans, and per-node emission would turn one deviation into `maxNodeCount` warnings on a hostile
-    document made entirely of foreign elements. An element carrying no namespace at all counts as
-    foreign, matching `isRecognizedNamespace`, which reads a `null` URI that way; it is tracked by
-    its own flag rather than a sentinel string key, so nothing a document can carry collides with it.
-  - **The document element is deliberately not swept either.** A root outside `urn:hl7-org:v3` is
-    already the root gate's `NOT_A_CLINICAL_DOCUMENT` fatal and a root inside it is recognized, so
-    the root can never produce a warning worth having. Sweeping it would cost something: under
-    `{ strict: true }` the emitter escalates the first warning, so a FHIR bundle handed to
-    `parseCcda` would have thrown `UNKNOWN_NAMESPACE_PREFIX` in place of the fatal that actually
-    describes it.
+  - **It is replayed after the model is built, never emitted where it is found, and that ordering is
+    the load-bearing part.** The walk runs before `parseCcda`'s root gate and before any clinical
+    parsing, and under `{ strict: true }` the emitter escalates the **first** warning it is handed.
+    Emitting in place therefore let a foreign vendor block throw `UNKNOWN_NAMESPACE_PREFIX` where a
+    non-C-CDA payload should have thrown `NOT_A_CLINICAL_DOCUMENT`, and where a C-CDA carrying a
+    real defect should have thrown a **safety-critical** code such as `MISSING_CODE_SYSTEM`. Both
+    were caught by the conformance gate on this slice and are pinned by
+    `test/dead-diagnostics-matrix.test.ts`. A namespace deviation is a statement about the whole
+    document and must never take a fatal's or a safety-critical code's place. The cost, stated
+    rather than hidden: in lenient mode these land last on `doc.warnings` instead of in discovery
+    order, so `OnWarningCallback` documents emission order now.
+  - **The sweep reports once per distinct foreign namespace, not once per node.** A vendor extension
+    block is one deviation however many elements it spans. **That bounds the benign case and is not
+    a defence:** a document declaring a distinct namespace on every element still produces one
+    warning per element, bounded only by `maxNodeCount`, exactly as every other per-element warning
+    in this parser is. An element carrying no namespace at all counts as foreign, matching
+    `isRecognizedNamespace`, which reads a `null` URI that way; it is tracked by its own flag rather
+    than a sentinel string key, so nothing a document can carry collides with it.
+  - **The position is the shallowest use of the namespace, not the first in document order.** The
+    walk is level-order, because it enforces a depth cap and a depth-first version would be the
+    recursion it exists to avoid. `line` and `column` locate the element the warning names exactly;
+    they simply do not name the earliest such element.
   - **Attributes are deliberately not swept.** An unprefixed C-CDA attribute (`root`, `code`,
     `nullFlavor`) carries no namespace at all and an `xmlns:` declaration lives in the namespace
     reserved for declarations, so an attribute sweep against the recognized set would flag every
     attribute in a conforming document. The factory's docblock said "an element or attribute" and now
     says what the code does.
+  - **The message text changed, because the code name is historical.** The code says `PREFIX` but
+    what is tested is the element's **namespace**, and an element in no namespace at all raises it
+    with no prefix in sight. Renaming a stable code is a breaking change, so the frozen message says
+    what the code does instead: "An element outside the recognized v3/xsi/sdtc namespaces, or in no
+    namespace at all, was found; the node is retained and reported once per distinct namespace.
   - **Neither the prefix nor the namespace URI reaches the warning.** The message comes whole from
     the frozen registry and the position carries the bounded element **local name**, so a foreign
     `<vnd:note>` positions as `<withheld>`. This closes the `expectCode: null` on the
@@ -100,12 +115,13 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
     carry the field, so an inert tolerance is documented rather than refused. Turning that into a
     definition-time throw needs a code-to-position-field registry, which is exactly the kind of
     stated claim that outlives the code it describes, so it is filed rather than smuggled in.
-  - **Monotonicity, measured against base `src/` rather than argued.** A 49-row matrix (recognition
-    shapes, namespace shapes, and all seventeen NullFlavor concepts plus two controls, each planted
-    on a header `<administrativeGenderCode>` and on a medication `<doseQuantity>`) was run against
-    the previous tree and against this one and the two outputs diffed. **24 rows are byte-identical**,
-    including the clean CCD, the `sdtc` element, `MISSING_TEMPLATE_ID`, and every one of the eight
-    tokens the old list already held. **Seven rows are pure gain**: four add
+  - **Monotonicity, measured against base `src/` in BOTH modes rather than argued.** A 51-row matrix
+    (recognition shapes, namespace shapes including a foreign root and a foreign block beside a
+    safety-critical defect, and all seventeen NullFlavor concepts plus two controls, each planted on
+    a header `<administrativeGenderCode>` and on a medication `<doseQuantity>`) was run against the
+    previous tree and against this one and the two outputs diffed. **25 rows are byte-identical**,
+    including the clean CCD, the `sdtc` element, `MISSING_TEMPLATE_ID`, the foreign root, and every
+    one of the eight tokens the old list already held. **Eight rows are pure gain**: five add
     `UNKNOWN_NAMESPACE_PREFIX` (the two-namespace row adds two of it), and three add a
     `position.templateId` to a warning whose code is unchanged. **Eighteen rows go from
     `INVALID_NULL_FLAVOR` to silent on that code**, and that is a false positive being withdrawn
@@ -114,6 +130,27 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
     allowed to tolerate it) and no row stops reporting anything else. The two controls hold: `NOPE`
     still draws the warning, and so does lower-case `unk`, because the code system is
     `caseSensitive`.
+  - **The strict-mode column moves on 22 of the 51 rows, and every one of those moves is this
+    change's intended effect.** Four rows go from throwing nothing to throwing
+    `UNKNOWN_NAMESPACE_PREFIX`, and eighteen stop throwing a false `INVALID_NULL_FLAVOR`. They are
+    the same rows already counted in the eight-gain and eighteen-withdrawn buckets above, not
+    movement beyond them. What holds across all 51 rows is the narrower pair the test asserts: **no
+    row's strict outcome moved independently of its lenient one**, and **no row's strict outcome is
+    a namespace code where base threw a fatal or a safety-critical one**.
+  - **The first measurement had no strict column at all.** It was taken over a lenient-mode
+    projection, which structurally could not see either of the two real defects in the first cut of
+    this change, both of which lived only in strict mode. This repo already records that a filtered
+    projection cannot support a monotonicity claim; it was learned again here.
+    `test/dead-diagnostics-matrix.test.ts` pins both modes and filters nothing.
+  - **What is committed is the 32-row subset of that matrix, not all 51 rows.**
+    `test/dead-diagnostics-matrix.test.ts` holds the thirteen recognition and namespace shapes plus
+    the nineteen NullFlavor tokens planted on `<administrativeGenderCode>`; the `<doseQuantity>`
+    half of the planting was measured by hand and is not in the file. Re-run **the file** against
+    the previous tree and the diff is **32 rows, 15 identical, 8 pure gain, 9 withdrawing a false
+    `INVALID_NULL_FLAVOR`**, with the strict column moving on 13 of them. Those are the numbers to
+    expect from it. They differ from the 51-row totals above only in the NullFlavor counts, which
+    the `<doseQuantity>` planting doubles, because each of those rows moved identically to its
+    `<administrativeGenderCode>` twin.
 
 ### Changed
 
@@ -200,13 +237,13 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
     failed**: five model-identifier leaks, one `err.message` (and `err.stack`) leak on the fatal,
     and fourteen warning-message leaks. A second test asserts every emitted message is a member of the frozen registry, so a
     factory that starts interpolating again fails without anyone having to think of the slot.
-  - **Known residual, stated rather than papered over.** `UNKNOWN_NAMESPACE_PREFIX` is in
-    `WARNING_CODES` and has a factory, but no call site in `src/` emits it; a foreign namespace prefix
-    is reported nowhere. That is a pre-existing gap this work found rather than introduced, and the
-    slot covering it carries `expectCode: null` for exactly that reason. Second, `CcdaPosition`
-    declares a `templateId` field that **no site in `src/` populates**, so a `QuirkTolerance` keyed
-    on a template OID can never match and silently tolerates nothing. Both are pre-existing, both are
-    now written down on the type's own docblock, and neither is closed here.
+  - **Two residuals were stated here rather than papered over, and both are CLOSED in the same
+    unreleased version, above.** `UNKNOWN_NAMESPACE_PREFIX` was in `WARNING_CODES` with a factory
+    and no call site, so a foreign namespace was reported nowhere and the slot covering it carried
+    `expectCode: null`; and `CcdaPosition.templateId` was declared and populated by nothing, so a
+    `QuirkTolerance` keyed on a template OID silently tolerated nothing. Both were pre-existing gaps
+    this work found rather than introduced. Read the `Fixed` entry above for what they do now; this
+    paragraph is kept because it records where they were found, not because either is still open.
 
 - **Public-surface hygiene (`PUBLIC-SURFACE-HYGIENE`, founder directive 2026-07-27).** Internal
   project bookkeeping is gone from every surface a consumer reads: `README.md`, `docs-content/`, the

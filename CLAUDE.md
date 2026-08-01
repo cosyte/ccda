@@ -529,17 +529,37 @@ immutability + explicit mutation, and the profile system.
     node-count walk is the package's **only exhaustive traversal**; the sweep rides on it and costs
     no second pass. If you ever add a diagnostic about a node this parser does not navigate, that
     walk is where it goes.
-    **Once per distinct foreign namespace, not once per node.** A vendor extension block is one
-    deviation however many elements it spans, and per-node emission would turn one deviation into
-    `maxNodeCount` warnings on a hostile document made entirely of foreign elements. An element with
-    no namespace at all counts as foreign (`isRecognizedNamespace` reads a `null` URI that way) and
-    is tracked by its own flag rather than a sentinel string key, so nothing a document can carry
-    collides with it.
-    **The document element is deliberately NOT swept.** A root outside `urn:hl7-org:v3` is already
-    `NOT_A_CLINICAL_DOCUMENT` and a root inside it is recognized, so the root can never produce a
-    warning worth having, and sweeping it would cost one: under `{ strict: true }` the emitter
-    escalates the first warning, so a FHIR bundle handed to `parseCcda` would throw
-    `UNKNOWN_NAMESPACE_PREFIX` instead of the fatal that describes it. A test pins both modes.
+    **It is REPLAYED after the model is built, never emitted where it is found, and this is the part
+    that was got wrong first and must not be undone.** The walk runs before the root gate and before
+    any clinical parsing, and under `{ strict: true }` the emitter escalates the FIRST warning it is
+    handed. The first cut emitted in place, and the conformance gate measured two consequences
+    against base: a non-C-CDA payload threw `UNKNOWN_NAMESPACE_PREFIX` instead of
+    `NOT_A_CLINICAL_DOCUMENT`, and a C-CDA carrying a foreign vendor block plus a real defect threw
+    it instead of the **safety-critical** `MISSING_CODE_SYSTEM`. A namespace deviation is a statement
+    about the whole document and must never take a fatal's or a safety-critical code's place.
+    `test/dead-diagnostics-matrix.test.ts` pins both. The cost is stated rather than hidden: in
+    lenient mode these land LAST on `doc.warnings`, so `OnWarningCallback` documents **emission**
+    order, not discovery order.
+    **The skip-the-root guard that the first cut used does NOT work and was removed.** A foreign
+    root's children are in the same foreign namespace, so skipping depth 1 changed nothing for any
+    document with a body, and the test pinning it used a CHILDLESS `<Bundle/>`, which passes whatever
+    the code does. That is the "a probe that cannot fail proves nothing" rule, broken inside the
+    slice that quotes it. Both replacement fixtures carry children on purpose.
+    **Once per distinct foreign namespace, not once per node. That bounds the BENIGN case and is not
+    a defence.** A vendor extension block is one deviation however many elements it spans, but a
+    document declaring a distinct namespace on every element still yields one warning per element,
+    bounded only by `maxNodeCount`, exactly like every other per-element warning here. Do not write
+    it up as a hostile-input bound. An element with no namespace at all counts as foreign
+    (`isRecognizedNamespace` reads a `null` URI that way) and is tracked by its own flag rather than
+    a sentinel string key, so nothing a document can carry collides with it.
+    **The position is the SHALLOWEST use of the namespace, not the first in document order**, because
+    the walk is level-order (it enforces a depth cap; a depth-first version would be the recursion it
+    exists to avoid). `line`/`column` locate the element the warning names exactly; they do not name
+    the earliest such element.
+    **The message text says what the code does, because the code NAME is historical.** It says
+    `PREFIX`, but what is tested is the element's namespace, and an element in no namespace raises it
+    with no prefix in sight. Renaming a stable code is a breaking change, so the frozen message was
+    corrected instead.
     **Attributes are deliberately NOT swept either, and do not "finish the job" by adding them.** An
     unprefixed C-CDA attribute (`root`, `code`, `nullFlavor`) carries no namespace at all, and an
     `xmlns:` declaration lives in the namespace reserved for declarations, so an attribute sweep
@@ -600,18 +620,44 @@ immutability + explicit mutation, and the profile system.
     was out of scope. **`smartScorecard` stopped citing `"UNC" for "UNK"` as a malformed token**:
     `UNC` ("un-encoded") is a real concept and no longer draws the warning at all. The tolerance
     itself is unchanged.
-    **Monotonicity for all three parts, MEASURED against base `src/` and not argued.** A 49-row
-    matrix (recognition shapes, namespace shapes, and all seventeen NullFlavor concepts plus the
-    controls `NOPE` and lower-case `unk`, each planted on a header `<administrativeGenderCode>` and
-    on a medication `<doseQuantity>`) run against the previous tree and against the change, diffed:
-    **24 identical**, **7 pure gain** (four gaining `UNKNOWN_NAMESPACE_PREFIX`, three gaining a
-    `position.templateId` on an unchanged code), **18 going from `INVALID_NULL_FLAVOR` to silent on
-    that code**. That last class is warned-to-quieter and is the one to justify rather than wave at:
-    each of those documents names a real concept of the code system, so the withdrawn warning was a
-    false positive, `INVALID_NULL_FLAVOR` is **not** in `SAFETY_CRITICAL_CODES`, and no row loses
-    any other code. Both controls hold: `NOPE` still draws it and so does lower-case `unk`, because
-    the code system is `caseSensitive`. **If you touch `NULL_FLAVORS` again, re-measure this way;
-    the list is public surface and a published version never moves backwards.**
+    **Monotonicity for all three parts, MEASURED against base `src/` in BOTH MODES and not argued.**
+    A 51-row matrix (recognition shapes, namespace shapes including a foreign root and a foreign
+    block beside a safety-critical defect, and all seventeen NullFlavor concepts plus the controls
+    `NOPE` and lower-case `unk`, each planted on a header `<administrativeGenderCode>` and on a
+    medication `<doseQuantity>`) run against the previous tree and against the change, diffed:
+    **25 identical**, **8 pure gain** (five gaining `UNKNOWN_NAMESPACE_PREFIX`, three gaining a
+    `position.templateId` on an unchanged code), and **18 going from `INVALID_NULL_FLAVOR` to silent
+    on that code**. That last class is
+    warned-to-quieter and is the one to justify rather than wave at: each of those documents names a
+    real concept of the code system, so the withdrawn warning was a false positive,
+    `INVALID_NULL_FLAVOR` is **not** in `SAFETY_CRITICAL_CODES`, and no row loses any other code.
+    Both controls hold: `NOPE` still draws it and so does lower-case `unk`, because the code system
+    is `caseSensitive`.
+    **THE STRICT COLUMN MOVES ON 22 OF THE 51 ROWS, AND THAT IS THE INTENDED EFFECT. Do not "fix" it
+    back.** Four rows begin throwing `UNKNOWN_NAMESPACE_PREFIX` where base threw nothing, and
+    eighteen stop throwing a false `INVALID_NULL_FLAVOR`; both classes are the same rows already
+    counted in the 8-gain and 18-withdrawn buckets, not movement beyond them. An earlier draft of
+    this entry claimed the strict column was identical on every row, which is false and would have
+    read as a regression to anyone who measured it. The invariants that **do** hold on every row,
+    and that the test asserts rather than leaving to a snapshot, are that **no row's strict outcome
+    moved independently of its lenient one** and **no row's strict outcome is a namespace code where
+    base threw a fatal or a safety-critical one**.
+    **THE FIRST MEASUREMENT HAD NO STRICT COLUMN, AND THAT IS WHY IT PASSED A BROKEN SLICE.** It was
+    a lenient-mode projection, and both real defects lived only in strict mode. `documentation`
+    already records that a filtered projection cannot support a monotonicity claim; this repo learned
+    it again, in the slice that cites the rule.
+    **What is COMMITTED is the 32-row subset of that planting, not all 51 rows.**
+    `test/dead-diagnostics-matrix.test.ts` runs both modes and filters nothing, but it holds the
+    thirteen recognition and namespace shapes plus the nineteen NullFlavor tokens planted on
+    `<administrativeGenderCode>` only; the `<doseQuantity>` half is still a hand-run and is not in
+    the file. So **re-running that file against the previous tree gives 32 rows, 15 identical, 8
+    pure gain and 9 withdrawn**, with the strict column moving on 13 -- the 51-row totals less the
+    `<doseQuantity>` twins, each of which moved identically to its `<administrativeGenderCode>`
+    counterpart. Expect the 32-row numbers from the file and the 51-row numbers only from the wider
+    hand-run; do not read either set as evidence that the other was wrong. **If you touch
+    `NULL_FLAVORS`, the sweep, or `position.templateId` again, re-run that file against the previous
+    tree and diff before you update its snapshot; the list is public surface and a published version
+    never moves backwards.**
   - `SAFETY_CRITICAL_CODES` is a frozen read-only view, not a `Set` instance: every read operation
     works (including spread), but `instanceof Set` is `false`.
   - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`

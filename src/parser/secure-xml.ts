@@ -108,6 +108,18 @@ export function resolveLimits(overrides?: CcdaParseLimits): ResolvedLimits {
  * any safety violation or malformed XML, never returns a partially-built
  * document.
  *
+ * `UNKNOWN_NAMESPACE_PREFIX` goes to `reportForeignNamespace` rather than to
+ * `emit`, and that separation is load-bearing rather than tidy. This function
+ * runs before `parseCcda`'s root gate and before any clinical parsing, and in
+ * strict mode the emitter escalates the **first** warning it is handed. Routing
+ * a whole-document observation through `emit` here would therefore let it
+ * preempt `NOT_A_CLINICAL_DOCUMENT` on a document that is not a C-CDA at all,
+ * and preempt a safety-critical per-element code such as `MISSING_CODE_SYSTEM`
+ * on one that is. `parseCcda` passes a collector and replays it **after** the
+ * model is built, so those keep their precedence. The parameter defaults to
+ * `emit` for a caller using this function on its own, where there is no later
+ * stage to defer to.
+ *
  * @example
  * ```ts
  * import { parseSecureXml, resolveLimits } from "@cosyte/ccda";
@@ -119,6 +131,7 @@ export function parseSecureXml(
   raw: string,
   limits: ResolvedLimits,
   emit: (warning: CcdaWarning) => void,
+  reportForeignNamespace: (warning: CcdaWarning) => void = emit,
 ): Document {
   let source = raw;
   if (source.charCodeAt(0) === 0xfeff) {
@@ -142,7 +155,7 @@ export function parseSecureXml(
   countEntityRefs(source, limits);
 
   const doc = buildDom(source);
-  enforceStructureLimits(doc, limits, emit);
+  enforceStructureLimits(doc, limits, reportForeignNamespace);
   return doc;
 }
 
@@ -215,22 +228,24 @@ function buildDom(source: string): Document {
  * `ELEMENT_DEPTH_LIMIT_EXCEEDED` for over-deep nesting and
  * `NODE_COUNT_LIMIT_EXCEEDED` for excessive fan-out.
  *
- * **The namespace sweep emits once per distinct foreign namespace**, positioned
- * on the first element that used it, rather than once per foreign element. A
- * vendor extension block is one deviation however many nodes it spans, and
- * per-node emission would turn one deviation into `maxNodeCount` warnings on a
- * document made entirely of foreign elements. An element with no namespace at
- * all counts as foreign, matching {@link isRecognizedNamespace}, which treats a
- * `null` URI that way; it is tracked by its own flag rather than by a sentinel
- * key, so no namespace URI a document could carry can collide with it.
+ * **The namespace sweep reports once per distinct foreign namespace**, not once
+ * per foreign element: a vendor extension block is one deviation however many
+ * nodes it spans. **That bounds the benign case, not a hostile one, and it must
+ * not be described as a defence.** A document declaring a distinct namespace on
+ * every element still produces one warning per element, bounded only by
+ * `maxNodeCount`, exactly as every other per-element warning in this parser is.
+ * An element with no namespace at all counts as foreign, matching
+ * {@link isRecognizedNamespace}, which treats a `null` URI that way; it is
+ * tracked by its own flag rather than by a sentinel key, so no namespace URI a
+ * document could carry can collide with it.
  *
- * **The document element is deliberately not swept.** A root outside
- * `urn:hl7-org:v3` is already the root gate's `NOT_A_CLINICAL_DOCUMENT` fatal,
- * and a root inside it is recognized, so the root can never produce a warning
- * this parser needs. Sweeping it would cost something instead: under
- * `{ strict: true }` the emitter escalates the first warning, so a FHIR bundle
- * handed to `parseCcda` would throw `UNKNOWN_NAMESPACE_PREFIX` in place of the
- * fatal that actually describes it.
+ * **The position is the shallowest use of that namespace, and the leftmost
+ * among those, NOT the first in document order.** This walk is level-order: it
+ * has to be, because it enforces a depth cap, and a depth-first version of it
+ * would be the recursion this function exists to avoid. So a namespace used
+ * deep inside the body and again on a shallow header sibling is reported at the
+ * shallow one. `line` and `column` still locate the element the warning names
+ * exactly; they simply do not name the earliest such element.
  *
  * Neither the namespace URI nor the prefix reaches the warning: the message
  * comes whole from the frozen registry and the position carries the bounded
@@ -242,7 +257,7 @@ function buildDom(source: string): Document {
 function enforceStructureLimits(
   doc: Document,
   limits: ResolvedLimits,
-  emit: (warning: CcdaWarning) => void,
+  reportForeignNamespace: (warning: CcdaWarning) => void,
 ): void {
   const root = doc.documentElement;
   if (root === null) return;
@@ -271,15 +286,15 @@ function enforceStructureLimits(
         );
       }
       const namespaceUri = node.namespaceURI;
-      if (depth > 1 && !isRecognizedNamespace(namespaceUri)) {
+      if (!isRecognizedNamespace(namespaceUri)) {
         if (namespaceUri === null) {
           if (!seenNoNamespace) {
             seenNoNamespace = true;
-            emit(unknownNamespacePrefix(positionOf(node)));
+            reportForeignNamespace(unknownNamespacePrefix(positionOf(node)));
           }
         } else if (!seenNamespaces.has(namespaceUri)) {
           seenNamespaces.add(namespaceUri);
-          emit(unknownNamespacePrefix(positionOf(node)));
+          reportForeignNamespace(unknownNamespacePrefix(positionOf(node)));
         }
       }
       for (let child = node.firstChild; child !== null; child = child.nextSibling) {
