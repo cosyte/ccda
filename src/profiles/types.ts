@@ -55,21 +55,40 @@ export interface ProfileProvenance {
 /**
  * Optional structural narrowing for a {@link QuirkTolerance}. When present, the
  * tolerance applies only to warnings whose PHI-free {@link CcdaPosition} matches
- * every provided field, so a profile can expect a deviation in one section
- * (e.g. deprecated LOINC only within Vital Signs) without blanket-tolerating it
- * everywhere. Matching is on **structural identifiers only** (LOINC section
- * code, template OID); there is no matching on clinical values, by construction.
+ * every provided field. Matching is on **structural identifiers only** (LOINC
+ * section code, template OID); there is no matching on clinical values, by
+ * construction.
+ *
+ * **Read which codes carry which field before keying on one.** A position field
+ * a warning does not carry can never equal the value you match on, so the
+ * tolerance is inert rather than broad. `sectionCode` is carried by
+ * `UNKNOWN_SECTION_CODE` and `SECTION_MATCHED_BY_LOINC_FALLBACK` only;
+ * `templateId` is carried by those two plus `TEMPLATE_EXTENSION_ABSENT`. Those
+ * three are the deviations a structural identifier can locate today.
+ * Entry-level codes (`DEPRECATED_LOINC`, `UNEXPECTED_CODE_SYSTEM`, the
+ * medication-product codes) carry neither, and so do `MISSING_TEMPLATE_ID` and
+ * `UNKNOWN_DOCUMENT_TEMPLATE`, so narrowing any of those to a section or a
+ * template matches nothing at all. Omit `match` to tolerate a code wherever it
+ * fires, which is what every profile shipped in `ccdaProfiles` does.
  *
  * @example
  * ```ts
  * import type { QuirkMatch } from "@cosyte/ccda";
- * const onlyVitals: QuirkMatch = { sectionCode: "8716-3" };
+ * // Tolerate the missing R2.1 version stamp on the CCD root template only.
+ * const ccdRootOnly: QuirkMatch = { templateId: "2.16.840.1.113883.10.20.22.1.2" };
  * ```
  */
 export interface QuirkMatch {
-  /** Match only warnings carrying this section LOINC code in their position. */
+  /**
+   * Match only warnings carrying this section LOINC code in their position.
+   * Carried by `UNKNOWN_SECTION_CODE` and `SECTION_MATCHED_BY_LOINC_FALLBACK`.
+   */
   readonly sectionCode?: string;
-  /** Match only warnings carrying this template OID in their position. */
+  /**
+   * Match only warnings carrying this template OID in their position. Carried
+   * by `UNKNOWN_SECTION_CODE`, `SECTION_MATCHED_BY_LOINC_FALLBACK` and
+   * `TEMPLATE_EXTENSION_ABSENT`.
+   */
   readonly templateId?: string;
 }
 

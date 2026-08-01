@@ -37,6 +37,8 @@ import type { ParseCtx } from "./types/_shared.js";
 import { pickMrn } from "../helpers/pick-mrn.js";
 import { documentTypeForOid, R21_EXTENSION, type DocumentType } from "../parser/templates.js";
 import { missingRequiredSections } from "../parser/required-sections.js";
+import { safeDerivedToken } from "../parser/tokens.js";
+import type { CcdaPosition } from "../parser/types.js";
 import {
   missingTemplateId,
   requiredSectionMissing,
@@ -720,6 +722,17 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
  * the document-type table, so they are naturally passed over, only a specific
  * document-type `templateId` resolves a {@link DocumentType}.
  *
+ * Only `TEMPLATE_EXTENSION_ABSENT` carries a `position.templateId` here (see
+ * {@link templateIdPosition}), and it names the **matched** root, the one the
+ * warning is actually about. The other two deliberately carry none.
+ * `MISSING_TEMPLATE_ID` has no template to name. `UNKNOWN_DOCUMENT_TEMPLATE`
+ * has too many: its subject is the templateId **set** naming no type, and the
+ * obvious pick, the first root in document order, is the US Realm Header stamp
+ * on essentially every real C-CDA. Populating it with a near-constant would let
+ * a profile author write a `match` that reads like narrowing and in practice
+ * tolerates the code on every document, which is a worse failure than the empty
+ * field it replaced.
+ *
  * @internal
  */
 function recognizeDocumentType(
@@ -732,14 +745,12 @@ function recognizeDocumentType(
     return undefined;
   }
 
-  let firstRootedOid: string | undefined;
   for (const tid of templateIds) {
     if (tid.root === undefined) continue;
-    if (firstRootedOid === undefined) firstRootedOid = tid.root;
     const documentType = documentTypeForOid(tid.root);
     if (documentType !== undefined) {
       if (tid.extension !== R21_EXTENSION) {
-        ctx.emit(templateExtensionAbsent(positionOf(root)));
+        ctx.emit(templateExtensionAbsent(templateIdPosition(root, tid.root)));
       }
       return documentType;
     }
@@ -747,6 +758,23 @@ function recognizeDocumentType(
 
   ctx.emit(unknownDocumentTemplate(positionOf(root)));
   return undefined;
+}
+
+/**
+ * Build a {@link CcdaPosition} for `el` that also names the template OID the
+ * warning is about, so a `QuirkTolerance` keyed on `templateId` can match it.
+ *
+ * The OID is **bounded, not copied**: `templateId` is a consumer-controlled
+ * `II.root`, so it is echoed only when it has the shape of an HL7 v3 UID and is
+ * `<withheld>` otherwise, exactly as `position.sectionCode` is bounded on the
+ * LOINC shape. The roots reaching here have already been through
+ * `boundTemplateId`; re-bounding at the site is idempotent and keeps the bound
+ * visible where the field is set rather than one call away.
+ *
+ * @internal
+ */
+function templateIdPosition(el: Element, root: string): CcdaPosition {
+  return { ...positionOf(el), templateId: safeDerivedToken(root, "uid") };
 }
 
 /**

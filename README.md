@@ -815,8 +815,8 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
 - **Near-zero dependencies**: one exact-pinned runtime dep (`@xmldom/xmldom`) for the XML substrate;
   healthcare integrations vet every dependency, so the cap is **≤ 3** justified deps.
 - **PHI-safe diagnostics**: warning and fatal messages come whole from a frozen registry and
-  interpolate nothing, so no value from your document reaches one; positions carry a bounded element
-  path plus line/column.
+  interpolate nothing, so no value from your document reaches one; positions carry bounded
+  structural identifiers only (element path, section LOINC code, template OID) plus line/column.
 - **Dual ESM + CJS**: built with `tsup`, validated with `attw`.
 - **Immutability**: parsed models are immutable; mutation is via explicit methods.
 - **Profile system**: a `defineCcdaProfile()` API for vendor/conformance quirks, with a

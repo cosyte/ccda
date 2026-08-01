@@ -19,14 +19,23 @@
  *
  * A UTF-8 BOM is stripped (emitting `ENCODING_BOM_STRIPPED`). Malformed XML
  * surfaces as `NOT_WELL_FORMED_XML`. Everything here is pure and synchronous.
+ *
+ * It also owns the **foreign-namespace sweep** that raises
+ * `UNKNOWN_NAMESPACE_PREFIX`, which is a placement decision rather than an
+ * accident. The model layer's child lookups (`../model/dom.ts`) are scoped to
+ * `urn:hl7-org:v3`, so an element outside the recognized set is invisible to
+ * every stage above this one: there is no navigation step that could notice it.
+ * The depth / node-count walk here is the package's only exhaustive traversal,
+ * so the sweep rides on it and costs no second pass.
  */
 
 import { DOMParser, type Document, type Element } from "@xmldom/xmldom";
 
 import { positionOf } from "../model/dom.js";
 import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES } from "./errors.js";
+import { isRecognizedNamespace } from "./namespaces.js";
 import type { CcdaParseLimits } from "./types.js";
-import { encodingBomStripped, type CcdaWarning } from "./warnings.js";
+import { encodingBomStripped, unknownNamespacePrefix, type CcdaWarning } from "./warnings.js";
 
 /** Fully-resolved safety caps, every field present (defaults merged in). @internal */
 export interface ResolvedLimits {
@@ -133,7 +142,7 @@ export function parseSecureXml(
   countEntityRefs(source, limits);
 
   const doc = buildDom(source);
-  enforceStructureLimits(doc, limits);
+  enforceStructureLimits(doc, limits, emit);
   return doc;
 }
 
@@ -201,17 +210,46 @@ function buildDom(source: string): Document {
 
 /**
  * Walk the constructed DOM iteratively (no recursion, itself a depth-attack
- * surface) to enforce `maxDepth` and `maxNodeCount`. Counts element nodes only;
- * throws `ELEMENT_DEPTH_LIMIT_EXCEEDED` for over-deep nesting and
+ * surface) to enforce `maxDepth` and `maxNodeCount`, and to sweep for elements
+ * outside the recognized namespace set. Counts element nodes only; throws
+ * `ELEMENT_DEPTH_LIMIT_EXCEEDED` for over-deep nesting and
  * `NODE_COUNT_LIMIT_EXCEEDED` for excessive fan-out.
+ *
+ * **The namespace sweep emits once per distinct foreign namespace**, positioned
+ * on the first element that used it, rather than once per foreign element. A
+ * vendor extension block is one deviation however many nodes it spans, and
+ * per-node emission would turn one deviation into `maxNodeCount` warnings on a
+ * document made entirely of foreign elements. An element with no namespace at
+ * all counts as foreign, matching {@link isRecognizedNamespace}, which treats a
+ * `null` URI that way; it is tracked by its own flag rather than by a sentinel
+ * key, so no namespace URI a document could carry can collide with it.
+ *
+ * **The document element is deliberately not swept.** A root outside
+ * `urn:hl7-org:v3` is already the root gate's `NOT_A_CLINICAL_DOCUMENT` fatal,
+ * and a root inside it is recognized, so the root can never produce a warning
+ * this parser needs. Sweeping it would cost something instead: under
+ * `{ strict: true }` the emitter escalates the first warning, so a FHIR bundle
+ * handed to `parseCcda` would throw `UNKNOWN_NAMESPACE_PREFIX` in place of the
+ * fatal that actually describes it.
+ *
+ * Neither the namespace URI nor the prefix reaches the warning: the message
+ * comes whole from the frozen registry and the position carries the bounded
+ * element **local name**. The URIs held in `seenNamespaces` are a loop-local
+ * dedup key and are never read out.
  *
  * @internal
  */
-function enforceStructureLimits(doc: Document, limits: ResolvedLimits): void {
+function enforceStructureLimits(
+  doc: Document,
+  limits: ResolvedLimits,
+  emit: (warning: CcdaWarning) => void,
+): void {
   const root = doc.documentElement;
   if (root === null) return;
 
   let nodeCount = 0;
+  const seenNamespaces = new Set<string>();
+  let seenNoNamespace = false;
   let level: { node: Element; depth: number }[] = [{ node: root, depth: 1 }];
 
   while (level.length > 0) {
@@ -231,6 +269,18 @@ function enforceStructureLimits(doc: Document, limits: ResolvedLimits): void {
           FATAL_MESSAGES.NODE_COUNT_LIMIT_EXCEEDED,
           {},
         );
+      }
+      const namespaceUri = node.namespaceURI;
+      if (depth > 1 && !isRecognizedNamespace(namespaceUri)) {
+        if (namespaceUri === null) {
+          if (!seenNoNamespace) {
+            seenNoNamespace = true;
+            emit(unknownNamespacePrefix(positionOf(node)));
+          }
+        } else if (!seenNamespaces.has(namespaceUri)) {
+          seenNamespaces.add(namespaceUri);
+          emit(unknownNamespacePrefix(positionOf(node)));
+        }
       }
       for (let child = node.firstChild; child !== null; child = child.nextSibling) {
         if (child.nodeType === ELEMENT_NODE)

@@ -25,8 +25,10 @@ import {
  * parser first and was red on eleven slots.
  *
  * `expectCode` is declared per slot so the runner proves the marker reached the
- * branch it names. The four slots carrying `null` are the ones whose value
- * drives no diagnostic at all; each says why.
+ * branch it names. The slots carrying `null` are the ones whose value drives no
+ * diagnostic at all, and each says why. No count is given for them on purpose:
+ * this comment said "four" while there were seven, and a stale count is exactly
+ * what a reader trusts. Derive it if you need it.
  */
 
 /** Adapter that rejects any coding in the `9.9.*` arc, so a planted OID reaches the semantic tier. */
@@ -369,10 +371,11 @@ export const PHI_SLOTS: readonly DiagnosticSlot<string>[] = [
   {
     name: "ClinicalDocument (foreign namespace prefix)",
     plant: (m) => doc({ extraNamespace: m }),
-    // UNKNOWN_NAMESPACE_PREFIX is declared in WARNING_CODES and has a factory, but no
-    // call site in `src/` ever emits it, so there is no branch to reach. The prefix is
-    // swept anyway: it must not surface through any other diagnostic.
-    expectCode: null,
+    // A live probe since CCDA-DEAD-DIAGNOSTICS: the DOM walk in `secure-xml.ts`
+    // emits UNKNOWN_NAMESPACE_PREFIX for the foreign element, so the marker
+    // (planted as the prefix) now reaches the branch that reports it. It carried
+    // `expectCode: null` while nothing in `src/` constructed the warning.
+    expectCode: WARNING_CODES.UNKNOWN_NAMESPACE_PREFIX,
   },
   // ---- section identity --------------------------------------------------
   {

@@ -576,10 +576,13 @@ export function contradictoryNullFlavor(position: CcdaPosition, datatype: string
 }
 
 /**
- * Build an `UNKNOWN_NAMESPACE_PREFIX` warning. Emitted when an element or
- * attribute uses a namespace prefix the parser does not recognize (anything
- * outside the default `urn:hl7-org:v3`, `xsi`, and `sdtc` set), the node is
- * still retained.
+ * Build an `UNKNOWN_NAMESPACE_PREFIX` warning. Emitted when an **element** is in
+ * a namespace the parser does not recognize (anything outside `urn:hl7-org:v3`,
+ * the XSI namespace and `urn:hl7-org:sdtc`, including an element carrying no
+ * namespace at all), the node is still retained and round-trips through
+ * `serializeCcda` unchanged. Raised **once per distinct foreign namespace** in a
+ * document, positioned on the first element that used it; see the DOM walk in
+ * `../parser/secure-xml.ts` for why. Attributes are not swept.
  *
  * @example
  * ```ts

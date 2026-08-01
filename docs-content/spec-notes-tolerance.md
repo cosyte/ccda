@@ -30,7 +30,17 @@ a value parameter, so no attribute value, coded token or element name from the d
 A handful of codes carry a variant per closed-set key (which `CodeSlot`, which catalog section), and
 those variants are generated from the parser's own tables. The `position` is bounded rather than
 copied: `path` is echoed only for an element name this parser navigates, `sectionCode` only for a
-LOINC-shaped code. So you can log the whole `.warnings` array without leaking PHI.
+LOINC-shaped code, and `templateId` only for a token shaped like an HL7 v3 UID. So you can log the
+whole `.warnings` array without leaking PHI.
+
+`sectionCode` and `templateId` are carried by a **short list** of codes and no others, which is what
+you need to know before narrowing a profile tolerance with `match`. `sectionCode` comes with
+`UNKNOWN_SECTION_CODE` and `SECTION_MATCHED_BY_LOINC_FALLBACK`; `templateId` comes with those two
+(the section's first `<templateId>` root) and with `TEMPLATE_EXTENSION_ABSENT` (the matched
+document-type root). Everything else carries neither, so a `match` keyed on one of them elsewhere
+applies to nothing rather than to everything. That includes `MISSING_TEMPLATE_ID`, which has no
+template to name, and `UNKNOWN_DOCUMENT_TEMPLATE`, whose subject is the whole `templateId` set rather
+than any one root.
 
 Most of the specifics a message used to name are still on the model: a section's `<code>` is on
 `section.code`, a unit on `PQ.unit`, an unmodelled datatype's raw text on the observation value. Two

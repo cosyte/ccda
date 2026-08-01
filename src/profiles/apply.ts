@@ -19,7 +19,8 @@ import type { CcdaProfile, QuirkTolerance } from "./types.js";
  * structural key present in the tolerance's `match` must equal the warning's
  * position, a tolerance with no `match` applies to every warning of its code.
  * Matching is on PHI-free structural identifiers only (section LOINC code,
- * template OID).
+ * template OID). Only three codes carry either field, so a `match` on a code
+ * that carries neither is inert; `QuirkMatch` names the set.
  *
  * @internal
  */

@@ -218,6 +218,74 @@ describe("warning factory, unknownNamespacePrefix", () => {
   });
 });
 
+/**
+ * The foreign-namespace sweep. `UNKNOWN_NAMESPACE_PREFIX` was declared,
+ * exported and constructed by nothing through `0.0.4`: the model layer's child
+ * lookups are scoped to `urn:hl7-org:v3`, so a foreign element was invisible to
+ * every stage that could have reported it. The DOM walk in `secure-xml.ts` is
+ * the only exhaustive traversal, which is where it now rides.
+ */
+describe("foreign-namespace sweep", () => {
+  /** Splice raw XML in after the header's `languageCode`, inside `ClinicalDocument`. */
+  const withExtra = (extra: string): string =>
+    buildCcda().replace(`<languageCode code="en-US"/>`, `<languageCode code="en-US"/>${extra}`);
+
+  const foreign = (xml: string): readonly CcdaWarning[] =>
+    parseCcda(xml).warnings.filter((w) => w.code === WARNING_CODES.UNKNOWN_NAMESPACE_PREFIX);
+
+  it("says nothing about a document that stays inside v3 / xsi / sdtc", () => {
+    expect(foreign(buildCcda())).toHaveLength(0);
+    // `sdtc` is a recognized namespace, so an HL7 standards extension is silent.
+    expect(
+      foreign(withExtra(`<sdtc:raceCode xmlns:sdtc="${SDTC_NS}" code="2106-3"/>`)),
+    ).toHaveLength(0);
+  });
+
+  it("flags a foreign element and neither echoes its prefix nor its namespace", () => {
+    const warnings = foreign(withExtra(`<vnd:note xmlns:vnd="urn:example:vendor">hi</vnd:note>`));
+    expect(warnings).toHaveLength(1);
+    const w = warnings[0];
+    expect(w?.message).not.toContain("vnd");
+    expect(w?.message).not.toContain("urn:example:vendor");
+    // `note` is not an element this parser navigates, so the bounded path withholds it.
+    expect(w?.position.path).toBe("<withheld>");
+    expect(JSON.stringify(w?.position)).not.toContain("vnd");
+  });
+
+  it("counts an element carrying no namespace at all as foreign", () => {
+    expect(foreign(withExtra(`<bare xmlns=""/>`))).toHaveLength(1);
+  });
+
+  it("reports once per distinct namespace, not once per node", () => {
+    const many = `<vnd:a xmlns:vnd="urn:example:vendor"><vnd:b/><vnd:c><vnd:d/></vnd:c></vnd:a>`;
+    expect(foreign(withExtra(many))).toHaveLength(1);
+
+    const two = `${many}<oth:e xmlns:oth="urn:example:other"/>`;
+    expect(foreign(withExtra(two))).toHaveLength(2);
+  });
+
+  it("retains the foreign node: it round-trips through serialization", () => {
+    const xml = withExtra(`<vnd:note xmlns:vnd="urn:example:vendor">hi</vnd:note>`);
+    expect(parseCcda(xml).toString()).toContain("urn:example:vendor");
+  });
+
+  it("escalates in strict mode like any other Tier-2 deviation", () => {
+    const xml = withExtra(`<vnd:note xmlns:vnd="urn:example:vendor"/>`);
+    expect(() => parseCcda(xml, { strict: true })).toThrow(
+      /namespace prefix outside the recognized/u,
+    );
+  });
+
+  it("leaves the document element to the root gate, in strict mode too", () => {
+    // A root outside v3 is NOT_A_CLINICAL_DOCUMENT, and sweeping it would take
+    // that fatal's place under `strict` (the emitter escalates the first warning).
+    const notCcda = `<?xml version="1.0" encoding="UTF-8"?><Bundle xmlns="http://hl7.org/fhir"/>`;
+    for (const opts of [{}, { strict: true }]) {
+      expect(() => parseCcda(notCcda, opts)).toThrow(/The root element is not a ClinicalDocument/u);
+    }
+  });
+});
+
 describe("header / section / document structural edge cases", () => {
   it("handles a record target with no patient element", () => {
     const xml = buildCcda().replace(/<patient>[\s\S]*?<\/patient>/u, "");

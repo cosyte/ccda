@@ -67,8 +67,9 @@ export const smartScorecard: CcdaProfile = defineCcdaProfile({
     {
       code: "INVALID_NULL_FLAVOR",
       rationale:
-        'The SMART C-CDA study logged malformed nullFlavor tokens (e.g. "UNC" for "UNK") in real ' +
-        "documents; the raw token is preserved verbatim, the non-conformance expected.",
+        "D'Amore et al. (JAMIA 2014) documented nullFlavor misuse across real C-CDA documents, " +
+        "including tokens outside the HL7 v3 NullFlavor code system; the raw token is preserved " +
+        "verbatim, the non-conformance expected.",
     },
   ],
 });

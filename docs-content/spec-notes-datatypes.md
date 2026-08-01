@@ -19,8 +19,14 @@ leaves `date` undefined (`MALFORMED_DATETIME`). Following the canonical CDA R2 /
 timezone offset is only accepted once the **time-of-day** (at least the hour) is present. An offset
 or fraction hung on a bare date, such as the dropped-dash `"2026-0721"`, is a malformed value, not a
 year `2026` with a `-07:21` offset. `@nullFlavor` is preserved verbatim
-throughout, and a value outside the HL7 v3 NullFlavor set is flagged (`INVALID_NULL_FLAVOR`) rather than
-dropped.
+throughout, and a value outside the HL7 v3 NullFlavor code system is flagged
+(`INVALID_NULL_FLAVOR`) rather than dropped.
+
+`NULL_FLAVORS` is the **whole** code system (`2.16.840.1.113883.5.1008`), all seventeen concepts, so
+a conforming `nullFlavor="PINF"` on a `PQ` or the `nullFlavor="NP"` a real Plan of Treatment carries
+on a `<code>` reads as conforming. It was eight of the seventeen through `0.0.4`, which flagged those
+as invalid. `NP` is retired in the published code system and is admitted all the same, because
+`INVALID_NULL_FLAVOR` asserts that a token is not a concept of the system, and it is one.
 
 ### A `nullFlavor` asserted beside a value
 

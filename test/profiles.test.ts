@@ -432,6 +432,102 @@ describe("applyProfile, pure warning transform", () => {
   });
 });
 
+/**
+ * `CcdaPosition.templateId` was declared and populated by nothing through
+ * `0.0.4`, so a `QuirkTolerance` keyed on a template OID could never match and
+ * such a profile entry silently tolerated nothing. The four recognition
+ * warnings carry it now, and each of them is pinned here alongside a tolerance
+ * that keys on it: a test that only checked the field is present would not have
+ * caught the inert-match half.
+ */
+describe("position.templateId, and the profile matching it enables", () => {
+  const CCD_ROOT = "2.16.840.1.113883.10.20.22.1.2";
+  const VENDOR_SECTION_ROOT = "2.16.840.1.113883.3.9999.1.1";
+
+  /** A Problems section stamped with an unrecognized root, so LOINC fallback decides it. */
+  const vendorStampedProblems = PROBLEMS_SECTION.replace(
+    "2.16.840.1.113883.10.20.22.2.5.1",
+    VENDOR_SECTION_ROOT,
+  );
+
+  const find = (warnings: readonly CcdaWarning[], code: WarningCode): CcdaWarning | undefined =>
+    warnings.find((w) => w.code === code);
+
+  it("TEMPLATE_EXTENSION_ABSENT names the matched document-type root", () => {
+    const doc = parseCcda(buildCcda({ extension: undefined, sections: VITALS_SECTION }));
+    expect(find(doc.warnings, WARNING_CODES.TEMPLATE_EXTENSION_ABSENT)?.position.templateId).toBe(
+      CCD_ROOT,
+    );
+  });
+
+  it("UNKNOWN_DOCUMENT_TEMPLATE carries none: its subject is the whole set", () => {
+    // The first rooted templateId here is the US Realm Header, which essentially
+    // every real C-CDA carries, so populating the field would give a profile
+    // author a `match` that reads like narrowing and tolerates the code
+    // everywhere. Pinned so a later "finish the job" pass has to argue with it.
+    const doc = parseCcda(buildCcda({ docTypeOid: "2.16.840.1.113883.3.9999.9" }));
+    const w = find(doc.warnings, WARNING_CODES.UNKNOWN_DOCUMENT_TEMPLATE);
+    expect(w).toBeDefined();
+    expect(w?.position.templateId).toBeUndefined();
+  });
+
+  it("MISSING_TEMPLATE_ID carries none: there is no template to name", () => {
+    const doc = parseCcda(buildCcda({ includeHeaderTemplate: false, includeDocTemplate: false }));
+    const w = find(doc.warnings, WARNING_CODES.MISSING_TEMPLATE_ID);
+    expect(w).toBeDefined();
+    expect(w?.position.templateId).toBeUndefined();
+  });
+
+  it("the section recognition warnings name the section's own first root", () => {
+    const doc = parseCcda(buildCcda({ sections: vendorStampedProblems }));
+    const w = find(doc.warnings, WARNING_CODES.SECTION_MATCHED_BY_LOINC_FALLBACK);
+    expect(w?.position.templateId).toBe(VENDOR_SECTION_ROOT);
+    expect(w?.position.sectionCode).toBe("11450-4");
+  });
+
+  it("withholds a root that is not shaped like an HL7 v3 UID", () => {
+    const doc = parseCcda(
+      buildCcda({
+        sections: PROBLEMS_SECTION.replace("2.16.840.1.113883.10.20.22.2.5.1", "Doe^Jane"),
+      }),
+    );
+    expect(
+      find(doc.warnings, WARNING_CODES.SECTION_MATCHED_BY_LOINC_FALLBACK)?.position.templateId,
+    ).toBe("<withheld>");
+  });
+
+  it("a tolerance keyed on templateId now matches, and still narrows", () => {
+    const xml = buildCcda({ extension: undefined, sections: VITALS_SECTION });
+    const onTheCcdRoot = defineCcdaProfile({
+      name: "ccdRootOnly",
+      tolerate: [
+        {
+          code: "TEMPLATE_EXTENSION_ABSENT",
+          match: { templateId: CCD_ROOT },
+          rationale: "R1.1-origin CCDs carry the root without the R2.1 version stamp.",
+        },
+      ],
+    });
+    expect(codes(parseCcda(xml, { profile: onTheCcdRoot }).warnings)).not.toContain(
+      WARNING_CODES.TEMPLATE_EXTENSION_ABSENT,
+    );
+
+    const onAnotherRoot = defineCcdaProfile({
+      name: "otherRootOnly",
+      tolerate: [
+        {
+          code: "TEMPLATE_EXTENSION_ABSENT",
+          match: { templateId: "2.16.840.1.113883.10.20.22.1.14" },
+          rationale: "A different document type's root, so this document is untouched.",
+        },
+      ],
+    });
+    expect(codes(parseCcda(xml, { profile: onAnotherRoot }).warnings)).toContain(
+      WARNING_CODES.TEMPLATE_EXTENSION_ABSENT,
+    );
+  });
+});
+
 describe("end-to-end parse with a profile", () => {
   it("smartScorecard re-badges a deprecated LOINC as an expected quirk", () => {
     const xml = deprecatedLoincCcd();
