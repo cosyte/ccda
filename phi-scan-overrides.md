@@ -41,6 +41,23 @@ Enumeration + scope keep the scan honest and un-dodgeable:
   necessarily embeds real-looking violator strings as adversarial inputs (and
   writes its runtime violators to a throwaway temp dir), so it is excluded from
   the walk: scanning the gate's negative controls would flag them.
+- **A scan that could not read what it enumerated REFUSES (exit 2).** All-mode
+  lists the tree first and reads each file afterwards, so a file can be deleted
+  inside that window: `tsup` writes `tsup.config.bundled_<hash>.mjs` at the repo
+  root and removes it when a build ends, which refused a whole publish-time
+  sweep once (`ccda@0.0.5`). The refusal was right and the enumeration was
+  wrong, so exactly one case is tolerated: a file the walk enumerated **itself**
+  that git does **not track** and that fails with `ENOENT`. It is reported on
+  stderr as skipped, never dropped silently. A **tracked** file (the committed
+  corpus is what the gate promises to have observed), any non-`ENOENT` failure
+  (`EACCES`, `EISDIR`: a scan that failed, not a file that went away), a file
+  that is back on disk when the sweep ends, a `git` that cannot say what is
+  tracked, and a tracked set that comes back empty all still refuse. All-mode
+  also refuses outright if it ended up observing no files at all. Pre-commit
+  (`--staged`) reads blobs from the git index, so it never depends on any of
+  this. **Residual:** the post-sweep re-check is keyed on the enumerated path,
+  not on content, so an untracked file _renamed_ inside the window is not read.
+  Committing it means `git add`, after which it is tracked and untolerable.
 
 | Category               | Where it looks                                                                                                                                  | Rule                                                                                                                                                                                                                                    |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
