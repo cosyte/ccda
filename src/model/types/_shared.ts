@@ -18,9 +18,27 @@ import type { TerminologyAdapter } from "../terminology.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
- * The HL7 v3 NullFlavor code system (`2.16.840.1.113883.5.1008`) value set
- * used in C-CDA: no-information, unknown, asked-but-unknown, not-asked,
- * temporarily-unavailable, not-applicable, other, and masked.
+ * The HL7 v3 NullFlavor code system (`2.16.840.1.113883.5.1008`), which CDA R2
+ * binds `@nullFlavor` to. All seventeen concepts, transcribed from the
+ * published HL7 Terminology `CodeSystem/v3-NullFlavor` (`content: complete`,
+ * `caseSensitive: true`, code-system version `4.0.0`, THO release 7.3.0):
+ * `NI`, `INV`, `DER`, `OTH`, `NINF`, `PINF`, `UNC`, `MSK`, `NA`, `UNK`, `ASKU`,
+ * `NAV`, `NASK`, `NAVU`, `QS`, `TRC`, `NP`.
+ *
+ * **It is the whole code system, deliberately, and it used to be eight of the
+ * seventeen.** A conforming `nullFlavor="PINF"` on a `PQ`, or the
+ * `nullFlavor="NP"` a real Plan of Treatment carries on a `<code>`, drew a false
+ * `INVALID_NULL_FLAVOR` on the published `0.0.4`, because the list held only the
+ * eight tokens the header and the common datatypes use. Membership here is also
+ * the bound that decides whether a `templateId`'s or an `ED`'s `nullFlavor` is
+ * echoed or `<withheld>` (`./ii.ts`, `./ed.ts`), and widening does not weaken
+ * it: every entry is a fixed literal this package owns, so the bound is still
+ * "a member of a closed set", now the same closed set the standard defines.
+ *
+ * `NP` carries `status: retired` in THO. It is admitted anyway, because it **is**
+ * a concept of the code system and `INVALID_NULL_FLAVOR` says a token is not:
+ * saying so about a real code is the false positive, and this package has no
+ * deprecation signal for `nullFlavor` to say anything narrower with.
  *
  * @example
  * ```ts
@@ -28,12 +46,31 @@ import type { Element } from "@xmldom/xmldom";
  * console.log(NULL_FLAVORS.includes("UNK")); // true
  * ```
  */
-export const NULL_FLAVORS = ["NI", "UNK", "ASKU", "NASK", "NAV", "NA", "OTH", "MSK"] as const;
+export const NULL_FLAVORS = [
+  "NI",
+  "INV",
+  "DER",
+  "OTH",
+  "NINF",
+  "PINF",
+  "UNC",
+  "MSK",
+  "NA",
+  "UNK",
+  "ASKU",
+  "NAV",
+  "NASK",
+  "NAVU",
+  "QS",
+  "TRC",
+  "NP",
+] as const;
 
 /**
  * A valid HL7 v3 NullFlavor token. Datatype `nullFlavor` fields are typed as
  * `string` (a non-conforming value is preserved verbatim and flagged with
- * `INVALID_NULL_FLAVOR`); this union documents the conforming set.
+ * `INVALID_NULL_FLAVOR`); this union documents the conforming set, which is the
+ * whole code system rather than a working subset of it.
  *
  * @example
  * ```ts

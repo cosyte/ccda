@@ -9,6 +9,7 @@
 
 import { sectionForLoinc, sectionForTemplateRoot, type SectionInfo } from "../parser/templates.js";
 import { safeDerivedToken } from "../parser/tokens.js";
+import type { CcdaPosition } from "../parser/types.js";
 import { sectionMatchedByLoincFallback, unknownSectionCode } from "../parser/warnings.js";
 import { attr, child, childElements, children, positionOf, text } from "./dom.js";
 import { parseCd, type CD } from "./types/cd.js";
@@ -127,7 +128,18 @@ function recognize(
     // `UNKNOWN_SECTION_CODE` fires precisely when the code is unrecognized, so
     // membership would always withhold here and a sender's arbitrary `@code`
     // would otherwise reach the position object verbatim.
-    const pos = { ...positionOf(el), sectionCode: safeDerivedToken(loinc, "loinc") };
+    //
+    // `templateId` names the section's first rooted `<templateId>` in document
+    // order, when it has one. Both codes below fire only after root matching
+    // failed, so that root is the vendor/legacy stamp a profile author would
+    // key a tolerance on. Bounded on the v3 UID shape for the same reason the
+    // LOINC code is bounded on its own: it is a consumer-controlled `II.root`.
+    const templateRoot = templateIds.find((t) => t.root !== undefined)?.root;
+    const pos: CcdaPosition = {
+      ...positionOf(el),
+      sectionCode: safeDerivedToken(loinc, "loinc"),
+      ...(templateRoot === undefined ? {} : { templateId: safeDerivedToken(templateRoot, "uid") }),
+    };
     if (info !== undefined) {
       ctx.emit(sectionMatchedByLoincFallback(pos));
       return { info, by: "loinc" };

@@ -3,8 +3,14 @@
  * companion namespaces the parser recognizes. C-CDA documents default to the
  * HL7 v3 namespace `urn:hl7-org:v3`; `xsi` drives `xsi:type` dispatch on
  * polymorphic elements, and `sdtc` carries the HL7 standards-extension
- * attributes (e.g. `sdtc:raceCode`). Anything outside this set is retained but
- * flagged with `UNKNOWN_NAMESPACE_PREFIX`.
+ * attributes (e.g. `sdtc:raceCode`). An **element** outside this set, including
+ * one in no namespace at all, is retained and flagged with
+ * `UNKNOWN_NAMESPACE_PREFIX`, once per distinct foreign namespace, by the DOM
+ * walk in `./secure-xml.ts`. Attributes are not
+ * swept: an unprefixed C-CDA attribute (`root`, `code`, `nullFlavor`) carries no
+ * namespace at all and an `xmlns:` declaration lives in the XML namespace
+ * reserved for declarations, so an attribute sweep against this set would flag
+ * every attribute in a conforming document.
  */
 
 /**

@@ -60,7 +60,18 @@ export function parseCcda(raw: string, options: ParseCcdaOptions = {}): CcdaDocu
   // `expected` warning never escalates in strict mode, see makeEmitter.
   const emit = wrapEmitterWithProfile(makeEmitter(warnings, options), profile);
 
-  const doc = parseSecureXml(raw, limits, emit);
+  // `UNKNOWN_NAMESPACE_PREFIX` is collected during the secure-XML walk and
+  // replayed at the end of this function rather than emitted where it is found.
+  // The walk runs before the root gate and before any clinical parsing, and in
+  // strict mode the emitter escalates the FIRST warning it is handed, so
+  // emitting in place let a foreign vendor block preempt both
+  // `NOT_A_CLINICAL_DOCUMENT` on a document that is not a C-CDA and a
+  // safety-critical per-element code on one that is. A namespace deviation is a
+  // statement about the whole document; it must never take a fatal's or a
+  // safety-critical code's place. The cost is that in lenient mode these land
+  // last on `doc.warnings` rather than in discovery order.
+  const foreignNamespaces: CcdaWarning[] = [];
+  const doc = parseSecureXml(raw, limits, emit, (warning) => foreignNamespaces.push(warning));
 
   const root = doc.documentElement;
   if (root === null) {
@@ -84,6 +95,7 @@ export function parseCcda(raw: string, options: ParseCcdaOptions = {}): CcdaDocu
   const ctx =
     options.terminology !== undefined ? { emit, terminology: options.terminology } : { emit };
   const parts = buildDocument(root, ctx);
+  for (const warning of foreignNamespaces) emit(warning);
   const serialized = serializeDocument(doc);
   const init = { ...parts, warnings, serialized };
   if (profile !== undefined) {
@@ -111,7 +123,7 @@ function resolveProfile(options: ParseCcdaOptions): CcdaProfile | undefined {
 
 /**
  * Build the warning sink. In lenient mode each warning is appended to
- * `warnings` and forwarded to `options.onWarning` (in discovery order, before
+ * `warnings` and forwarded to `options.onWarning` (in emission order, before
  * the append is observable to later code). In strict mode the warning is
  * escalated to a thrown {@link CcdaParseError}, reusing the Tier-3 error shape
  * so consumers have a single catch surface.

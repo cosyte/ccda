@@ -126,13 +126,16 @@ export function parseIi(el: Element | undefined, ctx: ParseCtx): II | undefined 
  * write anything in either. Neither means anything on a `templateId`: a template
  * OID has no assigning authority to label, so the label is withheld outright
  * rather than shape-tested, and the `nullFlavor` is bounded on membership in
- * `NULL_FLAVORS`, this package's NullFlavor set. Say it that way rather than
- * "the v3 table, which is closed": `NULL_FLAVORS` is an eight-token **subset**
- * of the v3 vocabulary (no `PINF`, `NINF`, `TRC`, `DER`, `QS`, `NP`, `INV`), so
- * a conforming `nullFlavor="PINF"` already draws `INVALID_NULL_FLAVOR` and now
- * reads `<withheld>` here too. Pre-existing and unchanged by this bound, but it
- * is load-bearing for the bound, so it should not be described as the whole
- * table.
+ * `NULL_FLAVORS`.
+ *
+ * **That list is load-bearing for this bound, so mind what it contains.** It
+ * held eight of the code system's seventeen concepts through `0.0.4`, which
+ * meant a conforming `nullFlavor="PINF"` both drew a false
+ * `INVALID_NULL_FLAVOR` and read `<withheld>` here. It is the whole code system
+ * now, so a conforming token is echoed and only a token outside the system is
+ * withheld. The bound itself did not change: it is membership in a closed set of
+ * literals this package owns, never a shape test, because at the point a token
+ * fails membership nothing distinguishes it from any other sender-chosen text.
  *
  * A conforming stamp passes through untouched (`2.16.840.1.113883.10.20.22.1.2`
  * is a UID, `2015-08-01` is a version, and neither other attribute appears at

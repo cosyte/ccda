@@ -16,8 +16,8 @@ immutability + explicit mutation, and the profile system.
 
 ## Status
 
-- **Published on npm at `0.0.2`**, public, MIT (re-derived from the registry 2026-07-28, where this
-  line said `0.0.1`; `npm view @cosyte/ccda version` is the only source of truth). Pre-alpha on the shared cosyte `0.0.x` ladder
+- **Published on npm at `0.0.4`**, public, MIT (re-derived from the registry 2026-08-01, where this
+  line said `0.0.2`; `npm view @cosyte/ccda version` is the only source of truth). Pre-alpha on the shared cosyte `0.0.x` ladder
   (`0.0.x` until first alpha, ADR 0001). A published version never moves backwards.
 - **There are no stubs left.** `src/index.ts` exports a working parser (`parseCcda`), serializer
   (`serializeCcda`), document builder (`buildCcda`), and document editor (`editCcda`), plus the
@@ -489,8 +489,8 @@ immutability + explicit mutation, and the profile system.
     its messages, verified green, and `deid` still leaked because `Segment.type` stayed unbounded on
     the model. So `src/parser/tokens.ts` (shape tests for a UID / version stamp / LOINC / media
     type, membership tests for an element name / v3 datatype name / media type / `ED.representation`)
-    is applied to `position.path`, `position.sectionCode`, `CcdaDocument.templateIds`,
-    `CcdaSection.templateIds`, `unsupported.xsiType` and
+    is applied to `position.path`, `position.sectionCode`, `position.templateId`,
+    `CcdaDocument.templateIds`, `CcdaSection.templateIds`, `unsupported.xsiType` and
     `ED.mediaType`/`representation`/`nullFlavor`.
     Recognition cannot move: every catalog OID and version stamp passes its shape.
     **Bound EVERY field of a `templateId`, not the two that look like locators.** The first cut
@@ -520,15 +520,144 @@ immutability + explicit mutation, and the profile system.
     collapsing two unrecognized anchors onto one `<withheld>` key would resolve a broken reference
     onto **unrelated narrative**, a clinical-safety regression worse than the leak. The
     broken-reference warning stopped naming the id instead.
-  - **`UNKNOWN_NAMESPACE_PREFIX` is declared, exported, and emitted by nothing.** No call site in
-    `src/` constructs it, so a foreign namespace prefix is reported nowhere. Pre-existing, found by
-    the slot table rather than introduced by it, and the reason that slot carries `expectCode: null`.
-    Removing the code would be a breaking change to a stable code set; wiring it up is the other
-    option and neither was taken here.
-  - **`CcdaPosition.templateId` is declared and populated by nothing**, so `toleranceApplies` can
-    never satisfy a `QuirkTolerance` keyed on `templateId`: such a profile entry silently tolerates
-    nothing. Pre-existing, found by a refuter on this slice, written onto the type's own docblock and
-    deliberately not closed here (it changes what a position carries).
+  - **`UNKNOWN_NAMESPACE_PREFIX` is wired up (`CCDA-DEAD-DIAGNOSTICS`), and WHERE is the whole
+    lesson.** It was declared, exported and constructed by nothing through `0.0.4`. It stayed
+    invisible for a structural reason rather than by oversight: every child lookup in
+    `src/model/dom.ts` is scoped to `urn:hl7-org:v3`, so **no navigation step in the model layer can
+    ever meet a foreign element**, and no amount of care in the model layer would have found one. It
+    is raised from `enforceStructureLimits` in `src/parser/secure-xml.ts` because the depth /
+    node-count walk is the package's **only exhaustive traversal**; the sweep rides on it and costs
+    no second pass. If you ever add a diagnostic about a node this parser does not navigate, that
+    walk is where it goes.
+    **It is REPLAYED after the model is built, never emitted where it is found, and this is the part
+    that was got wrong first and must not be undone.** The walk runs before the root gate and before
+    any clinical parsing, and under `{ strict: true }` the emitter escalates the FIRST warning it is
+    handed. The first cut emitted in place, and the conformance gate measured two consequences
+    against base: a non-C-CDA payload threw `UNKNOWN_NAMESPACE_PREFIX` instead of
+    `NOT_A_CLINICAL_DOCUMENT`, and a C-CDA carrying a foreign vendor block plus a real defect threw
+    it instead of the **safety-critical** `MISSING_CODE_SYSTEM`. A namespace deviation is a statement
+    about the whole document and must never take a fatal's or a safety-critical code's place.
+    `test/dead-diagnostics-matrix.test.ts` pins both. The cost is stated rather than hidden: in
+    lenient mode these land LAST on `doc.warnings`, so `OnWarningCallback` documents **emission**
+    order, not discovery order.
+    **The skip-the-root guard that the first cut used does NOT work and was removed.** A foreign
+    root's children are in the same foreign namespace, so skipping depth 1 changed nothing for any
+    document with a body, and the test pinning it used a CHILDLESS `<Bundle/>`, which passes whatever
+    the code does. That is the "a probe that cannot fail proves nothing" rule, broken inside the
+    slice that quotes it. Both replacement fixtures carry children on purpose.
+    **Once per distinct foreign namespace, not once per node. That bounds the BENIGN case and is not
+    a defence.** A vendor extension block is one deviation however many elements it spans, but a
+    document declaring a distinct namespace on every element still yields one warning per element,
+    bounded only by `maxNodeCount`, exactly like every other per-element warning here. Do not write
+    it up as a hostile-input bound. An element with no namespace at all counts as foreign
+    (`isRecognizedNamespace` reads a `null` URI that way) and is tracked by its own flag rather than
+    a sentinel string key, so nothing a document can carry collides with it.
+    **The position is the SHALLOWEST use of the namespace, not the first in document order**, because
+    the walk is level-order (it enforces a depth cap; a depth-first version would be the recursion it
+    exists to avoid). `line`/`column` locate the element the warning names exactly; they do not name
+    the earliest such element.
+    **The message text says what the code does, because the code NAME is historical.** It says
+    `PREFIX`, but what is tested is the element's namespace, and an element in no namespace raises it
+    with no prefix in sight. Renaming a stable code is a breaking change, so the frozen message was
+    corrected instead.
+    **Attributes are deliberately NOT swept either, and do not "finish the job" by adding them.** An
+    unprefixed C-CDA attribute (`root`, `code`, `nullFlavor`) carries no namespace at all, and an
+    `xmlns:` declaration lives in the namespace reserved for declarations, so an attribute sweep
+    against the recognized set would flag **every attribute in a conforming document**.
+    **The PHI slot it un-blocked is now a live probe.** `ClinicalDocument (foreign namespace prefix)`
+    carried `expectCode: null` because no branch existed to reach; it names the code now. The marker
+    is planted as the _prefix_, and neither the prefix nor the namespace URI reaches the warning (the
+    message is registry-whole, the position carries the bounded element **local name**, so a foreign
+    `<vnd:note>` positions as `<withheld>`). It was confirmed able to go **red** by injecting the
+    prefix into the position and watching the runner fail, before reverting. Re-confirm that way if
+    you touch the sweep: a probe that cannot fail proves nothing.
+  - **`CcdaPosition.templateId` is populated by THREE codes, and by nothing else**
+    (`CCDA-DEAD-DIAGNOSTICS`). It was declared and set by nothing, so `toleranceApplies` could never
+    satisfy a `QuirkTolerance` keyed on `templateId` and such a profile entry silently tolerated
+    nothing. The three are `TEMPLATE_EXTENSION_ABSENT` (the matched document-type root) and
+    `UNKNOWN_SECTION_CODE` / `SECTION_MATCHED_BY_LOINC_FALLBACK` (the section's first rooted
+    `templateId`).
+    **Two document-level codes carry none ON PURPOSE, and the second is the one to understand.**
+    `MISSING_TEMPLATE_ID` has no template to name. `UNKNOWN_DOCUMENT_TEMPLATE` has too many: its
+    subject is the templateId **set** naming no type, and the obvious pick, the first root in
+    document order, is the **US Realm Header** stamp on essentially every real C-CDA. A first cut
+    populated it that way; it was measured, seen to be a near-constant, and taken back out, because a
+    `match` keyed on it would read like narrowing and tolerate the code on every document. **Filling
+    a field because it can be filled is not the same as populating it, and do not "finish the job"
+    by restoring it.** Naming the last root instead would be an invented ordering rule: C-CDA does
+    not require the document-type stamp to follow the header.
+    It is bounded **at the site that sets it**, on the v3 UID shape, exactly as
+    `sectionCode` is bounded on the LOINC shape; the roots reaching those sites have already been
+    through `boundTemplateId`, and re-bounding is idempotent and keeps the bound visible where the
+    field is written.
+    **`QuirkMatch` was overstating itself and now says which codes carry which field.** Its example
+    was "deprecated LOINC only within Vital Signs", which has never worked and still does not:
+    `DEPRECATED_LOINC` carries no `sectionCode` either, so that narrowing matched **nothing** rather
+    than narrowing anything. A `match` on a field the warning does not carry is **inert, not broad**.
+    `sectionCode` comes with the two section-recognition codes; `templateId` with those two plus the
+    two document-type codes. No profile in `ccdaProfiles` uses `match` at all, so nothing shipped
+    moved.
+    **Still open, filed rather than smuggled in:** `defineCcdaProfile` accepts a `match` on a code
+    that cannot carry the field, so an inert tolerance is documented rather than refused. Refusing it
+    needs a code-to-position-field registry, which is exactly the kind of stated claim that outlives
+    the code it describes.
+  - **`NULL_FLAVORS` is the WHOLE v3 NullFlavor code system, seventeen concepts, and it was eight**
+    (`CCDA-DEAD-DIAGNOSTICS`). Transcribed from the published HL7 Terminology `v3-NullFlavor` code
+    system for `2.16.840.1.113883.5.1008` (`content: complete`, `caseSensitive: true`), not from
+    memory, and that matters: the missing set was first written down as **seven** tokens and is
+    **nine** (`INV`, `DER`, `NINF`, `PINF`, `UNC`, `NAVU`, `QS`, `TRC`, `NP`). A conforming
+    `nullFlavor="PINF"` on a `PQ`, and the `nullFlavor="NP"` a real Plan of Treatment carries on a
+    `<code>`, both drew a false `INVALID_NULL_FLAVOR`.
+    **Widening did not weaken the PHI bound it carries, and that is the part to check if you touch
+    it.** `boundTemplateId` and `parseEd` decide echo-vs-`<withheld>` by membership in this list. The
+    bound is "a member of a closed set of literals this package owns", never a shape test, and it
+    still is: the set is larger, is the same closed set the standard defines, and every entry is a
+    fixed token, so nothing sender-controlled gained a path through. What changed is that a
+    conforming token is echoed where it used to be withheld.
+    **`NP` carries `status: retired` in the published code system and is admitted anyway**, because
+    it **is** a concept of the system and `INVALID_NULL_FLAVOR` asserts that a token is not one.
+    There is no deprecation signal for `nullFlavor` to say anything narrower with, and inventing one
+    was out of scope. **`smartScorecard` stopped citing `"UNC" for "UNK"` as a malformed token**:
+    `UNC` ("un-encoded") is a real concept and no longer draws the warning at all. The tolerance
+    itself is unchanged.
+    **Monotonicity for all three parts, MEASURED against base `src/` in BOTH MODES and not argued.**
+    A 51-row matrix (recognition shapes, namespace shapes including a foreign root and a foreign
+    block beside a safety-critical defect, and all seventeen NullFlavor concepts plus the controls
+    `NOPE` and lower-case `unk`, each planted on a header `<administrativeGenderCode>` and on a
+    medication `<doseQuantity>`) run against the previous tree and against the change, diffed:
+    **25 identical**, **8 pure gain** (five gaining `UNKNOWN_NAMESPACE_PREFIX`, three gaining a
+    `position.templateId` on an unchanged code), and **18 going from `INVALID_NULL_FLAVOR` to silent
+    on that code**. That last class is
+    warned-to-quieter and is the one to justify rather than wave at: each of those documents names a
+    real concept of the code system, so the withdrawn warning was a false positive,
+    `INVALID_NULL_FLAVOR` is **not** in `SAFETY_CRITICAL_CODES`, and no row loses any other code.
+    Both controls hold: `NOPE` still draws it and so does lower-case `unk`, because the code system
+    is `caseSensitive`.
+    **THE STRICT COLUMN MOVES ON 22 OF THE 51 ROWS, AND THAT IS THE INTENDED EFFECT. Do not "fix" it
+    back.** Four rows begin throwing `UNKNOWN_NAMESPACE_PREFIX` where base threw nothing, and
+    eighteen stop throwing a false `INVALID_NULL_FLAVOR`; both classes are the same rows already
+    counted in the 8-gain and 18-withdrawn buckets, not movement beyond them. An earlier draft of
+    this entry claimed the strict column was identical on every row, which is false and would have
+    read as a regression to anyone who measured it. The invariants that **do** hold on every row,
+    and that the test asserts rather than leaving to a snapshot, are that **no row's strict outcome
+    moved independently of its lenient one** and **no row's strict outcome is a namespace code where
+    base threw a fatal or a safety-critical one**.
+    **THE FIRST MEASUREMENT HAD NO STRICT COLUMN, AND THAT IS WHY IT PASSED A BROKEN SLICE.** It was
+    a lenient-mode projection, and both real defects lived only in strict mode. `documentation`
+    already records that a filtered projection cannot support a monotonicity claim; this repo learned
+    it again, in the slice that cites the rule.
+    **What is COMMITTED is the 32-row subset of that planting, not all 51 rows.**
+    `test/dead-diagnostics-matrix.test.ts` runs both modes and filters nothing, but it holds the
+    thirteen recognition and namespace shapes plus the nineteen NullFlavor tokens planted on
+    `<administrativeGenderCode>` only; the `<doseQuantity>` half is still a hand-run and is not in
+    the file. So **re-running that file against the previous tree gives 32 rows, 15 identical, 8
+    pure gain and 9 withdrawn**, with the strict column moving on 13 -- the 51-row totals less the
+    `<doseQuantity>` twins, each of which moved identically to its `<administrativeGenderCode>`
+    counterpart. Expect the 32-row numbers from the file and the 51-row numbers only from the wider
+    hand-run; do not read either set as evidence that the other was wrong. **If you touch
+    `NULL_FLAVORS`, the sweep, or `position.templateId` again, re-run that file against the previous
+    tree and diff before you update its snapshot; the list is public surface and a published version
+    never moves backwards.**
   - `SAFETY_CRITICAL_CODES` is a frozen read-only view, not a `Set` instance: every read operation
     works (including spread), but `instanceof Set` is `false`.
   - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`

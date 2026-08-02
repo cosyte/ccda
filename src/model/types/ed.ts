@@ -86,8 +86,10 @@ export function parseEd(el: Element | undefined, ctx: ParseCtx): ED | undefined 
   // Bounded like the other two, and for the same reason: it rides on the object
   // the model presents as the body's shape, and `INVALID_NULL_FLAVOR` fires
   // exactly when the token is outside the set, so at that point nothing
-  // distinguishes it from any other text. Bounded on membership in this
-  // package's `NULL_FLAVORS`; the token itself survives in `doc.toString()`.
+  // distinguishes it from any other text. Bounded on membership in
+  // `NULL_FLAVORS`, which is the whole v3 NullFlavor code system (it was eight
+  // of its seventeen concepts through 0.0.4, so a conforming PINF read
+  // `<withheld>` here); the token itself survives in `doc.toString()`.
   const nullFlavor = readNullFlavor(el, ctx);
   if (nullFlavor !== undefined) {
     out.nullFlavor = isNullFlavor(nullFlavor) ? nullFlavor : WITHHELD;

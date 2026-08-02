@@ -62,8 +62,9 @@ message: not a template OID, not a `nullFlavor` token, not a unit, not an elemen
 tells you `code` plus `position`, and that is the entire contract.
 
 The `position` is bounded too, rather than copied. Its `path` is an element local name echoed only when
-it is one this parser navigates (`<withheld>` otherwise), and its `sectionCode` is echoed only when it
-has the shape of a LOINC part number. `line` and `column` still locate the element exactly.
+it is one this parser navigates (`<withheld>` otherwise), its `sectionCode` is echoed only when it
+has the shape of a LOINC part number, and its `templateId` only when it has the shape of an HL7 v3
+UID. `line` and `column` still locate the element exactly.
 
 So you can log the full `.warnings` array, and a thrown `CcdaParseError`'s `message`, `stack` and
 `position`, without leaking. Keep the same discipline in your own code: log the code and the position,

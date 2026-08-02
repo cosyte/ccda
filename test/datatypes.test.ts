@@ -16,6 +16,7 @@ import {
   parseV3DateTime,
   isNullFlavor,
   NULL_FLAVORS,
+  WARNING_CODES,
   type CcdaWarning,
 } from "../src/index.js";
 
@@ -200,5 +201,52 @@ describe("null flavors", () => {
   it("recognizes the canonical set", () => {
     for (const nf of NULL_FLAVORS) expect(isNullFlavor(nf)).toBe(true);
     expect(isNullFlavor("NOPE")).toBe(false);
+  });
+
+  /**
+   * The list is the whole HL7 v3 NullFlavor code system, transcribed from the
+   * published HL7 Terminology `CodeSystem/v3-NullFlavor` (`content: complete`).
+   * It held eight of the seventeen concepts through `0.0.4`, so a conforming
+   * `PINF` drew a false `INVALID_NULL_FLAVOR` and read `<withheld>` wherever the
+   * bound in `ii.ts` / `ed.ts` tested membership. Pinned as a set rather than
+   * spot-checked, so dropping a concept is a failing diff.
+   */
+  it("is the whole v3 NullFlavor code system, not a working subset", () => {
+    expect([...NULL_FLAVORS].sort()).toEqual([
+      "ASKU",
+      "DER",
+      "INV",
+      "MSK",
+      "NA",
+      "NASK",
+      "NAV",
+      "NAVU",
+      "NI",
+      "NINF",
+      "NP",
+      "OTH",
+      "PINF",
+      "QS",
+      "TRC",
+      "UNC",
+      "UNK",
+    ]);
+  });
+
+  it("no longer calls a conforming token invalid", () => {
+    // Each of these is a real concept of 2.16.840.1.113883.5.1008 that the
+    // eight-token list rejected. `NP` is `status: retired` in THO and is a
+    // member all the same, which is what INVALID_NULL_FLAVOR asserts about.
+    for (const nf of ["PINF", "NINF", "TRC", "DER", "QS", "NP", "INV", "UNC", "NAVU"]) {
+      const warnings: CcdaWarning[] = [];
+      parsePq(el(`<doseQuantity nullFlavor="${nf}"/>`), { emit: (w) => warnings.push(w) });
+      expect(warnings.map((w) => w.code)).not.toContain(WARNING_CODES.INVALID_NULL_FLAVOR);
+    }
+  });
+
+  it("still flags a token that is outside the code system", () => {
+    const warnings: CcdaWarning[] = [];
+    parsePq(el(`<doseQuantity nullFlavor="UNKOWN"/>`), { emit: (w) => warnings.push(w) });
+    expect(warnings.map((w) => w.code)).toContain(WARNING_CODES.INVALID_NULL_FLAVOR);
   });
 });

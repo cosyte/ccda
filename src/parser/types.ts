@@ -21,20 +21,33 @@ import type { TerminologyAdapter } from "../model/terminology.js";
  * optional. Together with `code` it is the whole contract for locating a
  * deviation: no diagnostic message names anything the document said.
  *
- * **The two string fields the parser populates are bounded, not copied.** `path`
- * is an element local name, which a sender can make anything, so it is echoed
- * only when it is a member of the CDA vocabulary this parser navigates and is
- * `<withheld>` otherwise. `sectionCode` is echoed only when it has the shape of
- * a LOINC part number, which matters because `UNKNOWN_SECTION_CODE` fires
- * exactly when the code is unrecognized. See `./tokens.ts` for both, and for why
- * a shape or membership test is used rather than a length cap. `line` and
+ * **The three string fields the parser populates are bounded, not copied.**
+ * `path` is an element local name, which a sender can make anything, so it is
+ * echoed only when it is a member of the CDA vocabulary this parser navigates
+ * and is `<withheld>` otherwise. `sectionCode` is echoed only when it has the
+ * shape of a LOINC part number, which matters because `UNKNOWN_SECTION_CODE`
+ * fires exactly when the code is unrecognized. `templateId` is echoed only when
+ * it has the shape of an HL7 v3 UID, for the same reason: it is a
+ * consumer-controlled `II.root`. See `./tokens.ts` for all three, and for why a
+ * shape or membership test is used rather than a length cap. `line` and
  * `column` are the XML locator and are never derived from content.
  *
- * **`templateId` is declared and never populated**, by any site in `src/`. That
- * is pre-existing and is stated here rather than left to be discovered: it means
- * a `QuirkTolerance` keyed on `templateId` can never match, so such a profile
- * entry silently tolerates nothing. Closing it is a change to what a position
- * carries, not to this bound, and is filed rather than smuggled in here.
+ * **Which codes carry which field is narrow, and worth reading before you key a
+ * profile on one.** `sectionCode` is carried by `UNKNOWN_SECTION_CODE` and
+ * `SECTION_MATCHED_BY_LOINC_FALLBACK`. `templateId` is carried by those two
+ * (the section's first rooted `<templateId>`) and by `TEMPLATE_EXTENSION_ABSENT`
+ * (the matched document-type root). No other code carries either, so a
+ * `QuirkMatch` keyed on one narrows those codes and matches nothing on the
+ * rest: an entry-level warning such as `DEPRECATED_LOINC` carries neither field
+ * today.
+ *
+ * Two document-level codes carry no `templateId` **on purpose**, and it is a
+ * decision rather than an omission. `MISSING_TEMPLATE_ID` has no template to
+ * name. `UNKNOWN_DOCUMENT_TEMPLATE` has too many: its subject is the templateId
+ * set naming no type, and the obvious pick, the first root in document order, is
+ * the US Realm Header stamp carried by essentially every real C-CDA, so keying a
+ * tolerance on it would read like narrowing while tolerating the code
+ * everywhere.
  *
  * The claim that stood here through `0.0.4`, that the fields were PHI-free "by
  * construction" because a `path` carries element names and a `sectionCode` is a
@@ -52,6 +65,7 @@ import type { TerminologyAdapter } from "../model/terminology.js";
  * const pos: CcdaPosition = {
  *   path: "/ClinicalDocument/component/structuredBody/component[3]/section",
  *   sectionCode: "11450-4",
+ *   templateId: "2.16.840.1.113883.10.20.22.2.5.1",
  * };
  * ```
  */
@@ -66,7 +80,15 @@ export interface CcdaPosition {
 /**
  * Callback invoked inline each time the parser emits a Tier-2 warning.
  * Always fires BEFORE the warning is appended to `CcdaDocument.warnings` so
- * consumers observe warnings in the same order the parser discovered them.
+ * consumers observe warnings in the same order the parser emitted them.
+ *
+ * That is emission order, and for one code it is deliberately not discovery
+ * order: `UNKNOWN_NAMESPACE_PREFIX` is found during the pre-parse DOM walk and
+ * replayed **last**, after the model is built. It is a statement about the whole
+ * document, and emitting it where it is found would let it take the place of the
+ * `NOT_A_CLINICAL_DOCUMENT` fatal, or of the first safety-critical per-element
+ * warning, under `{ strict: true }`, where the first warning is the one that
+ * throws. Nothing else is reordered.
  *
  * @example
  * ```ts
@@ -125,7 +147,7 @@ export interface CcdaParseLimits {
 export interface ParseCcdaOptions {
   /** When `true`, escalate every Tier-2 deviation to a thrown error instead of a warning. */
   readonly strict?: boolean;
-  /** Inline callback fired for each Tier-2 warning, in discovery order. */
+  /** Inline callback fired for each Tier-2 warning, in emission order (see {@link OnWarningCallback}). */
   readonly onWarning?: OnWarningCallback;
   /** Override one or more of the default safety caps applied before DOM construction. */
   readonly limits?: CcdaParseLimits;
