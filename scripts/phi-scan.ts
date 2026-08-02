@@ -42,6 +42,15 @@
  * SECURITY: every subprocess is `git`, invoked via `execFileSync` with array
  * args only. Never shell-form spawn.
  *
+ * A scan that could not read what it enumerated REFUSES (exit 2) rather than
+ * reporting a clean tree it never observed; that is the property that makes the
+ * gate worth having and it is not negotiable. The one bounded exception is the
+ * enumeration's own TOCTOU window, documented on `Target.tolerateVanish`: an
+ * UNTRACKED file the walk listed itself and that is gone by the time we read it
+ * (a build tool's transient) is reported as skipped instead of refusing. A
+ * tracked file, a non-`ENOENT` failure, and a file that reappears all still
+ * refuse, and `all` mode refuses outright if it ended up observing nothing.
+ *
  * Modes:
  *   --staged                 - scan only files staged in `git diff --cached`
  *   --allow-fixture <path>   - bypass one path; rejected unless logged in
@@ -220,6 +229,17 @@ function parseArgs(argv: string[]): Args {
   return { mode, paths: scanPaths, allowFixtures };
 }
 
+/**
+ * The `errno` string of a Node system error (`ENOENT`, `EACCES`, ...), or
+ * `undefined` for anything else. Narrowed with `in` rather than cast, so a
+ * thrown non-error cannot masquerade as a system error.
+ */
+function errorCode(err: unknown): string | undefined {
+  if (typeof err !== "object" || err === null || !("code" in err)) return undefined;
+  const { code } = err;
+  return typeof code === "string" ? code : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Allow-list + override log
 // ---------------------------------------------------------------------------
@@ -310,6 +330,41 @@ function validateAllowFixtures(allowFixtures: string[]): void {
 interface Target {
   path: string; // forward-slash repo-relative path for reporting
   read: () => Buffer;
+  /**
+   * Absolute path, set only for a target the walk enumerated itself, so a
+   * vanished file can be re-checked once the sweep has finished.
+   */
+  absPath?: string;
+  /**
+   * TOCTOU: true only for a file the scanner ENUMERATED ITSELF in `all` mode
+   * AND that git does not track. `all` mode lists the whole tree first and
+   * reads each file afterwards, so a transient build artifact can be deleted
+   * inside that window: `tsup` writes `tsup.config.bundled_<hash>.mjs` at the
+   * repo root and removes it when the build ends, which made a read throw
+   * `ENOENT` and refused an entire publish-time sweep (`ccda@0.0.5`).
+   *
+   * Only the ENUMERATION was unsound there, never the refusal, so the fix is
+   * scoped hard rather than by relaxing what a failed read means:
+   *   - a TRACKED file is never tolerated. The committed corpus is what the
+   *     gate promises to have observed, so if a tracked file cannot be read
+   *     the scan is incomplete and still refuses (exit 2);
+   *   - only `ENOENT` is tolerated. `EACCES`, `EISDIR` and friends are not a
+   *     file that went away, they are a scan that failed;
+   *   - a tolerated file is re-checked after the sweep and reported. If it is
+   *     back on disk, the sweep did not observe a file that exists now, so the
+   *     run refuses;
+   *   - `staged` mode reads blobs out of the git index (`git show :path`), so
+   *     the pre-commit gate never depends on this at all.
+   *
+   * RESIDUAL, stated rather than hidden: the re-check is keyed on the PATH the
+   * walk enumerated, not on content. An untracked file RENAMED inside the window
+   * is `ENOENT` at the old path and was never enumerated under the new one, so
+   * its bytes go unscanned under a clean report. It is bounded: the file has to
+   * be untracked, so committing it means `git add`, after which it is tracked
+   * and untolerable, and pre-commit reads the index either way. Closing it needs
+   * a content-addressed sweep, which is a different design, not a wider bound.
+   */
+  tolerateVanish?: boolean;
 }
 
 function walk(dir: string, out: string[]): void {
@@ -346,15 +401,49 @@ function gitIgnored(paths: string[]): Set<string> {
   return ignored;
 }
 
+/**
+ * Every path git tracks, or `null` when git could not answer. `null` means the
+ * tolerance below is switched off entirely (fail closed): without the tracked
+ * set we cannot tell a build transient from committed content.
+ *
+ * An EMPTY answer counts as no answer for the same reason. `git ls-files` exits
+ * 0 with no output for a repo whose index is empty (or unreadable in a way that
+ * does not raise), and an empty set would make EVERY file untracked, which is
+ * the one state in which the tracked-file bound below silently stops existing.
+ * This repo always tracks files, so there is no legitimate empty case here.
+ */
+function gitTracked(): Set<string> | null {
+  try {
+    // SECURITY: array-form execFileSync, no shell. `-z` is NUL-separated and
+    // unquoted, so it matches the walk's forward-slash relative paths exactly.
+    const out = execFileSync("git", ["ls-files", "-z"], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const tracked = new Set<string>();
+    for (const p of out.toString("utf8").split("\0")) {
+      if (p.length > 0) tracked.add(p);
+    }
+    return tracked.size > 0 ? tracked : null;
+  } catch {
+    return null;
+  }
+}
+
 function buildTargetsForAll(): Target[] {
   const files: string[] = [];
   walk(REPO_ROOT, files);
   const ignored = gitIgnored(files);
+  const tracked = gitTracked();
   return files
     .map((abs) => ({ abs, rel: normalizePath(abs) }))
     .filter(({ rel }) => !ignored.has(rel))
     .filter(({ rel }) => !rel.startsWith(EXCLUDED_PREFIX))
-    .map(({ abs, rel }) => ({ path: rel, read: () => readFileSync(abs) }));
+    .map(({ abs, rel }) => ({
+      path: rel,
+      read: () => readFileSync(abs),
+      absPath: abs,
+      tolerateVanish: tracked !== null && !tracked.has(rel),
+    }));
 }
 
 function buildTargetsForPaths(paths: string[]): Target[] {
@@ -748,11 +837,16 @@ function scanCda(path: string, text: string, allow: AllowList, hits: Hit[]): voi
  * whose author email is not PHI) is out of scope and skipped, so it is not a
  * false positive.
  */
-function scanTarget(target: Target, allow: AllowList, hits: Hit[], force: boolean): void {
+function scanTarget(target: Target, allow: AllowList, hits: Hit[], force: boolean): boolean {
   let buf: Buffer;
   try {
     buf = target.read();
   } catch (err) {
+    // TOCTOU, see `Target.tolerateVanish`: an untracked file the walk enumerated
+    // itself may be a build transient that was deleted before we reached it.
+    // Report it as unobserved instead of refusing; every other failure, and any
+    // tracked file, still refuses the whole scan.
+    if (target.tolerateVanish === true && errorCode(err) === "ENOENT") return false;
     throw new InvocationError(
       `could not read ${target.path}: ${err instanceof Error ? err.message : String(err)}`,
     );
@@ -761,14 +855,16 @@ function scanTarget(target: Target, allow: AllowList, hits: Hit[], force: boolea
   if (looksLikeCda(text, target.path)) {
     scanCda(target.path, text, allow, hits);
     scanCommonShapes(target.path, text, allow, hits);
-    return;
+    return true;
   }
   if (force || isSourceCode(target.path)) {
     // Not a document, conservative shape pass only (dashed SSN + non-test email)
     // over hand-written src/ + scripts/ code (or an explicitly-named path).
     scanCommonShapes(target.path, text, allow, hits);
   }
-  // Otherwise: out of scope (config / lockfile / non-code non-document), skip.
+  // Otherwise: out of scope (config / lockfile / non-code non-document), skipped
+  // as a scoping decision, but the bytes WERE read, so the target is observed.
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -838,9 +934,12 @@ function main(): number {
   // all / staged modes decide scope per file inside scanTarget.
   const force = args.mode === "paths";
   const hits: Hit[] = [];
+  const vanished: Target[] = [];
+  let observed = 0;
   for (const t of targets) {
     try {
-      scanTarget(t, allow, hits, force);
+      if (scanTarget(t, allow, hits, force)) observed += 1;
+      else vanished.push(t);
     } catch (err) {
       if (err instanceof InvocationError) {
         process.stderr.write(`[phi-scan] ${err.message}\n`);
@@ -848,6 +947,38 @@ function main(): number {
       }
       throw err;
     }
+  }
+
+  // A tolerated file is never silent, and the tolerance is only good while the
+  // file is still gone: if it is back on disk the sweep skipped something that
+  // exists, which is an incomplete scan and refuses like any other.
+  if (vanished.length > 0) {
+    const back = vanished.filter((t) => t.absPath !== undefined && existsSync(t.absPath));
+    if (back.length > 0) {
+      process.stderr.write(
+        `[phi-scan] could not read ${back.map((t) => t.path).join(", ")}: vanished mid-scan and is ` +
+          `present again, so the sweep did not observe it. Re-run with the tree at rest.\n`,
+      );
+      return 2;
+    }
+    process.stderr.write(
+      // "gone" rather than "deleted": a rename leaves the enumerated path just
+      // as absent, and the residual on `Target.tolerateVanish` is about exactly
+      // that case, so the line must not assert the file was removed.
+      `[phi-scan] skipped ${String(vanished.length)} untracked file(s) gone between ` +
+        `enumeration and read: ${vanished.map((t) => t.path).join(", ")}\n`,
+    );
+  }
+
+  // Refuse a sweep that observed nothing. `all` mode always reaches at least the
+  // allow-list itself, so zero reads means the enumeration or the tree is wrong,
+  // never a clean repo. (`staged` legitimately has nothing to scan when a commit
+  // touches only markdown, and `paths` is bounded by the caller's argv.)
+  if (args.mode === "all" && observed === 0) {
+    process.stderr.write(
+      "[phi-scan] refusing: the all-mode sweep observed no files, so it proves nothing.\n",
+    );
+    return 2;
   }
 
   report(hits);

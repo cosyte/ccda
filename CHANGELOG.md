@@ -14,6 +14,40 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Fixed
 
+- **A race in the PHI gate's own enumeration no longer refuses a publish (`PHI-SCAN-ENUMERATION-TOCTOU`).**
+  `scripts/phi-scan.ts` lists the whole tree in all-mode and reads each file afterwards. `tsup` writes
+  `tsup.config.bundled_<hash>.mjs` at the repo root and deletes it when a build ends, inside that window,
+  so the read threw `ENOENT` and the scanner refused the entire sweep with exit 2. That failed
+  `prepublishOnly` and blocked the real `ccda@0.0.5` publish on 2026-08-02. It is load-dependent and
+  intermittent, so a plain re-run published cleanly and it reads like a flake.
+  - **The two halves race inside `pnpm test`, which is what made it look like one.** `prepublishOnly` runs
+    the suite before `build`, and inside the suite `test/docs-content.test.ts` provisions `dist/` by running
+    `pnpm build` while `test/scripts/phi-scan.test.ts` sweeps the live checkout in all-mode from another
+    worker. Under load the build's transient config is born and deleted inside the sweep's window.
+  - **The refusal was correct; the enumeration was unsound.** Refusing a scan it could not complete is the
+    property that makes the gate worth having, so it is untouched. What changed is that the enumeration no
+    longer admits a file that may not survive to the read: exactly one case is tolerated, a file the walk
+    enumerated **itself** that **git does not track** and that fails with **`ENOENT`**. It is reported on
+    stderr as skipped, never dropped silently.
+  - **Everything else still refuses.** A **tracked** file that cannot be read (the committed corpus is what
+    the gate promises to have observed), any non-`ENOENT` failure (`EACCES` / `EISDIR` is a scan that
+    failed, not a file that went away), a `git` that cannot report the tracked set, and a tracked set that
+    comes back **empty** (which would make every file untracked, the one state in which that bound stops
+    existing) all tolerate nothing. **All-mode also refuses outright when it observed no files**, so the
+    tolerance can never decay into a clean report of a tree nothing was read from.
+  - **Which of those are pinned by a test, measured rather than asserted: five of six.** A tolerated file
+    that is **back on disk** when the sweep ends still refuses, and that branch is the one with no test:
+    reaching it needs a timed re-create against a deliberately slowed sweep, and a load-sensitive sleep in
+    the suite guarding this very defect is the failure it exists to stop. Stated as a known gap rather than
+    papered over; losing it would cost the re-check, not the tolerance's bounds.
+  - **The other tests hit the window without a sleep or a real build.** The scanner runs `git` between the
+    walk and the first read, so a `git` shim first on `PATH` is a deterministic hook into exactly that gap.
+    Every case runs against a throwaway git repo, so no decoy is ever written into this repo. The pre-commit
+    path (`--staged`) reads blobs from the git index and never depended on any of this.
+  - **One residual, stated rather than hidden:** the post-sweep re-check is keyed on the enumerated **path**,
+    not on content, so an untracked file **renamed** inside the window goes unscanned under a clean report.
+    It is bounded (committing such a file means `git add`, after which it is tracked and untolerable, and
+    pre-commit reads the index either way); closing it needs a content-addressed sweep, a different design.
 - **Two declared diagnostics that nothing could ever produce now work, and `NULL_FLAVORS` is the
   whole HL7 v3 NullFlavor code system (`CCDA-DEAD-DIAGNOSTICS`).** All three were found by review
   during `PHI-WARNING-MESSAGE-LEAK` and correctly left out of it.
