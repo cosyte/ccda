@@ -14,6 +14,53 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Fixed
 
+- **The test suite no longer asserts an idle box (`PARSER-TESTTIMEOUT-ASSERTS-AN-IDLE-BOX`).**
+  `vitest.config.ts` set a global `testTimeout: 10_000`, which is an assertion about the machine
+  rather than about the code. It is gone, `hookTimeout: 10_000` went with it (it restated Vitest's
+  own default verbatim, measured), and the tests whose cost is genuinely not fixed now declare their
+  own budget beside the work. **The rule, and why a global is the wrong shape, is stated once, in the
+  docblock of `vitest.config.ts`.** No runtime code changed and the published surface is unaffected.
+  - **The trim was the win, not the ceiling.** `test/scripts/phi-scan.test.ts` spawns the scanner in
+    nearly every case and paid a `tsx` start-up at each one. It spawns `node` instead (native type
+    stripping), measured at ~183 ms per start against ~646 ms for `tsx`, interleaved. That file's
+    summed test time fell by about **2.8x** (median of interleaved single-suite coverage runs) while
+    the file **gained** a test: one case still pays the `tsx` cold start and asserts the two runners
+    agree on exit code, stdout and stderr, because `pnpm phi-scan` is what the pre-commit hook and CI
+    really run. **Read the ratio, not an absolute:** the same file summed anywhere from 12.7 s to
+    98.3 s on the head tree alone depending on what else the box was doing, which is why an absolute
+    from one run is worthless here and why base and head were interleaved.
+  - **THE MEASUREMENT, because on this item the method is the claim.** Twenty-two `vitest run
+--coverage` runs on 2026-08-03, on a 12-CPU cgroup quota with sibling workers loading the box.
+    Base and head were **interleaved**, never compared across an hour, because a quiet box reads as a
+    speed-up. Six runs were a single suite at a time; sixteen were **four concurrent coverage suites
+    in one working tree**, harsher than anything CI does. The coverage runs are not optional: CI
+    gates on `pnpm test` **and** `pnpm test:coverage`, and the instrumented run roughly doubled every
+    peak.
+  - **What the 10 s global actually did, on correct code.** Across the eight concurrent base runs it
+    produced **20 timeout failures in 8 of 8 runs**, over five files, every one of them green when
+    run alone. Across the eight concurrent head runs, against the 5 s default this repo now inherits,
+    **2**, both in the single most starved run, both at about 1.3x the ceiling. Note the ratio that
+    moved, which is the durable part: base was a 10 s ceiling over a ~646 ms spawn, head is a 5 s
+    ceiling over a ~183 ms spawn. Halving the ceiling still bought headroom, because the trim shrank
+    the measured thing faster than the ceiling shrank.
+  - **The tests furthest past the old ceiling already carried their own budget**, so the global was
+    never what stood between this suite and a red: on the base tree `test/scripts/attw-gate.test.ts`,
+    which runs a real `npm pack` through `attw`, peaked at 16.2 s in a single-suite run and 24.2 s
+    under four concurrent suites, both far past the 10 s global and both green, because that file has
+    carried a 120 s budget all along.
+  - **Two tests were measured and deliberately NOT given a budget**, and that is a result rather than
+    an omission. `test/scripts/phi-scan.test.ts`'s sweep and `test/dead-diagnostics-matrix.test.ts`
+    each crossed 5 s exactly once, in the worst of those sixteen runs, at ~6.3 s; sequentially they
+    peak at 894 ms and 803 ms. Budgeting them would be sizing for a four-times-oversubscribed box,
+    which is the error this item exists to remove. With the declared budgets in place **every
+    remaining test peaked at 894 ms in a single-suite coverage run**, a ~5.6x margin.
+  - **Two limits, disclosed rather than fixed.** `engines.node` says `>=22.0.0` while unflagged type
+    stripping starts at Node 22.18, so the `node` runner needs a newer 22 than the manifest demands;
+    CI's 22 + 24 matrix resolves above it, and narrowing `engines` is consumer-facing and belongs in
+    its own change. And the four-concurrent condition is not clean for this repo: two suites write to
+    a shared `dist/` and one appends to the tracked `phi-scan-overrides.md`, so a handful of
+    same-tree collisions appeared on both trees and are excluded from the counts above as artifacts
+    of the harness, not of either tree.
 - **The PHI scanner no longer reads an IN-SCOPE symbolic link as a clean file, on either enumerating
   route (`PHI-SCAN-SYMLINK-BLIND-ON-BOTH-ROUTES`).** An in-scope entry that is not a regular file
   now refuses the scan (exit 2), naming every offender by its own repo-relative path and an
