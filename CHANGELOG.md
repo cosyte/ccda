@@ -14,6 +14,24 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Fixed
 
+- **The PHI scanner no longer reads an IN-SCOPE symbolic link as a clean file, on either enumerating
+  route (`PHI-SCAN-SYMLINK-BLIND-ON-BOTH-ROUTES`).** An in-scope entry that is not a regular file
+  now refuses the scan (exit 2), naming every offender by its own repo-relative path and an
+  engine-owned kind token, **never the link target**. `--staged` reads
+  `git diff --cached --raw -z --diff-filter=AMT`; the walk collects non-regular entries instead of
+  dropping them.
+  - **"In scope" is each route's own pre-existing boundary, and the qualifier is load-bearing.** A
+    gitignored link, and a link occupying the name of a skipped tooling directory, still pass. That
+    is unchanged from before and is argued in the docblock; an unqualified "no link reads clean"
+    would be false, which is why this headline carries the word.
+  - **The rule, its bounds, its two measured repo-specific divergences and its residuals live in one
+    place: the docblock of `scripts/phi-scan.ts`.** Read it there. Restating a guard in four
+    committed files is how three of them end up stale, which this package has already paid for.
+  - The cases that pin it live in `test/scripts/phi-scan.test.ts`; some are red against the previous
+    scanner and the rest are green against it on purpose, asserting behaviour that must **not** move.
+    No tally is quoted here on purpose: a test count is derivable in one command, it is the most
+    drift-prone sentence in a slice like this, and this one was already stale once. The committed
+    tree carries no non-regular entry, so `pnpm phi-scan` is unchanged on it.
 - **The `attw` publish gate no longer passes an untyped pack (`ATTW-FALSE-GREEN-PORT`).** `pnpm attw`
   ran the bare CLI, and `@arethetypeswrong/cli@0.18.4`'s `getExitCode.js` opens with
   `if (!analysis.types) return 0`, returning before the problem list is read. An untyped package is a

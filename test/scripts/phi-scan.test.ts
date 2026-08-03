@@ -44,6 +44,7 @@ import {
   rmSync,
   readFileSync,
   appendFileSync,
+  symlinkSync,
 } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { tmpdir } from "node:os";
@@ -460,6 +461,12 @@ function runScannerIn(
   return { code: r.status ?? -1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 }
 
+/** Run the scanner in `cwd` with explicit argv (no shim, no env overrides). */
+function runScannerArgsIn(cwd: string, args: string[]): RunResult {
+  const r = spawnSync(TSX_BIN, [SCANNER_PATH, ...args], { cwd, encoding: "utf8", shell: false });
+  return { code: r.status ?? -1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+}
+
 const BUNDLED = "tsup.config.bundled_1a2b3c4d.mjs";
 
 afterAll(() => {
@@ -547,6 +554,208 @@ describe("phi-scan: enumeration TOCTOU", () => {
     writeFileSync(join(repo, "leak.xml"), doc(`<section><family>Anderson</family></section>`));
     const r = runScannerIn(repo, null);
     expect(r.code, `stderr: ${r.stderr}`).toBe(1);
+    expect(r.stderr).toMatch(/Anderson/);
+  });
+});
+
+/**
+ * A non-regular entry (a symbolic link above all) read CLEAN on BOTH enumerating
+ * routes, and this repo's walk is rooted at the REPO ROOT, so the exposure was
+ * the whole tree. The rule and its two measured divergences from the sibling
+ * scanners are stated once, in `scripts/phi-scan.ts`'s docblock; these cases pin
+ * it rather than re-describing it.
+ *
+ * Every case plants a NAME-BEARING synthetic payload OUTSIDE the scan repo and
+ * proves the same bytes are still caught when they are a regular file, so a pass
+ * cannot come from a fixture that carries nothing (the failure mode where a link
+ * test is green because the target was empty).
+ */
+describe("phi-scan: a non-regular entry refuses the scan", () => {
+  /** A synthetic, name-bearing C-CDA written outside any scan repo. */
+  function plantPayload(fileName = "record.xml"): { dir: string; file: string } {
+    const d = tempDir("ccda-phi-target-");
+    const file = join(d, fileName);
+    writeFileSync(
+      file,
+      doc(`<section><text/></section>`).replace(
+        "<family>Doe</family>",
+        "<family>Anderson</family>",
+      ),
+    );
+    return { dir: d, file };
+  }
+
+  it("the payload IS caught as a regular file (the fixture is not vacuous)", () => {
+    const repo = makeScanRepo({ git: true });
+    const { file } = plantPayload();
+    writeFileSync(join(repo, "copy.xml"), readFileSync(file, "utf8"));
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(1);
+    expect(r.stderr).toMatch(/Anderson/);
+  });
+
+  it("all-mode REFUSES a symlink to a PHI-bearing file (base read it as clean)", () => {
+    const repo = makeScanRepo({ git: true });
+    const { file } = plantPayload();
+    symlinkSync(file, join(repo, "linked.xml"));
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stdout: ${r.stdout}`).toBe(2);
+    expect(r.stderr).toMatch(/refusing the scan/);
+    expect(r.stderr).toMatch(/linked\.xml \(a symbolic link\)/);
+    // The refusal must never hand back what is on the other side.
+    expect(r.stderr).not.toContain(file);
+    expect(r.stderr).not.toMatch(/Anderson/);
+  });
+
+  it("all-mode REFUSES a symlink to a DIRECTORY (it would take a whole subtree)", () => {
+    const repo = makeScanRepo({ git: true });
+    const { dir } = plantPayload();
+    symlinkSync(dir, join(repo, "linked-dir"));
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stdout: ${r.stdout}`).toBe(2);
+    expect(r.stderr).toMatch(/linked-dir \(a symbolic link\)/);
+    expect(r.stderr).not.toContain(dir);
+  });
+
+  it("--staged REFUSES a staged symlink and never echoes its target", () => {
+    // The target PATH is the leak this closes: `git show :<path>` hands the path
+    // text back as if it were content, so an SSN-shaped target name was reported
+    // as a dashed-SSN hit under the LINK's name. Built from parts so no literal
+    // SSN-shaped string lives in this source (a 9xx area is never a real SSN).
+    const marker = ["9", "00", "55", "00", "01"]
+      .join("")
+      .replace(/^(\d{3})(\d{2})(\d{4})$/, "$1-$2-$3");
+    const repo = makeScanRepo({ git: true });
+    const { file } = plantPayload(`${marker}.xml`);
+    symlinkSync(file, join(repo, "fixture.xml"));
+    gitIn(repo, ["add", "fixture.xml"]);
+    const r = runScannerArgsIn(repo, ["--staged"]);
+    expect(r.code, `stdout: ${r.stdout}`).toBe(2);
+    expect(r.stderr).toMatch(/fixture\.xml \(a symbolic link\)/);
+    expect(r.stderr).not.toContain(marker);
+    expect(r.stderr).not.toMatch(/dashed SSN pattern/);
+  });
+
+  it("--staged REFUSES a TYPECHANGE from a tracked regular file to a symlink", () => {
+    // The one-letter blocker: replacing a TRACKED file with a link is neither an
+    // add nor a modify, so `--diff-filter=AM` dropped the record before any mode
+    // could be read and the hook passed a mode-120000 blob green.
+    const repo = makeScanRepo({ git: true });
+    writeFileSync(join(repo, "fixture.xml"), doc(""));
+    gitIn(repo, ["add", "fixture.xml"]);
+    gitIn(repo, ["-c", "user.email=t@t.t", "-c", "user.name=T", "commit", "-qm", "base"]);
+    const { file } = plantPayload();
+    rmSync(join(repo, "fixture.xml"));
+    symlinkSync(file, join(repo, "fixture.xml"));
+    gitIn(repo, ["add", "fixture.xml"]);
+    // Guard the guard: this really is status T, not an add or a modify.
+    const raw = spawnSync("git", ["diff", "--cached", "--raw"], {
+      cwd: repo,
+      encoding: "utf8",
+      shell: false,
+    });
+    expect(raw.stdout).toMatch(/:100644 120000 [0-9a-f]+ [0-9a-f]+ T\tfixture\.xml/);
+    const r = runScannerArgsIn(repo, ["--staged"]);
+    expect(r.code, `stdout: ${r.stdout}`).toBe(2);
+    expect(r.stderr).toMatch(/fixture\.xml \(a symbolic link\)/);
+  });
+
+  it("--staged REFUSES a staged gitlink (a nested repository)", () => {
+    const repo = makeScanRepo({ git: true });
+    const nested = join(repo, "nested");
+    mkdirSync(nested, { recursive: true });
+    gitIn(nested, ["init", "-q"]);
+    writeFileSync(join(nested, "f.txt"), "x\n");
+    gitIn(nested, ["add", "f.txt"]);
+    gitIn(nested, ["-c", "user.email=t@t.t", "-c", "user.name=T", "commit", "-qm", "x"]);
+    gitIn(repo, ["add", "nested"]);
+    const r = runScannerArgsIn(repo, ["--staged"]);
+    expect(r.code, `stdout: ${r.stdout}`).toBe(2);
+    expect(r.stderr).toMatch(/nested \(a gitlink \(a nested repository\)\)/);
+  });
+
+  it("names EVERY offender, not just the first", () => {
+    // A developer who has to re-run the gate once per link learns to distrust it.
+    const repo = makeScanRepo({ git: true });
+    const { file } = plantPayload();
+    symlinkSync(file, join(repo, "a.xml"));
+    symlinkSync(file, join(repo, "b.xml"));
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stdout: ${r.stdout}`).toBe(2);
+    expect(r.stderr).toMatch(/2 entries are not regular files/);
+    expect(r.stderr).toMatch(/a\.xml \(a symbolic link\)/);
+    expect(r.stderr).toMatch(/b\.xml \(a symbolic link\)/);
+  });
+
+  it("REFUSES a link named *.md (the markdown exemption is NOT extended to one)", () => {
+    // That exemption is a judgement about bytes the walk could have read; a
+    // link's NAME is no evidence at all about what is on the other side.
+    const repo = makeScanRepo({ git: true });
+    const { file } = plantPayload();
+    symlinkSync(file, join(repo, "notes.md"));
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stdout: ${r.stdout}`).toBe(2);
+    expect(r.stderr).toMatch(/notes\.md \(a symbolic link\)/);
+  });
+
+  it("--staged REFUSES a link named *.md too (the exemption is not extended on EITHER route)", () => {
+    const repo = makeScanRepo({ git: true });
+    const { file } = plantPayload();
+    symlinkSync(file, join(repo, "notes.md"));
+    gitIn(repo, ["add", "notes.md"]);
+    const r = runScannerArgsIn(repo, ["--staged"]);
+    expect(r.code, `stdout: ${r.stdout}`).toBe(2);
+    expect(r.stderr).toMatch(/notes\.md \(a symbolic link\)/);
+  });
+
+  it("does NOT refuse a link whose name is a skipped tooling directory", () => {
+    // A trailing-slash gitignore pattern does not match a LINK of that name, so
+    // leaning on the ignore filter alone would refuse every scan in a checkout
+    // whose node_modules is a link. A real dist/ directory's contents are
+    // already out of scope, so a link named dist is the same boundary.
+    const repo = makeScanRepo({ git: true });
+    writeFileSync(join(repo, ".gitignore"), "node_modules/\ndist/\n");
+    const { dir } = plantPayload();
+    symlinkSync(dir, join(repo, "node_modules"));
+    symlinkSync(dir, join(repo, "dist"));
+    // The premise, asserted rather than assumed: git really does say "not ignored".
+    const ci = spawnSync("git", ["check-ignore", "node_modules", "dist"], {
+      cwd: repo,
+      encoding: "utf8",
+      shell: false,
+    });
+    expect(ci.status).toBe(1);
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(0);
+  });
+
+  it("does NOT refuse a gitignored link (one boundary, not a stricter second one)", () => {
+    const repo = makeScanRepo({ git: true });
+    writeFileSync(join(repo, ".gitignore"), "scratch-link\n");
+    const { file } = plantPayload();
+    symlinkSync(file, join(repo, "scratch-link"));
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(0);
+  });
+
+  it("does NOT refuse a link under the scanner's own excluded test prefix", () => {
+    const repo = makeScanRepo({ git: true });
+    mkdirSync(join(repo, "test", "scripts"), { recursive: true });
+    const { file } = plantPayload();
+    symlinkSync(file, join(repo, "test", "scripts", "probe.xml"));
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(0);
+  });
+
+  it("still scans a normal staged regular file (the gate did not become a refusal)", () => {
+    const repo = makeScanRepo({ git: true });
+    writeFileSync(
+      join(repo, "leak.xml"),
+      doc("").replace("<family>Doe</family>", "<family>Anderson</family>"),
+    );
+    gitIn(repo, ["add", "leak.xml"]);
+    const r = runScannerArgsIn(repo, ["--staged"]);
+    expect(r.code, `stdout: ${r.stdout}`).toBe(1);
     expect(r.stderr).toMatch(/Anderson/);
   });
 });
