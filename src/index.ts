@@ -27,7 +27,7 @@
  * console.log(VERSION);
  * ```
  */
-export const VERSION: string = "0.0.7";
+export const VERSION: string = "0.0.8";
 
 // Parser entry point + options.
 export { parseCcda } from "./parser/index.js";
