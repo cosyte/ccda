@@ -426,6 +426,44 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Tooling
 
+- **`test/sanity.test.ts` pins the `VERSION` export to `package.json` (`CCDA-VERSION-DRIFT-TEST`).**
+  Test-only. No runtime code changed and the published surface is unaffected. The suite asserted
+  only `typeof VERSION === "string"` and a semver-shaped regex, under a comment reading "At this
+  stage VERSION is `0.0.0`" that had been false since the first publish and made the weak assertion
+  look deliberate. Both the comment and the gap are gone: `expect(VERSION).toBe(manifestVersion(pkg))`
+  reads the manifest at test time and compares, never against a hardcoded literal, so a bump needs no
+  edit here.
+  - **This repo was NOT defective, and that is the point of the item.** The `version` script is
+    `changeset version && node scripts/sync-version.mjs && prettier --write package.json src/index.ts`,
+    so the constant is structurally synced at release; verified rather than assumed, twice, against
+    the `0.0.8` release commit (which moves `package.json` and `src/index.ts` in one commit) and
+    against the published `0.0.8` tarball (whose `dist` carries `VERSION = "0.0.8"`). What was
+    missing was the guard on the guard: if that step is ever removed, reordered, or silently fails,
+    nothing else in this repo catches it.
+  - **Ported from `@cosyte/transform`, which is the worked example rather than a hypothetical.**
+    It published `VERSION = "0.0.0"` on `0.0.2`, `0.0.3` **and** `0.0.4` while its manifest said
+    otherwise, verified here by unpacking all three tarballs from the registry; `astm@0.0.1` and
+    `terminology@0.0.1` were earlier instances of the same class. The two assertions this repo
+    already had are exactly the two that stayed green through all three of those releases, which is
+    measured rather than argued: with the constant desynced to `0.0.0` against a `0.0.8` manifest the
+    new assertion fails with `expected '0.0.0' to be '0.0.8'` while **both** pre-existing assertions
+    still pass.
+  - **`manifestVersion()` narrows the parsed manifest without an `as` cast, and that property was
+    ported deliberately rather than just the assertion line.** A cast would let the sanity test lie
+    about its own input, which is the failure mode it exists to detect one layer down.
+  - **No wiring check was added, deliberately.** Asserting that `scripts.version` still mentions
+    `sync-version.mjs` would be a string match on a config file: it guards assembly rather than
+    correctness, it fails on a legitimate refactor that preserves the invariant, and it detects
+    nothing this assertion misses. The drift test already catches every failure mode of **that
+    mechanism**, whose whole outcome is that the constant and the manifest agree, because it compares
+    those two artifacts regardless of how they came to agree. Stated that narrowly on purpose: it is
+    an assertion about `src/`, so a divergence introduced after it (a `tsup` `define` rewriting the
+    constant, or a stale `dist`) is outside it. Unreachable today (`tsup.config.ts` defines nothing,
+    and `prepublishOnly` cleans and rebuilds from the just-tested `src/`) and named rather than
+    implied. It gates on two independent routes (`ci / verify (22|24, ubuntu-latest)` are
+    required status checks and run `pnpm test`; `prepublishOnly` runs `pnpm test` again). A
+    "Version Packages" PR produced by a broken `version` script arrives desynced and is blocked.
+
 - **Public-surface gate (`scripts/check-no-internal-refs.sh`, `pnpm check:no-internal-refs`, plus
   `.github/workflows/no-internal-refs.yml`).** Enforces the founder directive above so the sweep
   cannot regress ("it needs to not just be a memory note, but something that is addressed in the
