@@ -58,6 +58,18 @@ Enumeration + scope keep the scan honest and un-dodgeable:
   this. **Residual:** the post-sweep re-check is keyed on the enumerated path,
   not on content, so an untracked file _renamed_ inside the window is not read.
   Committing it means `git add`, after which it is tracked and untolerable.
+- **An in-scope entry that is not a regular file REFUSES the scan (exit 2), on
+  both routes.** A symbolic link read as CLEAN on both until
+  `PHI-SCAN-SYMLINK-BLIND-ON-BOTH-ROUTES`. **The rule, what "in scope" means for
+  each route, the divergences from the sibling scanners and the residuals are
+  stated once, in the docblock of `scripts/phi-scan.ts`. Read it there; this
+  list deliberately does not carry a second copy.** The residuals that are
+  genuinely _limitations_, one line each, because that is what this list is
+  for: `R`/`C` (rename/copy) and `U` (unmerged) are not enumerated by `--staged`
+  at all, pre-existing and unchanged, so PHI newly written into a **renamed**
+  file is not seen by the commit gate (the all-mode sweep CI runs does catch
+  it); and `paths` mode follows a link through to its target's bytes, which is
+  not this hole because it never reads clean over one.
 
 | Category               | Where it looks                                                                                                                                  | Rule                                                                                                                                                                                                                                    |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
