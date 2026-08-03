@@ -14,13 +14,19 @@
  *     fixed point (`serialize(parse(serialize(x))) === serialize(x)`).
  */
 
-import { describe, it } from "vitest";
+import { describe, it, vi } from "vitest";
 import fc from "fast-check";
 import { lenientNeverThrowsProperty, roundTripProperty } from "@cosyte/test-utils";
 
 import { FATAL_CODES, WARNING_CODES, parseCcda, type CcdaDocument } from "../../src/index.js";
 
 import { specCleanCcdaXml } from "./_arbitraries.js";
+
+// Cost is not fixed: fast-check draws a fresh seed every run (none is pinned here, by
+// design) and each draw parses and re-serializes a whole generated C-CDA. Measured at
+// 7,401 ms under four concurrent `--coverage` suites. See `vitest.config.ts` for why
+// the budget is here and not global.
+vi.setConfig({ testTimeout: 30_000 });
 
 const fatalCodes = new Set<string>(Object.values(FATAL_CODES));
 const knownWarningCodes = new Set<string>(Object.values(WARNING_CODES));

@@ -6,6 +6,15 @@ import { buildCcda } from "./__fixtures__/ccda.js";
 
 const fatalCodes = new Set<string>(Object.values(FATAL_CODES));
 
+/**
+ * Budget for the three fuzz cases below, and for those only. Their cost is not fixed:
+ * fast-check draws a fresh seed every run (none is pinned here, by design) and each of
+ * the 500 / 300 / 300 draws runs a real `parseCcda` over a whole C-CDA. Measured at
+ * 5,902 ms under four concurrent `--coverage` suites, past the 5 s Vitest default the
+ * deterministic cases in this file inherit. See `vitest.config.ts`.
+ */
+const FUZZ_TIMEOUT = 30_000;
+
 describe("secure XML substrate, attack vectors", () => {
   it("rejects a classic XXE external-entity declaration", () => {
     const xxe = `<?xml version="1.0"?>
@@ -44,52 +53,64 @@ describe("secure XML substrate, attack vectors", () => {
 });
 
 describe("fuzz, parseCcda never throws a non-fatal", () => {
-  it("survives arbitrary strings (only Tier-3 fatals may escape)", () => {
-    fc.assert(
-      fc.property(fc.string(), (raw) => {
-        try {
-          parseCcda(raw);
-        } catch (err) {
-          expect(err).toBeInstanceOf(CcdaParseError);
-          expect(fatalCodes.has((err as CcdaParseError).code)).toBe(true);
-        }
-      }),
-      { numRuns: 500 },
-    );
-  });
-
-  it("survives truncations of a valid document", () => {
-    const full = buildCcda();
-    fc.assert(
-      fc.property(fc.integer({ min: 0, max: full.length }), (cut) => {
-        try {
-          parseCcda(full.slice(0, cut));
-        } catch (err) {
-          expect(err).toBeInstanceOf(CcdaParseError);
-          expect(fatalCodes.has((err as CcdaParseError).code)).toBe(true);
-        }
-      }),
-      { numRuns: 300 },
-    );
-  });
-
-  it("survives random byte injection into a valid document", () => {
-    const full = buildCcda();
-    fc.assert(
-      fc.property(
-        fc.integer({ min: 0, max: full.length - 1 }),
-        fc.string({ minLength: 1, maxLength: 4 }),
-        (at, inject) => {
-          const mutated = full.slice(0, at) + inject + full.slice(at);
+  it(
+    "survives arbitrary strings (only Tier-3 fatals may escape)",
+    () => {
+      fc.assert(
+        fc.property(fc.string(), (raw) => {
           try {
-            parseCcda(mutated);
+            parseCcda(raw);
           } catch (err) {
             expect(err).toBeInstanceOf(CcdaParseError);
             expect(fatalCodes.has((err as CcdaParseError).code)).toBe(true);
           }
-        },
-      ),
-      { numRuns: 300 },
-    );
-  });
+        }),
+        { numRuns: 500 },
+      );
+    },
+    FUZZ_TIMEOUT,
+  );
+
+  it(
+    "survives truncations of a valid document",
+    () => {
+      const full = buildCcda();
+      fc.assert(
+        fc.property(fc.integer({ min: 0, max: full.length }), (cut) => {
+          try {
+            parseCcda(full.slice(0, cut));
+          } catch (err) {
+            expect(err).toBeInstanceOf(CcdaParseError);
+            expect(fatalCodes.has((err as CcdaParseError).code)).toBe(true);
+          }
+        }),
+        { numRuns: 300 },
+      );
+    },
+    FUZZ_TIMEOUT,
+  );
+
+  it(
+    "survives random byte injection into a valid document",
+    () => {
+      const full = buildCcda();
+      fc.assert(
+        fc.property(
+          fc.integer({ min: 0, max: full.length - 1 }),
+          fc.string({ minLength: 1, maxLength: 4 }),
+          (at, inject) => {
+            const mutated = full.slice(0, at) + inject + full.slice(at);
+            try {
+              parseCcda(mutated);
+            } catch (err) {
+              expect(err).toBeInstanceOf(CcdaParseError);
+              expect(fatalCodes.has((err as CcdaParseError).code)).toBe(true);
+            }
+          },
+        ),
+        { numRuns: 300 },
+      );
+    },
+    FUZZ_TIMEOUT,
+  );
 });

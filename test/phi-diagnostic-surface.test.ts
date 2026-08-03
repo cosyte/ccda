@@ -1,8 +1,14 @@
 import { assertNoDiagnosticPhiLeak, PHI_MARKER_UNIT } from "@cosyte/test-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ALL_WARNING_MESSAGES } from "../src/parser/warnings.js";
 import { PHI_RUNNER, PHI_SLOTS } from "./__fixtures__/phi-slots.js";
+
+// Both cases below sweep the whole PHI slot corpus, so their cost grows with the slot
+// table rather than being fixed, and the table is meant to grow. Measured at 4,190 ms
+// under four concurrent `--coverage` suites, only 1.2x under the 5 s Vitest default.
+// See `vitest.config.ts` for why the budget is here and not global.
+vi.setConfig({ testTimeout: 30_000 });
 
 describe("PHI: no consumer-controlled input reaches a diagnostic surface", () => {
   it("holds for every consumer-controlled slot in C-CDA", () => {

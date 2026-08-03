@@ -14,6 +14,23 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Fixed
 
+- **The test suite no longer asserts an idle box (`PARSER-TESTTIMEOUT-ASSERTS-AN-IDLE-BOX`).**
+  `vitest.config.ts` set a global `testTimeout: 10_000`, which is an assertion about the machine
+  rather than about the code. Both it and `hookTimeout: 10_000` are gone, and every test whose cost
+  is not fixed now declares its own budget beside the work.
+  - **The trim was the win, not the ceiling.** `test/scripts/phi-scan.test.ts` spawns the scanner 48
+    times and paid a `tsx` start-up at every one (~521 ms, against ~147 ms for `node` with native
+    type stripping). It went from ~24.6 s to ~9.0 s while **gaining** a test: one case still pays the
+    `tsx` cold start and asserts the two runners agree on exit code, stdout and stderr, because
+    `pnpm phi-scan` is what the pre-commit hook and CI really run.
+  - **Two things measurement corrected against instinct.** The old 10 s global was itself the false
+    red, failing a correct property test in 6 of 8 concurrent-coverage runs; and the repo's slowest
+    test already ran past that global and passed, because it carries its own budget.
+  - **The rule, the measurement method behind it, and the numbers live in one place: the docblock of
+    `vitest.config.ts`.** Read it there, and re-measure rather than inherit the figures. This entry
+    deliberately does not copy them.
+  - No runtime code changed and the published surface is unaffected.
+
 - **The PHI scanner no longer reads an IN-SCOPE symbolic link as a clean file, on either enumerating
   route (`PHI-SCAN-SYMLINK-BLIND-ON-BOTH-ROUTES`).** An in-scope entry that is not a regular file
   now refuses the scan (exit 2), naming every offender by its own repo-relative path and an

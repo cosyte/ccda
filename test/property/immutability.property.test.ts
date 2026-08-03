@@ -9,12 +9,19 @@
  * warning set byte-for-byte unchanged.
  */
 
-import { describe, it } from "vitest";
+import { describe, it, vi } from "vitest";
 import { immutabilityProperty } from "@cosyte/test-utils";
 
 import { parseCcda, type CcdaWarning } from "../../src/index.js";
 
 import { specCleanCcdaXml } from "./_arbitraries.js";
+
+// This file's cost is not fixed: fast-check draws a fresh seed every run (no seed is
+// pinned here, by design), and each draw parses and re-serializes a whole generated
+// C-CDA. It is the most expensive unbudgeted test in the repo, measured at 12,299 ms
+// under four concurrent `--coverage` suites. See `vitest.config.ts` for why the budget
+// is here and not global.
+vi.setConfig({ testTimeout: 30_000 });
 
 const EXTRA_WARNING: CcdaWarning = {
   code: "SECTION_PLACEMENT_SUSPECT",
