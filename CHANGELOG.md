@@ -33,16 +33,26 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 --coverage` runs on 2026-08-03, on a 12-CPU cgroup quota with sibling workers loading the box.
     Base and head were **interleaved**, never compared across an hour, because a quiet box reads as a
     speed-up. Six runs were a single suite at a time; sixteen were **four concurrent coverage suites
-    in one working tree**, harsher than anything CI does. The coverage runs are not optional: CI
-    gates on `pnpm test` **and** `pnpm test:coverage`, and the instrumented run roughly doubled every
-    peak.
+    in one working tree**, harsher than anything CI does. The coverage runs were included because CI
+    gates on `pnpm test` **and** `pnpm test:coverage`. **Do not carry over the sibling finding that
+    instrumentation roughly doubles the peaks: it is false here, and the reason is worth knowing.**
+    This suite's slowest cases are subprocess-bound (`attw`, `npm pack`, the scanner), and v8
+    coverage does not instrument a child process, so they barely move. The two in-process property
+    suites do, by about 1.7x, and both carry a budget.
   - **What the 10 s global actually did, on correct code.** Across the eight concurrent base runs it
-    produced **20 timeout failures in 8 of 8 runs**, over five files, every one of them green when
-    run alone. Across the eight concurrent head runs, against the 5 s default this repo now inherits,
-    **2**, both in the single most starved run, both at about 1.3x the ceiling. Note the ratio that
-    moved, which is the durable part: base was a 10 s ceiling over a ~646 ms spawn, head is a 5 s
-    ceiling over a ~183 ms spawn. Halving the ceiling still bought headroom, because the trim shrank
-    the measured thing faster than the ceiling shrank.
+    produced **20 timeout failures in 8 of 8 runs**, every one of them green when run alone, in
+    `test/property/immutability.property.test.ts` (8), `test/property/round-trip.property.test.ts`
+    (4), `test/phi-diagnostic-surface.test.ts` (3), `test/scripts/phi-scan.test.ts` (3) and
+    `test/security.test.ts` (2). Across the eight concurrent head runs, against the 5 s default this
+    repo now inherits, **2**, both in the single most starved run, both at about 1.3x the ceiling and
+    both in files base also failed. Note the ratio that moved, which is the durable part: base was a
+    10 s ceiling over a ~646 ms spawn, head is a 5 s ceiling over a ~183 ms spawn. Halving the
+    ceiling still bought headroom, because the trim shrank the measured thing faster than the ceiling
+    shrank.
+  - **The two changes moved together and the third arm was not run.** Trim-with-the-global-kept was
+    never measured, and on these numbers it would have produced zero failures too. That arm is not
+    what settles this: the argument for removing the global is that it asserts the machine, and the
+    measurement's job was to show the removal does not make the suite worse. It does not.
   - **The tests furthest past the old ceiling already carried their own budget**, so the global was
     never what stood between this suite and a red: on the base tree `test/scripts/attw-gate.test.ts`,
     which runs a real `npm pack` through `attw`, peaked at 16.2 s in a single-suite run and 24.2 s
@@ -53,7 +63,10 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
     each crossed 5 s exactly once, in the worst of those sixteen runs, at ~6.3 s; sequentially they
     peak at 894 ms and 803 ms. Budgeting them would be sizing for a four-times-oversubscribed box,
     which is the error this item exists to remove. With the declared budgets in place **every
-    remaining test peaked at 894 ms in a single-suite coverage run**, a ~5.6x margin.
+    remaining test peaked at 894 ms in a single-suite coverage run on a warm tree**. Quote no margin
+    from that: an independent re-measurement on a **cold** tree, which is what CI does every run
+    (`test/docs-content.test.ts` builds `dist/` in a hook, concurrently with the suite), put the same
+    peak at 2,097 ms.
   - **Two limits, disclosed rather than fixed.** `engines.node` says `>=22.0.0` while unflagged type
     stripping starts at Node 22.18, so the `node` runner needs a newer 22 than the manifest demands;
     CI's 22 + 24 matrix resolves above it, and narrowing `engines` is consumer-facing and belongs in

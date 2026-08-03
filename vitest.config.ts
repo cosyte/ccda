@@ -16,9 +16,15 @@ import { cosyteVitest } from "@cosyte/vitest-config";
  * the work, where the number can be argued from what that test does.
  *
  * `hookTimeout: 10_000` restated Vitest's own default verbatim, and the shared
- * `@cosyte/vitest-config` sets neither, so removing both returns this repo to the shared standard
- * rather than inventing a second one. Both defaults were measured here by over-running a real test
- * and a real hook, not read from the documentation.
+ * `@cosyte/vitest-config` sets neither, so removing both leaves this repo on Vitest's defaults
+ * instead of carrying a literal of its own. Both defaults were measured here by over-running a real
+ * test and a real hook, not read from the documentation.
+ *
+ * **THIS IS A MEASURED DECISION ABOUT THIS REPO, NOT A FLEET RULE, AND IT DOES NOT PORT.** Sibling
+ * parsers worked the same item on the same day, measured, and KEPT their global, because tests the
+ * global still governs there crossed 5,000 ms under load and had no repeated fixed cost to trim
+ * first. The reason it goes here is that this suite's load-sensitive cases were subprocess starts
+ * with a cheaper runner available. Re-measure before deleting a sibling's line.
  *
  * **TRIM BEFORE BOUNDING.** The ceiling was never this repo's problem; a repeated fixed cost was.
  * If a test starts failing on time, look for that first -- `test/scripts/phi-scan.test.ts` was

@@ -179,14 +179,28 @@ describe("phi-scan: the `tsx` entry point `pnpm phi-scan` uses is the same scann
   // It asserts EQUIVALENCE, not merely that tsx works: the two runners must agree on exit
   // code, stdout and stderr. That is what makes the cheap runner trustworthy.
   //
-  // BOTH OUTCOMES ARE RUN, BECAUSE THE SCANNER USES A DIFFERENT CHANNEL FOR EACH, and
-  // comparing an empty channel to an empty channel proves nothing. A violator writes its
-  // hits to stderr and nothing to stdout; a clean file writes its OK line to stdout and
-  // nothing to stderr. Each channel is asserted non-empty on the run that populates it,
-  // so neither comparison can pass by both sides being absent.
+  // TWO OF THE SCANNER'S THREE OUTCOMES ARE RUN, BECAUSE EACH USES A DIFFERENT CHANNEL and
+  // comparing an empty channel to an empty channel proves nothing. A violator (exit 1)
+  // writes its hits to stderr and nothing to stdout; a clean file (exit 0) writes its OK
+  // line to stdout and nothing to stderr. Each channel is asserted non-empty on the run
+  // that populates it, so neither comparison can pass by both sides being absent. The
+  // third, the exit-2 REFUSAL, is deliberately not pinned here: it would cost a further
+  // `tsx` cold start and it shares the stderr channel with exit 1, so it adds a spawn
+  // rather than a channel. It was hand-checked at parity when this case was written.
   it(
     "agrees with the `node` runner on exit code, stdout and stderr, on a hit and on a miss",
     () => {
+      // The case is only a backstop if `pnpm phi-scan` really is the tsx invocation it
+      // pins. TSX_BIN is a hardcoded path, so assert the manifest still agrees with it;
+      // otherwise rewriting the script silently leaves this pinning a runner nobody runs.
+      const script = (
+        JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8")) as {
+          scripts: Record<string, string>;
+        }
+      ).scripts["phi-scan"];
+      expect(script).toMatch(/(^|\s)tsx\s/);
+      expect(script).toMatch(/scripts\/phi-scan\.ts/);
+
       const hit = join(dir, "parity-hit.xml");
       writeFileSync(hit, doc(`<section><text><family>Anderson</family></text></section>`));
       const nodeHit = runScanner([hit]);
