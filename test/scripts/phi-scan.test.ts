@@ -54,6 +54,33 @@ const SCANNER_PATH = join(REPO_ROOT, "scripts", "phi-scan.ts");
 const OVERRIDES_PATH = join(REPO_ROOT, "phi-scan-overrides.md");
 const TSX_BIN = join(REPO_ROOT, "node_modules", ".bin", "tsx");
 
+/**
+ * RUNNER. Nearly every case here spawns the scanner, so the runner's fixed start-up is
+ * this file's dominant cost, not the scanning. It spawns `node` (native type stripping,
+ * Node >= 22.18), which measured ~183 ms per start against ~646 ms for `tsx` on the box
+ * this was written on, interleaved.
+ *
+ * Two things make the cheaper runner sound, and neither is assumed:
+ *   - `scripts/phi-scan.ts` imports nothing but `node:` builtins and uses no construct
+ *     that needs emit, so erasure-only stripping is enough;
+ *   - `pnpm phi-scan` -- what the pre-commit hook and CI really run -- is still `tsx`,
+ *     so ONE case below spawns `tsx` and asserts the two runners AGREE. That case reds
+ *     if either premise stops holding. Delete it and a tsx-only breakage ships green.
+ *
+ * `engines.node` is `>=22.0.0` while stripping is unflagged only from 22.18. CI's 22 + 24
+ * matrix resolves above that; a developer on 22.0-22.17 gets a loud runner error here
+ * rather than a wrong result, and the fix is a newer 22.
+ */
+const NODE_BIN = process.execPath;
+
+/**
+ * Budget for the one case that deliberately pays a `tsx` cold start, twice, and for that
+ * case alone: it is the only case here whose cost is a compiler start rather than a
+ * process start. Every other case inherits the Vitest default. See its comment, and
+ * `vitest.config.ts` for why the budget is here rather than global.
+ */
+const TSX_PARITY_TIMEOUT = 60_000;
+
 /** Wrap section/patient XML in a minimal synthetic US-Realm ClinicalDocument. */
 function doc(inner: string): string {
   return `<?xml version="1.0"?>
@@ -78,6 +105,16 @@ interface RunResult {
 }
 
 function runScanner(args: string[]): RunResult {
+  const r = spawnSync(NODE_BIN, [SCANNER_PATH, ...args], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    shell: false,
+  });
+  return { code: r.status ?? -1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+}
+
+/** The `tsx` invocation `pnpm phi-scan` really uses, for the one case that pins it. */
+function runScannerViaTsx(args: string[]): RunResult {
   const r = spawnSync(TSX_BIN, [SCANNER_PATH, ...args], {
     cwd: REPO_ROOT,
     encoding: "utf8",
@@ -130,6 +167,62 @@ describe("phi-scan: synthetic / allow-listed content passes (exit 0)", () => {
     );
     expect(r.code, `stderr: ${r.stderr}`).toBe(0);
   });
+});
+
+describe("phi-scan: the `tsx` entry point `pnpm phi-scan` uses is the same scanner", () => {
+  // THE ONE CASE THAT STILL PAYS THE tsx COLD START, and it is the backstop for every
+  // other case in this file. The rest spawn `node` (see NODE_BIN above), but the gate a
+  // developer and CI actually run is `pnpm phi-scan`, which is `tsx scripts/phi-scan.ts`.
+  // Without this case a tsx-only breakage (a tsx upgrade, a construct node's erasure-only
+  // stripping rejects but tsx compiles, a loader difference) would ship green.
+  //
+  // It asserts EQUIVALENCE, not merely that tsx works: the two runners must agree on exit
+  // code, stdout and stderr. That is what makes the cheap runner trustworthy.
+  //
+  // TWO OF THE SCANNER'S THREE OUTCOMES ARE RUN, BECAUSE EACH USES A DIFFERENT CHANNEL and
+  // comparing an empty channel to an empty channel proves nothing. A violator (exit 1)
+  // writes its hits to stderr and nothing to stdout; a clean file (exit 0) writes its OK
+  // line to stdout and nothing to stderr. Each channel is asserted non-empty on the run
+  // that populates it, so neither comparison can pass by both sides being absent. The
+  // third, the exit-2 REFUSAL, is deliberately not pinned here: it would cost a further
+  // `tsx` cold start and it shares the stderr channel with exit 1, so it adds a spawn
+  // rather than a channel. It was hand-checked at parity when this case was written.
+  it(
+    "agrees with the `node` runner on exit code, stdout and stderr, on a hit and on a miss",
+    () => {
+      // The case is only a backstop if `pnpm phi-scan` really is the tsx invocation it
+      // pins. TSX_BIN is a hardcoded path, so assert the manifest still agrees with it;
+      // otherwise rewriting the script silently leaves this pinning a runner nobody runs.
+      const script = (
+        JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8")) as {
+          scripts: Record<string, string>;
+        }
+      ).scripts["phi-scan"];
+      expect(script).toMatch(/(^|\s)tsx\s/);
+      expect(script).toMatch(/scripts\/phi-scan\.ts/);
+
+      const hit = join(dir, "parity-hit.xml");
+      writeFileSync(hit, doc(`<section><text><family>Anderson</family></text></section>`));
+      const nodeHit = runScanner([hit]);
+      const tsxHit = runScannerViaTsx([hit]);
+      expect(nodeHit.code, `stderr: ${nodeHit.stderr}`).toBe(1);
+      expect(nodeHit.stderr.length).toBeGreaterThan(0);
+      expect(tsxHit.code).toBe(nodeHit.code);
+      expect(tsxHit.stderr).toBe(nodeHit.stderr);
+      expect(tsxHit.stdout).toBe(nodeHit.stdout);
+
+      const miss = join(dir, "parity-miss.xml");
+      writeFileSync(miss, doc(""));
+      const nodeMiss = runScanner([miss]);
+      const tsxMiss = runScannerViaTsx([miss]);
+      expect(nodeMiss.code, `stderr: ${nodeMiss.stderr}`).toBe(0);
+      expect(nodeMiss.stdout.length).toBeGreaterThan(0);
+      expect(tsxMiss.code).toBe(nodeMiss.code);
+      expect(tsxMiss.stdout).toBe(nodeMiss.stdout);
+      expect(tsxMiss.stderr).toBe(nodeMiss.stderr);
+    },
+    TSX_PARITY_TIMEOUT,
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -457,13 +550,13 @@ function runScannerIn(
 ): RunResult {
   const env: NodeJS.ProcessEnv = { ...process.env, ...extraEnv };
   if (shimDir !== null) env["PATH"] = `${shimDir}:${process.env["PATH"] ?? ""}`;
-  const r = spawnSync(TSX_BIN, [SCANNER_PATH], { cwd, encoding: "utf8", shell: false, env });
+  const r = spawnSync(NODE_BIN, [SCANNER_PATH], { cwd, encoding: "utf8", shell: false, env });
   return { code: r.status ?? -1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 }
 
 /** Run the scanner in `cwd` with explicit argv (no shim, no env overrides). */
 function runScannerArgsIn(cwd: string, args: string[]): RunResult {
-  const r = spawnSync(TSX_BIN, [SCANNER_PATH, ...args], { cwd, encoding: "utf8", shell: false });
+  const r = spawnSync(NODE_BIN, [SCANNER_PATH, ...args], { cwd, encoding: "utf8", shell: false });
   return { code: r.status ?? -1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 }
 

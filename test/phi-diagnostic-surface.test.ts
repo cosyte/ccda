@@ -1,8 +1,13 @@
 import { assertNoDiagnosticPhiLeak, PHI_MARKER_UNIT } from "@cosyte/test-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ALL_WARNING_MESSAGES } from "../src/parser/warnings.js";
 import { PHI_RUNNER, PHI_SLOTS } from "./__fixtures__/phi-slots.js";
+
+// Both tests in this file sweep the whole PHI slot corpus, so their cost tracks the size
+// of the slot table rather than being fixed, and that table is meant to grow. See
+// `vitest.config.ts` for why the budget is here rather than global.
+vi.setConfig({ testTimeout: 60_000 });
 
 describe("PHI: no consumer-controlled input reaches a diagnostic surface", () => {
   it("holds for every consumer-controlled slot in C-CDA", () => {
