@@ -782,7 +782,9 @@ a summary.
 - **Language:** TypeScript (strict, full rigor set incl. `noUncheckedIndexedAccess`) via
   `@cosyte/tsconfig`. **Target ES2023**, `NodeNext`. TypeScript 5.9.x, exact-pinned.
 - **Build:** dual ESM + CJS + `.d.ts` via `tsup` (`@cosyte/tsup-config`); `attw` is a publish gate
-  (per-condition types: `.d.ts` for `import`, `.d.cts` for `require`).
+  (per-condition types: `.d.ts` for `import`, `.d.cts` for `require`). The `attw` script is
+  **`node scripts/attw.mjs`, not the bare CLI**: see the guardrail below. The CLI reports a missing
+  `dist/` as "does not contain types" and **exits 0**.
 - **Node:** **>= 22** (CI matrix 22 + 24).
 - **Package manager:** `pnpm@10`.
 - **Lint/format:** **ESLint 10** + unified `typescript-eslint` (type-checked) via
@@ -810,6 +812,86 @@ a summary.
   warning with a stable code + positional context.
 - Coverage: per-directory >= 90% (lines/branches/functions/statements), enforced by
   `pnpm test:coverage`.
+- **`attw` SAYS "does not contain types" AND EXITS 0, SO THE `attw` SCRIPT IS A WRAPPER, NOT THE
+  BARE CLI** (`ATTW-FALSE-GREEN-PORT`). `getExitCode.js` in this repo's pinned
+  `@arethetypeswrong/cli@0.18.4` opens with `if (!analysis.types) return 0`. An untyped package is a
+  legitimate npm package, so "no types at all" is a description, not a problem, and the problem list
+  is never consulted. No `--profile`, `--ignore-rules` or config setting reaches that early return.
+  For a package that ships types it means the declarations were **not in the tarball**, which is a
+  broken publish reported as a pass. A false red costs an hour; **a false green merges.**
+  **The race only supplies the condition; it is not the defect.** Reproduced here deterministically,
+  with zero concurrency, against this package's own `dist/`: `rm -rf dist && attw --pack .`, and
+  `rm -f dist/index.d.ts dist/index.d.cts && attw --pack .`, both print the sentence and exit 0. The
+  second is the realistic window. `tsup` emits JS in one pass and declarations in a later one, so
+  **every** build here has an interval where `dist/` holds `.mjs`/`.cjs` and no `.d.ts`; measured on
+  three consecutive `pnpm build` runs at 1.7 s, 2.4 s and 3.1 s. **Do not quote one of those as the
+  figure**: they differ by 80% and move with box load. A concurrent build or `clean` in the same
+  working tree lands `attw` in it. So the answer is **not** a lock, a lease or a build queue: the
+  gate must be able to say its own inputs were missing, whatever removed them.
+  `scripts/attw.mjs` carries **two nets, and they catch different things**: a preflight that every
+  relative path `package.json` promises (`main`, `module`, `types`, `typings`, every string leaf of
+  `exports`, which here is four files) exists and is non-empty, which catches the window and _names
+  the missing file_; and a post-check on `attw`'s untyped sentence, which catches what the preflight
+  structurally cannot, declarations present on disk but excluded from the tarball.
+  **No instance of that second case is on record in this repo**, and it is still the case
+  `attw --pack` exists to catch. Demonstrated rather than assumed: with the declarations on disk and
+  `files` narrowed to the two JS entry points, bare `attw --pack .` prints the sentence and exits 0
+  and the wrapper exits 1.
+  **The preflight's non-emptiness half earns its keep separately.** A zero-byte `index.d.ts` is a
+  SECOND and quieter false green: `attw` finds a types entry point, reports "No problems found" and
+  exits 0 over a package that declares nothing. The post-check cannot see it, because the untyped
+  sentence never appears. Pinned.
+  **`.npmignore` VERSUS `files` IS ABOUT THE FILE'S DEPTH, NOT ITS EXISTENCE, and a draft of this
+  entry got it wrong in the confident direction.** Both measured with `npm pack` on this manifest: a
+  **root** `.npmignore` naming the declarations changes nothing, because `files` is present and npm
+  gives it precedence; a **`dist/.npmignore`** naming them DOES strip them, because a `.npmignore`
+  inside a directory `files` selected still filters that directory. The draft said `files` was the
+  only route and told the next reader not to restore the parenthetical, which would have made the
+  error durable. Net 2 catches both either way: it reads what `attw` says about the packed tarball
+  rather than reasoning about how the tarball was assembled.
+  **The post-check reads a string, so what would hide that string is refused**, not tolerated.
+  **Nine routes were measured** against this repo's pinned `attw`, each handing back exit 0 over an
+  untyped pack with the sentence absent: `--quiet`, `-q`, `--format json`, `--format=json`,
+  `-f json`, **`-fjson`**, **`-Pq`**, and a `.attw.json` setting `quiet` or `format` (`readConfig()`
+  applies it after argv). Two more are refused **without** being blinding routes, because the rule is
+  by option name and not by value: `--config-path` (by inference, not measurement, it would move the
+  config file out of view) and `-f=json` (measured: bare `attw` exits 1 with
+  `argument '=json' is invalid`). The refusal is **by option name, wholesale, not by value**, which
+  is the deliberate trade against value-parsing them.
+  **`-fjson` IS THE ONE THE SIBLING'S GUARD MISSES, and it is why the refusal reads a short
+  cluster's LETTERS rather than comparing whole tokens.** commander parses `-fjson` as `-f json`, so
+  a `split("=")[0]` token test lets it straight through. The first cut of this port carried that test
+  over unchanged while claiming refusal "by option name, wholesale"; the conformance gate measured
+  `-fjson` back to **exit 0 on this repo's real manifest**. The claim was true of the sentence and
+  false of the code, and the fix was to close the hole rather than soften the claim to match it.
+  Over-strictness is bounded rather than hand-waved: of attw 0.18.4's six short options (`-V`, `-P`,
+  `-p`, `-f`, `-q`, `-h`) **only `-f` takes a value**, so a `q` or an `f` inside a single-dash token
+  is either one of these options or part of `-f`'s own value, and there is no third thing for it to
+  be. A test pins that `-P` is still let through.
+  **THERE IS A THIRD GUARD BEHIND THE TWO NETS, so do not describe the file as "two nets" full
+  stop.** If `attw` exits 0 having printed nothing at all, the script fails rather than passes: the
+  post-check read nothing and cannot vouch for what it did not see. It is the backstop for an
+  unenumerated blinding route, and it is what would catch `-Pq` if the argument refusal did not.
+  **It is pinned by no test**, which is a stated gap rather than an oversight: reaching it needs an
+  `attw` that exits 0 in silence, and no measured route does that with the refusals in place. One
+  smaller gap is stated the same way: the pass-through test cannot tell `attw`'s own status from a
+  hardcoded `1`, because `getExitCode()` returns literally `1` on problems and every `die()` here
+  also exits 1, so pass-through is true by inspection rather than by that assertion.
+  **This guard is described in four committed files, and that is the standing hazard in this entry.**
+  Three separate corrections here have been a claim edited in some copies and not others. If you
+  touch this area, prefer **cutting a copy** to adding a more careful one.
+  `test/scripts/attw-gate.test.ts` pins both nets against the real binary, including the upstream
+  exit-0 itself, so an `attw` upgrade that reworks the wording or fixes the exit code reds the suite
+  instead of letting the net go quietly slack. It also pins a **negative control** on a well-formed
+  package and that a real `attw` failure still fails: a gate that only ever fails is not a gate, and
+  one that swallows the status is not one either. **The suite is load-bearing, measured rather than
+  asserted**: reverting `scripts/attw.mjs` to the bare invocation reds **16 of its 21** cases, and
+  the 5 that stay green are exactly the pass-through ones (three pins on `attw`'s OWN behaviour, the
+  real failure, and the negative control). Re-measure that figure if you add a case; do not carry it
+  forward. **`scripts/verify.sh` in the meta-repo needed no change and
+  must not be touched** for this: its propagation was never at fault, the step lied to it.
+  **This is a per-repo script.** Porting it here fixed this repo only; a sibling that still invokes
+  the CLI directly still has the defect. Do not write a repo count down here, derive it.
 
 ## Standing disciplines (every change)
 

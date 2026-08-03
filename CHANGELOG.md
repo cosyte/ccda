@@ -14,6 +14,45 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Fixed
 
+- **The `attw` publish gate no longer passes an untyped pack (`ATTW-FALSE-GREEN-PORT`).** `pnpm attw`
+  ran the bare CLI, and `@arethetypeswrong/cli@0.18.4`'s `getExitCode.js` opens with
+  `if (!analysis.types) return 0`, returning before the problem list is read. An untyped package is a
+  legitimate npm package, so the CLI treats "no types at all" as a description rather than a problem.
+  For a package that ships types it means the declarations were not in the tarball, which is a broken
+  publish reported as a pass. A false red costs an hour; a false green merges. The script is now
+  `node scripts/attw.mjs`.
+  - **Reproduced here with zero concurrency, against this package's own `dist/`.** Both
+    `rm -rf dist && attw --pack .` and `rm -f dist/index.d.ts dist/index.d.cts && attw --pack .`
+    print "This package does not contain types." and exit 0. The race only supplies the condition and
+    is not the defect: `tsup` emits JS in one pass and declarations in a later one, so every build
+    here has an interval where `dist/` holds `.mjs`/`.cjs` and no `.d.ts` (measured at 1.7 s, 2.4 s
+    and 3.1 s across three `pnpm build` runs, moving with box load). A concurrent build or `clean` in
+    the same working tree lands `attw` in it. Deliberately **not** answered with a lock, a lease or a
+    build queue: the gate must be able to report that its own inputs were missing, whatever removed
+    them.
+  - **Two nets, catching different things.** A preflight that every relative path `package.json`
+    promises (`main`, `module`, `types`, `typings`, every string leaf of `exports`, four files here)
+    exists and is non-empty, which catches the window and names the missing file; and a post-check
+    that promotes `attw`'s untyped sentence to a failure, which catches declarations present on disk
+    but excluded from the tarball. Demonstrated on this package: with the declarations on disk and
+    `files` narrowed to the two JS entry points, the bare CLI prints the untyped sentence and exits 0
+    while the wrapper exits 1. The non-emptiness half closes a second, quieter false green the
+    post-check cannot see: a zero-byte declaration, on which `attw` reports "No problems found" and
+    exits 0 over a package that declares nothing. Which route emptied the tarball depends on an
+    `.npmignore`'s depth rather than on whether one exists: a root one is overridden by `files`, a
+    `dist/.npmignore` is not. Both measured with `npm pack`.
+  - **The post-check reads a string, so the arguments and config that hide it are refused by option
+    name, wholesale.** `--quiet`, `-q`, `--format json`, `--format=json`, `-f json`, `-fjson`, `-Pq`
+    and a `.attw.json` setting `quiet` or `format` were each measured to hand back exit 0 with the
+    sentence absent. `--config-path` and `-f=json` are refused without being blinding routes, the
+    first by inference and the second because bare `attw` rejects it as a usage error. The refusal
+    reads a
+    short cluster's letters rather than comparing whole tokens, because commander parses `-fjson` as
+    `-f json` and a token test lets it through. A third guard sits behind the two nets: `attw`
+    exiting 0 having printed nothing at all is a failure, not a pass.
+  - **No behaviour change to the published package**, and no source file was touched: this is the
+    release gate only.
+
 - **A race in the PHI gate's own enumeration no longer refuses a publish (`PHI-SCAN-ENUMERATION-TOCTOU`).**
   `scripts/phi-scan.ts` lists the whole tree in all-mode and reads each file afterwards. `tsup` writes
   `tsup.config.bundled_<hash>.mjs` at the repo root and deletes it when a build ends, inside that window,
