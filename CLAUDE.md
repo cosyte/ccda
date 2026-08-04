@@ -22,8 +22,10 @@ immutability + explicit mutation, and the profile system.
 
 ## Status
 
-- **Published on npm at `0.0.4`**, public, MIT (re-derived from the registry 2026-08-01, where this
-  line said `0.0.2`; `npm view @cosyte/ccda version` is the only source of truth). Pre-alpha on the shared cosyte `0.0.x` ladder
+- **Published on npm at `0.0.10`**, public, MIT (re-derived from the registry 2026-08-04, where this
+  line said `0.0.4`, and `0.0.2` before that; it has been stale every time anyone checked, so
+  **`npm view @cosyte/ccda version` is the only source of truth** and a version quoted elsewhere in
+  this file is a historical statement about that release, not the current one). Pre-alpha on the shared cosyte `0.0.x` ladder
   (`0.0.x` until first alpha, ADR 0001). A published version never moves backwards.
 - **There are no stubs left.** `src/index.ts` exports a working parser (`parseCcda`), serializer
   (`serializeCcda`), document builder (`buildCcda`), and document editor (`editCcda`), plus the
@@ -77,19 +79,23 @@ immutability + explicit mutation, and the profile system.
     restore the older claim that the alternate arm's code "is read, not refused" and that every
     check "applies to it unchanged" full stop**; it is false once the conflict state exists. Arms
     naming **different** products is `MEDICATION_PRODUCT_ARM_CONFLICT` (safety-critical) and **no
-    code is selected**. No arm yielding a code is `MISSING_PRODUCT_CODE`, never a silent `undefined`.
+    code is selected**. No arm yielding a code is `MISSING_PRODUCT_CODE`, **safety-critical**, never
+    a silent `undefined`.
     Why: `documentation/agent-notes.md#the-manufacturedproduct-choice-and-its-two-arms`
   - **Disagreement is read across every arm and every coding; SELECTION IS NOT, and that asymmetry
     is load-bearing.** Translations are a **fallback, never an addition**. **Never "improve" this
     into a set-intersection rule where a shared translation withdraws a conflict.** Every branch may
-    only ever make the conflict fire **more**, and firing more means **withholding** more, so
-    **"no product code stops being reported" is a FALSE way to state the invariant; do not restore
-    it.** A matrix in `test/entries.test.ts` pins the monotonicity.
+    only ever make the conflict fire **more, never less**, and firing more means **withholding**
+    more, so **"no product code stops being reported" is a FALSE way to state the invariant; do not
+    restore it.** **That monotonicity is the safety property of this whole area and any change here
+    must preserve it**; a matrix in `test/entries.test.ts` pins it.
     Why: `documentation/agent-notes.md#disagreement-is-read-across-every-arm-and-coding-selection-is-not`
   - `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY` (**safety-critical**) and
     `MEDICATION_PRODUCT_ARM_REPEATED` (not) report two formerly silent states without changing what
-    is read. `drug.translation` must be **searched**, never read at `[0]`. The unquietable companions
-    number **four**, not three.
+    is read. **Where the coding is reachable depends on which arm holds it: on the arm that was NOT
+    selected it is not on the model at all and only `doc.toString()` has it**; on the selected arm
+    it is somewhere on `drug.translation`, which must be **searched**, never read at `[0]`. The
+    unquietable companions number **four**, not three.
     Why: `documentation/agent-notes.md#the-translation-only-and-repeated-arm-states`
   - **A repeated `<code>` on ONE arm is `MEDICATION_PRODUCT_CODE_REPEATED` (safety-critical),
     emitted per arm** and positioned on the arm that carries the repeat. **The comparison was
@@ -121,15 +127,20 @@ immutability + explicit mutation, and the profile system.
     planned, so returning it would contradict this repo's mood model. Whether the other three
     admitted-but-dropped templates should be REPORTED is **open, not settled**. `BuildCcdaPlannedOrder`
     still lets `buildCcda` emit a Planned Medication Activity short its SHALL `effectiveTime`:
-    **PRE-EXISTING, filed, still open** (requiring it breaks a published input type).
+    **PRE-EXISTING, filed, still open** (requiring it breaks a published input type). `[1..1]` is
+    **not** unique to `…22.4.120`: `…22.4.42` SHALL carry one too (CONF:1098-30468), so it is the
+    other **five** that are `[0..1]`. **Do not re-derive "the other six are `[0..1]`" from anything.**
     Why: `documentation/agent-notes.md#seven-planned-templates-returned-eleven-admitted-by-the-section`
   - **A planned entry NESTED in a Planned Intervention Act (`…22.4.146`) is returned, for all seven
     kinds; nothing else nested is. Nesting is NOT solved in general** (`…22.4.130` and `…22.4.131`
     stay unreached, pinned by test). **An `entryRelationship` is read for what it CONTAINS and never
     followed for what it REFERENCES.** Matching is on the `templateId` root alone, which is what
     keeps the performed acts out. **A Goal Observation is not a second container, and do not write
-    that it is** - that error came from a refuter, was adopted without re-checking, and shipped to
-    five sites. **Re-check a refuter's spec claim exactly as hard as your own.**
+    that it is** (its `plannedComponent` targets an Entry Reference, so it _references_ a planned
+    entry rather than nesting one; written up one section earlier, under
+    `#seven-planned-templates-returned-eleven-admitted-by-the-section`) - that error came from a
+    refuter, was adopted without re-checking, and shipped to five sites. **Re-check a refuter's spec
+    claim exactly as hard as your own.**
     Why: `documentation/agent-notes.md#planned-entries-nested-in-a-planned-intervention-act`
   - **The Interventions Section (`…21.2.3`, LOINC `62387-6`) lives in the `…10.20.21.2.*` arc, not
     the `…10.20.22.2.*` arc every other catalog section uses, and `…10.20.22.2.3` is RESULTS. Do not
@@ -138,7 +149,10 @@ immutability + explicit mutation, and the profile system.
     sibling is entries-required** (an earlier draft had it backwards). **Do not re-add a CONF id or
     a LOINC release number here**: both were invented precision and were removed rather than
     re-guessed. Every spec claim on this entry is **stated, not traced**, which licenses nothing
-    about `required-sections.ts`. **A filtered projection cannot support a monotonicity claim.**
+    about `required-sections.ts`. **A filtered projection cannot support a monotonicity claim**; the
+    matrix filters nothing, and there are FOUR classes of move, not the two the first cut claimed.
+    **`UNKNOWN_SECTION_CODE` is NOT withdrawn on "every document carrying `62387-6`"** - that
+    universal was published once and is false.
     **The OID is this entry's only real behavioural risk and wants a second source before the next
     publish.**
     Why: `documentation/agent-notes.md#the-interventions-section-and-its-oid-arc`
@@ -235,7 +249,8 @@ immutability + explicit mutation, and the profile system.
   is not theoretical (PR #52's sweep skipped that exact file and left a live character behind).
   **Do not swap in `website`'s variant**, and do not reach for `pathways`' `git check-attr binary`
   without first adding a `.gitattributes`. **Do not trust a copy count written down anywhere,
-  including here** - enumerate at carry-back time.
+  including here** - enumerate at carry-back time. Scope, stated honestly: **the gate covers new
+  text only, does not rewrite history, and 113 em dashes are already in commit messages on `main`.**
   Why: `documentation/agent-notes.md#the-em-dash-gate`
 
 ## Tech Stack (the shared `@cosyte/*` standard)
@@ -284,7 +299,8 @@ a summary.
   `scripts/attw.mjs` carries **THREE guards, not two**: a preflight that every relative path
   `package.json` promises exists **and is non-empty** (a zero-byte `index.d.ts` is a second, quieter
   false green), a post-check on `attw`'s untyped sentence, and a backstop that fails when `attw`
-  exits 0 having printed nothing at all. **Blinding options are refused BY OPTION NAME, wholesale,
+  exits 0 having printed nothing at all (**pinned by no test, a stated gap rather than an
+  oversight**). **Blinding options are refused BY OPTION NAME, wholesale,
   not by value, and short options BY LETTER ANYWHERE IN THE CLUSTER, not by whole token** - `-fjson`
   is the one a `split("=")[0]` token test lets straight through, measured back to **exit 0** on this
   repo's real manifest. **`.npmignore` versus `files` is about the file's DEPTH, not its existence.**
