@@ -23,6 +23,11 @@
  *     sweep, and five of the six ways it still refuses (the sixth, a tolerated
  *     file written back before the post-sweep re-check, is not reachable from a
  *     deterministic harness; see the block's own note)
+ *   - a staged RENAME, in both shapes `--diff-filter=AMT` used to delete: a link
+ *     `git mv`'d into the scan root, and a rename that substitutes a real name
+ *   - a staged UNMERGED path, which used to report clean over a path with no
+ *     staged blob to read
+ *   - a scan that could not RUN exits 2 (invocation error), never 1 (hits found)
  *
  * Violator fixtures are written to a throwaway temp dir so they never pollute
  * the committed corpus that `pnpm phi-scan` sweeps. The scanner is invoked via
@@ -43,8 +48,10 @@ import {
   existsSync,
   rmSync,
   readFileSync,
+  readdirSync,
   appendFileSync,
   symlinkSync,
+  chmodSync,
 } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { tmpdir } from "node:os";
@@ -850,5 +857,267 @@ describe("phi-scan: a non-regular entry refuses the scan", () => {
     const r = runScannerArgsIn(repo, ["--staged"]);
     expect(r.code, `stdout: ${r.stdout}`).toBe(1);
     expect(r.stderr).toMatch(/Anderson/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A staged RENAME is enumerated (PHI-SCAN-RENAME-BLIND-AT-PRECOMMIT)
+// ---------------------------------------------------------------------------
+
+/**
+ * `R`/`C` are returned by neither `--diff-filter=AM` nor `AMT`, so an ordinary
+ * `git mv` deleted the record before any mode or any content could be read and
+ * `--staged` exited 0 over it. Two shapes, both measured red on the base tree:
+ * a `git mv` of a LINK into the scan root (staged as `R100` at mode `120000`,
+ * so the mode check was never reached), and a `git mv` that also substitutes a
+ * real name (staged as `R<score>`, so PHI newly written into the destination was
+ * never scanned by the COMMIT gate).
+ *
+ * The remedy is `--no-renames`, which makes the destination arrive as an
+ * ordinary single-path `A` and the source as a `D` the filter drops. The cases
+ * below assert what the index really holds BEFORE asserting the scanner's
+ * answer, because the whole defect lives in the record shape: a fixture whose
+ * `git mv` was too dissimilar to score as a rename would pass against the base
+ * tree too, and prove nothing.
+ */
+describe("phi-scan: a staged rename is enumerated", () => {
+  /** A synthetic, name-bearing C-CDA written outside any scan repo. */
+  function plantLinkTarget(): string {
+    const d = tempDir("ccda-phi-rename-target-");
+    const file = join(d, "record.xml");
+    writeFileSync(file, doc("").replace("<family>Doe</family>", "<family>Anderson</family>"));
+    return file;
+  }
+
+  function stagedRaw(repo: string): string {
+    const r = spawnSync("git", ["diff", "--cached", "--raw"], {
+      cwd: repo,
+      encoding: "utf8",
+      shell: false,
+    });
+    return r.stdout ?? "";
+  }
+
+  /** A committed link, then `git mv`'d to another name inside the scan root. */
+  function repoWithRenamedLink(config?: [string, string]): string {
+    const repo = makeScanRepo({ git: true });
+    if (config) gitIn(repo, ["config", config[0], config[1]]);
+    symlinkSync(plantLinkTarget(), join(repo, "linked.xml"));
+    gitIn(repo, ["add", "linked.xml"]);
+    gitIn(repo, ["-c", "user.email=t@t.t", "-c", "user.name=T", "commit", "-qm", "base"]);
+    gitIn(repo, ["mv", "linked.xml", "fixture.xml"]);
+    return repo;
+  }
+
+  it("--staged REFUSES a link `git mv`'d into the scan root (base read R100 as clean)", () => {
+    const repo = repoWithRenamedLink();
+    // Guard the guard: rename detection really does collapse this to ONE
+    // two-path record at mode 120000, which is the record `AMT` deleted.
+    expect(stagedRaw(repo)).toMatch(
+      /:120000 120000 [0-9a-f]+ [0-9a-f]+ R100\tlinked\.xml\tfixture\.xml/,
+    );
+    const r = runScannerArgsIn(repo, ["--staged"]);
+    expect(r.code, `stdout: ${r.stdout}`).toBe(2);
+    expect(r.stderr).toMatch(/fixture\.xml \(a symbolic link\)/);
+    // Same bound as every other refusal: never hand back the other side.
+    expect(r.stderr).not.toMatch(/Anderson/);
+    expect(r.stderr).not.toMatch(/ccda-phi-rename-target-/);
+  });
+
+  it("--staged CATCHES a name substituted by the same commit that renamed the file", () => {
+    // The worse half: the destination is PHI the commit gate never read.
+    const repo = makeScanRepo({ git: true });
+    writeFileSync(join(repo, "old.xml"), doc(""));
+    gitIn(repo, ["add", "old.xml"]);
+    gitIn(repo, ["-c", "user.email=t@t.t", "-c", "user.name=T", "commit", "-qm", "base"]);
+    gitIn(repo, ["mv", "old.xml", "renamed.xml"]);
+    writeFileSync(
+      join(repo, "renamed.xml"),
+      doc("").replace("<family>Doe</family>", "<family>Anderson</family>"),
+    );
+    gitIn(repo, ["add", "renamed.xml"]);
+    // Guard the guard: still similar enough to score as a rename, so this is
+    // the R<score> record and not two independent A/D records.
+    expect(stagedRaw(repo)).toMatch(/ R\d{3}\told\.xml\trenamed\.xml/);
+    const r = runScannerArgsIn(repo, ["--staged"]);
+    expect(r.code, `stdout: ${r.stdout}`).toBe(1);
+    expect(r.stderr).toMatch(/renamed\.xml/);
+    expect(r.stderr).toMatch(/Anderson/);
+  });
+
+  it.each([
+    ["diff.renames", "true", /R100\tlinked\.xml\tfixture\.xml/],
+    ["diff.renames", "copies", /R100\tlinked\.xml\tfixture\.xml/],
+    // The one row whose index does NOT hold a rename. It is the control: the
+    // base tree already refused this one, which is what proves the answer used
+    // to be the caller's git config rather than the scanner's.
+    ["diff.renames", "false", /:000000 120000 [0-9a-f]+ [0-9a-f]+ A\tfixture\.xml/],
+    ["diff.renames", "1", /R100\tlinked\.xml\tfixture\.xml/],
+    ["diff.renameLimit", "1", /R100\tlinked\.xml\tfixture\.xml/],
+  ])("refuses whatever the caller's %s=%s says", (key, value, indexHolds) => {
+    // The filter alone left this to the caller's git config: with detection off
+    // the base tree already refused, with it on the base tree exited 0. The flag
+    // is what makes the answer structural rather than configured.
+    const repo = repoWithRenamedLink([key, value]);
+    // Guard the guard, PER ROW. Without it, a fixture that stopped scoring as a
+    // rename would collapse all four detection-on rows into duplicates of the
+    // `false` control and they would stay green: the exact vacuity this block
+    // exists to rule out.
+    expect(stagedRaw(repo)).toMatch(indexHolds);
+    const r = runScannerArgsIn(repo, ["--staged"]);
+    expect(r.code, `stdout: ${r.stdout}`).toBe(2);
+    expect(r.stderr).toMatch(/fixture\.xml \(a symbolic link\)/);
+  });
+
+  it("--staged still exits 0 over an ordinary rename of a clean synthetic file", () => {
+    // The enumeration widened; the SCOPE did not. Read with the case above,
+    // which proves the destination really is read: same shape, name-bearing.
+    const repo = makeScanRepo({ git: true });
+    writeFileSync(join(repo, "old.xml"), doc(""));
+    gitIn(repo, ["add", "old.xml"]);
+    gitIn(repo, ["-c", "user.email=t@t.t", "-c", "user.name=T", "commit", "-qm", "base"]);
+    gitIn(repo, ["mv", "old.xml", "renamed.xml"]);
+    expect(stagedRaw(repo)).toMatch(/ R100\told\.xml\trenamed\.xml/);
+    const r = runScannerArgsIn(repo, ["--staged"]);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// An unmerged path is enumerated, and refused under its own sentence
+// ---------------------------------------------------------------------------
+
+describe("phi-scan: an unmerged path refuses the scan", () => {
+  /** Leave `name` unmerged in a throwaway repo, with `body(variant)` as content. */
+  function repoWithConflict(name: string, body: (variant: string) => string): string {
+    const repo = makeScanRepo({ git: true });
+    const commit = (msg: string): void =>
+      gitIn(repo, ["-c", "user.email=t@t.t", "-c", "user.name=T", "commit", "-qm", msg]);
+    writeFileSync(join(repo, name), body("base"));
+    gitIn(repo, ["add", name]);
+    commit("base");
+    gitIn(repo, ["checkout", "-q", "-b", "side"]);
+    writeFileSync(join(repo, name), body("side"));
+    gitIn(repo, ["add", name]);
+    commit("side");
+    gitIn(repo, ["checkout", "-q", "-"]);
+    writeFileSync(join(repo, name), body("trunk"));
+    gitIn(repo, ["add", name]);
+    commit("trunk");
+    // The merge is EXPECTED to fail, so it does not go through `gitIn`. It
+    // carries the identity explicitly like every commit above: a merge with no
+    // resolvable `user.name` fails BEFORE it touches the index, which is
+    // non-zero without a conflict, and CI (whose runner has no global identity)
+    // is where that difference shows up. Assert the CONFLICT, not just the
+    // status, so the premise fails loudly instead of an index assertion later.
+    const merge = spawnSync(
+      "git",
+      ["-c", "user.email=t@t.t", "-c", "user.name=T", "merge", "side"],
+      { cwd: repo, encoding: "utf8", shell: false },
+    );
+    expect(merge.status, `merge unexpectedly clean: ${merge.stdout ?? ""}`).not.toBe(0);
+    expect(`${merge.stdout ?? ""}${merge.stderr ?? ""}`).toMatch(/CONFLICT/);
+    return repo;
+  }
+
+  it("does NOT refuse an unmerged markdown file (a class this route never reads)", () => {
+    // The `.md` exemption IS extended to this one, unlike to a link: a link's
+    // name is no evidence about the bytes on the other side, but an unmerged
+    // markdown is a file class the route never scans conflict or no conflict,
+    // so refusing over one announces a failure to read something it was never
+    // going to read. A conflict in CHANGELOG.md would otherwise refuse the gate.
+    const repo = repoWithConflict("notes.md", (v) => `# notes\n\n${v}\n`);
+    const raw = spawnSync("git", ["diff", "--cached", "--raw"], {
+      cwd: repo,
+      encoding: "utf8",
+      shell: false,
+    });
+    expect(raw.stdout).toMatch(/ U\tnotes\.md/);
+    const r = runScannerArgsIn(repo, ["--staged"]);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(0);
+  });
+
+  it("--staged REFUSES an unmerged path and does not call it a non-regular file", () => {
+    // `git commit` refuses an unmerged path before the pre-commit hook runs, so
+    // this is not a commit hole. It is a false CLEAN report over a path the
+    // scan never read, which is the answer this gate must never give.
+    const repo = repoWithConflict("conflict.xml", (v) =>
+      doc(`<section><text>${v}</text></section>`),
+    );
+    // Guard the guard: the index really holds a `U` record, at mode 000000.
+    const raw = spawnSync("git", ["diff", "--cached", "--raw"], {
+      cwd: repo,
+      encoding: "utf8",
+      shell: false,
+    });
+    expect(raw.stdout).toMatch(/:100644 000000 [0-9a-f]+ [0-9a-f]+ U\tconflict\.xml/);
+    const r = runScannerArgsIn(repo, ["--staged"]);
+    expect(r.code, `stdout: ${r.stdout}`).toBe(2);
+    expect(r.stderr).toMatch(/1 path is unmerged/);
+    expect(r.stderr).toMatch(/conflict\.xml \(no stage-0 blob\)/);
+    // Its mode is 000000, which says nothing about a link or a gitlink.
+    expect(r.stderr).not.toMatch(/not a regular file/);
+    expect(r.stderr).not.toMatch(/mode-000000/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A scan that could not RUN exits 2, never 1
+// ---------------------------------------------------------------------------
+
+/**
+ * 1 is this gate's code for HITS FOUND and node exits 1 on an uncaught throw,
+ * so a scanner that fell over reported itself to CI as a finding. Both routes
+ * below were measured at exit 1 on the base tree.
+ */
+describe("phi-scan: a scan that could not run exits 2", () => {
+  it("a missing allow-list exits 2, not 1", () => {
+    const repo = makeScanRepo({ git: true });
+    rmSync(join(repo, "scripts", "phi-allow-list.txt"));
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(2);
+    expect(r.stderr).toMatch(/allow-list not found/);
+    // A stack trace on stderr is what exiting 1 looked like.
+    expect(r.stderr).not.toMatch(/InvocationError:/);
+  });
+
+  it("a system error thrown past every handler exits 2, not 1", () => {
+    // The PROCESS-LEVEL net, probed without depending on file permissions: the
+    // `EACCES` case below is the more realistic shape but is skipped for root,
+    // and a net whose only probe can be skipped is a net that ships unpinned.
+    // A DIRECTORY where the allow-list should be passes `existsSync` and then
+    // fails `readFileSync` with `EISDIR`, which is a plain system error, not an
+    // InvocationError, so it flies past the handler in `main` exactly as
+    // `readdirSync` does.
+    const repo = makeScanRepo({ git: true });
+    const allowList = join(repo, "scripts", "phi-allow-list.txt");
+    rmSync(allowList);
+    mkdirSync(allowList);
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(2);
+    expect(r.stderr).toMatch(/refusing the scan/);
+    expect(r.stderr).toMatch(/EISDIR/);
+  });
+
+  it.skipIf(process.getuid?.() === 0)("a directory the walk cannot read exits 2, not 1", () => {
+    // `readdirSync` raising `EACCES` is a plain system error, not an
+    // InvocationError, so it flew past every handler in `main`.
+    const repo = makeScanRepo({ git: true });
+    const locked = join(repo, "locked");
+    mkdirSync(locked, { recursive: true });
+    writeFileSync(join(locked, "x.xml"), doc(""));
+    chmodSync(locked, 0o000);
+    try {
+      // The premise, asserted rather than assumed: this really is unreadable
+      // for the user running the suite (root would read it happily, which is
+      // what the skip above is for).
+      expect(() => readdirSync(locked)).toThrow(/EACCES/);
+      const r = runScannerIn(repo, null);
+      expect(r.code, `stderr: ${r.stderr}`).toBe(2);
+      expect(r.stderr).toMatch(/refusing the scan/);
+      expect(r.stderr).toMatch(/EACCES/);
+    } finally {
+      chmodSync(locked, 0o755);
+    }
   });
 });

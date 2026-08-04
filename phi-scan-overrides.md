@@ -65,11 +65,22 @@ Enumeration + scope keep the scan honest and un-dodgeable:
   stated once, in the docblock of `scripts/phi-scan.ts`. Read it there; this
   list deliberately does not carry a second copy.** The residuals that are
   genuinely _limitations_, one line each, because that is what this list is
-  for: `R`/`C` (rename/copy) and `U` (unmerged) are not enumerated by `--staged`
-  at all, pre-existing and unchanged, so PHI newly written into a **renamed**
-  file is not seen by the commit gate (the all-mode sweep CI runs does catch
-  it); and `paths` mode follows a link through to its target's bytes, which is
-  not this hole because it never reads clean over one.
+  for: `D` (deletion) is not enumerated by `--staged`, because a deletion has no
+  staged blob to scan; and `paths` mode follows a link through to its target's
+  bytes, which is not this hole because it never reads clean over one.
+- **A staged RENAME is enumerated, and used to be invisible to the commit gate**
+  (`PHI-SCAN-RENAME-BLIND-AT-PRECOMMIT`); so is an unmerged path, which is
+  refused rather than scanned. **The record shapes, the `--no-renames` argument,
+  what the widened enumeration costs on this repo specifically, and the bound on
+  the unmerged case are stated once, in the docblock of `scripts/phi-scan.ts`.**
+  This list carries no second copy of them, for the same reason it carries no
+  second copy of the non-regular-entry rule.
+- **A scan that could not RUN exits 2, never 1.** `1` means hits found, and node
+  exits 1 on an uncaught throw, so a missing allow-list and a directory the walk
+  cannot read (`EACCES`) both reported themselves to CI as findings. Both exit 2
+  now. Read the 2 as the whole "did not run, or refused" class rather than as
+  `InvocationError`: an `EACCES` is a plain system error and is deliberately not
+  one.
 
 | Category               | Where it looks                                                                                                                                  | Rule                                                                                                                                                                                                                                    |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

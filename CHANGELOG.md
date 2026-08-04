@@ -14,6 +14,70 @@ its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until firs
 
 ### Fixed
 
+- **A staged RENAME is scanned by the commit gate (`PHI-SCAN-RENAME-BLIND-AT-PRECOMMIT`).**
+  Tooling only. No runtime code changed and the published surface is unaffected. `R`/`C` are
+  returned by neither `--diff-filter=AM` nor `AMT`, so `git mv <link> <name>` staged as
+  `:120000 120000 <sha> <sha> R100` and `--staged` exited **0** over it, with the mode check that
+  refuses a non-regular entry never reached. **The worse half is the second shape:** a `git mv` that
+  also substitutes a real name reports `R<score>` and passed identically, so PHI newly written into
+  a renamed file was never read by the COMMIT gate. The all-mode sweep CI runs did catch it, but
+  only after the fact. Both shapes were measured red before and green after.
+  - **The remedy is `--no-renames`, and the framing this item carried ("needs the two-path record
+    shape, a scope decision") was FALSE.** With detection off the destination arrives as an ordinary
+    single-path `A` (`:000000 120000 0000000 <sha> A`) and the source as a `D` the filter drops, so
+    the enumeration is a strict **superset** of the previous one and there is no stride work at all.
+    Verified under `diff.renames=true|copies|false|1` and `diff.renameLimit=1`: every one yields the
+    same single-path `A`. It also makes the two-field stride **structural** rather than the filter's
+    grace, so the answer no longer depends on the caller's git config. That dependence was real and
+    measured: with `diff.renames=false` the base tree already refused this fixture, with the default
+    it exited 0.
+  - **What it costs is enumeration, and this repo pays more than a sibling does, so the number is
+    stated.** `--staged` here is scoped by NO path prefix (a sibling's staged route is bounded to
+    its fixture root), so every rename DESTINATION anywhere in the tree is now read. Measured:
+    `git mv src/model/entries src/model/clinical` stages 17 records, which this route enumerated as
+    **0 targets before and 17 after**. The upper bound is the number of paths in the commit. Scope
+    is still decided per file by content, so the same 17 rename destinations, and an ordinary rename
+    of a synthetic fixture, still exit 0. **The all-mode walk is untouched by this flag** (137
+    tracked files, 121 non-markdown walk candidates, before and after): the wide blast radius here
+    is on the STAGED route, not on the repo-root walk.
+  - **`U` (unmerged) is enumerated in the same change and REFUSED, and it is not a closed commit
+    hole.** Be exact, because the bound is real and was measured rather than reasoned about: `git
+commit` refuses an unmerged path BEFORE it runs the pre-commit hook (the hook does not run at
+    all), so this route was never the thing that could let one through. What it DID do was report
+    "OK, no hits" over a path it had not read, which is the one answer this gate must never give. An
+    unmerged record has no stage-0 blob (`git show :<path>` fatals), so it is refused under its
+    **own** message: its destination mode is `000000`, and reporting a merge conflict as "a git
+    mode-000000 entry" sends a developer looking for a symlink that is not there.
+  - **A scan that could not RUN now exits 2, never 1.** `1` is this gate's code for HITS FOUND and
+    node exits 1 on an uncaught throw, so every failure that was not an `InvocationError` reported
+    itself to CI and to the developer as a finding. Two measured instances: `loadAllowList()` sat
+    outside every handler in `main`, and `readdirSync` refusing a directory (`EACCES`) is a plain
+    system error raised from inside the walk. The net is at the process boundary rather than a
+    `catch` per call site, deliberately: the property wanted is about the exit code, and a per-site
+    list is what goes stale the next time a call is added.
+  - **Twelve tests, nine of them red against the base scanner.** The controls that are green on base
+    are deliberate: the `diff.renames=false` variant (which base already refused, and which is what
+    proves the answer used to be configured rather than structural) and an ordinary rename of a
+    clean synthetic file (which proves the enumeration widened without the scope widening). **Every**
+    rename case asserts what the INDEX really holds before asserting the scanner's answer, the
+    parameterised ones per row, because the whole defect lives in the record shape: a `git mv` too
+    dissimilar to score as a rename would pass against the base tree too and prove nothing, and
+    would silently collapse the four detection-on rows into duplicates of the control. The refusal
+    still never echoes the link target.
+  - **Three diagnostics were narrowed by the conformance gate rather than the guards widened.**
+    "EVERY offender is named" is true per GROUP and no longer across them, since the route now
+    refuses in two phases and the unmerged one throws first; an unmerged `.md` is exempted, because
+    that is a file class this route never reads at all, so refusing over one would announce a
+    failure to read something it was never going to read (a conflict in `CHANGELOG.md` would refuse
+    the whole gate); and the process net's probe no longer depends on file permissions, since the
+    `EACCES` case is skipped for root and a net whose only probe can be skipped ships unpinned.
+  - **One residual disclosed rather than closed:** `git show` runs through `execFileSync`, whose
+    `maxBuffer` is 1 MiB, so a larger staged blob refuses with `ENOBUFS`. PRE-EXISTING and
+    fail-safe, named here because `--no-renames` widens what reaches that call. No tracked file in
+    this repo is close (largest ~222 KB).
+  - **The rule and the residuals are stated once, in the scanner's docblock**, and
+    `phi-scan-overrides.md` points there rather than restating them. This entry is the release
+    record and necessarily carries the measurements; it is not a third home for the rule.
 - **The test suite no longer asserts an idle box (`PARSER-TESTTIMEOUT-ASSERTS-AN-IDLE-BOX`).**
   `vitest.config.ts` set a global `testTimeout: 10_000`, which is an assertion about the machine
   rather than about the code. It is gone, `hookTimeout: 10_000` went with it (it restated Vitest's
