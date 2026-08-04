@@ -24,8 +24,10 @@ immutability + explicit mutation, and the profile system.
 
 - **Published on npm at `0.0.10`**, public, MIT (re-derived from the registry 2026-08-04, where this
   line said `0.0.4`, and `0.0.2` before that; it has been stale every time anyone checked, so
-  **`npm view @cosyte/ccda version` is the only source of truth** and a version quoted elsewhere in
-  this file is a historical statement about that release, not the current one). Pre-alpha on the shared cosyte `0.0.x` ladder
+  **`npm view @cosyte/ccda version` is the only source of truth** and a **`@cosyte/ccda`** version
+  quoted elsewhere in this file is a historical statement about that release, not the current one;
+  the `@cosyte/test-utils`, TypeScript and `pnpm` pins below are live and mean what they say).
+  Pre-alpha on the shared cosyte `0.0.x` ladder
   (`0.0.x` until first alpha, ADR 0001). A published version never moves backwards.
 - **There are no stubs left.** `src/index.ts` exports a working parser (`parseCcda`), serializer
   (`serializeCcda`), document builder (`buildCcda`), and document editor (`editCcda`), plus the
