@@ -2,9 +2,12 @@
 
 The long-form record behind `CLAUDE.md`. Every section here is the **verbatim** narrative that used
 to sit in `CLAUDE.md` itself, relocated 2026-08-04 under `CLAUDE-MD-AUDIT` because that file is
-always-read for every worker that `cd`s into this repo, and is budgeted at 90,000 bytes (ADR 0023
-and its 2026-08-04 amendment, in the meta-repo). **Nothing was deleted, weakened or summarised on
-the way here.**
+always-read for every worker that `cd`s into this repo, and is bounded by its entry in `REPO_CLAUDE`
+in the meta-repo's `.claude/hooks/doc-budget.mjs`, which is lowered as relocations land (ADR 0023 and
+its 2026-08-04 amendment). **The bound is deliberately not quoted here**: this line first carried the
+number, a uniform 90,000, and it was retracted for a per-repo ratchet within a day. A numeral that
+went stale that fast is the failure class this audit exists to fix, so what stands here is a pointer.
+**Nothing was deleted, weakened or summarised on the way here.**
 
 Every trap still has a one-line imperative in `CLAUDE.md` pointing at the section below that carries
 its reasoning. **Read that section before you change the code it describes.** These are

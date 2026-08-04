@@ -72,8 +72,11 @@ immutability + explicit mutation, and the profile system.
     "does this field look dangerous", and it applies at whatever layer manufactures.** `pickMrn`
     returns `undefined` when the **first** `patientRole/id` is null-marked and **must never
     substitute the next `<id>`**. `templateId` is the stated exception, not a member of that list.
-    `editCcda` refuses an `RPLC` from a null-marked `ClinicalDocument.id` rather than laundering the
-    marking away.
+    The other identity slots (`ClinicalDocument.id`, `setId`, `parentDocument/id`, entry-level
+    `<id>`s) are only ever reported whole beside the warning, have no naked-string accessor, and are
+    **deliberately left alone**; adding an accessor or extending read-side withholding to them
+    undoes a decision. `editCcda` refuses an `RPLC` from a null-marked `ClinicalDocument.id` rather than
+    laundering the marking away.
     Why: `documentation/agent-notes.md#the-withholding-rule-pickmrn-and-the-templateid-exception`
   - A medication/vaccine product is read from **either** arm of the CDA R2 `ManufacturedProduct`
     choice, at every consumable call site. `MEDICATION_PRODUCT_ARM_UNEXPECTED` is tolerable only
@@ -86,8 +89,13 @@ immutability + explicit mutation, and the profile system.
     Why: `documentation/agent-notes.md#the-manufacturedproduct-choice-and-its-two-arms`
   - **Disagreement is read across every arm and every coding; SELECTION IS NOT, and that asymmetry
     is load-bearing.** Translations are a **fallback, never an addition**. **Never "improve" this
-    into a set-intersection rule where a shared translation withdraws a conflict.** Every branch may
-    only ever make the conflict fire **more, never less**, and firing more means **withholding**
+    into a set-intersection rule where a shared translation withdraws a conflict.** **Where BOTH
+    arms fall back to translations, an arm merely offering an extra alternate the other stayed quiet
+    about is elaborating its own concept, which is what v3 says a `<translation>` does, and is
+    deliberately NOT a conflict: a shorter list is not a denial.** Requiring the sets to cover each
+    other drew an unquietable safety-critical code on a coherent document. Every branch may
+    only ever make the conflict fire **more than the base rule would, never less**, and firing more
+    means **withholding**
     more, so **"no product code stops being reported" is a FALSE way to state the invariant; do not
     restore it.** **That monotonicity is the safety property of this whole area and any change here
     must preserve it**; a matrix in `test/entries.test.ts` pins it.
