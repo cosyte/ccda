@@ -262,6 +262,15 @@ immutability + explicit mutation, and the profile system.
   including here** - enumerate at carry-back time. Scope, stated honestly: **the gate covers new
   text only, does not rewrite history, and 113 em dashes are already in commit messages on `main`.**
   Why: `documentation/agent-notes.md#the-em-dash-gate`
+- **The `CLAUDE.md` / `agent-notes.md` contract is gated, and unlike the two gates above it
+  BLOCKS**: it runs inside the test suite, whose `ci / verify` contexts are in
+  `parser-ci-required-checks`. **It asserts what THIS repo promises, never a fleet universal** -
+  `config`, `hl7` and `workflow` carry no `agent-notes.md` at all, so a universal would be an
+  overclaim three repos already break. **Do not promote it to an umbrella script.** Two pointer
+  forms are live; the bare `` `#anchor` `` one is confined to `CLAUDE.md` by shape and by scope and
+  **must not be widened** (`#id` and `#62` are XML and C-CDA narrative references). **Never delete
+  an imperative or a section to get green.**
+  Why: `documentation/agent-notes.md#the-agent-notes-contract-gate`
 
 ## Tech Stack (the shared `@cosyte/*` standard)
 

@@ -93,7 +93,8 @@ non-`ClinicalDocument` root) is always a thrown `CcdaParseError`.
   ethnic group) + identifiers, via `getPatient()` / `getMrn()`.
 - **Sections**: framed by `templateId` with a LOINC-code fallback, including nested subsections,
   narrative text, and a narrative `ID`→text index for later reference resolution, via `findSection()` /
-  `allSections()`. Unstructured documents expose their `nonXMLBody` (base64 left inert).
+  `allSections()`. An Unstructured Document exposes its `nonXMLBody` content on `doc.nonXmlBody`
+  (base64 left inert).
 - **HL7 v3 datatypes**: `II`, `ST`, `BL`, `CD`, `PQ`, `IVL_PQ`, `TS`, `IVL_TS`, `ED`, with
   variable-precision v3 datetime parsing and null-flavor handling.
 
