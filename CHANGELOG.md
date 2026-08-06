@@ -1,16 +1,26 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## Released before this file was generated
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-Versions and publishing are managed with [Changesets](https://github.com/changesets/changesets);
-this file is maintained by hand (Changesets handles the version bump and publish only).
+Every release section above this heading is written by
+[Changesets](https://github.com/changesets/changesets) from the changesets in `.changeset/`, newest
+release first. The release writes its own version heading, so nothing above this line is maintained
+by hand: a change is recorded by adding a changeset, and that changeset's summary is the entry a
+reader sees here.
 
-## [Unreleased]
+Everything below this heading was maintained by hand. It sat under a single `[Unreleased]` heading
+that no release ever rolled over, so it went on describing already-published code as unreleased,
+inside the published tarball, for the whole of this package's public history. It is left as it was
+written rather than re-sorted into version sections: the file never recorded which release each
+entry went out in, and this is the text that installed copies already carry on disk. Only three
+things were dropped, all of them scaffolding for the hand-written workflow that no longer runs: the
+`[Unreleased]` heading itself, its link definition at the foot of the file, and the four empty
+section stubs that existed to receive the next hand-written entry. No entry was reworded.
 
-The first pre-alpha release (`0.0.1`) will ship the initial public API surface. The package begins
-its public history at `0.0.x`, per the cosyte version ladder (`0.0.x` until first alpha).
+The entries below follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the generated
+sections above use the format Changesets writes, which is a version heading and a list of the
+changes that release consumed. Versions follow the cosyte pre-alpha ladder, `0.0.x` until first
+alpha, rather than [Semantic Versioning](https://semver.org/spec/v2.0.0.html) alone.
 
 ### Fixed
 
@@ -1667,12 +1677,6 @@ statusCode, effectiveTime, component+`).
   **1 of the ≤ 3** runtime-dep cap, intended as the shared XML substrate with `@cosyte/ncpdp`. No
   parse-layer code yet; Phase 1 configures and consumes it.
 
-### Changed
-
-### Deprecated
-
-### Removed
-
 ### Fixed
 
 - **The Interventions Section (`2.16.840.1.113883.10.20.21.2.3`, LOINC `62387-6`) is in the section
@@ -2457,7 +2461,3 @@ value="12"/>` returned a score of 12 with no warning. The `integer` observation 
   workflow at startup (~1s, no jobs, no logs). Every Release run from June 2026 until now failed this
   way, unnoticed, because a `startup_failure` produces no logs to read. The caller job now declares
   the three scopes explicitly. CI-only: no runtime or API change.
-
-### Security
-
-[Unreleased]: https://github.com/cosyte/ccda/commits/main
