@@ -330,8 +330,18 @@ Mirrors the three disciplines in the meta-repo's `documentation/conventions.md`.
    docs are: this repo's docs content (`README.md`, `docs-content/`), the meta-repo
    `documentation/repos/ccda.md` (bump its "last verified" date), and the `ecosystem-map.md`
    status table.
-2. **Version + changelog**: a Changeset (`patch` on the `0.0.x` ladder) + a `CHANGELOG.md`
-   `[Unreleased]` entry per meaningful change. Renaming a stable warning code is a **breaking change**.
+2. **Version + changelog**: a Changeset (`patch` on the `0.0.x` ladder) per meaningful change.
+   **The changeset summary IS the changelog entry** and `CHANGELOG.md` is generated output above
+   `## Released before this file was generated`: `.changeset/config.json` sets a `changelog`
+   generator, so the release writes the version heading and the entry itself. **Do not hand-edit
+   `CHANGELOG.md`**, and do not reintroduce a hand-maintained `[Unreleased]` heading: one stood
+   there unrolled for the whole published history of this package, which is how a shipped tarball
+   came to describe its own contents as unreleased. **The Prettier pass stays ON here** (no
+   `"prettier"` key), which is derived from this repo having no `.prettierignore` and a
+   `format:check` that globs root markdown, **not copied from a sibling**: with it off the
+   generator's raw output reds this repo's own `format:check` on every Version PR.
+   `test/scripts/changelog-generation.test.ts` pins all of it. Renaming a stable warning code is a
+   **breaking change**.
 3. **Crew + knowledgebase loop**: if this parser's public API or warning codes change, flag/update
    the matching `crew` healthcare skill + the KB product doc.
 
