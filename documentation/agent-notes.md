@@ -949,14 +949,16 @@ break. What this one asserts is what `ccda` itself promises, which is also why i
 repo's CI and costs the meta-repo's capped automation plane nothing. **Do not promote it to an
 umbrella script**, and do not restate it as a fleet rule.
 
-**Unlike the public-surface gate and the em-dash gate, this one BLOCKS, and that was the point of
-where it was put.** Both of those live in their own workflow whose context is not in
-`parser-ci-required-checks`, so they report and stop nothing. Read from the GitHub API on
-2026-08-06, that ruleset requires `ci / verify (22, ubuntu-latest)`, `ci / verify (24,
-ubuntu-latest)` and `ci / actionlint`, and the `no-emdash` context comes from a separate
-repository-level ruleset. A check that runs inside the test suite is therefore inside a required
-context. Putting this one in a fourth workflow would have added a third thing that reports and
-blocks nothing. `pnpm check:agent-notes` runs it standalone; the meta-repo's `verify.sh` has a fixed
+**Unlike the public-surface gate, this one BLOCKS, and that was the point of where it was put.**
+Read from the GitHub API on 2026-08-06, `parser-ci-required-checks` requires `ci / verify (22,
+ubuntu-latest)`, `ci / verify (24, ubuntu-latest)` and `ci / actionlint`, so a check that runs
+inside the test suite is inside a required context; `no-internal-refs` is in none of the rulesets
+and therefore reports and stops nothing. **Do NOT extend that to the em-dash gate, and do not
+trust `CLAUDE.md`'s old line about it**: `no-emdash` IS required, via a separate
+repository-level `emdash-required-check` ruleset, active and scoped to the default branch. The
+settings change `CLAUDE.md` said was outstanding had already landed, so that trap was stale in the
+blocking direction and was corrected in the same commit as this section. **Re-read the rulesets;
+do not infer a gate's teeth from a prose line about it, including this one.** `pnpm check:agent-notes` runs it standalone; the meta-repo's `verify.sh` has a fixed
 `LADDER` that does not name it, so it prints "gate-shaped script(s) this ladder does not know ... a
 green verify.sh therefore means LESS than a green CI". **That warning is correct in general and
 misleading here, and `verify.sh` must not be touched over it**: the ladder does not invoke the

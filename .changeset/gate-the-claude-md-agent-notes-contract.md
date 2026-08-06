@@ -28,10 +28,16 @@ was written, three package repos carry no such file at all. A gate claiming ever
 would be an overclaim that three of them already break, so this one is scoped to `ccda`, lives in
 `ccda`'s own CI, and is not proposed as a shared script.
 
-**It blocks, which the two gates beside it do not.** The public-surface and em-dash gates each live
-in their own workflow whose context is not among this repo's required status checks, so they are
-visible on every pull request and stop nothing. This one runs inside the test suite, which is
-inside a required context, so the placement was the point rather than an implementation detail.
+**It blocks, which the gate beside it does not.** The public-surface check lives in its own
+workflow whose context is in none of this repository's rulesets, so it is visible on every pull
+request and stops nothing. This one runs inside the test suite, which is inside a required context,
+so the placement was the point rather than an implementation detail.
+
+Measuring that turned up a stale trap and it is corrected here. `CLAUDE.md` recorded the em-dash
+gate as "present and reporting, but NOT yet blocking", with the settings change it needed still
+outstanding. That change had landed: `no-emdash` is a required status check via its own
+repository-level ruleset, active on the default branch. The line is now accurate, and says to
+re-read the rulesets rather than trust a prose line about them.
 
 Three properties are worth knowing before changing it. The corpus is `git ls-files` and is
 **reconciled**, not merely counted: every tracked path is opened, skipped as binary, or the run

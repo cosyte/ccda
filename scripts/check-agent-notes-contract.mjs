@@ -31,9 +31,11 @@
  * a choice, not an accident: the org ruleset `parser-ci-required-checks` requires
  * `ci / verify (22, ubuntu-latest)`, `ci / verify (24, ubuntu-latest)` and
  * `ci / actionlint` (read from the GitHub API, 2026-08-06), so a check that runs inside
- * the test suite blocks a merge. This repo already has two gates that report and block
- * nothing, both because they live in their own workflow whose context is not in that
- * ruleset. Adding a third of those would have been reporting, not gating.
+ * the test suite blocks a merge. This repo already has a gate that reports and blocks
+ * nothing, `no-internal-refs`, because it lives in its own workflow whose context is in
+ * no ruleset. Adding a second of those would have been reporting, not gating. The
+ * em-dash gate is NOT an example of it: `no-emdash` is required via its own
+ * repository-level ruleset, whatever `CLAUDE.md` used to say. Re-read the rulesets.
  *
  * WHAT IT REFUSES TO GUESS.
  *
