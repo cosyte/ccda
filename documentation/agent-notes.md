@@ -1026,11 +1026,17 @@ directly against a real NUL matches. A genuinely binary file can now only cost a
 which is cheap. **Do not re-add a binary heuristic here**, and treat "the counts are equal" as the
 property, not "the counts reconcile".
 
-**The one real limit of scanning everything is the ENCODING, and it is a stated limit rather than a
-claim.** Files are decoded as UTF-8 and the pointer patterns are ASCII, so a tracked file in a
-non-UTF-8 text encoding is read but its pointers can never match: a UTF-16LE file carrying a broken
-pointer reads green, verified. That is not a regression - the earlier binary-skip cut missed it too,
-by skipping the file outright - and no such file is tracked here. **If one is ever added, this gate
+**The one real limit of scanning everything is the ENCODING, and the limit is NON-ASCII-COMPATIBLE
+encodings specifically, not "non-UTF-8".** This paragraph said "non-UTF-8" for one commit and a
+refuter measured it false, which is the second prose-versus-code mismatch this area produced in
+three passes: **the pattern, not the instance, is the thing to watch here.** Files are decoded as
+UTF-8 and the pointer patterns are ASCII, so what matters is only whether the encoding represents
+ASCII as single ASCII bytes. It does in Windows-1252, Latin-1 and every other ASCII superset, and a
+Windows-1252 file carrying a broken pointer **reds and is named** - verified, and exactly what the
+resync paragraph above predicts. It does not in **UTF-16, UTF-32, EBCDIC or UTF-7**, where a
+tracked file is read but its pointers can never match: a UTF-16LE file carrying a broken pointer
+reads green, verified. That is not a regression - the earlier binary-skip cut missed it too, by
+skipping the file outright - and no such file is tracked here. **If one is ever added, this gate
 does not cover it**, and the honest fix is to decode by encoding, not to re-add a skip.
 
 **One hazard follows from having no exclusion list: do not write a pointer into a
