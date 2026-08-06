@@ -36,6 +36,14 @@
  *     clean.
  *  8. THAT ZERO POINTERS REFUSES. An empty result set is indistinguishable from a clean
  *     run by any count, so it cannot be allowed to read as one.
+ *  9. THE NUL BYPASS, WHICH A REFUTER FOUND IN THIS GATE AND WHICH IS NOW PINNED. The
+ *     first cut skipped any NUL-bearing file as "binary". On this repo that was exactly
+ *     `src/profiles/merge.ts`, a linted TypeScript source, and `CLAUDE.md` already names
+ *     that file as the one an em-dash sweep silently skipped while leaving a banned
+ *     character behind. A broken pointer planted there passed green. The skip is gone,
+ *     and both directions are pinned: a broken pointer in a NUL-bearing source reds and
+ *     names the file, and a CLEAN NUL-bearing source does not red. The second is not
+ *     decoration, because deleting a skip is exactly how you buy a false red instead.
  *
  * The fixtures are throwaway git repositories in a temp dir. They are real repositories
  * because the gate enumerates its corpus with `git ls-files`, and a tree with no index
@@ -284,13 +292,50 @@ describe("agent-notes contract gate", () => {
     expect(r.out).toContain("#a-trap-that-was-deleted");
   });
 
-  it("skips a tracked binary file without failing, and counts it", () => {
-    const dir = makeRepo("binary", HEALTHY);
-    writeFileSync(join(dir, "fixture.bin"), Buffer.from([0x00, 0x01, 0x02, 0x00]));
-    git(dir, ["add", "--", "fixture.bin"]);
+  // The bypass a refuter reproduced end to end against this gate, now pinned. An earlier
+  // cut skipped any NUL-bearing file as "binary" and counted it anonymously. On this repo
+  // that was exactly one file, `src/profiles/merge.ts`, a linted and type-checked source
+  // that embeds NULs in a join separator, and `CLAUDE.md` already records it as the file
+  // PR #52's em-dash sweep silently skipped while leaving a banned character behind. A
+  // broken pointer planted there passed green, byte-identically to a clean run.
+  it("reds on a broken pointer in a NUL-bearing source file, and skips nothing", () => {
+    const dir = makeRepo("nul-bearing", HEALTHY);
+    const anchor = "a-heading-that-does-not-exist";
+    // A TypeScript source with a real NUL byte in a template literal, as `merge.ts` has.
+    const source = Buffer.concat([
+      Buffer.from(`// Why: \`${ptr(anchor)}\`\nexport const SEP = \``),
+      Buffer.from([0x00]),
+      Buffer.from("`;\n"),
+    ]);
+    mkdirSync(join(dir, "src"), { recursive: true });
+    writeFileSync(join(dir, "src/merge.ts"), source);
+    git(dir, ["add", "--", "src/merge.ts"]);
+
+    const r = gateOn(dir);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("src/merge.ts");
+    expect(r.out).toContain(anchor);
+    // And the summary leaves no anonymous residue for a reader to have to interpret:
+    // every tracked file was read, so the two counts are equal.
+    expect(r.out).toContain("0 skipped");
+  });
+
+  it("reads a NUL-bearing file that is clean, rather than exempting it", () => {
+    // The negative control on the same path: the NUL must not cause a false red either.
+    const dir = makeRepo("nul-clean", HEALTHY);
+    mkdirSync(join(dir, "src"), { recursive: true });
+    writeFileSync(join(dir, "src/merge.ts"), Buffer.from([0x2f, 0x2f, 0x20, 0x00, 0x0a]));
+    git(dir, ["add", "--", "src/merge.ts"]);
     const r = gateOn(dir);
     expect(r.code).toBe(0);
-    expect(r.out).toContain("1 binary (skipped)");
+    // Derived from the run rather than hardcoded: tracked must equal read, with no
+    // residue. A literal here would be a count to keep correcting.
+    const counts = /(\d+) tracked, (\d+) read, (\d+) skipped, (\d+) unreadable/.exec(r.out);
+    expect(counts).not.toBeNull();
+    const [, tracked, read, skipped, unreadable] = counts as RegExpExecArray;
+    expect(read).toBe(tracked);
+    expect(skipped).toBe("0");
+    expect(unreadable).toBe("0");
   });
 
   it("refuses a heading whose anchor it would have to guess", () => {

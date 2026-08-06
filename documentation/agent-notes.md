@@ -966,8 +966,10 @@ script by name, but it runs `test:coverage`, which runs the test that runs the s
 in both, and a LADDER entry would spend a meta-repo edit to run it a second time.
 
 **Two pointer forms are live, measured rather than assumed, and the shape-based one is held
-narrow.** The path form, `agent-notes.md` plus `#anchor`, occurs 30 times, all in `CLAUDE.md`, and
-is scanned in **every** tracked text file so no root has to be declared. A bare backticked
+narrow.** The path form, `agent-notes.md` plus `#anchor`, is the common one and every live
+occurrence is in `CLAUDE.md` today. **No count is written here**: this sentence carried "occurs 30
+times", the same commit added a 31st, and the gate prints the number on every run. It is scanned in
+**every** tracked file so no root has to be declared. A bare backticked
 `` `#anchor` `` occurs once, in `CLAUDE.md`, on the line cross-referencing the planned-templates
 section. **A guard matching only the path form is GREEN while that bare pointer is broken**, and
 that bypass is reproduced end to end in the test rather than argued: the same fixture reds with the
@@ -1005,7 +1007,25 @@ when the next heading is deeper, i.e. it is a container for its subsections; any
 pointer that resolves to nothing. A gate that only ever fails is not a gate, so the container case
 is pinned green.
 
-**There is no exclusion list, and one hazard follows from that: do not write a pointer into a
+**There is no exclusion list, and it took a refuter to make that true.** The first cut skipped any
+file containing a NUL byte as "binary", counted only as an anonymous `1 binary (skipped)`. On this
+repo that was exactly one file: **`src/profiles/merge.ts`**, a linted, type-checked,
+Prettier-formatted TypeScript source that embeds NULs in a join separator. `CLAUDE.md` already
+records that same file as this repo's MEASURED silent exemption, because PR #52's em-dash sweep
+skipped it and left a live banned character behind, which is why the em-dash gate's text-only
+variant drops `grep -I`. **The new gate had re-introduced the identical skip in the identical
+file**, and a broken pointer planted there was reproduced passing green, byte-identically to a clean
+run, while the same pointer in the NUL-free sibling `apply.ts` red. Three shipped copies claimed
+"every tracked text file" and "no exclusion list" while it was false, and one of them was a
+changeset summary about to freeze into `CHANGELOG.md`. **The skip was DELETED rather than
+documented**: every tracked file is now decoded and scanned, so `read` equals `tracked` on a clean
+run and there is no residue to interpret. Decoding is safe and was measured: the pointer patterns
+are pure ASCII, and UTF-8 decoding replaces only invalid sequences and resyncs, so a pointer planted
+directly against a real NUL matches. A genuinely binary file can now only cost a **false red**,
+which is cheap. **Do not re-add a binary heuristic here**, and treat "the counts are equal" as the
+property, not "the counts reconcile".
+
+**One hazard follows from having no exclusion list: do not write a pointer into a
 changeset summary.** The summary becomes the `CHANGELOG.md` entry, `CHANGELOG.md` is tracked, and
 the scan covers every tracked text file, so a pointer archived there freezes the heading it names
 forever: renaming that section later reds the gate on a published record nobody may hand-edit.
@@ -1024,12 +1044,12 @@ legitimate; and nothing about any other link in the repo, because this is not a 
 heading and pointer counts on every run, all of them move with the repo, and this file already
 carries the lesson that a numeral which goes stale fast is the failure class the audit exists to
 fix. **Re-run it; do not quote it.** The contract was already intact when the gate was written, so
-**this closed no live break** - eighteen cases carry it, and the red-before evidence is each defect
+**this closed no live break** - nineteen cases carry it, and the red-before evidence is each defect
 class reproduced against a real fixture, not a count of existing failures.
 
 **The corpus is `git ls-files`, so an UNSTAGED new file is not in it.** A green run in a dirty
 working tree therefore says less than the same run in CI, which always sees a committed tree. This
-is not hypothetical: the gate's own script sat untracked while its eighteen cases passed, and the
+is not hypothetical: the gate's own script sat untracked while its cases passed, and the
 first run after `git add` immediately red on a literal pointer inside the script's own header
 comment. **The script needs no self-exemption** and builds its own pointer pattern from the path
 constant at run time, so it never writes the path and a `#` adjacently; that comment was the one
@@ -1037,7 +1057,8 @@ place it did, and the gate caught it rather than a reviewer. The em-dash gate ne
 self-exemption, and that exemption has already cost this repo an escape.
 
 **`documentation/agent-notes.md` is NOT under this repo's Prettier globs and must not be run through
-it.** `format` and `format:check` cover `src/**/*.{ts,md}` and root `*.{json,md,yml}` only. Running
+it.** `format` and `format:check` cover `src/**/*.{ts,md}`, `test/**/*.ts`, `scripts/**/*.ts` and root
+`*.{json,md,yml}`, and `documentation/` is in none of them. Running
 Prettier over this file by hand reflows all of it: measured here, 1,385 lines changed for a
 three-paragraph append, which buries the real edit and churns a file whose whole premise is that the
 relocation was verbatim. Append by hand at the existing wrap.

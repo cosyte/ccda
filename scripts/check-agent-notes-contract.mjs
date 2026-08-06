@@ -41,9 +41,13 @@
  *
  *  - A CHECK CAN PRINT GREEN OVER A CORPUS IT NEVER OPENED, and a denominator does not
  *    detect it: a count counts the files that DID exist. So the corpus is enumerated
- *    from `git ls-files` and RECONCILED: every tracked path is opened, skipped as
- *    binary, or the run refuses. A tracked file missing from the worktree is a refusal,
- *    not a silent skip, because a gate cannot claim to cover a file it could not read.
+ *    from `git ls-files` and RECONCILED: every tracked path is opened, or the run
+ *    refuses. THERE IS NO BINARY SKIP AND NO OTHER EXEMPTION, so on a clean run the read
+ *    count EQUALS the tracked count and there is no residue for a reader to have to
+ *    interpret. An earlier cut of this file skipped any NUL-bearing file as binary; see
+ *    the comment at the read loop for the file that exempted and why it was removed
+ *    rather than documented. A tracked file missing from the worktree is a refusal, not
+ *    a silent skip, because a gate cannot claim to cover a file it could not read.
  *  - Both files the contract is about must be present in what was actually opened. A
  *    phantom path cannot yield green here, because green requires having read them.
  *  - Finding ZERO pointers is a refusal. If the scanner stops matching (a pointer
@@ -58,9 +62,11 @@
  * THE POINTER FORMS ARE MEASURED, NOT ASSUMED, AND THE SHAPE-BASED ONE IS HELD NARROW.
  * Two forms are live in this tree:
  *
- *   1. The path form: the NOTES path below, then a `#`, then the anchor. 30 occurrences,
- *      all in `CLAUDE.md`. Scanned in EVERY tracked text file, so a pointer written into
- *      `README.md` or a source comment is covered without this file declaring a root.
+ *   1. The path form: the NOTES path below, then a `#`, then the anchor. Every live one
+ *      is in `CLAUDE.md` today; no count is written here, because the gate prints one on
+ *      every run and a numeral in a comment is the staleness class this repo keeps
+ *      paying for. Scanned in EVERY tracked file, so a pointer written into `README.md`
+ *      or a source comment is covered without this file declaring a root.
  *      Spelled out in words rather than shown, because writing one here would BE one:
  *      this gate caught exactly that in this comment, on the first run after the file
  *      became tracked. Which is also the limit worth knowing locally: the corpus is
@@ -124,7 +130,7 @@ const NOTES = "documentation/agent-notes.md";
  * string for a regex" while its body handled one character, so the first caller who
  * passes something else gets a silently wrong pattern.
  */
-const escapeForRegExp = (text) => text.replace(/[\\^$.*+?()[\]{}|/-]/g, "\\$&");
+const escapeForRegExp = (text) => text.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 
 /** Built at run time so this file never contains a literal pointer of its own. */
 const POINTER_RE = new RegExp(`${escapeForRegExp(NOTES)}#([A-Za-z0-9._-]+)`, "g");
@@ -224,7 +230,6 @@ try {
 if (tracked.length === 0) refuse(`${ROOT} has no tracked files, so there is nothing to check.`);
 
 const opened = new Map();
-const binary = [];
 const unreadable = [];
 for (const rel of tracked) {
   let buf;
@@ -234,16 +239,30 @@ for (const rel of tracked) {
     unreadable.push(`${rel} (${error.code ?? error.message})`);
     continue;
   }
-  if (buf.includes(0)) binary.push(rel);
-  else opened.set(rel, buf.toString("utf8"));
+  // EVERY tracked file is decoded and scanned. THERE IS NO BINARY SKIP, and removing the
+  // one this file used to carry is the whole point: it classified any file containing a
+  // NUL as binary, which on this repo is exactly `src/profiles/merge.ts`, a linted,
+  // type-checked, Prettier-formatted TypeScript source that embeds NULs in a join
+  // separator. `CLAUDE.md` already records that file as this repo's MEASURED silent
+  // exemption: PR #52's em-dash sweep skipped it and left a live banned character behind,
+  // which is why the em-dash gate's text-only variant drops `grep -I`. A pointer planted
+  // in it was reproduced passing this gate green, byte-identically to a clean run.
+  //
+  // Decoding is safe for this purpose and was measured, not assumed. The pointer patterns
+  // are pure ASCII, and UTF-8 decoding replaces only INVALID sequences, resyncing at the
+  // next valid byte, so an ASCII run always survives intact: a pointer planted directly
+  // against a real NUL in that file matches. A genuinely binary file can therefore only
+  // ever cost a false RED here, which is cheap, and never the silent exemption that has
+  // already cost this repo an escape.
+  opened.set(rel, buf.toString("utf8"));
 }
 
 // The reconciliation. Not a count of what was found: an equality against what git says
 // exists, so a path that silently went missing cannot pass for a path that was clean.
-if (opened.size + binary.length + unreadable.length !== tracked.length) {
+if (opened.size + unreadable.length !== tracked.length) {
   refuse(
     `corpus reconciliation failed: ${tracked.length} tracked, ${opened.size} read, ` +
-      `${binary.length} binary, ${unreadable.length} unreadable.`,
+      `${unreadable.length} unreadable.`,
   );
 }
 if (unreadable.length > 0) {
@@ -351,7 +370,7 @@ if (!pointers.some((p) => p.file === CLAUDE_MD)) {
 // ---- Report -------------------------------------------------------------------------
 
 const summary =
-  `  corpus:   ${tracked.length} tracked, ${opened.size} read, ${binary.length} binary (skipped), 0 unreadable\n` +
+  `  corpus:   ${tracked.length} tracked, ${opened.size} read, 0 skipped, 0 unreadable\n` +
   `  anchors:  ${headings.length} headings in ${NOTES}, ${targeted.size} of them pointed at\n` +
   `  pointers: ${pointers.length} (${pointers.filter((p) => p.form === "path").length} path form, ` +
   `${pointers.filter((p) => p.form === "bare").length} bare form in ${CLAUDE_MD})\n`;
