@@ -70,4 +70,13 @@ after its own script was staged, against a literal pointer written into that scr
 comment. That is also the limit worth knowing locally: the corpus is the tracked tree, so a green
 run before `git add` says less than the same run in CI.
 
+One thing CI found in the new script and it is fixed here rather than waived. The helper that
+escapes the notes path into a pattern escaped `.` only, which is every character this repo's value
+actually contains; CodeQL flagged it as incomplete sanitization and was right to. A constant input
+makes it unexploitable today and does not make it correct, because the helper's contract is "escape
+a string for a regex" while its body handled one character, so the first caller passing anything
+else would get a silently wrong pattern. It now escapes the full metacharacter set, backslash
+first. Behaviour is unchanged and it is exercised by every pointer match the eighteen cases make,
+but it has no unit test of its own.
+
 No runtime code, no public API, no warning code and no parse behaviour changed.

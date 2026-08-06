@@ -115,8 +115,19 @@ const CLAUDE_MD = "CLAUDE.md";
 /** The on-demand file that carries the reasoning behind them. */
 const NOTES = "documentation/agent-notes.md";
 
+/**
+ * Escape every RegExp metacharacter, with the backslash FIRST so its own escape is not
+ * re-escaped by a later rule. An earlier cut here escaped only `.`, which is all this
+ * repo's `NOTES` value actually needs; CodeQL flagged it as incomplete sanitization on
+ * this branch and was right to. The value being a constant makes it unexploitable today
+ * and does not make it correct: the defect is that the helper's contract is "escape a
+ * string for a regex" while its body handled one character, so the first caller who
+ * passes something else gets a silently wrong pattern.
+ */
+const escapeForRegExp = (text) => text.replace(/[\\^$.*+?()[\]{}|/-]/g, "\\$&");
+
 /** Built at run time so this file never contains a literal pointer of its own. */
-const POINTER_RE = new RegExp(`${NOTES.replace(/[.]/g, "\\.")}#([A-Za-z0-9._-]+)`, "g");
+const POINTER_RE = new RegExp(`${escapeForRegExp(NOTES)}#([A-Za-z0-9._-]+)`, "g");
 /** Three or more hyphen-joined lowercase runs, backticked. See the header. */
 const BARE_RE = /`#([a-z0-9]+(?:-[a-z0-9]+){2,})`/g;
 
