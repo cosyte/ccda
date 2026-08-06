@@ -78,7 +78,7 @@
  *      reproduced end to end in the test file rather than argued.
  *
  * Form 2 is keyed on shape, so it is cut narrowly and only in `CLAUDE.md`. Measured
- * over every tracked text file, a bare `` `#...` `` also matches `` `#id` `` in
+ * over every tracked file, a bare `` `#...` `` also matches `` `#id` `` in
  * TypeScript sources and `` `#62` `` in tests and in `agent-notes.md` itself: those are
  * C-CDA narrative `<reference value="#62"/>` targets and XML id references, which is
  * exactly the reference material this parser exists to talk about. Requiring three
@@ -321,7 +321,7 @@ function lineOf(text, index) {
 // found means either the contract was abandoned or this scanner stopped matching.
 if (pointers.length === 0) {
   refuse(
-    `no pointer into ${NOTES} was found in any of the ${opened.size} tracked text files read. ` +
+    `no pointer into ${NOTES} was found in any of the ${opened.size} tracked files read. ` +
       `Either the two-file contract is gone, or this gate stopped matching the pointers it is about.`,
   );
 }
@@ -370,7 +370,8 @@ if (!pointers.some((p) => p.file === CLAUDE_MD)) {
 // ---- Report -------------------------------------------------------------------------
 
 const summary =
-  `  corpus:   ${tracked.length} tracked, ${opened.size} read, 0 skipped, 0 unreadable\n` +
+  `  corpus:   ${tracked.length} tracked, ${opened.size} read, ${unreadable.length} unreadable ` +
+  `(no file is ever skipped)\n` +
   `  anchors:  ${headings.length} headings in ${NOTES}, ${targeted.size} of them pointed at\n` +
   `  pointers: ${pointers.length} (${pointers.filter((p) => p.form === "path").length} path form, ` +
   `${pointers.filter((p) => p.form === "bare").length} bare form in ${CLAUDE_MD})\n`;

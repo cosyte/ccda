@@ -316,8 +316,12 @@ describe("agent-notes contract gate", () => {
     expect(r.out).toContain("src/merge.ts");
     expect(r.out).toContain(anchor);
     // And the summary leaves no anonymous residue for a reader to have to interpret:
-    // every tracked file was read, so the two counts are equal.
-    expect(r.out).toContain("0 skipped");
+    // every tracked file was read, so the two counts are equal. Derived from the run
+    // rather than matched against a literal, because a literal cannot notice a skip
+    // coming back.
+    const seen = /(\d+) tracked, (\d+) read,/.exec(r.out);
+    expect(seen).not.toBeNull();
+    expect((seen as RegExpExecArray)[2]).toBe((seen as RegExpExecArray)[1]);
   });
 
   it("reads a NUL-bearing file that is clean, rather than exempting it", () => {
@@ -330,11 +334,10 @@ describe("agent-notes contract gate", () => {
     expect(r.code).toBe(0);
     // Derived from the run rather than hardcoded: tracked must equal read, with no
     // residue. A literal here would be a count to keep correcting.
-    const counts = /(\d+) tracked, (\d+) read, (\d+) skipped, (\d+) unreadable/.exec(r.out);
+    const counts = /(\d+) tracked, (\d+) read, (\d+) unreadable/.exec(r.out);
     expect(counts).not.toBeNull();
-    const [, tracked, read, skipped, unreadable] = counts as RegExpExecArray;
+    const [, tracked, read, unreadable] = counts as RegExpExecArray;
     expect(read).toBe(tracked);
-    expect(skipped).toBe("0");
     expect(unreadable).toBe("0");
   });
 

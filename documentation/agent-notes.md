@@ -976,7 +976,7 @@ that bypass is reproduced end to end in the test rather than argued: the same fi
 bare pointer and greens with it deleted and nothing else changed. This is the `ncpdp#64` shape,
 where a guard failing to catch something is an overclaim and not merely a gap.
 
-**Do not widen the bare form.** Measured over every tracked text file here, a bare `` `#...` `` also
+**Do not widen the bare form.** Measured over every tracked file here, a bare `` `#...` `` also
 matches `` `#id` `` in TypeScript sources and `` `#62` `` in tests and in this file: those are XML
 id references and C-CDA narrative `<reference value="#62"/>` targets, which is exactly the reference
 material this parser exists to talk about, and is the same class as the `PID-3` / `SCH-11` false
@@ -986,7 +986,8 @@ any other file is deliberately not a pointer**, and that is a stated limit rathe
 
 **The corpus is `git ls-files`, reconciled, because a check can print green over a corpus it never
 opened and no denominator detects it** (a count counts the roots that DID exist). Every tracked path
-is opened, skipped as binary, or the run refuses; the three numbers must sum to what git reported.
+is opened, or the run refuses. There is no skip of any kind, so the property is that `read` EQUALS
+`tracked`, not that a set of numbers reconciles.
 **A tracked file missing from the worktree is a refusal, not a silent skip** - existence is not
 observation, and a gate cannot claim to cover a file it could not read. Both files the contract is
 about must be among what was actually opened, so a phantom path cannot yield green. **Finding zero
@@ -1025,9 +1026,16 @@ directly against a real NUL matches. A genuinely binary file can now only cost a
 which is cheap. **Do not re-add a binary heuristic here**, and treat "the counts are equal" as the
 property, not "the counts reconcile".
 
+**The one real limit of scanning everything is the ENCODING, and it is a stated limit rather than a
+claim.** Files are decoded as UTF-8 and the pointer patterns are ASCII, so a tracked file in a
+non-UTF-8 text encoding is read but its pointers can never match: a UTF-16LE file carrying a broken
+pointer reads green, verified. That is not a regression - the earlier binary-skip cut missed it too,
+by skipping the file outright - and no such file is tracked here. **If one is ever added, this gate
+does not cover it**, and the honest fix is to decode by encoding, not to re-add a skip.
+
 **One hazard follows from having no exclusion list: do not write a pointer into a
 changeset summary.** The summary becomes the `CHANGELOG.md` entry, `CHANGELOG.md` is tracked, and
-the scan covers every tracked text file, so a pointer archived there freezes the heading it names
+the scan covers every tracked file, so a pointer archived there freezes the heading it names
 forever: renaming that section later reds the gate on a published record nobody may hand-edit.
 Today `CHANGELOG.md` carries none, so excluding it would buy nothing and would cost the property
 that makes the corpus trustworthy, which is that every tracked path is accounted for and no skip can
@@ -1040,7 +1048,8 @@ file avoids; nothing about whether a section's prose is accurate, current, or wh
 describes is closed (**a pointer is not a closure**); nothing about unreferenced sections, which are
 legitimate; and nothing about any other link in the repo, because this is not a link checker.
 
-**No corpus figure is written down here, deliberately.** The gate prints tracked / read / binary,
+**No corpus figure is written down here, deliberately.** The gate prints tracked / read /
+unreadable,
 heading and pointer counts on every run, all of them move with the repo, and this file already
 carries the lesson that a numeral which goes stale fast is the failure class the audit exists to
 fix. **Re-run it; do not quote it.** The contract was already intact when the gate was written, so

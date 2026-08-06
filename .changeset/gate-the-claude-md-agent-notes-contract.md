@@ -40,9 +40,9 @@ repository-level ruleset, active on the default branch. The line is now accurate
 re-read the rulesets rather than trust a prose line about them.
 
 Three properties are worth knowing before changing it. The corpus is `git ls-files` and is
-**reconciled**, not merely counted: every tracked path is opened, skipped as binary, or the run
-refuses, because a check can print green over a corpus it never opened and no denominator detects
-that. A tracked file missing from the worktree is a refusal rather than a silent skip, and refusals
+**reconciled**, not merely counted: every tracked path is opened or the run refuses, with no
+exclusion of any kind, so `read` equals `tracked` on a clean run. A check can print green over a
+corpus it never opened and no denominator detects that. A tracked file missing from the worktree is a refusal rather than a silent skip, and refusals
 exit `2` where a contract violation exits `1`. Finding zero pointers is also a refusal, on the same
 reasoning the `attw` wrapper already uses for a tool that exits `0` having printed nothing: an
 empty result set is indistinguishable from a clean run.
