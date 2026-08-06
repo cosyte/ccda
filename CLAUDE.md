@@ -248,11 +248,13 @@ immutability + explicit mutation, and the profile system.
   `CHANGELOG.md` is exempt org-wide (founder, 2026-07-29): do not re-litigate it, do not sweep it.
   Known residual: five `//` line comments are out of scope by convention.
   Why: `documentation/agent-notes.md#the-public-surface-gate`
-- **Em-dash gate present and reporting, but NOT yet blocking.** `U+2014` is banned outright by
+- **Em-dash gate present AND BLOCKING.** `U+2014` is banned outright by
   founder directive, and **when it goes red the fix is never to re-encode the character**: rewrite
-  with a period, colon, comma or parentheses. The job is **not a required status check**, so a PR
-  carrying a live character can auto-merge while it is red; **closing that is a GitHub settings
-  change, not a file change.** It scans every tracked file **except the script itself**, **and** the
+  with a period, colon, comma or parentheses. **This line said "NOT yet blocking" and was stale**:
+  the settings change it called for has landed, and `no-emdash` is a required status check via the
+  repository-level `emdash-required-check` ruleset, active on the default branch (re-read from the
+  API 2026-08-06). **Re-read the rulesets rather than this line.**
+  It scans every tracked file **except the script itself**, **and** the
   PR title, body and commit messages, so **keep the script free of the literal character.** **It is
   the text-only variant, and dropping `grep -I` is the load-bearing part**: `src/profiles/merge.ts`
   carries raw NULs and would otherwise be **silently exempt** from a ban with no exceptions, which
@@ -262,6 +264,15 @@ immutability + explicit mutation, and the profile system.
   including here** - enumerate at carry-back time. Scope, stated honestly: **the gate covers new
   text only, does not rewrite history, and 113 em dashes are already in commit messages on `main`.**
   Why: `documentation/agent-notes.md#the-em-dash-gate`
+- **The `CLAUDE.md` / `agent-notes.md` contract is gated, and unlike the public-surface gate above
+  it BLOCKS** (it runs in the test suite, inside `parser-ci-required-checks`). **It asserts what
+  THIS repo promises, never a fleet universal**: `config`, `hl7` and `workflow` carry no
+  `agent-notes.md` at all. **Do not promote it to an umbrella script.** It scans **EVERY tracked
+  file, no exclusion list: do not re-add a binary/NUL skip** - the first cut had one and silently
+  exempted `src/profiles/merge.ts`, the file the em-dash trap above names. The bare `` `#anchor` ``
+  form is confined to `CLAUDE.md` by shape and scope and **must not be widened** (`#id`/`#62` are
+  XML and C-CDA narrative references). **Never delete an imperative or a section to get green.**
+  Why: `documentation/agent-notes.md#the-agent-notes-contract-gate`
 
 ## Tech Stack (the shared `@cosyte/*` standard)
 

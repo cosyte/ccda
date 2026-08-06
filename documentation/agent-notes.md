@@ -927,3 +927,153 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
   must not be touched** for this: its propagation was never at fault, the step lied to it.
   **This is a per-repo script.** Porting it here fixed this repo only; a sibling that still invokes
   the CLI directly still has the defect. Do not write a repo count down here, derive it.
+
+## The agent-notes contract gate
+
+`CLAUDE-MD-AUDIT` (2026-08-04) split this file out of `CLAUDE.md` and nothing checked the result.
+Both halves state the same promise in their own words: `CLAUDE.md` says every trap is "a one-line
+imperative with a pointer into it", and this file's preamble says every trap "still has a one-line
+imperative in `CLAUDE.md` pointing at the section below that carries its reasoning". A heading
+reworded here silently strands every pointer at it. Neither file gets a compile error, and a worker
+who follows a dead pointer gets the imperative with none of the reasoning, which is the exact
+failure the split was supposed to be safe against: the preamble above says a summary of one of these
+lessons is not a substitute for it. `scripts/check-agent-notes-contract.mjs` and
+`test/scripts/agent-notes-contract.test.ts` close it.
+
+**The gate is scoped to this repo on purpose, and calling it universal would have been an
+overclaim.** The split landed across the fleet, but the contract did not: measured over the
+meta-repo's submodules on 2026-08-06, **`config`, `hl7` and `workflow` have no
+`documentation/agent-notes.md` at all** (nor do the non-package repos `crew` and `knowledgebase`).
+A gate asserting "every cosyte repo carries one" is a universal that three package repos already
+break. What this one asserts is what `ccda` itself promises, which is also why it lives in this
+repo's CI and costs the meta-repo's capped automation plane nothing. **Do not promote it to an
+umbrella script**, and do not restate it as a fleet rule.
+
+**Unlike the public-surface gate, this one BLOCKS, and that was the point of where it was put.**
+Read from the GitHub API on 2026-08-06, `parser-ci-required-checks` requires `ci / verify (22,
+ubuntu-latest)`, `ci / verify (24, ubuntu-latest)` and `ci / actionlint`, so a check that runs
+inside the test suite is inside a required context; `no-internal-refs` is in none of the rulesets
+and therefore reports and stops nothing. **Do NOT extend that to the em-dash gate, and do not
+trust `CLAUDE.md`'s old line about it**: `no-emdash` IS required, via a separate
+repository-level `emdash-required-check` ruleset, active and scoped to the default branch. The
+settings change `CLAUDE.md` said was outstanding had already landed, so that trap was stale in the
+blocking direction and was corrected in the same commit as this section. **Re-read the rulesets;
+do not infer a gate's teeth from a prose line about it, including this one.** `pnpm check:agent-notes` runs it standalone; the meta-repo's `verify.sh` has a fixed
+`LADDER` that does not name it, so it prints "gate-shaped script(s) this ladder does not know ... a
+green verify.sh therefore means LESS than a green CI". **That warning is correct in general and
+misleading here, and `verify.sh` must not be touched over it**: the ladder does not invoke the
+script by name, but it runs `test:coverage`, which runs the test that runs the script. The gate is
+in both, and a LADDER entry would spend a meta-repo edit to run it a second time.
+
+**Two pointer forms are live, measured rather than assumed, and the shape-based one is held
+narrow.** The path form, `agent-notes.md` plus `#anchor`, is the common one and every live
+occurrence is in `CLAUDE.md` today. **No count is written here**: this sentence carried "occurs 30
+times", the same commit added a 31st, and the gate prints the number on every run. It is scanned in
+**every** tracked file so no root has to be declared. A bare backticked
+`` `#anchor` `` occurs once, in `CLAUDE.md`, on the line cross-referencing the planned-templates
+section. **A guard matching only the path form is GREEN while that bare pointer is broken**, and
+that bypass is reproduced end to end in the test rather than argued: the same fixture reds with the
+bare pointer and greens with it deleted and nothing else changed. This is the `ncpdp#64` shape,
+where a guard failing to catch something is an overclaim and not merely a gap.
+
+**Do not widen the bare form.** Measured over every tracked file here, a bare `` `#...` `` also
+matches `` `#id` `` in TypeScript sources and `` `#62` `` in tests and in this file: those are XML
+id references and C-CDA narrative `<reference value="#62"/>` targets, which is exactly the reference
+material this parser exists to talk about, and is the same class as the `PID-3` / `SCH-11` false
+positives that a shape rule destroys in a release body. Requiring three hyphen-joined lowercase runs
+excludes them by shape; confining the form to `CLAUDE.md` excludes them by scope. **A bare anchor in
+any other file is deliberately not a pointer**, and that is a stated limit rather than a claim.
+
+**The corpus is `git ls-files`, reconciled, because a check can print green over a corpus it never
+opened and no denominator detects it** (a count counts the roots that DID exist). Every tracked path
+is opened, or the run refuses. There is no skip of any kind, so the property is that `read` EQUALS
+`tracked`, not that a set of numbers reconciles.
+**A tracked file missing from the worktree is a refusal, not a silent skip** - existence is not
+observation, and a gate cannot claim to cover a file it could not read. Both files the contract is
+about must be among what was actually opened, so a phantom path cannot yield green. **Finding zero
+pointers is also a refusal**, on the same logic as `scripts/attw.mjs`'s backstop for a tool that
+exits 0 having printed nothing: an empty result set is indistinguishable from a clean run by any
+count. Refusals exit **2**, distinct from a contract violation's **1**.
+
+**The heading recogniser fails in both directions and both are pinned.** Three leading spaces and a
+setext underline are real headings that `/^#{1,6} /` misses, which is a **false red** on a pointer
+that is fine; a `#` inside a fenced code block is **not** a heading, and counting it is a **false
+green** on a pointer that resolves to nothing. GitHub's `-1` / `-2` duplicate suffixing is
+reproduced, because a duplicate slug otherwise resolves a pointer to the wrong section rather than
+to none. **A heading carrying a non-ASCII character is refused rather than guessed at**: the
+slugifier reproduces GitHub's ASCII behaviour only.
+
+**Emptiness is checked with its negative control.** A heading with no body of its own is legitimate
+when the next heading is deeper, i.e. it is a container for its subsections; anything else is a
+pointer that resolves to nothing. A gate that only ever fails is not a gate, so the container case
+is pinned green.
+
+**There is no exclusion list, and it took a refuter to make that true.** The first cut skipped any
+file containing a NUL byte as "binary", counted only as an anonymous `1 binary (skipped)`. On this
+repo that was exactly one file: **`src/profiles/merge.ts`**, a linted, type-checked,
+Prettier-formatted TypeScript source that embeds NULs in a join separator. `CLAUDE.md` already
+records that same file as this repo's MEASURED silent exemption, because PR #52's em-dash sweep
+skipped it and left a live banned character behind, which is why the em-dash gate's text-only
+variant drops `grep -I`. **The new gate had re-introduced the identical skip in the identical
+file**, and a broken pointer planted there was reproduced passing green, byte-identically to a clean
+run, while the same pointer in the NUL-free sibling `apply.ts` red. Three shipped copies claimed
+"every tracked text file" and "no exclusion list" while it was false, and one of them was a
+changeset summary about to freeze into `CHANGELOG.md`. **The skip was DELETED rather than
+documented**: every tracked file is now decoded and scanned, so `read` equals `tracked` on a clean
+run and there is no residue to interpret. Decoding is safe and was measured: the pointer patterns
+are pure ASCII, and UTF-8 decoding replaces only invalid sequences and resyncs, so a pointer planted
+directly against a real NUL matches. A genuinely binary file can now only cost a **false red**,
+which is cheap. **Do not re-add a binary heuristic here**, and treat "the counts are equal" as the
+property, not "the counts reconcile".
+
+**The one real limit of scanning everything is the ENCODING, and the limit is NON-ASCII-COMPATIBLE
+encodings specifically, not "non-UTF-8".** This paragraph said "non-UTF-8" for one commit and a
+refuter measured it false, which is the second prose-versus-code mismatch this area produced in
+three passes: **the pattern, not the instance, is the thing to watch here.** Files are decoded as
+UTF-8 and the pointer patterns are ASCII, so what matters is only whether the encoding represents
+ASCII as single ASCII bytes. It does in Windows-1252, Latin-1 and every other ASCII superset, and a
+Windows-1252 file carrying a broken pointer **reds and is named** - verified, and exactly what the
+resync paragraph above predicts. It does not in **UTF-16, UTF-32, EBCDIC or UTF-7**, where a
+tracked file is read but its pointers can never match: a UTF-16LE file carrying a broken pointer
+reads green, verified. That is not a regression - the earlier binary-skip cut missed it too, by
+skipping the file outright - and no such file is tracked here. **If one is ever added, this gate
+does not cover it**, and the honest fix is to decode by encoding, not to re-add a skip.
+
+**One hazard follows from having no exclusion list: do not write a pointer into a
+changeset summary.** The summary becomes the `CHANGELOG.md` entry, `CHANGELOG.md` is tracked, and
+the scan covers every tracked file, so a pointer archived there freezes the heading it names
+forever: renaming that section later reds the gate on a published record nobody may hand-edit.
+Today `CHANGELOG.md` carries none, so excluding it would buy nothing and would cost the property
+that makes the corpus trustworthy, which is that every tracked path is accounted for and no skip can
+quietly go phantom. Reference the section by title in a changeset, never by anchor.
+
+**What a green run does NOT say**, because more will be read into it otherwise: nothing about any
+other repo; nothing about whether every trap in `CLAUDE.md` has a pointer, since recognising "a
+trap" is a judgement about prose and a guard that tried would be the universal-shaped overclaim this
+file avoids; nothing about whether a section's prose is accurate, current, or whether the trap it
+describes is closed (**a pointer is not a closure**); nothing about unreferenced sections, which are
+legitimate; and nothing about any other link in the repo, because this is not a link checker.
+
+**No corpus figure is written down here, deliberately.** The gate prints tracked / read /
+unreadable,
+heading and pointer counts on every run, all of them move with the repo, and this file already
+carries the lesson that a numeral which goes stale fast is the failure class the audit exists to
+fix. **Re-run it; do not quote it.** The contract was already intact when the gate was written, so
+**this closed no live break** - nineteen cases carry it, and the red-before evidence is each defect
+class reproduced against a real fixture, not a count of existing failures.
+
+**The corpus is `git ls-files`, so an UNSTAGED new file is not in it.** A green run in a dirty
+working tree therefore says less than the same run in CI, which always sees a committed tree. This
+is not hypothetical: the gate's own script sat untracked while its cases passed, and the
+first run after `git add` immediately red on a literal pointer inside the script's own header
+comment. **The script needs no self-exemption** and builds its own pointer pattern from the path
+constant at run time, so it never writes the path and a `#` adjacently; that comment was the one
+place it did, and the gate caught it rather than a reviewer. The em-dash gate next door does need a
+self-exemption, and that exemption has already cost this repo an escape.
+
+**`documentation/agent-notes.md` is NOT under this repo's Prettier globs and must not be run through
+it.** `format` and `format:check` cover `src/**/*.{ts,md}`, `test/**/*.ts`, `scripts/**/*.ts` and root
+`*.{json,md,yml}`, and `documentation/` is in none of them. Running
+Prettier over this file by hand reflows all of it: measured here, 1,385 lines changed for a
+three-paragraph append, which buries the real edit and churns a file whose whole premise is that the
+relocation was verbatim. Append by hand at the existing wrap.
