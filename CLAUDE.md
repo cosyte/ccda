@@ -46,6 +46,14 @@ immutability + explicit mutation, and the profile system.
   - `buildCcda` emits **two of the twelve** document types (CCD, Referral Note); parsing
     **recognizes** all twelve, only building is limited.
     Why: `documentation/agent-notes.md#what-buildccda-emits-and-what-it-does-not`
+  - **A narrative label is REFUSED, never fabricated: `narrativeLabel()` THROWS when a PRESENT coded
+    object carries no `displayName`. Never render a confident sentence the entry does not support,
+    and never substitute a different one** - `?? "No known allergies"` emitted a positively-asserted
+    allergy as its own negation, byte-identical to the negated form, warnings `[]`, in `0.0.11`.
+    **An ABSENT optional object keeps whatever fallback it has**, where it has one; a PRESENT
+    unlabelled one is refused, empty and whitespace-only included, and **only NARRATIVE labels are
+    guarded**. `editCcda` inherits it via `buildSectionComponent`.
+    Why: `documentation/agent-notes.md#a-narrative-label-is-refused-never-fabricated`
   - **OPEN DEFECT, filed rather than fixed: 64 `@example` blocks cite an import that does not
     resolve**, across four modules; **four reach consumers** in the published `.d.ts`. **The
     predicate is "reaches `dist`", NOT "is on the entry point".** If you pick it up, parse the TSDoc
@@ -158,41 +166,29 @@ immutability + explicit mutation, and the profile system.
   - **Three plan-surface decisions were settled 2026-08-06, all toward REPORTING rather than toward
     changing what is returned or accepted, and each has a "do not finish the job" edge.**
     (1) `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`: the field stays optional, the **emitted XML is
-    byte-identical** (no date, no `nullFlavor`), **`parseCcda` raises nothing**, and the immunization
-    variant is **not** checked (its field is required, so the diagnostic would be dead). The
-    `editCcda` half was a stated residual and is **CLOSED (2026-08-07)**; read
+    byte-identical**, **`parseCcda` raises nothing**, and the immunization variant is **not**
+    checked. The `editCcda` half is **CLOSED (2026-08-07)**; read
     `#closing-the-two-silent-plan-drops-2026-08-07` before touching it, because an **INPUT-reading
-    check was tried and REVERTED** (an ordered edit list where a later edit discards an earlier one's
-    content warned of a SHALL violation on a conformant document). The shipped shape is one shared
-    check over the **emitted DOM**, message naming **neither** emitter.
+    check was tried and REVERTED**.
     (2) `PLAN_ENTRY_NOT_MODELED` reports Instruction / Handoff / Nutrition Recommendation, **not**
     Goal Observation (that one is to be MODELLED, and a code is stable forever once shipped).
     **Where it fires is a CHOSEN BOUND, not a containment catalog**: a direct entry in **two**
-    sections, `planOfTreatment` and `interventions` (widened 2026-08-07 on a verbatim
-    CONF:1198-32402 / 1198-32403 citation plus a base-measured matrix; a conformant Instructions
-    Section still stays quiet), the nested half wherever the container sits. **They appear in more
-    places than the report covers and an occurrence outside it is still dropped in silence** (a
-    Handoff nested in an Intervention Act `…22.4.131` is one) **- say that, and never justify the
-    scope with an untraced containment claim** (one shipped, retracted).
-    **Reporting is not modelling: nothing about
-    `getPlannedItems()` changed.** (3) `editCcda` **keeps minting** a `setId` (CDA R2 requires the
-    replacement and its `parentDocument` to share one) and labels the minted one only:
-    `SYNTHETIC_SETID_PREFIX` + the synthetic root, both required by `isSyntheticSetId`. **State the
-    residual: nothing forces a receiver to read the label, and a `false` never certifies an id is
-    real.** **The CCD SHALL-set disagreement was NOT touched and is still blocked on the Schematron.**
+    sections, `planOfTreatment` and `interventions`, the nested half wherever the container sits.
+    **They appear in more places than the report covers and an occurrence outside it is still
+    dropped in silence - say that, and never justify the scope with an untraced containment claim**
+    (one shipped, retracted). **Reporting is not modelling: nothing about
+    `getPlannedItems()` changed.** (3) `editCcda` **keeps minting** a `setId` and labels the minted
+    one only. **State the residual: nothing forces a receiver to read the label, and a `false` never
+    certifies an id is real.**
+    **The CCD SHALL-set disagreement was NOT touched and is still blocked on the Schematron.**
     Why: `documentation/agent-notes.md#the-three-plan-surface-decisions-of-2026-08-06`
   - **The Interventions Section (`…21.2.3`, LOINC `62387-6`) lives in the `…10.20.21.2.*` arc, not
     the `…10.20.22.2.*` arc every other catalog section uses, and `…10.20.22.2.3` is RESULTS. Do not
-    "normalize" the arc** (a matrix row exists solely to fail if the two are confused). Exactly one
-    root, no entries-required sibling; **in C-CDA the base root is entries-optional and the `.1`
-    sibling is entries-required** (an earlier draft had it backwards). **Do not re-add a CONF id or
-    a LOINC release number here**: both were invented precision, removed rather than re-guessed.
-    Every other spec claim on this entry is **stated, not traced**, which licenses nothing
-    about `required-sections.ts`. **A filtered projection cannot support a monotonicity claim**; the
-    matrix filters nothing, and there are FOUR classes of move, not the two the first cut claimed.
+    "normalize" the arc.** **Do not re-add a CONF id or a LOINC release number here**: both were
+    invented precision, removed rather than re-guessed. Every other spec claim on this entry is
+    **stated, not traced**, which licenses nothing about `required-sections.ts`.
     **`UNKNOWN_SECTION_CODE` is NOT withdrawn on "every document carrying `62387-6`"** - that
     universal was published once and is false.
-    **The OID got a FIRST source 2026-08-07**, non-normative: root + LOINC only.
     Why: `documentation/agent-notes.md#the-interventions-section-and-its-oid-arc`
   - **`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`'s precondition is each arm's LEAD `<code>`, and the
     message must keep saying so.** A safety-critical warning that misdescribes the document it is
@@ -219,15 +215,11 @@ immutability + explicit mutation, and the profile system.
     Why: `documentation/agent-notes.md#the-phi-bound-is-applied-at-the-model-as-well`
   - **`UNKNOWN_NAMESPACE_PREFIX` is raised from `enforceStructureLimits`, the package's only
     exhaustive traversal, and REPLAYED after the model is built, never emitted where it is found.**
-    **A namespace deviation must never take a fatal's or a safety-critical code's place**; in
-    lenient mode this means `OnWarningCallback` documents emission order, not discovery order. **The
-    skip-the-root guard does not work and was removed**, and the test pinning it used a childless
-    root: **a probe that cannot fail proves nothing.** Once per distinct namespace bounds only the
-    **benign** case; **do not write it up as a hostile-input bound.** The position is the
-    **shallowest** use, not the first in document order. **Attributes are deliberately NOT swept;
-    do not "finish the job" by adding them.** The code NAME is historical, so the frozen message was
-    corrected instead of renaming a stable code. **If you add a diagnostic about a node this parser
-    does not navigate, that walk is where it goes.**
+    **A namespace deviation must never take a fatal's or a safety-critical code's place.** **A probe
+    that cannot fail proves nothing.** Once per distinct namespace bounds only the **benign** case;
+    **do not write it up as a hostile-input bound.** **Attributes are deliberately NOT swept; do not
+    "finish the job" by adding them.** **If you add a diagnostic about a node this parser does not
+    navigate, that walk is where it goes.**
     Why: `documentation/agent-notes.md#where-the-unknown-namespace-prefix-warning-is-raised`
   - **`CcdaPosition.templateId` is populated by THREE codes, and by nothing else.**
     `MISSING_TEMPLATE_ID` and `UNKNOWN_DOCUMENT_TEMPLATE` carry none **on purpose**; **filling a
@@ -236,15 +228,11 @@ immutability + explicit mutation, and the profile system.
     open, filed: `defineCcdaProfile` accepts such an inert tolerance rather than refusing it.
     Why: `documentation/agent-notes.md#what-populates-ccdaposition-templateid`
   - **`NULL_FLAVORS` is the WHOLE v3 NullFlavor code system, seventeen concepts** (it was eight).
-    **Transcribe from the published code system, never from memory** (the missing set was first
-    written down as seven and is nine). Retired `NP` is admitted deliberately. Widening did not
-    weaken the PHI bound it carries: membership in a closed set of literals this package owns, never
-    a shape test. **The strict column moves on 22 of the 51 rows and that is the intended effect;
-    do not "fix" it back.** **The first measurement had no strict column, and that is why it passed
-    a broken slice.** Expect the 32-row numbers from `test/dead-diagnostics-matrix.test.ts` and the
-    51-row numbers only from the wider hand-run. **If you touch `NULL_FLAVORS`, the namespace sweep
-    or `position.templateId`, re-run that file against the previous tree and diff before you update
-    its snapshot; the list is public surface and a published version never moves backwards.**
+    **Transcribe from the published code system, never from memory.** Widening did not weaken the
+    PHI bound it carries: membership in a closed set of literals this package owns, never a shape
+    test. **If you touch `NULL_FLAVORS`, the namespace sweep or `position.templateId`, re-run
+    `test/dead-diagnostics-matrix.test.ts` against the previous tree and diff before you update its
+    snapshot; the list is public surface and a published version never moves backwards.**
     Why: `documentation/agent-notes.md#the-v3-nullflavor-code-system-has-seventeen-concepts`
   - `SAFETY_CRITICAL_CODES` is a frozen read-only view, not a `Set` instance: every read operation
     works (including spread), but `instanceof Set` is `false`.
@@ -267,30 +255,25 @@ immutability + explicit mutation, and the profile system.
   Why: `documentation/agent-notes.md#the-xml-parser-dependency-ratified`
 - **Public-surface gate present and reporting, but NOT yet blocking** (`PUBLIC-SURFACE-HYGIENE`).
   `pnpm check:no-internal-refs` is on the meta-repo's `verify.sh` ladder, but its context is not in
-  `parser-ci-required-checks`, so it is visible on every PR and blocks nothing; **closing that is a
-  ruleset change, not a file change.** **Ported from `ncpdp`'s copy, NOT `hl7`'s** - a "resync with
-  hl7" that restores `RULE_COUNT=6` deletes rule 7, and the script refuses to run if it does.
-  **Measure the doc comments first, and quote a count with the tree it was taken on**: the markdown
-  surface alone under-counts by roughly 30:1 here. **The prefix list, designation exclusions, phase
-  guards and self-test samples are re-derived for C-CDA and must not be inherited wholesale.**
-  `CHANGELOG.md` is exempt org-wide (founder, 2026-07-29): do not re-litigate it, do not sweep it.
-  Known residual: five `//` line comments are out of scope by convention.
+  `parser-ci-required-checks`, so it blocks nothing; **closing that is a ruleset change, not a file
+  change.** **Ported from `ncpdp`'s copy, NOT `hl7`'s** - a "resync with hl7" that restores
+  `RULE_COUNT=6` deletes rule 7, and the script refuses to run if it does. **Measure the doc
+  comments first, and quote a count with the tree it was taken on. The prefix list, designation
+  exclusions, phase guards and self-test samples are re-derived for C-CDA and must not be inherited
+  wholesale.** `CHANGELOG.md` is exempt org-wide (founder, 2026-07-29): do not re-litigate it.
   Why: `documentation/agent-notes.md#the-public-surface-gate`
 - **Em-dash gate present AND BLOCKING.** `U+2014` is banned outright by
   founder directive, and **when it goes red the fix is never to re-encode the character**: rewrite
-  with a period, colon, comma or parentheses. **This line said "NOT yet blocking" and was stale**:
-  the settings change it called for has landed, and `no-emdash` is a required status check via the
-  repository-level `emdash-required-check` ruleset, active on the default branch (re-read from the
-  API 2026-08-06). **Re-read the rulesets rather than this line.**
+  with a period, colon, comma or parentheses. `no-emdash` is a required status check via the
+  repository-level `emdash-required-check` ruleset; **re-read the rulesets rather than this line.**
   It scans every tracked file **except the script itself**, **and** the
   PR title, body and commit messages, so **keep the script free of the literal character.** **It is
   the text-only variant, and dropping `grep -I` is the load-bearing part**: `src/profiles/merge.ts`
   carries raw NULs and would otherwise be **silently exempt** from a ban with no exceptions, which
-  is not theoretical (PR #52's sweep skipped that exact file and left a live character behind).
-  **Do not swap in `website`'s variant**, and do not reach for `pathways`' `git check-attr binary`
-  without first adding a `.gitattributes`. **Do not trust a copy count written down anywhere,
-  including here** - enumerate at carry-back time. Scope, stated honestly: **the gate covers new
-  text only, does not rewrite history, and 113 em dashes are already in commit messages on `main`.**
+  is not theoretical. **Do not swap in `website`'s variant**, and do not reach for `pathways`'
+  `git check-attr binary` without first adding a `.gitattributes`. **Do not trust a copy count
+  written down anywhere, including here** - enumerate at carry-back time. **The gate covers new
+  text only and does not rewrite history.**
   Why: `documentation/agent-notes.md#the-em-dash-gate`
 - **The `CLAUDE.md` / `agent-notes.md` contract is gated, and unlike the public-surface gate above
   it BLOCKS** (it runs in the test suite, inside `parser-ci-required-checks`). **It asserts what
@@ -335,26 +318,25 @@ a summary.
 - Immutable by default. Mutation only via explicit methods.
 - No `console.*` in library code. Throw typed errors or return results.
 - Short, testable functions over big parsing blobs.
+- **Commit style:** atomic and reviewable. Mirror the commit-message style from `@cosyte/hl7`'s
+  `git log`.
 - Postel's Law: parser is liberal (lenient default + warnings), serializer is conservative (always
   emits spec-clean output).
 - Fatal errors only for unrecoverable structural corruption (Tier-3 codes). Everything else is a
   warning with a stable code + positional context.
 - Coverage: per-directory >= 90% (lines/branches/functions/statements), enforced by
-  `pnpm test:coverage`.
+  `pnpm test:coverage`; the gated directories are declared in `vitest.config.ts` (`coverageDirs`)
+  and you **add one there when you add one under `src/`**.
 - **`attw` SAYS "does not contain types" AND EXITS 0, SO THE `attw` SCRIPT IS A WRAPPER, NOT THE
   BARE CLI** (`ATTW-FALSE-GREEN-PORT`). **A false red costs an hour; a false green merges.** The
   race only supplies the condition; it is not the defect, so **the answer is not a lock, a lease or
   a build queue** - the gate must be able to say its own inputs were missing, whatever removed them.
-  `scripts/attw.mjs` carries **THREE guards, not two**: a preflight that every relative path
-  `package.json` promises exists **and is non-empty** (a zero-byte `index.d.ts` is a second, quieter
-  false green), a post-check on `attw`'s untyped sentence, and a backstop that fails when `attw`
-  exits 0 having printed nothing at all (**pinned by no test, a stated gap rather than an
-  oversight**). **Blinding options are refused BY OPTION NAME, wholesale,
-  not by value, and short options BY LETTER ANYWHERE IN THE CLUSTER, not by whole token** - `-fjson`
-  is the one a `split("=")[0]` token test lets straight through, measured back to **exit 0** on this
-  repo's real manifest. **`.npmignore` versus `files` is about the file's DEPTH, not its existence.**
-  `test/scripts/attw-gate.test.ts` pins both nets, the upstream exit-0 itself, a real failure and a
-  negative control; **do not carry its "16 of 21" figure forward, re-measure it.** **This is a
+  `scripts/attw.mjs` carries **THREE guards, not two**. **Blinding options are refused BY OPTION
+  NAME, wholesale, not by value, and short options BY LETTER ANYWHERE IN THE CLUSTER, not by whole
+  token.** **`.npmignore` versus `files` is about the file's DEPTH, not its existence.**
+  `test/scripts/attw-gate.test.ts` pins two of the three, the upstream exit-0 itself, a real failure
+  and a negative control; **the printed-nothing backstop is pinned by NO test, a stated gap rather
+  than an oversight. Do not carry the test file's "16 of 21" figure forward, re-measure it.** **This is a
   per-repo script** and a sibling still invoking the CLI directly still has the defect; do not write
   a repo count down here, derive it. `scripts/verify.sh` in the meta-repo **must not be touched** for
   this. **The guard is described in four committed files and three corrections have landed in some
@@ -386,31 +368,8 @@ Mirrors the three disciplines in the meta-repo's `documentation/conventions.md`.
 
 ---
 
-# C-CDA planning notes
-
-_Preserved from the pre-scaffold planning `CLAUDE.md`. The sections above are the shared `@cosyte/*`
-standard (authoritative for tooling/stack/disciplines); the notes below are the C-CDA-specific design
-intent. Where they overlap, the standard above wins, e.g. runtime deps are now **one** (`@xmldom/xmldom`, ratified by
-`docs/adr/0001-xml-parser.md`), and the sibling `@cosyte/hl7` now lives at `../hl7` (the old
-`../hl7-parser` path is stale)._
-
-A TypeScript library for the HL7 Consolidated CDA R2.1 standard.
-
-## Ground truth
-
-- **North star:** A developer can parse a real-world, vendor-quirky C-CDA document and pull useful sections out of it in one line, without having read the C-CDA IG.
-- **Sibling package:** `@cosyte/hl7` (lives at `../hl7`). This project mirrors its style, tooling, and guardrails. When in doubt, do what `@cosyte/hl7` did.
-- **Deliberate divergence from the sibling:** runtime dependencies are allowed here (for XML parsing). Target ≤ 3 runtime deps, each justified. (Ratified: `@xmldom/xmldom` via `docs/adr/0001-xml-parser.md`, **1 of 3**.)
-
-## Hard gates
-
-- **≥ 90% per-directory coverage**, enforced today by `pnpm test:coverage` (not deferred to v1). The
-  gated directories are declared in `vitest.config.ts` (`coverageDirs`): `parser`, `model`,
-  `model/types`, `helpers`, `serialize`, `profiles`, `builder`, `edit`. Add a directory there when
-  you add one under `src/`.
-- **No `console.*` in library code.** Throw typed errors or return results.
-- **TypeScript strict + `noUncheckedIndexedAccess`.** No `any`, no unjustified `as` casts.
-
-## Commit style
-
-Atomic and reviewable. Mirror the commit-message style from `@cosyte/hl7`'s `git log`.
+**The pre-scaffold C-CDA planning notes were relocated verbatim 2026-08-07** (north star, the
+sibling-package pointer, the hard gates and the commit style). Where they overlapped the standard
+above, the standard above wins. The **two** imperatives in them stated nowhere else are kept above:
+the `coverageDirs` rule, in the coverage guardrail, and the commit style, in its own bullet.
+Why: `documentation/agent-notes.md#the-pre-scaffold-planning-notes`

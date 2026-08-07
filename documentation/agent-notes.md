@@ -110,12 +110,18 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     disagreement
     between `build-ccda.ts` and `required-sections.ts` is untouched and still blocked on the
     normative R2.1 Schematron.
-  - **OWED AND BLOCKED: this trap has no one-line imperative in `CLAUDE.md`.** That file measured
-    **34,482 bytes against its 32,000-byte budget** in the meta-repo's `.claude/hooks/doc-budget.mjs`
-    **before this change**, so the hook refuses any write that grows it, including a pointer at this
-    section. Closing that is either a deliberate budget raise (its own umbrella commit, with its own
-    argument, per ADR 0023) or a measured relocation slice here; **do not pay for it by deleting a
-    trap.**
+  - **PAID 2026-08-07: this trap now HAS its one-line imperative in `CLAUDE.md`.** It was owed and
+    blocked when the fix landed, because that file measured **34,482 bytes against its 32,000-byte
+    budget** in the meta-repo's `.claude/hooks/doc-budget.mjs` and the hook refuses any write that
+    grows an over-budget file, including a pointer at this section. `CCDA-CLAUDE-MD-OVER-BUDGET`
+    closed it the way the debt said it had to be closed: **a measured relocation slice, not a budget
+    raise** (ADR 0023 requires a raise to name a feature, and "fitting one more trap" is not one, so
+    raising would have ratified the bypass that created the overage). **Nothing was deleted to pay
+    for it**; eight blocks were shortened in `CLAUDE.md` and each is reproduced verbatim in the
+    section of this file its pointer already named. **How the file got 2,482 bytes over a hook that
+    exists to refuse exactly that: `doc-budget.mjs` only sees `Write`/`Edit` tool calls, so a write
+    through `python`, `sed` or a shell redirect bypasses it silently. Edit these two files with the
+    editing tools and re-measure after every change.**
 
 ## The 64 unresolvable example imports
 
@@ -718,6 +724,39 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     forwards a `terminology` adapter to its re-parse and takes no profile.) Adding either later can
     only forbid more and is a reviewable act of its own.
 
+### The CLAUDE.md imperative for the plan-surface decisions, as it stood before the 2026-08-07 relocation
+
+`CCDA-CLAUDE-MD-OVER-BUDGET` shortened this trap's one-line imperative in `CLAUDE.md` to fit that
+file under its 32,000-byte budget. Nothing was deleted: the imperative as it stood is reproduced
+here verbatim, and what is LEFT there is the rule plus this pointer.
+
+  - **Three plan-surface decisions were settled 2026-08-06, all toward REPORTING rather than toward
+    changing what is returned or accepted, and each has a "do not finish the job" edge.**
+    (1) `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`: the field stays optional, the **emitted XML is
+    byte-identical** (no date, no `nullFlavor`), **`parseCcda` raises nothing**, and the immunization
+    variant is **not** checked (its field is required, so the diagnostic would be dead). The
+    `editCcda` half was a stated residual and is **CLOSED (2026-08-07)**; read
+    `#closing-the-two-silent-plan-drops-2026-08-07` before touching it, because an **INPUT-reading
+    check was tried and REVERTED** (an ordered edit list where a later edit discards an earlier one's
+    content warned of a SHALL violation on a conformant document). The shipped shape is one shared
+    check over the **emitted DOM**, message naming **neither** emitter.
+    (2) `PLAN_ENTRY_NOT_MODELED` reports Instruction / Handoff / Nutrition Recommendation, **not**
+    Goal Observation (that one is to be MODELLED, and a code is stable forever once shipped).
+    **Where it fires is a CHOSEN BOUND, not a containment catalog**: a direct entry in **two**
+    sections, `planOfTreatment` and `interventions` (widened 2026-08-07 on a verbatim
+    CONF:1198-32402 / 1198-32403 citation plus a base-measured matrix; a conformant Instructions
+    Section still stays quiet), the nested half wherever the container sits. **They appear in more
+    places than the report covers and an occurrence outside it is still dropped in silence** (a
+    Handoff nested in an Intervention Act `…22.4.131` is one) **- say that, and never justify the
+    scope with an untraced containment claim** (one shipped, retracted).
+    **Reporting is not modelling: nothing about
+    `getPlannedItems()` changed.** (3) `editCcda` **keeps minting** a `setId` (CDA R2 requires the
+    replacement and its `parentDocument` to share one) and labels the minted one only:
+    `SYNTHETIC_SETID_PREFIX` + the synthetic root, both required by `isSyntheticSetId`. **State the
+    residual: nothing forces a receiver to read the label, and a `false` never certifies an id is
+    real.** **The CCD SHALL-set disagreement was NOT touched and is still blocked on the Schematron.**
+    Why: `documentation/agent-notes.md#the-three-plan-surface-decisions-of-2026-08-06`
+
 ## Closing the two silent plan drops (2026-08-07)
 
   - **The two residuals `#98` stated and test-pinned rather than fixed, closed together as one slice
@@ -906,6 +945,25 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     Recognizing the section did **not** change what `getPlannedItems()` returns or reach `…22.4.130` /
     `…22.4.131`; those stay pinned as unreached.
 
+### The CLAUDE.md imperative for the Interventions Section, as it stood before the 2026-08-07 relocation
+
+`CCDA-CLAUDE-MD-OVER-BUDGET` shortened this trap's one-line imperative in `CLAUDE.md`. Nothing was
+deleted; the imperative as it stood is reproduced here verbatim.
+
+  - **The Interventions Section (`…21.2.3`, LOINC `62387-6`) lives in the `…10.20.21.2.*` arc, not
+    the `…10.20.22.2.*` arc every other catalog section uses, and `…10.20.22.2.3` is RESULTS. Do not
+    "normalize" the arc** (a matrix row exists solely to fail if the two are confused). Exactly one
+    root, no entries-required sibling; **in C-CDA the base root is entries-optional and the `.1`
+    sibling is entries-required** (an earlier draft had it backwards). **Do not re-add a CONF id or
+    a LOINC release number here**: both were invented precision, removed rather than re-guessed.
+    Every other spec claim on this entry is **stated, not traced**, which licenses nothing
+    about `required-sections.ts`. **A filtered projection cannot support a monotonicity claim**; the
+    matrix filters nothing, and there are FOUR classes of move, not the two the first cut claimed.
+    **`UNKNOWN_SECTION_CODE` is NOT withdrawn on "every document carrying `62387-6`"** - that
+    universal was published once and is false.
+    **The OID got a FIRST source 2026-08-07**, non-normative: root + LOINC only.
+    Why: `documentation/agent-notes.md#the-interventions-section-and-its-oid-arc`
+
 ## The translation-only precondition is each arm's lead code
 
   - **`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`'s precondition is each arm's LEAD `<code>`, and the
@@ -1028,6 +1086,24 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     prefix into the position and watching the runner fail, before reverting. Re-confirm that way if
     you touch the sweep: a probe that cannot fail proves nothing.
 
+### The CLAUDE.md imperative for the namespace sweep, as it stood before the 2026-08-07 relocation
+
+`CCDA-CLAUDE-MD-OVER-BUDGET` shortened this trap's one-line imperative in `CLAUDE.md`. Nothing was
+deleted; the imperative as it stood is reproduced here verbatim.
+
+  - **`UNKNOWN_NAMESPACE_PREFIX` is raised from `enforceStructureLimits`, the package's only
+    exhaustive traversal, and REPLAYED after the model is built, never emitted where it is found.**
+    **A namespace deviation must never take a fatal's or a safety-critical code's place**; in
+    lenient mode this means `OnWarningCallback` documents emission order, not discovery order. **The
+    skip-the-root guard does not work and was removed**, and the test pinning it used a childless
+    root: **a probe that cannot fail proves nothing.** Once per distinct namespace bounds only the
+    **benign** case; **do not write it up as a hostile-input bound.** The position is the
+    **shallowest** use, not the first in document order. **Attributes are deliberately NOT swept;
+    do not "finish the job" by adding them.** The code NAME is historical, so the frozen message was
+    corrected instead of renaming a stable code. **If you add a diagnostic about a node this parser
+    does not navigate, that walk is where it goes.**
+    Why: `documentation/agent-notes.md#where-the-unknown-namespace-prefix-warning-is-raised`
+
 ## What populates CcdaPosition templateId
 
   - **`CcdaPosition.templateId` is populated by THREE codes, and by nothing else**
@@ -1121,6 +1197,23 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     tree and diff before you update its snapshot; the list is public surface and a published version
     never moves backwards.**
 
+### The CLAUDE.md imperative for NULL_FLAVORS, as it stood before the 2026-08-07 relocation
+
+`CCDA-CLAUDE-MD-OVER-BUDGET` shortened this trap's one-line imperative in `CLAUDE.md`. Nothing was
+deleted; the imperative as it stood is reproduced here verbatim.
+
+  - **`NULL_FLAVORS` is the WHOLE v3 NullFlavor code system, seventeen concepts** (it was eight).
+    **Transcribe from the published code system, never from memory** (the missing set was first
+    written down as seven and is nine). Retired `NP` is admitted deliberately. Widening did not
+    weaken the PHI bound it carries: membership in a closed set of literals this package owns, never
+    a shape test. **The strict column moves on 22 of the 51 rows and that is the intended effect;
+    do not "fix" it back.** **The first measurement had no strict column, and that is why it passed
+    a broken slice.** Expect the 32-row numbers from `test/dead-diagnostics-matrix.test.ts` and the
+    51-row numbers only from the wider hand-run. **If you touch `NULL_FLAVORS`, the namespace sweep
+    or `position.templateId`, re-run that file against the previous tree and diff before you update
+    its snapshot; the list is public surface and a published version never moves backwards.**
+    Why: `documentation/agent-notes.md#the-v3-nullflavor-code-system-has-seventeen-concepts`
+
 ## The safety-critical codes export is a frozen view
 
   - `SAFETY_CRITICAL_CODES` is a frozen read-only view, not a `Set` instance: every read operation
@@ -1196,6 +1289,23 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
   - **Known residual:** `//` line comments are out of scope by convention and five are live. They
     reach `dist/index.mjs` but are not what a consumer is shown.
 
+### The CLAUDE.md imperative for the public-surface gate, as it stood before the 2026-08-07 relocation
+
+`CCDA-CLAUDE-MD-OVER-BUDGET` shortened this trap's one-line imperative in `CLAUDE.md`. Nothing was
+deleted; the imperative as it stood is reproduced here verbatim.
+
+- **Public-surface gate present and reporting, but NOT yet blocking** (`PUBLIC-SURFACE-HYGIENE`).
+  `pnpm check:no-internal-refs` is on the meta-repo's `verify.sh` ladder, but its context is not in
+  `parser-ci-required-checks`, so it is visible on every PR and blocks nothing; **closing that is a
+  ruleset change, not a file change.** **Ported from `ncpdp`'s copy, NOT `hl7`'s** - a "resync with
+  hl7" that restores `RULE_COUNT=6` deletes rule 7, and the script refuses to run if it does.
+  **Measure the doc comments first, and quote a count with the tree it was taken on**: the markdown
+  surface alone under-counts by roughly 30:1 here. **The prefix list, designation exclusions, phase
+  guards and self-test samples are re-derived for C-CDA and must not be inherited wholesale.**
+  `CHANGELOG.md` is exempt org-wide (founder, 2026-07-29): do not re-litigate it, do not sweep it.
+  Known residual: five `//` line comments are out of scope by convention.
+  Why: `documentation/agent-notes.md#the-public-surface-gate`
+
 ## The em-dash gate
 
 - **Em-dash gate present and reporting, but NOT yet blocking.** `scripts/check-no-emdash.sh`
@@ -1255,6 +1365,28 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     worse than a known shared limit.
   - Scope, stated honestly: the gate covers new text only. It does not rewrite history, and 113 em
     dashes are already in commit messages on `main`, PR #52's subject line among them.
+
+### The CLAUDE.md imperative for the em-dash gate, as it stood before the 2026-08-07 relocation
+
+`CCDA-CLAUDE-MD-OVER-BUDGET` shortened this trap's one-line imperative in `CLAUDE.md`. Nothing was
+deleted; the imperative as it stood is reproduced here verbatim.
+
+- **Em-dash gate present AND BLOCKING.** `U+2014` is banned outright by
+  founder directive, and **when it goes red the fix is never to re-encode the character**: rewrite
+  with a period, colon, comma or parentheses. **This line said "NOT yet blocking" and was stale**:
+  the settings change it called for has landed, and `no-emdash` is a required status check via the
+  repository-level `emdash-required-check` ruleset, active on the default branch (re-read from the
+  API 2026-08-06). **Re-read the rulesets rather than this line.**
+  It scans every tracked file **except the script itself**, **and** the
+  PR title, body and commit messages, so **keep the script free of the literal character.** **It is
+  the text-only variant, and dropping `grep -I` is the load-bearing part**: `src/profiles/merge.ts`
+  carries raw NULs and would otherwise be **silently exempt** from a ban with no exceptions, which
+  is not theoretical (PR #52's sweep skipped that exact file and left a live character behind).
+  **Do not swap in `website`'s variant**, and do not reach for `pathways`' `git check-attr binary`
+  without first adding a `.gitattributes`. **Do not trust a copy count written down anywhere,
+  including here** - enumerate at carry-back time. Scope, stated honestly: **the gate covers new
+  text only, does not rewrite history, and 113 em dashes are already in commit messages on `main`.**
+  Why: `documentation/agent-notes.md#the-em-dash-gate`
 
 ## The attw wrapper script
 
@@ -1338,6 +1470,31 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
   must not be touched** for this: its propagation was never at fault, the step lied to it.
   **This is a per-repo script.** Porting it here fixed this repo only; a sibling that still invokes
   the CLI directly still has the defect. Do not write a repo count down here, derive it.
+
+### The CLAUDE.md imperative for the attw wrapper, as it stood before the 2026-08-07 relocation
+
+`CCDA-CLAUDE-MD-OVER-BUDGET` shortened this trap's one-line imperative in `CLAUDE.md`. Nothing was
+deleted; the imperative as it stood is reproduced here verbatim.
+
+- **`attw` SAYS "does not contain types" AND EXITS 0, SO THE `attw` SCRIPT IS A WRAPPER, NOT THE
+  BARE CLI** (`ATTW-FALSE-GREEN-PORT`). **A false red costs an hour; a false green merges.** The
+  race only supplies the condition; it is not the defect, so **the answer is not a lock, a lease or
+  a build queue** - the gate must be able to say its own inputs were missing, whatever removed them.
+  `scripts/attw.mjs` carries **THREE guards, not two**: a preflight that every relative path
+  `package.json` promises exists **and is non-empty** (a zero-byte `index.d.ts` is a second, quieter
+  false green), a post-check on `attw`'s untyped sentence, and a backstop that fails when `attw`
+  exits 0 having printed nothing at all (**pinned by no test, a stated gap rather than an
+  oversight**). **Blinding options are refused BY OPTION NAME, wholesale,
+  not by value, and short options BY LETTER ANYWHERE IN THE CLUSTER, not by whole token** - `-fjson`
+  is the one a `split("=")[0]` token test lets straight through, measured back to **exit 0** on this
+  repo's real manifest. **`.npmignore` versus `files` is about the file's DEPTH, not its existence.**
+  `test/scripts/attw-gate.test.ts` pins both nets, the upstream exit-0 itself, a real failure and a
+  negative control; **do not carry its "16 of 21" figure forward, re-measure it.** **This is a
+  per-repo script** and a sibling still invoking the CLI directly still has the defect; do not write
+  a repo count down here, derive it. `scripts/verify.sh` in the meta-repo **must not be touched** for
+  this. **The guard is described in four committed files and three corrections have landed in some
+  copies and not others: prefer CUTTING a copy to adding a more careful one.**
+  Why: `documentation/agent-notes.md#the-attw-wrapper-script`
 
 ## The agent-notes contract gate
 
@@ -1488,3 +1645,46 @@ it.** `format` and `format:check` cover `src/**/*.{ts,md}`, `test/**/*.ts`, `scr
 Prettier over this file by hand reflows all of it: measured here, 1,385 lines changed for a
 three-paragraph append, which buries the real edit and churns a file whose whole premise is that the
 relocation was verbatim. Append by hand at the existing wrap.
+
+## The pre-scaffold planning notes
+
+`CCDA-CLAUDE-MD-OVER-BUDGET` relocated the tail of `CLAUDE.md` here on 2026-08-07: the block
+preserved from the pre-scaffold planning `CLAUDE.md`, which the sections above the fence in that
+file already superseded wherever the two overlapped. **It is reproduced verbatim, its own heading
+levels included**, which is why an `H1` and three `H2`s appear below inside this record rather than
+being demoted; demoting them would have been an edit, and the premise of this file is that nothing
+is edited on the way in. **Two** imperatives in it are stated nowhere else and both were kept in
+`CLAUDE.md` rather than relocated: the `coverageDirs` rule, in the coverage guardrail, and the
+commit style, in its own guardrail bullet. Everything else here is either superseded by the standard
+sections of `CLAUDE.md` or is design intent read on demand.
+
+---
+
+# C-CDA planning notes
+
+_Preserved from the pre-scaffold planning `CLAUDE.md`. The sections above are the shared `@cosyte/*`
+standard (authoritative for tooling/stack/disciplines); the notes below are the C-CDA-specific design
+intent. Where they overlap, the standard above wins, e.g. runtime deps are now **one** (`@xmldom/xmldom`, ratified by
+`docs/adr/0001-xml-parser.md`), and the sibling `@cosyte/hl7` now lives at `../hl7` (the old
+`../hl7-parser` path is stale)._
+
+A TypeScript library for the HL7 Consolidated CDA R2.1 standard.
+
+## Ground truth
+
+- **North star:** A developer can parse a real-world, vendor-quirky C-CDA document and pull useful sections out of it in one line, without having read the C-CDA IG.
+- **Sibling package:** `@cosyte/hl7` (lives at `../hl7`). This project mirrors its style, tooling, and guardrails. When in doubt, do what `@cosyte/hl7` did.
+- **Deliberate divergence from the sibling:** runtime dependencies are allowed here (for XML parsing). Target ≤ 3 runtime deps, each justified. (Ratified: `@xmldom/xmldom` via `docs/adr/0001-xml-parser.md`, **1 of 3**.)
+
+## Hard gates
+
+- **≥ 90% per-directory coverage**, enforced today by `pnpm test:coverage` (not deferred to v1). The
+  gated directories are declared in `vitest.config.ts` (`coverageDirs`): `parser`, `model`,
+  `model/types`, `helpers`, `serialize`, `profiles`, `builder`, `edit`. Add a directory there when
+  you add one under `src/`.
+- **No `console.*` in library code.** Throw typed errors or return results.
+- **TypeScript strict + `noUncheckedIndexedAccess`.** No `any`, no unjustified `as` casts.
+
+## Commit style
+
+Atomic and reviewable. Mirror the commit-message style from `@cosyte/hl7`'s `git log`.
