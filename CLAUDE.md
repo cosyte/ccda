@@ -50,8 +50,9 @@ immutability + explicit mutation, and the profile system.
     object carries no `displayName`. Never render a confident sentence the entry does not support,
     and never substitute a different one** - `?? "No known allergies"` emitted a positively-asserted
     allergy as its own negation, byte-identical to the negated form, warnings `[]`, in `0.0.11`.
-    **An ABSENT optional object keeps its fallback**; only a present-but-unlabelled one is refused,
-    and **only NARRATIVE labels are guarded**. `editCcda` inherits it via `buildSectionComponent`.
+    **An ABSENT optional object keeps whatever fallback it has**, where it has one; a PRESENT
+    unlabelled one is refused, empty and whitespace-only included, and **only NARRATIVE labels are
+    guarded**. `editCcda` inherits it via `buildSectionComponent`.
     Why: `documentation/agent-notes.md#a-narrative-label-is-refused-never-fabricated`
   - **OPEN DEFECT, filed rather than fixed: 64 `@example` blocks cite an import that does not
     resolve**, across four modules; **four reach consumers** in the published `.d.ts`. **The
@@ -317,6 +318,8 @@ a summary.
 - Immutable by default. Mutation only via explicit methods.
 - No `console.*` in library code. Throw typed errors or return results.
 - Short, testable functions over big parsing blobs.
+- **Commit style:** atomic and reviewable. Mirror the commit-message style from `@cosyte/hl7`'s
+  `git log`.
 - Postel's Law: parser is liberal (lenient default + warnings), serializer is conservative (always
   emits spec-clean output).
 - Fatal errors only for unrecoverable structural corruption (Tier-3 codes). Everything else is a
@@ -331,8 +334,9 @@ a summary.
   `scripts/attw.mjs` carries **THREE guards, not two**. **Blinding options are refused BY OPTION
   NAME, wholesale, not by value, and short options BY LETTER ANYWHERE IN THE CLUSTER, not by whole
   token.** **`.npmignore` versus `files` is about the file's DEPTH, not its existence.**
-  `test/scripts/attw-gate.test.ts` pins both nets, the upstream exit-0 itself, a real failure and a
-  negative control; **do not carry its "16 of 21" figure forward, re-measure it.** **This is a
+  `test/scripts/attw-gate.test.ts` pins two of the three, the upstream exit-0 itself, a real failure
+  and a negative control; **the printed-nothing backstop is pinned by NO test, a stated gap rather
+  than an oversight. Do not carry the test file's "16 of 21" figure forward, re-measure it.** **This is a
   per-repo script** and a sibling still invoking the CLI directly still has the defect; do not write
   a repo count down here, derive it. `scripts/verify.sh` in the meta-repo **must not be touched** for
   this. **The guard is described in four committed files and three corrections have landed in some
@@ -366,6 +370,6 @@ Mirrors the three disciplines in the meta-repo's `documentation/conventions.md`.
 
 **The pre-scaffold C-CDA planning notes were relocated verbatim 2026-08-07** (north star, the
 sibling-package pointer, the hard gates and the commit style). Where they overlapped the standard
-above, the standard above wins, and the one imperative in them that is not stated above is kept in
-the coverage guardrail.
+above, the standard above wins. The **two** imperatives in them stated nowhere else are kept above:
+the `coverageDirs` rule, in the coverage guardrail, and the commit style, in its own bullet.
 Why: `documentation/agent-notes.md#the-pre-scaffold-planning-notes`

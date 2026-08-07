@@ -724,7 +724,7 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     forwards a `terminology` adapter to its re-parse and takes no profile.) Adding either later can
     only forbid more and is a reviewable act of its own.
 
-### The CLAUDE.md imperative as it stood before the 2026-08-07 relocation
+### The CLAUDE.md imperative for the plan-surface decisions, as it stood before the 2026-08-07 relocation
 
 `CCDA-CLAUDE-MD-OVER-BUDGET` shortened this trap's one-line imperative in `CLAUDE.md` to fit that
 file under its 32,000-byte budget. Nothing was deleted: the imperative as it stood is reproduced
@@ -945,7 +945,7 @@ here verbatim, and what is LEFT there is the rule plus this pointer.
     Recognizing the section did **not** change what `getPlannedItems()` returns or reach `…22.4.130` /
     `…22.4.131`; those stay pinned as unreached.
 
-### The CLAUDE.md imperative as it stood before the 2026-08-07 relocation
+### The CLAUDE.md imperative for the Interventions Section, as it stood before the 2026-08-07 relocation
 
 `CCDA-CLAUDE-MD-OVER-BUDGET` shortened this trap's one-line imperative in `CLAUDE.md`. Nothing was
 deleted; the imperative as it stood is reproduced here verbatim.
@@ -1086,7 +1086,7 @@ deleted; the imperative as it stood is reproduced here verbatim.
     prefix into the position and watching the runner fail, before reverting. Re-confirm that way if
     you touch the sweep: a probe that cannot fail proves nothing.
 
-### The CLAUDE.md imperative as it stood before the 2026-08-07 relocation
+### The CLAUDE.md imperative for the namespace sweep, as it stood before the 2026-08-07 relocation
 
 `CCDA-CLAUDE-MD-OVER-BUDGET` shortened this trap's one-line imperative in `CLAUDE.md`. Nothing was
 deleted; the imperative as it stood is reproduced here verbatim.
@@ -1197,7 +1197,7 @@ deleted; the imperative as it stood is reproduced here verbatim.
     tree and diff before you update its snapshot; the list is public surface and a published version
     never moves backwards.**
 
-### The CLAUDE.md imperative as it stood before the 2026-08-07 relocation
+### The CLAUDE.md imperative for NULL_FLAVORS, as it stood before the 2026-08-07 relocation
 
 `CCDA-CLAUDE-MD-OVER-BUDGET` shortened this trap's one-line imperative in `CLAUDE.md`. Nothing was
 deleted; the imperative as it stood is reproduced here verbatim.
@@ -1289,7 +1289,7 @@ deleted; the imperative as it stood is reproduced here verbatim.
   - **Known residual:** `//` line comments are out of scope by convention and five are live. They
     reach `dist/index.mjs` but are not what a consumer is shown.
 
-### The CLAUDE.md imperative as it stood before the 2026-08-07 relocation
+### The CLAUDE.md imperative for the public-surface gate, as it stood before the 2026-08-07 relocation
 
 `CCDA-CLAUDE-MD-OVER-BUDGET` shortened this trap's one-line imperative in `CLAUDE.md`. Nothing was
 deleted; the imperative as it stood is reproduced here verbatim.
@@ -1366,7 +1366,7 @@ deleted; the imperative as it stood is reproduced here verbatim.
   - Scope, stated honestly: the gate covers new text only. It does not rewrite history, and 113 em
     dashes are already in commit messages on `main`, PR #52's subject line among them.
 
-### The CLAUDE.md imperative as it stood before the 2026-08-07 relocation
+### The CLAUDE.md imperative for the em-dash gate, as it stood before the 2026-08-07 relocation
 
 `CCDA-CLAUDE-MD-OVER-BUDGET` shortened this trap's one-line imperative in `CLAUDE.md`. Nothing was
 deleted; the imperative as it stood is reproduced here verbatim.
@@ -1471,7 +1471,7 @@ deleted; the imperative as it stood is reproduced here verbatim.
   **This is a per-repo script.** Porting it here fixed this repo only; a sibling that still invokes
   the CLI directly still has the defect. Do not write a repo count down here, derive it.
 
-### The CLAUDE.md imperative as it stood before the 2026-08-07 relocation
+### The CLAUDE.md imperative for the attw wrapper, as it stood before the 2026-08-07 relocation
 
 `CCDA-CLAUDE-MD-OVER-BUDGET` shortened this trap's one-line imperative in `CLAUDE.md`. Nothing was
 deleted; the imperative as it stood is reproduced here verbatim.
