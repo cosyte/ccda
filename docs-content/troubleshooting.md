@@ -321,7 +321,18 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   Instruction (`…22.4.20`), Handoff Communication Participants (`…22.4.141`), Nutrition Recommendation
   (`…22.4.130`) and Goal Observation (`…22.4.121`); a Goal Observation is `moodCode="GOL"`, which this
   parser calls neither performed nor planned. Their narrative and structure are preserved and they
-  re-serialize faithfully, but they are not planned items, and nothing is raised about them.
+  re-serialize faithfully, and they are still not planned items. **Three of the four are no longer
+  silent**: Instruction, Handoff Communication Participants and Nutrition Recommendation each draw
+  `PLAN_ENTRY_NOT_MODELED` where planned items are read, once per matching root, so a consumer has a
+  code to filter on instead of an entry that vanishes **in the two places the report covers**.
+  Reporting is not modelling: nothing about the returned list changed. A direct entry is reported only
+  in a section recognized as Plan of Treatment (an Instruction in the Instructions Section,
+  `…22.2.45`, where it is that section's own required entry, draws nothing), while the nested half is
+  reported wherever the Planned Intervention Act sits. **Those two places are a bound this library
+  chose, not a claim about which sections C-CDA admits these templates in: they appear in more places
+  than that, and an occurrence outside the two is still dropped in silence.** **Goal Observation is
+  deliberately not reported**, because the decision taken on it was to model it rather than warn about
+  it.
 - **A planned entry nested in a Planned Intervention Act was dropped in silence, for all seven kinds
   (fixed in `0.0.3`).** `getPlannedItems()` used to read an `<entry>`'s own act and go no deeper, so a
   planned flu shot or drug order hanging off a **Planned Intervention Act** (`…22.4.146`, the act that
@@ -335,8 +346,11 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   elsewhere, and that is stepped over rather than resolved. **It is the only container descended into,
   and C-CDA has others, so nesting is not solved in general.** A Nutrition Recommendation
   (`…22.4.130`) inline-holds six of the seven planned templates, and an Intervention Act (`…22.4.131`)
-  inline-holds a Planned Intervention Act; a planned entry in either still comes back as nothing, with
-  nothing said, exactly as it did before. Read `doc.toString()` if your senders nest that way. A
+  inline-holds a Planned Intervention Act; a planned entry in either still comes back as nothing,
+  exactly as it did before. What changed is only that the Nutrition Recommendation **container** now
+  draws `PLAN_ENTRY_NOT_MODELED` (it is one of the three named above); what it holds is still not
+  reached, and the Intervention Act is still silent end to end. Read `doc.toString()` if your senders
+  nest that way. A
   returned item does not say whether it was direct or nested, either: the intervention itself is not
   modelled, so the grouping toward the goal is available only from `doc.toString()`.
 - **UCUM validation is grammatical, on a curated atom subset.** The validator checks well-formed UCUM

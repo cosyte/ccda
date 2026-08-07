@@ -21,9 +21,15 @@
  * so calling it a planned item would contradict this package's own mood model.
  * The other three describe an instruction, a communication, and a dietary
  * recommendation rather than an act to be performed on the patient at a future
- * time, which is the question `getPlannedItems()` answers. **Whether they should
- * be reported as dropped is an open decision, not a settled one**, and it is
- * recorded as such rather than silently taken here.
+ * time, which is the question `getPlannedItems()` answers.
+ *
+ * **Those three are no longer excluded in silence: each is REPORTED**
+ * (`PLAN_ENTRY_NOT_MODELED`, one warning per matching root) where planned items
+ * are read. That decision was taken 2026-08-06 and it settles only the
+ * *reporting*: they are still not {@link PlannedItem}s, still reach no model
+ * field, and still survive only in the re-serialized document. **Goal
+ * Observation is deliberately NOT reported** with them; the decision taken on it
+ * was to model it, and a warning would pre-empt that with a weaker answer.
  *
  * **A planned entry NESTED in a Planned Intervention Act (`…22.4.146`) is now
  * reached too, for all seven kinds.** R2.1 gives that act an `entryRelationship`
@@ -66,8 +72,15 @@ import { parseCd, type CD } from "../types/cd.js";
 import type { II } from "../types/ii.js";
 import { parseIvlTs, type IVL_TS } from "../types/ivl-ts.js";
 import type { ParseCtx } from "../types/_shared.js";
-import { missingProductCode } from "../../parser/warnings.js";
 import {
+  missingProductCode,
+  planEntryNotModeled,
+  type UnmodeledPlanEntry,
+} from "../../parser/warnings.js";
+import {
+  HANDOFF_COMMUNICATION_PARTICIPANTS,
+  INSTRUCTION,
+  NUTRITION_RECOMMENDATION,
   PLANNED_ACT,
   PLANNED_ENCOUNTER,
   PLANNED_IMMUNIZATION_ACTIVITY,
@@ -87,6 +100,7 @@ import {
   reconcileCode,
   relatedEntryActs,
   resolveNarrative,
+  sectionKeyOf,
   statusCodeOf,
   type EventDisposition,
 } from "./shared.js";
@@ -219,6 +233,57 @@ const PLANNED_VARIANTS: ReadonlyArray<{
 ];
 
 /**
+ * The three templates the Plan of Treatment Section and the Planned Intervention
+ * Act admit alongside the seven planned kinds, which this module recognizes and
+ * does **not** return as a {@link PlannedItem}. Each one is reported
+ * (`PLAN_ENTRY_NOT_MODELED`) where planned items are read, rather than excluded
+ * in silence.
+ *
+ * **Recognizing a template for a warning is not modelling it, and this list must
+ * not be read as a step toward returning them.** Nothing here reaches the model:
+ * no `PlannedItemKind` was added, `PLANNED_VARIANTS` is untouched, and every one
+ * of these acts still survives only in the re-serialized document. The reason
+ * they are not planned items is unchanged too, and it is a reading of what they
+ * *are* rather than a gap: an instruction is something to be told, a handoff
+ * names who took over care, a nutrition recommendation is dietary advice. None
+ * answers "what is this patient scheduled to have done", which is the question
+ * {@link extractPlannedItems} answers.
+ *
+ * **Goal Observation (`…22.4.121`) is deliberately absent.** It is the fourth
+ * template the section admits and does not return, but it is `moodCode="GOL"`,
+ * which {@link classifyDisposition} calls neither performed nor planned, and the
+ * decision taken on it was to *model* it (with its own IG grounding and its own
+ * conformance surface) rather than to report it. A warning here would pre-empt
+ * that work with a weaker answer. @internal
+ */
+const UNMODELED_PLAN_ENTRY_ROOTS: ReadonlyMap<string, UnmodeledPlanEntry> = new Map([
+  [INSTRUCTION, "instruction"],
+  [HANDOFF_COMMUNICATION_PARTICIPANTS, "handoffCommunication"],
+  [NUTRITION_RECOMMENDATION, "nutritionRecommendation"],
+]);
+
+/**
+ * The catalog key of the section whose *direct* entries draw
+ * `PLAN_ENTRY_NOT_MODELED`. @internal
+ */
+const PLAN_SECTION_KEY = "planOfTreatment";
+
+/**
+ * Report an act that carries one of {@link UNMODELED_PLAN_ENTRY_ROOTS}, once per
+ * matching root. Returns nothing and changes nothing: the act is not extracted,
+ * not counted, and not returned, before or after.
+ *
+ * Every root the act declares is checked rather than the first, because an act
+ * stacking two of these three states both, and picking one would be a ranking no
+ * document supplies. @internal
+ */
+function reportUnmodeledPlanEntry(act: Element, ctx: ParseCtx): void {
+  for (const [root, entry] of UNMODELED_PLAN_ENTRY_ROOTS) {
+    if (hasTemplateRoot(act, root)) ctx.emit(planEntryNotModeled(entry, positionOf(act)));
+  }
+}
+
+/**
  * The planned variants whose `code` is the **product in the `consumable`**, not
  * the act's own `<code>`. Both are `substanceAdministration`s; C-CDA puts the
  * substance in `consumable/manufacturedProduct` for each, and the act's own
@@ -280,8 +345,29 @@ const PLANNED_CODE_SLOTS: ReadonlyMap<PlannedItemKind, "medication" | "vaccine">
  * is planned and none of which carries a planned root), and the same three
  * non-item templates the section itself admits (Instruction `…22.4.20`, Handoff
  * Communication Participants `…22.4.141`, Nutrition Recommendation `…22.4.130`).
- * Whether those three should be reported as dropped is an open decision, at both
- * levels, and it is still recorded rather than taken.
+ * **Those three are now REPORTED at both levels** (`PLAN_ENTRY_NOT_MODELED`),
+ * still not returned. The performed acts are not, and must not be: they are
+ * modelled elsewhere and reached by their own extractors, so a "not modelled"
+ * report on one would be false.
+ *
+ * **The two levels are scoped differently, and the scope is a CHOICE this
+ * package makes, not a claim about which sections C-CDA admits these templates
+ * in.** A direct `<entry>` is reported only when the section resolves to
+ * `planOfTreatment`, the section this accessor is named for and the one whose
+ * planned reading a consumer is relying on. That bound exists for a measured
+ * reason: an Instruction sitting in the Instructions Section (`…22.2.45`) is the
+ * section's own required entry, and reporting a conformant document's required
+ * entry as "not modelled" would be noise. Inside a Planned Intervention Act
+ * there is no section condition at all, because the container is what the report
+ * is relative to there and it is read wherever it sits.
+ *
+ * **The residual, stated rather than implied: these three templates appear in
+ * more places than those two, and an occurrence outside them is still dropped in
+ * silence.** This is a bound on the report, not a claim that the report covers
+ * every occurrence; an earlier draft justified the scope by asserting which
+ * sections admit the three, which was an untraced spec claim and is retracted
+ * rather than replaced with another one. Widening the report is a decision with
+ * its own grounding and its own base-measured matrix, not a tidy-up.
  *
  * **A returned item does not say whether it was a direct `<entry>` or nested.**
  * The Planned Intervention Act is not modelled: this package carries no container
@@ -303,6 +389,10 @@ export function extractPlannedItems(
   ctx: ParseCtx,
 ): readonly PlannedItem[] {
   const out: PlannedItem[] = [];
+  // Resolved once per section, not per entry: the direct-entry report below is
+  // scoped to the Plan of Treatment section (a choice, bounded in the docblock
+  // above), and recognition walks the section's templateIds and <code>.
+  const inPlanSection = sectionKeyOf(sectionEl) === PLAN_SECTION_KEY;
   for (const entry of childEntries(sectionEl)) {
     for (const variant of PLANNED_VARIANTS) {
       const el = entryAct(entry, variant.root);
@@ -318,7 +408,14 @@ export function extractPlannedItems(
     // eighth `entryAct` call: an `<entry>` carries one act, so one scan answers
     // it, and this extractor runs on every `<section>` of every document.
     const act = anyEntryAct(entry);
-    if (act !== undefined && hasTemplateRoot(act, PLANNED_INTERVENTION_ACT)) {
+    if (act === undefined) continue;
+    // The admitted-but-unmodelled three, reported rather than excluded in
+    // silence, and scoped to the Plan of Treatment section as a direct entry.
+    // Independent of both the variant loop above and the container walk below:
+    // an act stacking a planned root and one of these states both, and reporting
+    // must never change which acts are extracted.
+    if (inPlanSection) reportUnmodeledPlanEntry(act, ctx);
+    if (hasTemplateRoot(act, PLANNED_INTERVENTION_ACT)) {
       collectNested(act, narrativeById, ctx, out);
     }
   }
@@ -348,6 +445,15 @@ function collectNested(
   for (const nested of relatedEntryActs(container)) {
     const variant = PLANNED_VARIANTS.find((v) => hasTemplateRoot(nested, v.root));
     if (variant !== undefined) out.push(buildPlannedItem(nested, variant.kind, narrativeById, ctx));
+    // Reported here with **no section-key condition**, unlike the direct-entry
+    // half. The report is relative to the container at this level, and the
+    // container is read wherever it sits (this package already reaches it in the
+    // Interventions Section, `…21.2.3`, which is where R2.1 puts it and not the
+    // Plan of Treatment), so gating on the section key would have made this half
+    // silent on exactly the documents that place it conformantly. The
+    // direct-entry half is scoped to the section this accessor is named for; see
+    // the docblock above for what that scope does NOT cover.
+    reportUnmodeledPlanEntry(nested, ctx);
     if (hasTemplateRoot(nested, PLANNED_INTERVENTION_ACT)) {
       collectNested(nested, narrativeById, ctx, out);
     }

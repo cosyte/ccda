@@ -90,6 +90,8 @@ export const WARNING_CODES = {
   REQUIRED_SECTION_MISSING: "REQUIRED_SECTION_MISSING",
   PROCEDURE_MOOD_UNEXPECTED: "PROCEDURE_MOOD_UNEXPECTED",
   PLANNED_VS_PERFORMED_AMBIGUOUS: "PLANNED_VS_PERFORMED_AMBIGUOUS",
+  MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME: "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
+  PLAN_ENTRY_NOT_MODELED: "PLAN_ENTRY_NOT_MODELED",
   SMOKING_STATUS_UNKNOWN: "SMOKING_STATUS_UNKNOWN",
   SMOKING_STATUS_CODE_UNRECOGNIZED: "SMOKING_STATUS_CODE_UNRECOGNIZED",
   SEMANTIC_CODE_INVALID: "SEMANTIC_CODE_INVALID",
@@ -196,6 +198,38 @@ export const NARRATIVE_SLOTS = [
 export type NarrativeSlot = (typeof NARRATIVE_SLOTS)[number];
 
 /**
+ * The entry templates a `PLAN_ENTRY_NOT_MODELED` warning can be about: the
+ * three the Plan of Treatment Section (and the Planned Intervention Act) admit
+ * that this package recognizes but does not return as a `PlannedItem`.
+ *
+ * A closed set this module owns, exactly like {@link CODE_SLOTS}: no document
+ * text can become one, so naming a member in a message names a parser constant.
+ * The names are duplicated here rather than derived from the template-root
+ * constants in `../model/entries/shared.ts` for the same reason
+ * `V3_DATATYPES` is, that module imports this one and a back-import would
+ * close a cycle. The **OIDs** are deliberately not repeated here: they live in
+ * one place (`shared.ts`), and this file names templates, never OIDs.
+ *
+ * **Goal Observation is deliberately not a member.** It is `moodCode="GOL"`,
+ * which `classifyDisposition` calls neither performed nor planned, and modelling
+ * it is a separate piece of work with its own IG grounding rather than a
+ * diagnostic.
+ */
+export const UNMODELED_PLAN_ENTRIES = [
+  "instruction",
+  "handoffCommunication",
+  "nutritionRecommendation",
+] as const;
+
+/**
+ * Which admitted-but-unmodelled template a `PLAN_ENTRY_NOT_MODELED` is about.
+ * Closed by construction. (No `@example` import here, deliberately: this type is
+ * not on the package entry point, and citing one that does not resolve is the
+ * open `@example` defect this repo already has filed.)
+ */
+export type UnmodeledPlanEntry = (typeof UNMODELED_PLAN_ENTRIES)[number];
+
+/**
  * The frozen message registry: every string this module can put on a
  * `CcdaWarning.message`, one entry per {@link WarningCode}.
  *
@@ -287,6 +321,10 @@ export const WARNING_MESSAGES: Readonly<Record<WarningCode, string>> = Object.fr
     "The procedure's moodCode is neither a performed (EVN) nor a recognized planned mood; extracted but unclassified.",
   PLANNED_VS_PERFORMED_AMBIGUOUS:
     "Procedure entry has no moodCode; performed (EVN) vs planned (INT) is ambiguous, never conflated, left unclassified.",
+  MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME:
+    "buildCcda emitted a Planned Medication Activity with no effectiveTime, which the template makes a SHALL (exactly one, CONF:1098-30468): the caller supplied none and the builder never fabricates a date, so the emitted document is short that element and says nothing about when the drug is to be given.",
+  PLAN_ENTRY_NOT_MODELED:
+    "An entry template the Plan of Treatment reading admits was found where planned items are read (a section entry, or an act nested in a Planned Intervention Act); this parser recognizes it but does not model it as a planned item, so it is excluded from getPlannedItems(), reaches no other model field, and survives only in the re-serialized document.",
   SMOKING_STATUS_UNKNOWN:
     'Smoking status is recorded as unknown (nullFlavor or an "unknown" SNOMED concept); preserved, flagged as unknown.',
   SMOKING_STATUS_CODE_UNRECOGNIZED:
@@ -379,6 +417,31 @@ const CONTRADICTORY_NULL_FLAVOR_BY_DATATYPE = tableOver(
     `${datatype} element declares a nullFlavor and asserts a value at the same time; the document contradicts itself, so the value is preserved verbatim but never read as the field's value.`,
 );
 
+/**
+ * The human-readable template name for each {@link UnmodeledPlanEntry}. Owned
+ * here, like the keys themselves, so this module stays free of a back-import.
+ * @internal
+ */
+const UNMODELED_PLAN_ENTRY_NAMES: Readonly<Record<UnmodeledPlanEntry, string>> = Object.freeze({
+  instruction: "Instruction",
+  handoffCommunication: "Handoff Communication Participants",
+  nutritionRecommendation: "Nutrition Recommendation",
+});
+
+/**
+ * One wording per admitted-but-unmodelled template. Built over the closed key
+ * list rather than with {@link tableOver} so the name lookup stays typed (no
+ * widening to `string`, no cast). @internal
+ */
+const PLAN_ENTRY_NOT_MODELED_BY_ENTRY: Readonly<Record<string, string>> = Object.freeze(
+  Object.fromEntries(
+    UNMODELED_PLAN_ENTRIES.map((key) => [
+      key,
+      `A ${UNMODELED_PLAN_ENTRY_NAMES[key]} template was found where planned items are read (a section entry, or an act nested in a Planned Intervention Act); this parser recognizes it but does not model it as a planned item, so it is excluded from getPlannedItems(), reaches no other model field, and survives only in the re-serialized document.`,
+    ]),
+  ),
+);
+
 /** The two arm-relative wordings of `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`. @internal */
 const TRANSLATION_ONLY_BY_ARM = Object.freeze({
   selected: `${WARNING_MESSAGES.MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY} The coding is somewhere on the returned CD's translation list rather than on its code (search the list, the first entry need not be the one naming the product).`,
@@ -404,6 +467,7 @@ export const ALL_WARNING_MESSAGES: ReadonlySet<string> = new Set([
   ...Object.values(REQUIRED_SECTION_MISSING_BY_SECTION),
   ...Object.values(CONTRADICTORY_NULL_FLAVOR_BY_DATATYPE),
   ...Object.values(TRANSLATION_ONLY_BY_ARM),
+  ...Object.values(PLAN_ENTRY_NOT_MODELED_BY_ENTRY),
 ]);
 
 /**
@@ -1677,6 +1741,81 @@ export function plannedVsPerformedAmbiguous(position: CcdaPosition): CcdaWarning
   return {
     code: WARNING_CODES.PLANNED_VS_PERFORMED_AMBIGUOUS,
     message: WARNING_MESSAGES.PLANNED_VS_PERFORMED_AMBIGUOUS,
+    position,
+  };
+}
+
+/**
+ * Build a `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` warning. **Emitted by
+ * `buildCcda`, never by `parseCcda`**: it reports that the *caller's own build
+ * input* omitted the `effectiveTime` a Planned Medication Activity (`…22.4.42`)
+ * SHALL carry exactly once (CONF:1098-30468), so the document the builder just
+ * emitted is short that element.
+ *
+ * The field stays **optional** on `BuildCcdaPlannedOrder`: requiring it would be
+ * a breaking change to a published input type, and the decision taken was to
+ * report the gap rather than close it by breaking callers. The builder does not
+ * fabricate a date and does not refuse the build; it emits what it was given and
+ * says so.
+ *
+ * Nothing changes on the read path. A *parsed* Planned Medication Activity with
+ * no `effectiveTime` is as silent as it has always been, and widening this to
+ * `parseCcda` would move rows on every third-party document, which is its own
+ * decision with its own base-measured matrix.
+ *
+ * (No `@example` import: this factory is not on the package entry point.)
+ *
+ * @example
+ * ```ts
+ * const w = missingPlannedMedicationEffectiveTime({
+ *   path: "substanceAdministration",
+ *   sectionCode: "18776-5",
+ * });
+ * ```
+ */
+export function missingPlannedMedicationEffectiveTime(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME,
+    message: WARNING_MESSAGES.MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME,
+    position,
+  };
+}
+
+/**
+ * Build a `PLAN_ENTRY_NOT_MODELED` warning. Emitted when one of the three
+ * templates the Plan of Treatment Section and the Planned Intervention Act admit
+ * alongside the seven planned kinds is found where planned items are read, and
+ * this package does not return it: Instruction, Handoff Communication
+ * Participants, or Nutrition Recommendation. Before this the entry was excluded
+ * in complete silence.
+ *
+ * `entry` is a member of the closed {@link UNMODELED_PLAN_ENTRIES} list, so the
+ * variant wording names a parser constant and never document text.
+ *
+ * **Goal Observation, the fourth admitted-but-unreturned template, is
+ * deliberately not reported here.** Modelling it is a separate piece of work
+ * (it is `moodCode="GOL"`, neither performed nor planned in this package's mood
+ * model, and a conformant Planned Intervention Act must reference one), and a
+ * diagnostic is not a stand-in for it.
+ *
+ * (No `@example` import: this factory is not on the package entry point.)
+ *
+ * @example
+ * ```ts
+ * const w = planEntryNotModeled("instruction", { path: "act", sectionCode: "18776-5" });
+ * ```
+ */
+export function planEntryNotModeled(
+  entry: UnmodeledPlanEntry,
+  position: CcdaPosition,
+): CcdaWarning {
+  return {
+    code: WARNING_CODES.PLAN_ENTRY_NOT_MODELED,
+    message: variant(
+      PLAN_ENTRY_NOT_MODELED_BY_ENTRY,
+      entry,
+      WARNING_MESSAGES.PLAN_ENTRY_NOT_MODELED,
+    ),
     position,
   };
 }

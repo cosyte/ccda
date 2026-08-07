@@ -21,10 +21,12 @@ import type { Element } from "@xmldom/xmldom";
 
 import {
   buildCcda,
+  editCcda,
   parseCcda,
   serializeCcda,
   type BuildCcdaInit,
   type BuildCcdaPlannedItem,
+  type TerminologyAdapter,
 } from "../src/index.js";
 
 const PROBLEM_OBSERVATION = "2.16.840.1.113883.10.20.22.4.4";
@@ -1493,6 +1495,13 @@ describe("buildCcda, plan of treatment round-trip", () => {
         kind: "medicationActivity",
         code: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" },
         mood: "RQO",
+        // SHALL [1..1] on `…22.4.42` (CONF:1098-30468). Supplied here so this
+        // fixture stays the *clean* one; omitting it is now reported
+        // (MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME) and has its own tests
+        // below, rather than riding along in every assertion that uses
+        // PLAN_INIT. Before this it was absent and the fixture asserted
+        // "warning-free" over a document short a SHALL element.
+        effectiveTime: "20240801",
       },
       {
         kind: "encounter",
@@ -1653,6 +1662,212 @@ describe("buildCcda, plan of treatment round-trip", () => {
 
   it("is a serialization fixed point with a Plan of Treatment section present", () => {
     const xml = serializeCcda(buildCcda(PLAN_INIT));
+    expect(parseCcda(xml).toString()).toBe(xml);
+  });
+});
+
+/**
+ * The build-time diagnostic for a Planned Medication Activity built short its
+ * SHALL `effectiveTime` (`…22.4.42`, `[1..1]`, CONF:1098-30468).
+ *
+ * The decision taken was **keep the field optional, report the omission**:
+ * requiring it on `BuildCcdaPlannedOrder` would break a published input type.
+ * So the three things worth pinning are that the input type still accepts the
+ * omission (it compiles), that the emitted XML is **unchanged** by the
+ * diagnostic (no fabricated date, no nullFlavor), and that the diagnostic
+ * actually appears.
+ */
+describe("buildCcda, planned medication effectiveTime diagnostic", () => {
+  const noTime: BuildCcdaInit = {
+    patient: { mrn: "M" },
+    planOfTreatment: [
+      { kind: "medicationActivity", code: { code: "314076", displayName: "Lisinopril 10 MG" } },
+    ],
+  };
+  const withTime: BuildCcdaInit = {
+    patient: { mrn: "M" },
+    planOfTreatment: [
+      {
+        kind: "medicationActivity",
+        code: { code: "314076", displayName: "Lisinopril 10 MG" },
+        effectiveTime: "20240801",
+      },
+    ],
+  };
+
+  it("reports the omission rather than refusing the build or fabricating a date", () => {
+    const doc = buildCcda(noTime);
+    expect(doc.warnings.map((w) => w.code)).toStrictEqual([
+      "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
+    ]);
+    // The emitted document is EXACTLY what it was before the diagnostic existed:
+    // short the element, with nothing invented in its place. A nullFlavor here
+    // would be a fabricated statement ("the time is unknown") the caller never
+    // made, and a date would be worse.
+    expect(doc.toString()).not.toContain("effectiveTime nullFlavor");
+    const sbadm = doc.toString().slice(doc.toString().indexOf("22.4.42"));
+    expect(sbadm.slice(0, sbadm.indexOf("</substanceAdministration>"))).not.toContain(
+      "<effectiveTime",
+    );
+  });
+
+  it("stays silent when the caller supplies the SHALL effectiveTime", () => {
+    const doc = buildCcda(withTime);
+    expect(doc.warnings).toEqual([]);
+    expect(doc.getPlannedItems()[0]?.effectiveTime?.value?.raw).toBe("20240801");
+  });
+
+  it("raises one diagnostic per offending item, and none for the other six kinds", () => {
+    // The five `[0..1]` kinds are conformant without a time and must stay silent;
+    // only the two `substanceAdministration` variants are `[1..1]`, and the
+    // immunization's field is required by its type, so it cannot reach here.
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      planOfTreatment: [
+        { kind: "act", code: { code: "409073007", displayName: "Education" } },
+        { kind: "procedure", code: { code: "73761001", displayName: "Colonoscopy" } },
+        { kind: "encounter", code: { code: "99213", displayName: "Office visit" } },
+        { kind: "supply", code: { code: "58938008", displayName: "Wheelchair" } },
+        { kind: "observation", code: { code: "58410-2", displayName: "CBC panel" } },
+        { kind: "medicationActivity", code: { code: "314076", displayName: "Lisinopril 10 MG" } },
+        { kind: "medicationActivity", code: { code: "197361", displayName: "Amlodipine 5 MG" } },
+        {
+          kind: "immunizationActivity",
+          code: { code: "140", displayName: "Influenza, split virus, trivalent" },
+          effectiveTime: "20241001",
+        },
+      ],
+    });
+    expect(doc.warnings.map((w) => w.code)).toStrictEqual([
+      "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
+      "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
+    ]);
+  });
+
+  it("carries a PHI-free registry message and a bounded position", () => {
+    const w = buildCcda(noTime).warnings[0];
+    expect(w?.message).toContain("CONF:1098-30468");
+    // No value parameter reaches any factory, so nothing from the input can be
+    // in the string: the drug name is the obvious candidate.
+    expect(w?.message).not.toContain("Lisinopril");
+    expect(w?.position).toStrictEqual({
+      path: "substanceAdministration",
+      sectionCode: "18776-5",
+    });
+  });
+
+  it("appends after the parse warnings rather than interleaving with them", () => {
+    // Forced with a real parse warning beside the build diagnostic: a
+    // terminology adapter that rejects the drug makes the re-parse raise
+    // SEMANTIC_CODE_INVALID, so there is something for the ordering to be
+    // relative to. Asserting `.at(-1)` on a single-warning document would be a
+    // probe that cannot fail.
+    const rejectAll: TerminologyAdapter = { validateCode: () => ({ result: false }) };
+    const doc = buildCcda(noTime, { terminology: rejectAll });
+    const codes = doc.warnings.map((w) => w.code);
+    expect(codes).toContain("SEMANTIC_CODE_INVALID");
+    expect(codes.indexOf("SEMANTIC_CODE_INVALID")).toBeLessThan(
+      codes.indexOf("MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME"),
+    );
+    expect(codes.at(-1)).toBe("MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME");
+  });
+
+  it("does NOT fire from editCcda, the residual this slice deliberately did not close", () => {
+    // MEASURED, not asserted, because the field's own TSDoc names this bound and
+    // a bound nobody probes drifts. `editCcda` writes this section through the
+    // same emitter from the same input type and stays silent.
+    //
+    // Wiring it there was tried in this slice and REVERTED. `editCcda` takes an
+    // ORDERED LIST OF EDITS where a later one discards an earlier one's content,
+    // so a check reading that list reported a SHALL violation against a document
+    // whose emitted DOM carried the element. The second case below is that exact
+    // shape, kept as the reason the bound stands: closing it needs a check that
+    // reads what survived into the DOM, and a message naming neither emitter.
+    const base = buildCcda({ patient: { mrn: "M" } });
+    const grafted = editCcda(base, {
+      sections: [
+        {
+          kind: "planOfTreatment",
+          mode: "upsert",
+          content: [
+            {
+              kind: "medicationActivity",
+              code: { code: "314076", displayName: "Lisinopril 10 MG" },
+            },
+          ],
+        },
+      ],
+    });
+    expect(grafted.warnings.map((w) => w.code)).not.toContain(
+      "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
+    );
+    // The document really is short the SHALL element, which is what makes the
+    // silence a residual rather than a non-event.
+    const sbadm = grafted.toString().slice(grafted.toString().indexOf("22.4.42"));
+    expect(sbadm.slice(0, sbadm.indexOf("</substanceAdministration>"))).not.toContain(
+      "<effectiveTime",
+    );
+  });
+
+  it("would have warned falsely on a conformant edit, which is why the bound stands", () => {
+    // Two planOfTreatment edits in one call: the offending one is discarded by
+    // the later one, so the EMITTED document carries the element and is
+    // conformant. A check reading the edit list rather than the surviving DOM
+    // reports a SHALL violation about a document that does not have one, and a
+    // warning that misdescribes its own document is the defect this repo names
+    // explicitly. Nothing is reported here, and nothing may be without solving
+    // the surviving-content problem first.
+    const base = buildCcda({ patient: { mrn: "M" } });
+    const revised = editCcda(base, {
+      sections: [
+        {
+          kind: "planOfTreatment",
+          mode: "upsert",
+          content: [
+            {
+              kind: "medicationActivity",
+              code: { code: "314076", displayName: "Lisinopril 10 MG" },
+            },
+          ],
+        },
+        {
+          kind: "planOfTreatment",
+          mode: "upsert",
+          content: [
+            {
+              kind: "medicationActivity",
+              code: { code: "314076", displayName: "Lisinopril 10 MG" },
+              effectiveTime: "20240801",
+            },
+          ],
+        },
+      ],
+    });
+    expect(revised.toString()).toContain("20240801");
+    expect(revised.warnings.map((w) => w.code)).not.toContain(
+      "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
+    );
+    // The library's own re-parse of the same bytes agrees the document is clean.
+    expect(parseCcda(revised.toString()).warnings).toEqual([]);
+  });
+
+  it("never fires on a PARSED document, only on a built one", () => {
+    // The read path is deliberately unchanged: re-parsing the very XML the
+    // builder just emitted (short the SHALL element) raises nothing. Widening
+    // this to `parseCcda` would move rows on every third-party document and is
+    // its own decision.
+    const built = buildCcda(noTime);
+    const reparsed = parseCcda(built.toString());
+    expect(reparsed.warnings.map((w) => w.code)).not.toContain(
+      "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
+    );
+    expect(reparsed.warnings).toEqual([]);
+  });
+
+  it("leaves the emitted XML byte-identical to a build with the diagnostic ignored", () => {
+    // The diagnostic is a statement ABOUT the document, never a change TO it:
+    // serialization is still a fixed point and the document still round-trips.
+    const xml = serializeCcda(buildCcda(noTime));
     expect(parseCcda(xml).toString()).toBe(xml);
   });
 });

@@ -4,7 +4,7 @@
  * (construct). Re-exported from the package root.
  */
 
-export { editCcda, CcdaEditError } from "./edit-ccda.js";
+export { editCcda, CcdaEditError, SYNTHETIC_SETID_PREFIX, isSyntheticSetId } from "./edit-ccda.js";
 export type {
   EditCcdaOptions,
   SectionEdit,

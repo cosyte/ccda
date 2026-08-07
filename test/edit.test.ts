@@ -29,6 +29,8 @@ import {
   CcdaEditError,
   CcdaDocument,
   WARNING_CODES,
+  SYNTHETIC_SETID_PREFIX,
+  isSyntheticSetId,
   type BuildCcdaInit,
   type CcdaWarning,
   type TerminologyAdapter,
@@ -290,6 +292,78 @@ describe("editCcda, CDA R2 revision", () => {
     expect(rel[0]?.parentDocument.ids[0]?.extension).toBe("DOC-1");
     expect(rel[0]?.parentDocument.versionNumber).toBe(1);
     expect(rel[0]?.parentDocument.setId?.extension).toBe(revised.header.setId?.extension);
+  });
+
+  /**
+   * A minted `setId` is a fabricated version-series identifier. The decision
+   * taken was to **keep minting** (CDA R2 requires the replacement and its
+   * `parentDocument` to share one, so not minting emits a document that
+   * contradicts itself) and to make the fabrication **obvious**: a documented
+   * prefix under a synthetic assigning-authority root, plus a predicate a
+   * receiver can call.
+   *
+   * The residual is stated on the public surface and cannot be tested away:
+   * nothing forces a receiver to read the label.
+   */
+  describe("a minted setId is labelled synthetic", () => {
+    it("mints under the documented scheme and recognises its own mint", () => {
+      const revised = editCcda(sampleDoc(), {
+        sections: [
+          { kind: "problems", mode: "replace", content: [{ problem: DIABETES, status: "active" }] },
+        ],
+      });
+      // The source (`sampleDoc`) carries no setId, so this is the minted branch.
+      expect(revised.header.setId?.extension).toMatch(
+        new RegExp(`^${SYNTHETIC_SETID_PREFIX}-`, "u"),
+      );
+      expect(isSyntheticSetId(revised.header.setId)).toBe(true);
+      // The parentDocument shares it, which is the CDA R2 rule the minting
+      // exists to satisfy; the label goes with it rather than only on one side.
+      expect(isSyntheticSetId(revised.header.relatedDocuments[0]?.parentDocument.setId)).toBe(true);
+    });
+
+    it("never relabels a setId the SOURCE asserted", () => {
+      // The prefix marks what this library invented. A series id somebody else
+      // asserted is theirs, and rewriting it would be the laundering this whole
+      // area refuses.
+      const source = parseCcda(
+        rawCda({
+          id: '<id root="1.2" extension="DOC-1"/>',
+          setId: '<setId root="1.2" extension="SERIES-1"/>',
+        }),
+      );
+      const revised = editCcda(source, { sections: [] });
+      expect(revised.header.setId?.extension).toBe("SERIES-1");
+      expect(isSyntheticSetId(revised.header.setId)).toBe(false);
+    });
+
+    it("never relabels a setId the CALLER supplied", () => {
+      const revised = editCcda(sampleDoc(), {
+        revision: { setId: { root: "1.2.3", extension: "CALLER-SERIES" } },
+      });
+      expect(revised.header.setId?.extension).toBe("CALLER-SERIES");
+      expect(isSyntheticSetId(revised.header.setId)).toBe(false);
+    });
+
+    it("requires BOTH halves of the scheme, so a coincidence does not read as synthetic", () => {
+      // Either half alone is something a real document could carry: the prefix
+      // under a real authority's root, or the example-arc root with an ordinary
+      // extension. The predicate is deliberately an AND.
+      expect(isSyntheticSetId({ root: "1.2.3", extension: `${SYNTHETIC_SETID_PREFIX}-e1` })).toBe(
+        false,
+      );
+      expect(
+        isSyntheticSetId({ root: "2.16.840.1.113883.19.5.99999", extension: "setid-e1" }),
+      ).toBe(false);
+      expect(isSyntheticSetId(undefined)).toBe(false);
+      expect(isSyntheticSetId({ root: "2.16.840.1.113883.19.5.99999" })).toBe(false);
+    });
+
+    it("survives the round trip, so a receiver parsing the emitted XML sees the label", () => {
+      const revised = editCcda(sampleDoc(), { sections: [] });
+      const reparsed = parseCcda(revised.toString());
+      expect(isSyntheticSetId(reparsed.header.setId)).toBe(true);
+    });
   });
 
   it("emits setId/versionNumber before recordTarget and relatedDocument before component (XSD order)", () => {

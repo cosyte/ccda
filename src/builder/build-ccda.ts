@@ -14,6 +14,18 @@
  * `parseCcda(doc.toString()).toString() === doc.toString()` (the serializer
  * fixed-point) holds automatically. A clean build produces **zero warnings**.
  *
+ * **"Clean" now has one build-time exception, and it is not a round-trip
+ * failure.** The returned document's `warnings` are the re-parse's warnings plus
+ * any diagnostic the builder raises about the *input it was handed*: today that
+ * is exactly one code, `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, appended
+ * after the parse warnings. It reports that a Planned Medication Activity was
+ * built without the `effectiveTime` its template makes a SHALL, which the
+ * published input type still permits. A build whose input carries no such gap is
+ * warning-free exactly as before, and this diagnostic can never appear on a
+ * document `buildCcda` did not produce: neither `parseCcda` nor `editCcda`
+ * raises it. The `editCcda` half is a stated residual rather than an oversight;
+ * see {@link BuildCcdaPlannedItemBase.effectiveTime}.
+ *
  * **Scope.** The builder's default document is a **Continuity of Care
  * Document (CCD)**, emitted with the full US Realm Header and populated
  * **discrete-data**
@@ -256,6 +268,7 @@ import type { TerminologyAdapter, TerminologyCoding } from "../model/terminology
 import type { PlannedItemKind } from "../model/entries/plan-of-treatment.js";
 import type { ProcedureKind } from "../model/entries/procedure.js";
 import { parseCcda } from "../parser/index.js";
+import { missingPlannedMedicationEffectiveTime, type CcdaWarning } from "../parser/warnings.js";
 import {
   AGE_OBSERVATION,
   ALLERGY_CONCERN_ACT,
@@ -1355,9 +1368,22 @@ interface BuildCcdaPlannedItemBase {
    * redeclares this field as required, which is why omitting it there is a type
    * error; {@link BuildCcdaPlannedOrder} does not, so `buildCcda` will emit a
    * Planned Medication Activity short that SHALL element if you leave it out.
-   * **That gap is known and deliberately still open**: closing it means making
-   * the field required on a published input type, which is a breaking change and
-   * a decision of its own rather than a patch.
+   *
+   * **The field stays optional, and the omission is REPORTED rather than silent
+   * BY `buildCcda`.** Making it required would be a breaking change to a
+   * published input type, so the decision taken was to keep the type as it is
+   * and have {@link buildCcda} raise
+   * `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` on the returned document. The
+   * document is still emitted, still short that element, and no date is ever
+   * fabricated to fill it.
+   *
+   * **`editCcda` does NOT report it, and that residual is filed rather than
+   * hidden.** It writes this section through the same emitter from this same
+   * type, so a planned medication grafted in by an edit is emitted short the
+   * SHALL element in silence, exactly as it always was. Closing it needs a check
+   * that reads what survived into the emitted DOM rather than the caller's edit
+   * list (a later edit can discard an earlier one's content) and a diagnostic
+   * message that names neither emitter; that is its own item.
    */
   readonly effectiveTime?: string;
 }
@@ -1429,7 +1455,11 @@ export interface BuildCcdaPlannedOrder extends BuildCcdaPlannedItemBase {
  * types `effectiveTime` as optional for its `medicationActivity` arm, so
  * `buildCcda` can emit a Planned Medication Activity short that SHALL element.
  * Making the field required on `BuildCcdaPlannedOrder` would be a breaking
- * change to a published type, so the gap stands.
+ * change to a published type, so the field stands as it is and the omission is
+ * **reported** instead (`MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, raised by
+ * `buildCcda` on the returned document; `editCcda` does not, a stated residual).
+ * No such diagnostic exists for this template, and adding one would be dead
+ * code: omitting the field here does not compile.
  *
  * @example
  * ```ts
@@ -1876,7 +1906,9 @@ export interface BuildCcdaOptions {
  *   from its optional `translate`. The builder never coerces a code to satisfy the
  *   adapter, every primary value is emitted verbatim and a `<translation>` is only
  *   ever an additional alternate coding.
- * @returns The parsed document, the parse of the spec-clean XML just emitted.
+ * @returns The parsed document, the parse of the spec-clean XML just emitted,
+ *   carrying the re-parse's warnings plus any build-time diagnostic about the
+ *   input (today: `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, appended last).
  * @throws {TypeError} When `documentType` is anything other than `"ccd"` or
  *   `"referralNote"` (the only two types this builder supports), when an allergy
  *   is neither an `allergen` nor `noKnownAllergy`, when a result does not carry
@@ -2007,9 +2039,83 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
   // `SEMANTIC_CODE_INVALID` for any coded value the adapter rejects, validation
   // *on build*. The builder still emits every code **verbatim** (it never coerces
   // a value to satisfy an adapter); the adapter can only ever add a flag.
-  return options.terminology !== undefined
-    ? parseCcda(serializeDocument(doc), { terminology: options.terminology })
-    : parseCcda(serializeDocument(doc));
+  const parsed =
+    options.terminology !== undefined
+      ? parseCcda(serializeDocument(doc), { terminology: options.terminology })
+      : parseCcda(serializeDocument(doc));
+
+  // Then the build-time diagnostics: what the *input* left short, which a
+  // re-parse cannot see because the emitted document is a faithful rendering of
+  // exactly what it was given. Appended after the parse warnings (never
+  // interleaved), and `withWarnings` returns a new document rather than mutating
+  // the parsed one.
+  const diagnostics = plannedItemDiagnostics(init.planOfTreatment ?? []);
+  return diagnostics.length === 0 ? parsed : parsed.withWarnings(diagnostics);
+}
+
+/**
+ * The diagnostics {@link buildCcda} raises about its own **input**, as distinct
+ * from the warnings the re-parse of the emitted document produces.
+ *
+ * There is exactly one today. A Planned Medication Activity (`…22.4.42`) SHALL
+ * carry exactly one `effectiveTime` (CONF:1098-30468), and
+ * {@link BuildCcdaPlannedOrder} types the field as optional, so an emitter can
+ * be handed a planned drug order with no timing at all. The decision taken was
+ * to **keep the field optional and report the omission**: making it required is
+ * a breaking change to a published input type, and the builder must not
+ * fabricate a date the caller never supplied. So the document is emitted short
+ * that element, exactly as before, and the returned document now says so.
+ *
+ * **`buildCcda` ONLY, and the bound is not laziness.** `editCcda` writes a Plan
+ * of Treatment section through this same emitter from this same input type and
+ * raises nothing, which is a stated residual rather than a gap this check should
+ * quietly close. Wiring it there was tried and reverted: `editCcda`'s input is an
+ * **ordered list of edits where a later one discards an earlier one's content**,
+ * so reading that list reported a SHALL violation against a document whose
+ * emitted DOM carried the element, on a conformant edit. Reporting there has to
+ * read what survived into the DOM (or the surviving edits), with a message that
+ * names neither emitter; that is its own item and its own shape.
+ *
+ * **Why the check reads `init` and not the emitted DOM.** *On this path* the two
+ * are the same fact, and reading the input is the one that cannot drift:
+ * `init.planOfTreatment` is one list and it is always emitted, so the builder
+ * writes an `<effectiveTime>` for this variant if and only if
+ * `p.effectiveTime !== undefined`. Re-walking the DOM to rediscover that would
+ * be a second implementation of the emit rule, and this repo has been burned by
+ * a claim and its code drifting apart. **That argument is `buildCcda`'s and it
+ * does NOT travel**: see the paragraph above for the path where it is false.
+ *
+ * **The Planned Immunization Activity is not checked here and must not be
+ * added.** Its `effectiveTime` is `[1..1]` too, but
+ * {@link BuildCcdaPlannedImmunization} makes the field **required**, so omitting
+ * it is a compile error and a runtime warning would be unreachable, a dead
+ * diagnostic. The other five planned templates make it `[0..1]`; an absence
+ * there is conformant and draws nothing.
+ *
+ * (No `@example` import: this helper is not on the package entry point, and
+ * citing one that does not resolve is the open `@example` defect already filed.)
+ *
+ * @param items - The planned items `buildCcda` was handed.
+ * @returns One warning per offending item, in input order; empty when none.
+ * @example
+ * ```ts
+ * plannedItemDiagnostics(init.planOfTreatment ?? []);
+ * ```
+ * @internal
+ */
+function plannedItemDiagnostics(items: readonly BuildCcdaPlannedItem[]): readonly CcdaWarning[] {
+  const out: CcdaWarning[] = [];
+  for (const p of items) {
+    if (p.kind === "medicationActivity" && p.effectiveTime === undefined) {
+      out.push(
+        missingPlannedMedicationEffectiveTime({
+          path: "substanceAdministration",
+          sectionCode: PLAN_OF_TREATMENT_LOINC,
+        }),
+      );
+    }
+  }
+  return out;
 }
 
 /**
@@ -2402,6 +2508,8 @@ const MENTAL_STATUS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.56";
 const PAST_MEDICAL_HISTORY_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.20";
 /** @internal */
 const PLAN_OF_TREATMENT_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.10";
+/** The Plan of Treatment Section's LOINC `<code>`. @internal */
+const PLAN_OF_TREATMENT_LOINC = "18776-5";
 /** @internal */
 const FAMILY_HISTORY_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.15";
 
@@ -3974,7 +4082,7 @@ function planOfTreatmentSection(
     return emptySection(
       doc,
       PLAN_OF_TREATMENT_SECTION_BASE,
-      "18776-5",
+      PLAN_OF_TREATMENT_LOINC,
       "Plan of Treatment",
       PLAN_OF_TREATMENT_EXT,
     );
@@ -3991,7 +4099,7 @@ function planOfTreatmentSection(
   const section = sectionElement(
     doc,
     PLAN_OF_TREATMENT_SECTION_BASE,
-    "18776-5",
+    PLAN_OF_TREATMENT_LOINC,
     "Plan of Treatment",
     text,
     false,
@@ -4045,9 +4153,12 @@ function plannedItemEntry(
   // `…4.42` (the medication, CONF:1098-30468). Only the first of those has a
   // required field on its input type, so this branch is always taken for an
   // immunization; a Planned Medication Activity built with no `effectiveTime` is
-  // still emitted short that SHALL element. Pre-existing, and closing it means a
-  // breaking change to a published input type, so it is its own item rather than
-  // a side effect here.
+  // still emitted short that SHALL element, because closing it means a breaking
+  // change to a published input type. What changed is that the omission is no
+  // longer silent: `plannedItemDiagnostics` raises
+  // `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` on the returned document. The
+  // emitted XML is byte-identical to what it was; do not "fix" this by
+  // fabricating a date or a nullFlavor here.
   if (p.effectiveTime !== undefined) {
     act.appendChild(
       el(doc, "effectiveTime", {
@@ -4424,7 +4535,7 @@ export const EDITABLE_SECTIONS: Readonly<Record<EditableSectionKind, EditableSec
   encounters: { base: ENCOUNTERS_SECTION_BASE, loinc: "46240-8" },
   socialHistory: { base: SOCIAL_HISTORY_SECTION_BASE, loinc: "29762-2" },
   pastMedicalHistory: { base: PAST_MEDICAL_HISTORY_SECTION_BASE, loinc: "11348-0" },
-  planOfTreatment: { base: PLAN_OF_TREATMENT_SECTION_BASE, loinc: "18776-5" },
+  planOfTreatment: { base: PLAN_OF_TREATMENT_SECTION_BASE, loinc: PLAN_OF_TREATMENT_LOINC },
   familyHistory: { base: FAMILY_HISTORY_SECTION_BASE, loinc: "10157-6" },
 };
 

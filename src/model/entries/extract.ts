@@ -11,11 +11,15 @@
 
 import { child, children, positionOf } from "../dom.js";
 import { buildNarrativeIndex } from "../section.js";
-import { sectionForLoinc, sectionForTemplateRoot } from "../../parser/templates.js";
 import { sectionPlacementSuspect } from "../../parser/warnings.js";
-import { parseCd } from "../types/cd.js";
 import type { ParseCtx } from "../types/_shared.js";
-import { ENTRY_ROOT_TO_SECTION, anyEntryAct, childEntries, templateRoots } from "./shared.js";
+import {
+  ENTRY_ROOT_TO_SECTION,
+  anyEntryAct,
+  childEntries,
+  sectionKeyOf,
+  templateRoots,
+} from "./shared.js";
 import { extractProblems, type ProblemConcern } from "./problem.js";
 import { extractMedications, type Medication } from "./medication.js";
 import { extractAllergies, type AllergyConcern } from "./allergy.js";
@@ -159,20 +163,6 @@ function allSectionElements(structuredBody: Element): readonly Element[] {
 function narrativeIndexOf(sectionEl: Element): ReadonlyMap<string, string> {
   const textEl = child(sectionEl, "text");
   return textEl === undefined ? new Map() : buildNarrativeIndex(textEl);
-}
-
-/** Silently recognize a section's catalog key (templateId root, then LOINC). @internal */
-function sectionKeyOf(sectionEl: Element): string | undefined {
-  for (const root of templateRoots(sectionEl)) {
-    const info = sectionForTemplateRoot(root);
-    if (info !== undefined) return info.key;
-  }
-  const code = parseCd(child(sectionEl, "code"), { emit: () => {} });
-  if (code?.code !== undefined) {
-    const info = sectionForLoinc(code.code);
-    if (info !== undefined) return info.key;
-  }
-  return undefined;
 }
 
 /** Emit `SECTION_PLACEMENT_SUSPECT` for a triad entry sitting in the wrong section. @internal */

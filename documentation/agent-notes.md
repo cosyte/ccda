@@ -351,8 +351,11 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     Communication Participants (`…22.4.141`), Nutrition Recommendation (`…22.4.130`) and Goal
     Observation (`…22.4.121`). Goal Observation is the load-bearing one: it is `moodCode="GOL"`, which
     `classifyDisposition` calls **neither** performed nor planned, so returning it would contradict
-    this repo's own mood model. **Whether the other three should be REPORTED as dropped is open, not
-    settled** and deliberately not decided in that slice.
+    this repo's own mood model. **Whether the other three should be REPORTED as dropped was open, not
+    settled** and deliberately not decided in that slice. **SETTLED 2026-08-06: they are reported**
+    (`PLAN_ENTRY_NOT_MODELED`), and Goal Observation deliberately is not. The full reasoning, including
+    why the two levels are scoped differently, is in "The three plan-surface decisions of 2026-08-06"
+    below.
     **`PLANNED_VARIANTS` is ORDERED and the immunization row is deliberately LAST.** Extraction takes
     the first matching root and stops, so an act stacking `…22.4.42` and `…22.4.120` still reads as a
     `medicationActivity`, exactly as it did before `…22.4.120` was recognized at all. Both variants
@@ -391,9 +394,13 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     the field optional, so `buildCcda` emits a Planned Medication Activity short a SHALL element.
     **PRE-EXISTING, filed, deliberately not closed here** (requiring it is a breaking change to a
     published input type). Do not re-derive "the other six are `[0..1]`" from anything.
-    **Still open after `CCDA-NESTED-PLANNED-ENTRIES`**, which corrected the `BuildCcdaPlannedItemBase`
+    **Was still open after `CCDA-NESTED-PLANNED-ENTRIES`**, which corrected the `BuildCcdaPlannedItemBase`
     JSDoc that stated `SHOULD [0..1]` flatly (false on two of the seven) but did **not** make the field
     required. The false claim and the breaking change are separate acts and only the first was cheap.
+    **SETTLED 2026-08-06, and settled toward REPORTING rather than toward the breaking change**: the
+    field is still optional, the emitted XML is unchanged, and `buildCcda` now raises
+    `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` on the returned document. See "The three plan-surface
+    decisions of 2026-08-06" below.
 
 ## Planned entries nested in a Planned Intervention Act
 
@@ -427,10 +434,14 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     Intervention Act is not modelled at all: no container type, no goal linkage, no `nested` flag, so
     the grouping toward the goal is available only from `doc.toString()`. What `getPlannedItems()`
     answers is which acts are planned, and a nested one is planned on the same terms as a direct one.
-    **The three open non-item templates stay open at both levels**: Instruction (`…22.4.20`), Handoff
+    **The three non-item templates were open at both levels**: Instruction (`…22.4.20`), Handoff
     Communication Participants (`…22.4.141`) and Nutrition Recommendation (`…22.4.130`) are admitted by
-    the container exactly as by the section, still not returned and still silent, and a test pins that
-    rather than settling it.
+    the container exactly as by the section, and that slice left them not returned and silent, pinned
+    by test rather than settled. **SETTLED 2026-08-06: they are REPORTED at both levels**
+    (`PLAN_ENTRY_NOT_MODELED`) and **still not returned**, so the nesting bound above is unchanged. The
+    Nutrition Recommendation container is now reported as an act while what it holds is still not
+    reached, which is the one row of the bound test that moved; the Intervention Act (`…22.4.131`) half
+    is silent end to end exactly as before. See "The three plan-surface decisions of 2026-08-06".
     **Monotone, measured rather than argued.** A 14-row matrix (each of the seven acts placed as a
     direct `<entry>` and as the same element nested in an intervention) run against base `src/`: all
     seven direct rows byte-identical, all seven nested rows moving from the **same** base reading,
@@ -444,6 +455,156 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     escape hatch, and emitting a _conformant_ Planned Intervention Act means satisfying its `[1..*]`
     `RSON` Entry Reference to a Goal Observation, which means modelling goals. That is a feature, not a
     fixture, and it is filed rather than smuggled in.
+
+## The three plan-surface decisions of 2026-08-06
+
+  - **Three founder decisions, taken together as one slice because each is a public-surface change to
+    the same area.** They settle three things that stood open as "filed, not fixed", and each was
+    settled toward *reporting* rather than toward changing what the library returns or accepts. Read
+    them as three separate acts that happen to ship together, not as one feature.
+  - **1. A Planned Medication Activity built with no `effectiveTime` is REPORTED, and the field stays
+    OPTIONAL.** `…22.4.42` SHALL carry exactly one (CONF:1098-30468) and
+    `BuildCcdaPlannedOrder` types it optional, so `buildCcda` could emit a planned drug order with no
+    timing and say nothing. Requiring the field would be a breaking change to a **published** input
+    type, so the decision was to keep the type and raise
+    `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` on the returned document.
+    **The emitted XML is byte-identical to what it was.** No date is fabricated, no `nullFlavor` is
+    invented, nothing is refused; the diagnostic is a statement *about* the document, never a change
+    *to* it. **Do not "finish the job" by making the field required, and do not fill the element.**
+    **It is a BUILD-time diagnostic and must stay one.** `buildCcda` appends it through
+    `CcdaDocument.withWarnings` after the re-parse, so it lands **last**, after every parse warning.
+    Re-parsing the very same XML raises nothing, and that asymmetry is deliberate: teaching
+    `parseCcda` the same check would move rows on every third-party document in the world, which is
+    its own decision with its own base-measured matrix. A test pins the parse path staying silent.
+    **IT IS `buildCcda`-ONLY, `editCcda` IS A STATED RESIDUAL, AND THE ROUTE FROM ONE TO THE OTHER
+    IS THE MOST INSTRUCTIVE THING IN THIS SECTION.** `editCcda` writes a Plan of Treatment section
+    through the **same** emitter (`buildSectionComponent` into `planOfTreatmentSection`) from the
+    **same** `BuildCcdaPlannedItem` input and raises nothing, so a planned medication grafted in by an
+    edit is emitted short the SHALL element in silence.
+    **Refuter pass 1 was right that the FIRST cut overclaimed**: the TSDoc on
+    `BuildCcdaPlannedItemBase.effectiveTime` said "the omission is now reported" on a field
+    `editCcda` also consumes. **The remedy chose to grow the guard as well as fix the claim, and
+    growing the guard is what broke.** `editCcda`'s input is an **ordered list of edits where a later
+    one discards an earlier one's content**, so a check reading that list reported a SHALL violation
+    against a document whose emitted DOM **carried** the element, on a conformant edit; the library's
+    own re-parse of the same bytes said `[]`. The frozen message also names `buildCcda`, and it is a
+    member of the public `ALL_WARNING_MESSAGES` registry, so an `editCcda`-raised warning
+    misdescribed its own document, which this repo already names as the same defect as a warning
+    pointing at a coding that is not there. **Refuter pass 2 caught both and recommended cutting back
+    rather than hardening; the `editCcda` wiring was reverted.**
+    **The lesson worth carrying: "read the input, not the emitted DOM" is `buildCcda`'s argument and
+    it does not travel.** It holds there because `init.planOfTreatment` is one list that is always
+    emitted. It is false wherever the input can be discarded before it reaches the DOM. **Do not wire
+    `editCcda` to `plannedItemDiagnostics`.** Reporting there needs to read what survived into the
+    emitted DOM (or the surviving edits) **and** a message that names neither emitter, which is its
+    own item with its own shape. A test pins both halves: the silence, and the conformant two-edit
+    document that the reverted version warned about.
+    **The check reads `init`, not the emitted DOM**, because the builder emits the element if and only
+    if the input carried it; re-walking the DOM would be a second implementation of the emit rule and
+    the two would drift.
+    **`BuildCcdaPlannedImmunization` is deliberately NOT checked.** Its `effectiveTime` is `[1..1]`
+    too, but the type makes the field **required**, so a runtime warning there would be unreachable.
+    Adding one would be a dead diagnostic, which this repo has a whole matrix about.
+  - **2. Instruction (`…22.4.20`), Handoff Communication Participants (`…22.4.141`) and Nutrition
+    Recommendation (`…22.4.130`) are REPORTED as `PLAN_ENTRY_NOT_MODELED`, not excluded in silence.**
+    They are three of the four templates the Plan of Treatment Section admits and `getPlannedItems()`
+    does not return. **Reporting is NOT modelling and nothing about the returned list changed**: no
+    `PlannedItemKind` was added, `PLANNED_VARIANTS` is untouched, and each act still reaches no model
+    field and survives only in `doc.toString()`. The reason they are not planned items is unchanged
+    and is a reading of what they *are*, not a gap: an instruction is something to be told, a handoff
+    names who took over care, a nutrition recommendation is dietary advice.
+    **THE FOURTH, GOAL OBSERVATION (`…22.4.121`), IS DELIBERATELY NOT REPORTED.** The decision taken
+    on it was to **model** it, with its own IG grounding and its own conformance surface, because a
+    conformant Planned Intervention Act must satisfy its `[1..*]` reference to one. A warning would
+    pre-empt that with a weaker answer, and a warning code is stable under ADR 0001 the moment it
+    ships, so it would then have to be carried forever. **Do not add it to the reported set.**
+    **THE TWO LEVELS ARE SCOPED DIFFERENTLY, AND THE SCOPE IS A CHOSEN BOUND, NOT A CONTAINMENT
+    CATALOG.** A direct `<entry>` is reported only when the section resolves to `planOfTreatment`, the
+    section this accessor is named for; without that scope an Instruction sitting in the Instructions
+    Section (`…22.2.45`), where it is that section's own **required** entry, would draw a "not
+    modelled" warning on a fully conformant document. Inside a Planned Intervention Act there is no
+    section condition at all, because the report is relative to the **container** there and the
+    container is read wherever it sits (this package already reaches it in the Interventions Section,
+    `…21.2.3`, which is where R2.1 puts it): gating that half on the section key would have made it
+    silent on exactly the documents that place it conformantly. Both halves are pinned by test,
+    including the Instructions-Section negative control.
+    **THE FIRST CUT JUSTIFIED THAT SCOPE WITH AN UNTRACED SPEC CLAIM, AND IT SHIPPED TO THREE SITES
+    BEFORE THE REFUTER CAUGHT IT.** It said Handoff and Nutrition Recommendation are "admitted in the
+    same two places as Instruction", and that the Plan of Treatment Section "is the section whose
+    catalog admits the three". Neither was traced, and the refuter produced a counter-citation
+    (Interventions Section CONF:1198-32402/32403, admitting Handoff as a direct entry). **The remedy
+    retracted the claim rather than swapping in a counter-claim it had not itself traced**, which was
+    the right call at the time: an unsourced true claim and an unsourced false one are
+    indistinguishable at the time of writing.
+    **THE COUNTER-CITATION IS REAL AND IS NOW TRACED, AND HOW IT WAS MISSED IS THE REUSABLE PART.**
+    `hl7.org/ccdasearch` returns **HTTP 202 with a zero-byte body** through this container's egress,
+    which reads exactly like an empty page rather than a failure, so a fetch there is not evidence of
+    absence. `raw.githubusercontent.com` works: C-CDA Online's generated page for the Interventions
+    Section (V3) says verbatim *"MAY contain zero or more [0..*] entry (CONF:1198-32402) such that it
+    SHALL contain exactly one [1..1] Handoff Communication Participants (identifier:
+    2.16.840.1.113883.10.20.22.4.141) (CONF:1198-32403)."* Verified here, 2026-08-07, at
+    `raw.githubusercontent.com/jddamore/ccda-search/master/templates/2.16.840.1.113883.10.20.21.2.3.html`.
+    **The retraction still stands**: what was wrong was the *original* claim, and the fix was never to
+    replace it with a differently-shaped catalog assertion. What the citation does is make the
+    residual below **measured** rather than merely suspected.
+    **What is stated instead is the RESIDUAL, which is this package's own behaviour: these three
+    templates appear in more places than the two the report covers, and an occurrence outside them is
+    still dropped in silence.** A Handoff as a direct entry of an Interventions Section is the traced
+    example (CONF:1198-32402/32403, above), and a differential test pins that it contributes nothing. Say it that way everywhere. **Do not widen
+    the report to close it as a side effect** - that is a new behavioural surface with its own
+    grounding and its own base-measured matrix. And do not restore a containment count anywhere in
+    this repo without a normative source in hand.
+    **`sectionKeyOf` moved from `model/entries/extract.ts` to `model/entries/shared.ts`** so the
+    misplaced-entry check and this scoping read one definition rather than two copies of the same
+    claim. It is silent by construction (`buildSection` already emitted the recognition warnings), and
+    it inherits the filed limitation that a disagreeing section resolves on `templateId` with no word
+    said, so a mis-recognized Plan of Treatment loses the direct-entry half of this report. That is a
+    stated bound, not a rule of the function.
+    **Reporting never changes what is extracted.** An act stacking a planned root and one of the three
+    still yields its `PlannedItem` **and** the report; an act stacking two of the three is reported
+    **twice**, because nothing in a document ranks them and picking one would hide the other.
+    Performed acts a Planned Intervention Act also holds are **not** reported: they are modelled
+    elsewhere and reached by their own extractors, so calling one "not modelled" would be false.
+  - **3. A minted `setId` is LABELLED SYNTHETIC, and `editCcda` KEEPS MINTING.** Not minting is not an
+    option: CDA R2 requires a replacement and its `parentDocument` to share a version-series `setId`,
+    so a source with none forces the editor to invent one or emit a document that contradicts itself.
+    The decision was to keep inventing it and make the invention obvious. The scheme is the
+    **conjunction** of two things, exported as `SYNTHETIC_SETID_PREFIX` and checked by
+    `isSyntheticSetId`: an `@extension` beginning `SYNTHETIC-SETID-`, **and** the synthetic
+    assigning-authority root `2.16.840.1.113883.19.5.99999`. Either half alone is something a real
+    document could carry, so the predicate is an AND and a test pins both single-half cases as
+    `false`.
+    **The label goes on the MINTED branch only.** A `setId` the source asserted, or one the caller
+    passed as `revision.setId`, is somebody else's assertion and is never relabelled; relabelling it
+    would be the laundering this area refuses everywhere else.
+    **THE RESIDUAL IS STATED ON THE PUBLIC SURFACE AND CANNOT BE TESTED AWAY: NOTHING FORCES A
+    RECEIVER TO READ THE LABEL.** A receiving system that ignores the prefix and the root treats a
+    minted `setId` exactly as it treats a real one. A label makes a fabrication visible; it does not
+    make the identifier true. **And a `false` from `isSyntheticSetId` is not a promise the id is
+    real** - a `setId` minted by another tool, or by this library before the scheme existed
+    (`setid-e1`, unprefixed), reads `false`. Say it that way; the inverse reading is the overclaim.
+    **`ClinicalDocument.id` is deliberately NOT labelled.** `deriveNewDocId` mints a fresh document id
+    from the source's own root, which is a different act with a different argument, and widening the
+    scheme to it was not the decision taken.
+  - **Filed by this slice, not fixed.** Every `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` carries the
+    same `{ path: "substanceAdministration", sectionCode: "18776-5" }`, so two offending orders in one
+    build produce two byte-identical warnings a consumer cannot tell apart. That is defensible rather
+    than accidental (no factory may take a value parameter, `PHI-WARNING-MESSAGE-LEAK`, and `path` is
+    a bounded element local name), but it is a real limit and it is stated rather than left to be
+    discovered. The other residual is the report scope above: an Instruction, Handoff or Nutrition
+    Recommendation outside the two covered places is still dropped in silence.
+  - **What this slice deliberately did NOT touch.** The CCD SHALL-set disagreement is untouched and
+    still open: `build-ccda.ts` names five `shallSections` **including** `vitalSigns` while
+    `required-sections.ts` names four **excluding** it, so `buildCcda` always emits Vital Signs while
+    `parseCcda` will not warn when a third-party CCD lacks one. **It is blocked on a normative source
+    (the R2.1 Schematron), not on a decision, and this slice did not let either half quietly pick a
+    set.** Modelling Goal Observation and emitting the Planned Intervention Act are a roadmap phase,
+    not a drain unit. Neither new code was added to `SAFETY_CRITICAL_CODES`: `PLAN_ENTRY_NOT_MODELED`
+    reports a **modelling gap**, not a misread value, which is the same class as
+    `UNKNOWN_SECTION_CODE` (a section retained as narrative-only, also not in that set), and
+    `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` can only ever be raised by `buildCcda`, which consults
+    no profile, so listing it would be inert. Adding either later can only forbid more and is a
+    reviewable act of its own.
 
 ## The Interventions Section and its OID arc
 
