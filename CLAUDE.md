@@ -157,23 +157,24 @@ immutability + explicit mutation, and the profile system.
     Why: `documentation/agent-notes.md#planned-entries-nested-in-a-planned-intervention-act`
   - **Three plan-surface decisions were settled 2026-08-06, all toward REPORTING rather than toward
     changing what is returned or accepted, and each has a "do not finish the job" edge.**
-    (1) `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` is **`buildCcda`-only** and must stay that way
-    until someone does the other one properly: the field stays optional and the **emitted XML is
-    byte-identical** (no date, no `nullFlavor`). **`parseCcda` and `editCcda` both raise nothing**, and
-    the `editCcda` half is a STATED RESIDUAL, not an oversight. **Wiring `editCcda` to the same check
-    was tried in this slice and REVERTED**: its input is an ordered list of edits where a later one
-    discards an earlier one's content, so reading that list warned of a SHALL violation on a document
-    whose emitted DOM carried the element, and the frozen message names `buildCcda`. Closing it needs
-    the surviving DOM and a message naming neither emitter. The immunization variant is **not**
-    checked, because its field is required and the diagnostic would be dead.
+    (1) `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`: the field stays optional, the **emitted XML is
+    byte-identical** (no date, no `nullFlavor`), **`parseCcda` raises nothing**, and the immunization
+    variant is **not** checked (its field is required, so the diagnostic would be dead). The
+    `editCcda` half was a stated residual and is **CLOSED (2026-08-07)**; read
+    `#closing-the-two-silent-plan-drops-2026-08-07` before touching it, because an **INPUT-reading
+    check was tried and REVERTED** (an ordered edit list where a later edit discards an earlier one's
+    content warned of a SHALL violation on a conformant document). The shipped shape is one shared
+    check over the **emitted DOM**, message naming **neither** emitter.
     (2) `PLAN_ENTRY_NOT_MODELED` reports Instruction / Handoff / Nutrition Recommendation, **not**
     Goal Observation (that one is to be MODELLED, and a code is stable forever once shipped).
-    **Where it fires is a CHOSEN BOUND, not a containment catalog**: a direct entry only in a section
-    recognized as `planOfTreatment` (so a conformant Instructions Section stays quiet), the nested
-    half wherever the container sits. **These templates appear in more places than those two and an
-    occurrence outside them is still dropped in silence - say that, and do not justify the scope with
-    an untraced claim about which sections admit what** (one such claim shipped to three sites here and
-    was retracted). **Reporting is not modelling: nothing about
+    **Where it fires is a CHOSEN BOUND, not a containment catalog**: a direct entry in **two**
+    sections, `planOfTreatment` and `interventions` (widened 2026-08-07 on a verbatim
+    CONF:1198-32402 / 1198-32403 citation plus a base-measured matrix; a conformant Instructions
+    Section still stays quiet), the nested half wherever the container sits. **They appear in more
+    places than the report covers and an occurrence outside it is still dropped in silence** (a
+    Handoff nested in an Intervention Act `…22.4.131` is one) **- say that, and never justify the
+    scope with an untraced containment claim** (one shipped, retracted).
+    **Reporting is not modelling: nothing about
     `getPlannedItems()` changed.** (3) `editCcda` **keeps minting** a `setId` (CDA R2 requires the
     replacement and its `parentDocument` to share one) and labels the minted one only:
     `SYNTHETIC_SETID_PREFIX` + the synthetic root, both required by `isSyntheticSetId`. **State the
@@ -185,14 +186,13 @@ immutability + explicit mutation, and the profile system.
     "normalize" the arc** (a matrix row exists solely to fail if the two are confused). Exactly one
     root, no entries-required sibling; **in C-CDA the base root is entries-optional and the `.1`
     sibling is entries-required** (an earlier draft had it backwards). **Do not re-add a CONF id or
-    a LOINC release number here**: both were invented precision and were removed rather than
-    re-guessed. Every spec claim on this entry is **stated, not traced**, which licenses nothing
+    a LOINC release number here**: both were invented precision, removed rather than re-guessed.
+    Every other spec claim on this entry is **stated, not traced**, which licenses nothing
     about `required-sections.ts`. **A filtered projection cannot support a monotonicity claim**; the
     matrix filters nothing, and there are FOUR classes of move, not the two the first cut claimed.
     **`UNKNOWN_SECTION_CODE` is NOT withdrawn on "every document carrying `62387-6`"** - that
     universal was published once and is false.
-    **The OID is this entry's only real behavioural risk and wants a second source before the next
-    publish.**
+    **The OID got a FIRST source 2026-08-07**, non-normative: root + LOINC only.
     Why: `documentation/agent-notes.md#the-interventions-section-and-its-oid-arc`
   - **`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`'s precondition is each arm's LEAD `<code>`, and the
     message must keep saying so.** A safety-critical warning that misdescribes the document it is

@@ -28,6 +28,7 @@ import {
   type BuildCcdaPlannedItem,
   type TerminologyAdapter,
 } from "../src/index.js";
+import { ALL_WARNING_MESSAGES } from "../src/parser/warnings.js";
 
 const PROBLEM_OBSERVATION = "2.16.840.1.113883.10.20.22.4.4";
 const ALLERGY_OBSERVATION = "2.16.840.1.113883.10.20.22.4.7";
@@ -1667,17 +1668,26 @@ describe("buildCcda, plan of treatment round-trip", () => {
 });
 
 /**
- * The build-time diagnostic for a Planned Medication Activity built short its
- * SHALL `effectiveTime` (`…22.4.42`, `[1..1]`, CONF:1098-30468).
+ * The emit-time diagnostic for a Planned Medication Activity written short its
+ * SHALL `effectiveTime` (`…22.4.42`, `[1..1]`, CONF:1098-30468), raised by
+ * **both** writers: `buildCcda` and `editCcda`.
  *
  * The decision taken was **keep the field optional, report the omission**:
  * requiring it on `BuildCcdaPlannedOrder` would break a published input type.
- * So the three things worth pinning are that the input type still accepts the
+ * So the things worth pinning are that the input type still accepts the
  * omission (it compiles), that the emitted XML is **unchanged** by the
  * diagnostic (no fabricated date, no nullFlavor), and that the diagnostic
  * actually appears.
+ *
+ * The `editCcda` half is what makes the SCOPE worth pinning as hard as the
+ * check. It reads the **surviving grafted** components of the emitted DOM, which
+ * is two claims, each with its own test below: an offending edit discarded by a
+ * later one says nothing (reading the ordered edit list instead reported a SHALL
+ * violation against a conformant document, measured and reverted), and an
+ * untouched section the source brought with it is never re-reported (an edit is
+ * not a validator of documents its caller did not write).
  */
-describe("buildCcda, planned medication effectiveTime diagnostic", () => {
+describe("planned medication effectiveTime diagnostic, on both writers", () => {
   const noTime: BuildCcdaInit = {
     patient: { mrn: "M" },
     planOfTreatment: [
@@ -1772,51 +1782,107 @@ describe("buildCcda, planned medication effectiveTime diagnostic", () => {
     expect(codes.at(-1)).toBe("MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME");
   });
 
-  it("does NOT fire from editCcda, the residual this slice deliberately did not close", () => {
-    // MEASURED, not asserted, because the field's own TSDoc names this bound and
-    // a bound nobody probes drifts. `editCcda` writes this section through the
-    // same emitter from the same input type and stays silent.
-    //
-    // Wiring it there was tried in this slice and REVERTED. `editCcda` takes an
-    // ORDERED LIST OF EDITS where a later one discards an earlier one's content,
-    // so a check reading that list reported a SHALL violation against a document
-    // whose emitted DOM carried the element. The second case below is that exact
-    // shape, kept as the reason the bound stands: closing it needs a check that
-    // reads what survived into the DOM, and a message naming neither emitter.
-    const base = buildCcda({ patient: { mrn: "M" } });
-    const grafted = editCcda(base, {
-      sections: [
-        {
-          kind: "planOfTreatment",
-          mode: "upsert",
-          content: [
-            {
-              kind: "medicationActivity",
-              code: { code: "314076", displayName: "Lisinopril 10 MG" },
-            },
-          ],
-        },
-      ],
+  /** The offending planned order, and its conformant twin. */
+  const ORDER_NO_TIME = {
+    kind: "medicationActivity",
+    code: { code: "314076", displayName: "Lisinopril 10 MG" },
+  } as const;
+  const ORDER_WITH_TIME = { ...ORDER_NO_TIME, effectiveTime: "20240801" } as const;
+  const planEdit = (
+    ...content: readonly (typeof ORDER_NO_TIME | typeof ORDER_WITH_TIME)[]
+  ): Parameters<typeof editCcda>[1] => ({
+    sections: content.map((c) => ({ kind: "planOfTreatment", mode: "upsert", content: [c] })),
+  });
+
+  it("ALSO fires from editCcda, on the section that edit grafted", () => {
+    // The residual `#98` stated and did not close. `editCcda` writes this section
+    // through the same emitter from the same input type, so a document it emits
+    // can be short the same SHALL element; it now says so, with the same code.
+    const grafted = editCcda(buildCcda({ patient: { mrn: "M" } }), planEdit(ORDER_NO_TIME));
+    expect(grafted.warnings.map((w) => w.code)).toStrictEqual([
+      "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
+    ]);
+    // The emitted XML is unchanged by the diagnostic, exactly as on the builder:
+    // the document really is short the element, with nothing invented in its
+    // place, which is what makes the report a statement ABOUT the document.
+    const sbadm = grafted.toString().slice(grafted.toString().indexOf("22.4.42"));
+    expect(sbadm.slice(0, sbadm.indexOf("</substanceAdministration>"))).not.toContain(
+      "<effectiveTime",
+    );
+    expect(grafted.toString()).not.toContain("effectiveTime nullFlavor");
+  });
+
+  it("names NEITHER emitter, so the same message is true of both writers", () => {
+    // The message was worded around `buildCcda` while that was the only writer
+    // raising it, which made it false the moment a second one did. A warning that
+    // misdescribes its own document is the defect this repo names explicitly, and
+    // which call produced a document is not a fact about the document.
+    const built = buildCcda(noTime).warnings[0];
+    const edited = editCcda(buildCcda({ patient: { mrn: "M" } }), planEdit(ORDER_NO_TIME))
+      .warnings[0];
+    expect(edited?.message).toBe(built?.message);
+    expect(built?.message).not.toContain("buildCcda");
+    expect(built?.message).not.toContain("editCcda");
+    // And it does not overclaim in the other direction either. It is scoped to
+    // the ACT, not to the document, because `editCcda`'s check covers only what
+    // that call wrote: a universal ("the emitted document carries…") would make
+    // the warning's ABSENCE read as a guarantee the check never gives.
+    expect(built?.message).toContain("Only content the emitting call itself wrote is checked");
+    // Still the registry entry rather than anything assembled per call site.
+    expect(ALL_WARNING_MESSAGES.has(built?.message ?? "")).toBe(true);
+  });
+
+  it("reports the SURVIVING edit when a later one replaces an earlier offending section", () => {
+    // The ordering that matters, in the direction the trap below does not cover:
+    // the conformant edit is discarded and the offending one survives, so the
+    // emitted document IS short the element and the report is about what is
+    // there. One report, not two, because one act survived.
+    const revised = editCcda(
+      buildCcda({ patient: { mrn: "M" } }),
+      planEdit(ORDER_WITH_TIME, ORDER_NO_TIME),
+    );
+    expect(revised.warnings.map((w) => w.code)).toStrictEqual([
+      "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
+    ]);
+    expect(revised.toString()).not.toContain("20240801");
+  });
+
+  it("stays silent on an offending act the SOURCE brought, when the edit touched another section", () => {
+    // The other half of the scope, and the reason it is not simply "scan the
+    // emitted document". An untouched section is the source's content, carried by
+    // reference; re-reporting it would make an edit a validator of a document its
+    // caller did not write, and would fire again on every later edit of an
+    // unrelated section. The act is provably still there and still short.
+    const source = parseCcda(
+      buildCcda({ patient: { mrn: "M" }, planOfTreatment: [ORDER_NO_TIME] }).toString(),
+    );
+    const revised = editCcda(source, {
+      sections: [{ kind: "medications", mode: "upsert", content: [] }],
     });
-    expect(grafted.warnings.map((w) => w.code)).not.toContain(
+    expect(revised.warnings.map((w) => w.code)).not.toContain(
       "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
     );
-    // The document really is short the SHALL element, which is what makes the
-    // silence a residual rather than a non-event.
-    const sbadm = grafted.toString().slice(grafted.toString().indexOf("22.4.42"));
+    const sbadm = revised.toString().slice(revised.toString().indexOf("22.4.42"));
     expect(sbadm.slice(0, sbadm.indexOf("</substanceAdministration>"))).not.toContain(
       "<effectiveTime",
     );
   });
 
-  it("would have warned falsely on a conformant edit, which is why the bound stands", () => {
+  it("stays silent when the edit grafts a conformant planned medication", () => {
+    const revised = editCcda(buildCcda({ patient: { mrn: "M" } }), planEdit(ORDER_WITH_TIME));
+    expect(revised.warnings).toEqual([]);
+  });
+
+  it("stays silent on the conformant two-edit shape an input-reading check warned on", () => {
+    // THE TRAP THAT SIZED THE DESIGN, kept verbatim in shape and still silent.
     // Two planOfTreatment edits in one call: the offending one is discarded by
     // the later one, so the EMITTED document carries the element and is
-    // conformant. A check reading the edit list rather than the surviving DOM
-    // reports a SHALL violation about a document that does not have one, and a
-    // warning that misdescribes its own document is the defect this repo names
-    // explicitly. Nothing is reported here, and nothing may be without solving
-    // the surviving-content problem first.
+    // conformant. A check reading the edit LIST reports a SHALL violation about a
+    // document that does not have one, and a warning that misdescribes its own
+    // document is the defect this repo names explicitly. That version was
+    // measured and reverted; this one reads the SURVIVING grafted components, so
+    // it sees the conformant act that is there rather than the discarded one that
+    // is not. Anyone who moves the check back onto `options.sections` fails here.
     const base = buildCcda({ patient: { mrn: "M" } });
     const revised = editCcda(base, {
       sections: [

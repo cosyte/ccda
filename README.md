@@ -306,16 +306,24 @@ normalized away**. An unrecognized `value xsi:type` is kept as `unsupported`; no
   (`…22.4.130`) and Goal Observation (`…22.4.121`), none of which is an act to be performed on the
   patient at a future time. A Goal Observation is the clearest: it is `moodCode="GOL"`, which this
   parser classifies as neither performed nor planned. **The first three are no longer excluded in
-  silence: each is reported as `PLAN_ENTRY_NOT_MODELED`, once per matching root, both as a direct
-  Plan of Treatment `<entry>` and nested in a Planned Intervention Act.** Reporting is not modelling:
+  silence: each is reported as `PLAN_ENTRY_NOT_MODELED`, once per matching root, as a direct
+  `<entry>` and nested in a Planned Intervention Act.** Reporting is not modelling:
   they are still not returned, still on no model field, and still reachable only through
   `doc.toString()`. **Where the report fires is a bound this library chose, not a statement about
-  every place C-CDA admits these templates.** A direct entry is reported only in a section
-  recognized as Plan of Treatment, so an Instruction in the Instructions Section (`…22.2.45`), where
-  it is that section's own required entry, draws nothing; nested in a Planned Intervention Act there
-  is no section condition, because the container is what the report is relative to and it is read
-  wherever it sits. **These three templates appear in more places than those two, and an occurrence
-  outside them is still dropped in silence.** **A Goal Observation is
+  every place C-CDA admits these templates.** A direct entry is reported in **two** sections: Plan of
+  Treatment, and the **Interventions Section (V3)** (`…21.2.3`), which admits a Handoff as a direct
+  entry in as many words (CONF:1198-32402 / 1198-32403) and is where R2.1 puts the container the
+  nested half already reads. **The citation is V3's; the matching is this library's usual section
+  recognition, which is wider**: templateId root `…21.2.3` first, LOINC `62387-6` as the fallback, no
+  `@extension` check, so a V2-stamped or LOINC-only Interventions Section is in scope too. An
+  Instruction in the Instructions Section (`…22.2.45`), where
+  it is that section's own required entry, still draws nothing; nested in a Planned Intervention Act
+  there is no section condition, because the container is what the report is relative to and it is
+  read wherever it sits. **These three templates appear in more places than the report covers, and an
+  occurrence outside it is still dropped in silence**: a Handoff nested in an **Intervention Act**
+  (`…22.4.131`) is silent, because that act is not a container this library descends into, and a
+  direct entry of a section this catalog recognizes as nothing is silent because there is no key to
+  match. **A Goal Observation is
   deliberately not reported**, because the decision taken on it was to model it rather than warn about
   it. A planned entry is read as an `<entry>`'s own
   act **or** nested inside a **Planned Intervention Act** (`…22.4.146`), the act that groups the
@@ -507,10 +515,9 @@ returned document carries `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, appended 
 warnings. The field stays optional on purpose, because requiring it would break a published input
 type, and the builder still emits exactly what it was given: no date is fabricated, no `nullFlavor` is
 invented, and the emitted XML is byte-identical to what it was before the diagnostic existed. This is
-the one warning `buildCcda` can raise that `parseCcda` cannot: re-parsing the same document says
-nothing. **`editCcda` does not raise it either**, so a planned medication grafted in by an edit is
-still emitted short that element in silence; that residual is stated rather than closed here, because
-a check there has to read what survived into the emitted document rather than the caller's edit list.
+the one warning the **emit side** can raise that `parseCcda` cannot: re-parsing the same document says
+nothing. **`editCcda` raises it too**, on the sections that edit grafted, so a planned medication
+written in by an edit is no longer emitted short that element in silence.
 The five non-`substanceAdministration` variants are genuinely `[0..1]` and
 stay silent), and
 **Family History** (a Family History Organizer `…22.4.45` per relative,
@@ -593,6 +600,16 @@ A `setId` the source already asserted, or one you pass as `revision.setId`, is *
 ignores the prefix and the root treats a minted `setId` exactly as it treats a real one, and this
 library cannot make it do otherwise. A `false` from `isSyntheticSetId` is likewise not a promise the
 id is real, only that this library did not mint it under this scheme.
+
+**An edit reports what it wrote, over the sections it actually grafted.** A grafted Plan of Treatment
+can carry a Planned Medication Activity short the `effectiveTime` its template SHALLs, so the returned
+document raises `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, appended after the re-parse's warnings,
+with the emitted XML unchanged. The scope is deliberately narrow in **both** directions and neither
+half is an optimisation. It reads what **survived** into the emitted document, so an offending edit
+that a later edit in the same call discarded says nothing (`sections` is an ordered list, and reading
+the list rather than the result reports a violation against a document that does not have one). And it
+covers only what **this call grafted**, so an offending act the source brought with it is never
+re-reported: an edit is not a validator of a document its caller did not write.
 
 It is fail-safe: an unedited section is carried by reference (never dropped), an empty content list
 emits a spec-clean `nullFlavor="NI"` shell (never fabricated entries), and an edit that would drop a

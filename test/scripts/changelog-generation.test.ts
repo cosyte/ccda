@@ -388,9 +388,26 @@ describe("changelog generation is on", () => {
     expect(pkg.scripts?.["format:check"] ?? "").toContain('"*.{json,md,yml}"');
   });
 
-  it("keeps the committed changelog Prettier-canonical, which is what makes leaving it on safe", async () => {
-    await expect(formatCheckAccepts(changelog)).resolves.toBe(true);
-  });
+  it(
+    "keeps the committed changelog Prettier-canonical, which is what makes leaving it on safe",
+    // Its own budget, never a global one (see `vitest.config.ts`, which
+    // deliberately sets none). This is the file's FIRST `formatCheckAccepts`
+    // call, so it pays for `prettier.resolveConfig` plus the lazy load of the
+    // markdown parser and this repo's shared config package; the two later
+    // callers are cheap because it already paid. The assertion itself is a string
+    // comparison, so nothing here is genuinely slow, and the trim available (warm
+    // Prettier in a hook) only moves the same cost under a hook timeout.
+    //
+    // Sized against the failure, not against a comfortable machine: on Vitest's
+    // 5 s default this timed out on 2 of roughly 10 local runs with four worker
+    // agents on the box, and was green in CI every time. The siblings in this
+    // file that spawn a real `changeset version` carry 90 s for a much larger
+    // cost; an in-process module load wants far less than that.
+    { timeout: 30_000 },
+    async () => {
+      await expect(formatCheckAccepts(changelog)).resolves.toBe(true);
+    },
+  );
 });
 
 describe("CHANGELOG.md carries no hand-maintained Unreleased section", () => {

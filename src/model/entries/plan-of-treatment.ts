@@ -263,10 +263,58 @@ const UNMODELED_PLAN_ENTRY_ROOTS: ReadonlyMap<string, UnmodeledPlanEntry> = new 
 ]);
 
 /**
- * The catalog key of the section whose *direct* entries draw
- * `PLAN_ENTRY_NOT_MODELED`. @internal
+ * The catalog keys of the sections whose *direct* entries draw
+ * `PLAN_ENTRY_NOT_MODELED`.
+ *
+ * **Two, and the second is traced rather than assumed.** The C-CDA R2.1
+ * Interventions Section (V3) admits a Handoff Communication Participants act as a
+ * direct `<entry>` in as many words: "MAY contain zero or more [0..\*] entry
+ * (CONF:1198-32402) such that it SHALL contain exactly one [1..1] Handoff
+ * Communication Participants (identifier: 2.16.840.1.113883.10.20.22.4.141)
+ * (CONF:1198-32403)". So the one position this package silently dropped that the
+ * IG explicitly admits is now reported.
+ *
+ * **The internal reason is the stronger one.** This module already reports all
+ * three templates nested in a Planned Intervention Act *with no section
+ * condition*, and the Planned Intervention Act's conformant home is the
+ * Interventions Section. Before this, moving a Handoff one level up, out of the
+ * container and into a direct entry of the same section, took it from reported to
+ * silent. A report that a document's own nesting depth turns off is not a bound,
+ * it is an accident.
+ *
+ * **Instruction and Nutrition Recommendation are in scope here too, and the
+ * reason is deliberately NOT a containment claim.** The warning has always been
+ * about a **modelling gap, not conformance**: wherever one of the three sits,
+ * this package recognizes it and drops it, so reporting it says something true
+ * that silence does not. Scoping per template would require a catalog of which
+ * sections admit what, and an untraced catalog is the move this area has already
+ * retracted once. **No count is asserted here.** The page cited above does list
+ * the section's contained templates, but it is a generated navigation site that
+ * says of itself that HL7's own C-CDA page remains definitive, so it grounds the
+ * quoted conformance statement and nothing wider.
+ *
+ * **The section is matched the way this package matches every section, which is
+ * WIDER than the citation.** {@link sectionKeyOf} resolves `interventions` from
+ * the `…21.2.3` `templateId` root, with the section `<code>` LOINC `62387-6` as
+ * the fallback, and it checks **no `@extension`**. So a V2-stamped Interventions
+ * Section, one carrying the LOINC and no `templateId` at all, and one whose root
+ * and `<code>` disagree all land in scope, while the citation
+ * (CONF:1198-32402 / 1198-32403) is V3's. That is recognition behaving as it does
+ * everywhere else rather than a decision taken here, and it is stated rather than
+ * narrowed: the report is a modelling-gap statement that is true in every one of
+ * those shapes.
+ *
+ * **What this still does NOT cover, measured rather than implied.** Handoff's own
+ * contained-by set on that page is four: Plan of Treatment Section, Planned
+ * Intervention Act, Intervention Act, Interventions Section. The first, second and
+ * fourth report; the **third does not**, because an Intervention Act (`…22.4.131`)
+ * is not a container this package descends into at all. That is unchanged by this
+ * widening and pinned by test. @internal
  */
-const PLAN_SECTION_KEY = "planOfTreatment";
+const PLAN_ENTRY_REPORT_SECTION_KEYS: ReadonlySet<string> = new Set([
+  "planOfTreatment",
+  "interventions",
+]);
 
 /**
  * Report an act that carries one of {@link UNMODELED_PLAN_ENTRY_ROOTS}, once per
@@ -350,24 +398,30 @@ const PLANNED_CODE_SLOTS: ReadonlyMap<PlannedItemKind, "medication" | "vaccine">
  * modelled elsewhere and reached by their own extractors, so a "not modelled"
  * report on one would be false.
  *
- * **The two levels are scoped differently, and the scope is a CHOICE this
- * package makes, not a claim about which sections C-CDA admits these templates
- * in.** A direct `<entry>` is reported only when the section resolves to
- * `planOfTreatment`, the section this accessor is named for and the one whose
- * planned reading a consumer is relying on. That bound exists for a measured
- * reason: an Instruction sitting in the Instructions Section (`…22.2.45`) is the
- * section's own required entry, and reporting a conformant document's required
- * entry as "not modelled" would be noise. Inside a Planned Intervention Act
- * there is no section condition at all, because the container is what the report
- * is relative to there and it is read wherever it sits.
+ * **The two levels are scoped differently, and the scope is a BOUND this package
+ * chose, not a catalog of which sections C-CDA admits these templates in.** A
+ * direct `<entry>` is reported in the **two** sections named on
+ * {@link PLAN_ENTRY_REPORT_SECTION_KEYS}: `planOfTreatment`, the section this
+ * accessor is named for, and `interventions`, the Interventions Section (V3),
+ * which admits a Handoff as a direct entry in as many words (CONF:1198-32402 /
+ * 1198-32403, quoted on that constant) and is where R2.1 puts the container the
+ * nested half already reads. Inside a Planned Intervention Act there is no
+ * section condition at all, because the container is what the report is relative
+ * to there and it is read wherever it sits.
+ *
+ * An Instruction sitting in the **Instructions Section** (`…22.2.45`) is
+ * deliberately still silent: it is that section's own required entry, and
+ * reporting a conformant document's required entry as "not modelled" would be
+ * noise rather than a finding.
  *
  * **The residual, stated rather than implied: these three templates appear in
- * more places than those two, and an occurrence outside them is still dropped in
- * silence.** This is a bound on the report, not a claim that the report covers
- * every occurrence; an earlier draft justified the scope by asserting which
- * sections admit the three, which was an untraced spec claim and is retracted
- * rather than replaced with another one. Widening the report is a decision with
- * its own grounding and its own base-measured matrix, not a tidy-up.
+ * more places than the report covers, and an occurrence outside them is still
+ * dropped in silence.** Two are measured and pinned by test. A Handoff nested in
+ * an **Intervention Act** (`…22.4.131`) is silent, because that act is not a
+ * container this package descends into. Any of the three as a direct entry of a
+ * section this catalog does not recognize at all is silent, because there is no
+ * key to match. Widening further is its own decision with its own base-measured
+ * matrix, not a tidy-up.
  *
  * **A returned item does not say whether it was a direct `<entry>` or nested.**
  * The Planned Intervention Act is not modelled: this package carries no container
@@ -390,9 +444,11 @@ export function extractPlannedItems(
 ): readonly PlannedItem[] {
   const out: PlannedItem[] = [];
   // Resolved once per section, not per entry: the direct-entry report below is
-  // scoped to the Plan of Treatment section (a choice, bounded in the docblock
-  // above), and recognition walks the section's templateIds and <code>.
-  const inPlanSection = sectionKeyOf(sectionEl) === PLAN_SECTION_KEY;
+  // scoped to the Plan of Treatment and Interventions sections (a bound, stated
+  // on the constant), and recognition walks the section's templateIds and <code>.
+  const sectionKey = sectionKeyOf(sectionEl);
+  const inReportingSection =
+    sectionKey !== undefined && PLAN_ENTRY_REPORT_SECTION_KEYS.has(sectionKey);
   for (const entry of childEntries(sectionEl)) {
     for (const variant of PLANNED_VARIANTS) {
       const el = entryAct(entry, variant.root);
@@ -410,11 +466,12 @@ export function extractPlannedItems(
     const act = anyEntryAct(entry);
     if (act === undefined) continue;
     // The admitted-but-unmodelled three, reported rather than excluded in
-    // silence, and scoped to the Plan of Treatment section as a direct entry.
-    // Independent of both the variant loop above and the container walk below:
-    // an act stacking a planned root and one of these states both, and reporting
-    // must never change which acts are extracted.
-    if (inPlanSection) reportUnmodeledPlanEntry(act, ctx);
+    // silence, and scoped as a direct entry to the two sections named on
+    // `PLAN_ENTRY_REPORT_SECTION_KEYS`. Independent of both the variant loop
+    // above and the container walk below: an act stacking a planned root and one
+    // of these states both, and reporting must never change which acts are
+    // extracted.
+    if (inReportingSection) reportUnmodeledPlanEntry(act, ctx);
     if (hasTemplateRoot(act, PLANNED_INTERVENTION_ACT)) {
       collectNested(act, narrativeById, ctx, out);
     }

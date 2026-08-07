@@ -476,7 +476,10 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     Re-parsing the very same XML raises nothing, and that asymmetry is deliberate: teaching
     `parseCcda` the same check would move rows on every third-party document in the world, which is
     its own decision with its own base-measured matrix. A test pins the parse path staying silent.
-    **IT IS `buildCcda`-ONLY, `editCcda` IS A STATED RESIDUAL, AND THE ROUTE FROM ONE TO THE OTHER
+    **SUPERSEDED 2026-08-07 ON THE `editCcda` HALF ONLY, BY
+    `#closing-the-two-silent-plan-drops-2026-08-07`. The rest of this bullet still holds, and the
+    history below is why the closing shape is what it is: read it before touching that check.**
+    **IT WAS `buildCcda`-ONLY, `editCcda` WAS A STATED RESIDUAL, AND THE ROUTE FROM ONE TO THE OTHER
     IS THE MOST INSTRUCTIVE THING IN THIS SECTION.** `editCcda` writes a Plan of Treatment section
     through the **same** emitter (`buildSectionComponent` into `planOfTreatmentSection`) from the
     **same** `BuildCcdaPlannedItem` input and raises nothing, so a planned medication grafted in by an
@@ -494,14 +497,19 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     rather than hardening; the `editCcda` wiring was reverted.**
     **The lesson worth carrying: "read the input, not the emitted DOM" is `buildCcda`'s argument and
     it does not travel.** It holds there because `init.planOfTreatment` is one list that is always
-    emitted. It is false wherever the input can be discarded before it reaches the DOM. **Do not wire
-    `editCcda` to `plannedItemDiagnostics`.** Reporting there needs to read what survived into the
-    emitted DOM (or the surviving edits) **and** a message that names neither emitter, which is its
-    own item with its own shape. A test pins both halves: the silence, and the conformant two-edit
-    document that the reverted version warned about.
-    **The check reads `init`, not the emitted DOM**, because the builder emits the element if and only
-    if the input carried it; re-walking the DOM would be a second implementation of the emit rule and
-    the two would drift.
+    emitted. It is false wherever the input can be discarded before it reaches the DOM. **Never wire
+    an emitter to an INPUT-reading version of this check.** Reporting on the edit path needs to read
+    what survived into the emitted DOM **and** a message that names neither emitter; that was done
+    2026-08-07 and both requirements are now met, so the shape to preserve is
+    `plannedMedicationDiagnostics(surviving grafted components)`, not `plannedItemDiagnostics(items)`,
+    which no longer exists. The conformant two-edit document the reverted version warned about is
+    still pinned by test, and now pins the check staying silent on it rather than the check being
+    absent.
+    **The check used to read `init` rather than the emitted DOM**, on the argument that the builder
+    emits the element if and only if the input carried it and that re-walking the DOM would be a
+    second implementation of the emit rule. **That argument is retired**: making the DOM read the
+    *only* read means there is no second implementation to drift from, which is strictly better than
+    the property it was defending. See `#closing-the-two-silent-plan-drops-2026-08-07`.
     **`BuildCcdaPlannedImmunization` is deliberately NOT checked.** Its `effectiveTime` is `[1..1]`
     too, but the type makes the field **required**, so a runtime warning there would be unreachable.
     Adding one would be a dead diagnostic, which this repo has a whole matrix about.
@@ -519,7 +527,11 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     pre-empt that with a weaker answer, and a warning code is stable under ADR 0001 the moment it
     ships, so it would then have to be carried forever. **Do not add it to the reported set.**
     **THE TWO LEVELS ARE SCOPED DIFFERENTLY, AND THE SCOPE IS A CHOSEN BOUND, NOT A CONTAINMENT
-    CATALOG.** A direct `<entry>` is reported only when the section resolves to `planOfTreatment`, the
+    CATALOG.** **The direct-entry half was WIDENED to a second section 2026-08-07** (see
+    `#closing-the-two-silent-plan-drops-2026-08-07` for the traced grounding and the base-measured
+    matrix); the paragraph below describes the original single-section bound and the reasoning that
+    still governs it. A direct `<entry>` was reported only when the section resolves to
+    `planOfTreatment`, the
     section this accessor is named for; without that scope an Instruction sitting in the Instructions
     Section (`…22.2.45`), where it is that section's own **required** entry, would draw a "not
     modelled" warning on a fully conformant document. Inside a Planned Intervention Act there is no
@@ -548,10 +560,14 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     replace it with a differently-shaped catalog assertion. What the citation does is make the
     residual below **measured** rather than merely suspected.
     **What is stated instead is the RESIDUAL, which is this package's own behaviour: these three
-    templates appear in more places than the two the report covers, and an occurrence outside them is
-    still dropped in silence.** A Handoff as a direct entry of an Interventions Section is the traced
-    example (CONF:1198-32402/32403, above), and a differential test pins that it contributes nothing. Say it that way everywhere. **Do not widen
-    the report to close it as a side effect** - that is a new behavioural surface with its own
+    templates appear in more places than the report covers, and an occurrence outside it is
+    still dropped in silence.** A Handoff as a direct entry of an Interventions Section was the traced
+    example (CONF:1198-32402/32403, above); **that one was closed 2026-08-07, on its own grounding and
+    its own base-measured matrix, exactly as this bullet demanded** (see
+    `#closing-the-two-silent-plan-drops-2026-08-07`). The residual itself is unchanged in kind and
+    still has measured members, now the Intervention Act container and any unrecognized section. Say
+    it that way everywhere. **Do not widen
+    the report further as a side effect** - that is a new behavioural surface with its own
     grounding and its own base-measured matrix. And do not restore a containment count anywhere in
     this repo without a normative source in hand.
     **`sectionKeyOf` moved from `model/entries/extract.ts` to `model/entries/shared.ts`** so the
@@ -591,8 +607,9 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     build produce two byte-identical warnings a consumer cannot tell apart. That is defensible rather
     than accidental (no factory may take a value parameter, `PHI-WARNING-MESSAGE-LEAK`, and `path` is
     a bounded element local name), but it is a real limit and it is stated rather than left to be
-    discovered. The other residual is the report scope above: an Instruction, Handoff or Nutrition
-    Recommendation outside the two covered places is still dropped in silence.
+    discovered, and **it survives the 2026-08-07 slice unchanged**: the same position is now produced
+    by two writers rather than one. The other residual is the report scope above: an Instruction,
+    Handoff or Nutrition Recommendation outside the covered places is still dropped in silence.
   - **What this slice deliberately did NOT touch.** The CCD SHALL-set disagreement is untouched and
     still open: `build-ccda.ts` names five `shallSections` **including** `vitalSigns` while
     `required-sections.ts` names four **excluding** it, so `buildCcda` always emits Vital Signs while
@@ -602,9 +619,133 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     not a drain unit. Neither new code was added to `SAFETY_CRITICAL_CODES`: `PLAN_ENTRY_NOT_MODELED`
     reports a **modelling gap**, not a misread value, which is the same class as
     `UNKNOWN_SECTION_CODE` (a section retained as narrative-only, also not in that set), and
-    `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` can only ever be raised by `buildCcda`, which consults
-    no profile, so listing it would be inert. Adding either later can only forbid more and is a
-    reviewable act of its own.
+    `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` can only ever be raised by an emitter, and neither
+    emitter consults a profile, so listing it would be inert. (Still true after 2026-08-07: `editCcda`
+    forwards a `terminology` adapter to its re-parse and takes no profile.) Adding either later can
+    only forbid more and is a reviewable act of its own.
+
+## Closing the two silent plan drops (2026-08-07)
+
+  - **The two residuals `#98` stated and test-pinned rather than fixed, closed together as one slice
+    because they are the same defect twice: an emit-side drop and a read-side drop, both silent, both
+    on the plan surface.** Neither was a bug `#98` could have fixed in passing; each needed its own
+    grounding, and one needed a different SHAPE, not a wider guard.
+  - **1. `editCcda` NOW RAISES `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, AND WHAT MADE IT POSSIBLE
+    IS READING THE EMITTED DOM, NOT WIRING IN THE OLD CHECK.** The reverted attempt read
+    `options.sections`, the caller's **ordered** edit list, and a later edit discards an earlier one's
+    content, so it reported a SHALL violation against a document whose emitted DOM carried the
+    element. **The check now reads DOM subtrees**, and both emitters share one implementation:
+    `plannedMedicationDiagnostics(emitted: readonly Element[])` in `src/builder/build-ccda.ts`, which
+    walks for `…22.4.42` `<substanceAdministration>` elements with no `<effectiveTime>` child.
+    `plannedItemDiagnostics` is gone; do not reintroduce an input-reading variant under any name.
+  - **THE CALLER CHOOSES THE SUBTREES, AND THAT SCOPE IS HALF THE DESIGN.** `buildCcda` hands it the
+    whole `structuredBody` (every section in a built document is the caller's own content).
+    `editCcda` hands it **only the grafted components that SURVIVED into the final body**, computed
+    by `applySectionEdits` returning the grafted nodes and filtering them against
+    `children(structuredBody, "component")`. **Survival is decided by asking the DOCUMENT, not by
+    inspecting a removed node's `parentNode`**: the question is "is this in the document", and the
+    document is the thing that cannot be wrong about it.
+  - **Both halves of that scope are load-bearing and each has its own test.** Reading the SURVIVING
+    graft is what keeps the conformant two-edit document silent (the trap `#98` left behind, which
+    still passes and now pins the check rather than its absence). Reading only what THIS CALL grafted
+    is what keeps an edit from becoming a validator: an offending act the source brought with it is
+    never re-reported, and would otherwise fire again on every later edit of an unrelated section.
+  - **THE FROZEN MESSAGE WAS REWORDED TO NAME NEITHER EMITTER, AND A SECOND CODE WAS CONSIDERED AND
+    REJECTED.** The old message opened "buildCcda emitted a Planned Medication Activity…", which was
+    false the moment a second writer raised it. The alternative, a new code, was rejected on this
+    repo's own rules: it is one defect with one remedy, a warning code is stable forever once shipped
+    (ADR 0001) so adding one is the more permanent commitment, and there is direct precedent here for
+    correcting a frozen message instead, `UNKNOWN_NAMESPACE_PREFIX`. **State the cost honestly rather
+    than eliding it: the message string is what consumers see on `warning.message`, so the wording
+    moved on a published code.** The `code` did not, which is the documented thing to key on, and
+    `ALL_WARNING_MESSAGES` is not re-exported from `src/index.ts`.
+    **The reword's FIRST draft then overclaimed in the other direction, and the correction is worth
+    keeping.** It opened "The emitted document carries a Planned Medication Activity with no
+    effectiveTime", a universal about the document, while `editCcda`'s check is graft-scoped: an
+    offending act the source carried is not reported, so the warning's ABSENCE would have read as a
+    guarantee the check never makes. The shipped wording is act-scoped and says the bound in as many
+    words ("Only content the emitting call itself wrote is checked"). **Any future wording here must
+    keep that clause or an equivalent**; it is the same shape as "a clean run means those five slots
+    passed, NOT that the document was terminology-verified".
+  - **2. `PLAN_ENTRY_NOT_MODELED`'s DIRECT-ENTRY HALF WAS WIDENED FROM ONE SECTION TO TWO:
+    `planOfTreatment` and `interventions`** (`PLAN_ENTRY_REPORT_SECTION_KEYS`). **The citation is
+    verbatim and was re-fetched for this slice**, 2026-08-07, from
+    `raw.githubusercontent.com/jddamore/ccda-search/master/templates/2.16.840.1.113883.10.20.21.2.3.html`:
+    Interventions Section (V3) *"MAY contain zero or more [0..\*] entry (CONF:1198-32402) such that it
+    SHALL contain exactly one [1..1] Handoff Communication Participants (identifier:
+    2.16.840.1.113883.10.20.22.4.141) (CONF:1198-32403)."* **`hl7.org/ccdasearch` still returns HTTP
+    202 with a zero-byte body through this container's egress, so a fetch there is never evidence of
+    absence.** Search the page for the sentence and require exactly one hit; a label proves the label
+    exists, not that the body carries the claim.
+  - **THE INTERNAL ARGUMENT IS THE STRONGER ONE AND IS WORTH KEEPING.** This module already reports
+    all three templates nested in a Planned Intervention Act **with no section condition**, and that
+    act's conformant home is the Interventions Section. So before this, moving a Handoff one level up,
+    out of the container and into a direct entry of the same section, took it from reported to silent.
+    A report a document's own nesting depth switches off is an accident, not a bound.
+  - **ALL THREE TEMPLATES ARE IN SCOPE IN THE NEW SECTION, AND THE REASON IS DELIBERATELY NOT A
+    CONTAINMENT CLAIM.** The warning has always been about a **modelling gap, not conformance**:
+    wherever one of the three sits, this package recognizes it and drops it, so silence says less than
+    the report does. Scoping per template would need a catalog of which sections admit what, and an
+    untraced catalog is the move this area already retracted once. **NO CONTAINMENT COUNT IS
+    ASSERTED**, here or in the code. A first draft of this slice did assert one ("exactly three")
+    from the cited page; the refuter was right that a generated navigation site which says of itself
+    that HL7's own C-CDA page remains definitive is not a normative source for a catalog, whatever it
+    is for the quoted conformance statement. **The rule stands: do not restore a containment count
+    anywhere in this repo without a normative source in hand, and note that the same page is good
+    enough to quote a CONF statement from and not good enough to enumerate from.**
+  - **THE SECTION IS MATCHED WIDER THAN THE CITATION, AND THAT IS STATED RATHER THAN NARROWED.**
+    `sectionKeyOf` resolves `interventions` from the `…21.2.3` `templateId` root with LOINC `62387-6`
+    as the fallback, and checks **no `@extension`**. So a **V2**-stamped Interventions Section, one
+    carrying only the LOINC and no `templateId`, and one whose root and `<code>` disagree are all in
+    scope, while CONF:1198-32402 / 1198-32403 is **V3**'s. Measured base to head: all three of those
+    shapes went from silent to reported, exactly like the V3 shape. That is this package's recognition
+    behaving as it does everywhere else, not a decision taken here, and the report stays true in every
+    one of them because it is a statement about this package rather than about the document's
+    conformance. **Do not narrow recognition to fix this**; that would give the Interventions Section
+    a matching rule no other section has.
+  - **THE BASE-MEASURED MATRIX, taken on `a29202d` and again after, four templates x seven
+    positions.** Only three cells moved, all in the same row, and `getPlannedItems()` returned `[]` on
+    every cell before and after (reporting is not modelling):
+
+    | position | handoff `…22.4.141` | instruction `…22.4.20` | nutrition `…22.4.130` | goal `…22.4.121` |
+    | --- | --- | --- | --- | --- |
+    | direct entry, Plan of Treatment Section | 1 -> 1 | 1 -> 1 | 1 -> 1 | 0 -> 0 |
+    | **direct entry, Interventions Section (V3)** | **0 -> 1** | **0 -> 1** | **0 -> 1** | 0 -> 0 |
+    | direct entry, Instructions Section | 0 -> 0 | 0 -> 0 | 0 -> 0 | 0 -> 0 |
+    | direct entry, unrecognized section | 0 -> 0 | 0 -> 0 | 0 -> 0 | 0 -> 0 |
+    | nested in Planned Intervention Act, Interventions Section | 1 -> 1 | 1 -> 1 | 1 -> 1 | 0 -> 0 |
+    | nested in Planned Intervention Act, Plan of Treatment Section | 1 -> 1 | 1 -> 1 | 1 -> 1 | 0 -> 0 |
+    | nested in Intervention Act (`…22.4.131`), Interventions Section | 0 -> 0 | 0 -> 0 | 0 -> 0 | 0 -> 0 |
+
+    Every cell was taken differentially, against the same section envelope carrying no act at all, so
+    a fixture's own warnings can never be read as the claim. **Goal Observation is 0 in every cell,
+    before and after, and must stay that way**: the decision on it is to model it.
+  - **The edit-side matrix, same method.** Six cases, two moved: a single edit grafting a planned
+    medication short the element (`[]` -> the warning) and a two-edit call whose **surviving** edit is
+    the offending one (`[]` -> the warning). The conformant two-edit call, an offending act left in
+    the untouched source, a conformant single edit, and the `buildCcda` control were all unchanged.
+    In every moved case the emitted DOM was independently confirmed short the element, so the report
+    is measured against the bytes rather than against the input.
+  - **WHAT IS STILL DROPPED IN SILENCE, MEASURED AND PINNED.** Handoff's contained-by set is four:
+    Plan of Treatment Section, Planned Intervention Act, Intervention Act, Interventions Section.
+    Three report; the **Intervention Act (`…22.4.131`) does not**, because this package does not
+    descend into that container at all (unchanged, and the same test that pins it names why). A direct
+    entry of a section this catalog recognizes as nothing is also silent, because there is no key to
+    match. **Widening either is its own decision with its own base-measured matrix.**
+  - **WHAT THIS SLICE DELIBERATELY DID NOT TOUCH.** The CCD SHALL-set disagreement between
+    `build-ccda.ts` (five `shallSections`, including `vitalSigns`), `required-sections.ts` (four,
+    excluding it) and the roadmap (a third set) is **untouched and still blocked on the normative R2.1
+    Schematron, not on a decision**. Neither half of this slice was allowed to quietly pick a set.
+    Modelling Goal Observation and emitting the Planned Intervention Act remain a roadmap phase.
+    `getPlannedItems()` returns the same seven templates it always did.
+  - **The chore folded in, and why it is a per-test budget rather than a global one.**
+    `test/scripts/changelog-generation.test.ts` "keeps the committed changelog Prettier-canonical" ran
+    on Vitest's 5 s default and timed out on 2 of roughly 10 local runs under four-worker fleet load,
+    green in CI every time. It is the file's **first** `formatCheckAccepts` call, so it pays for
+    `prettier.resolveConfig` plus the lazy markdown-parser load that the two later callers then get
+    free; the assertion itself is a string comparison. It now carries `{ timeout: 30_000 }` beside the
+    work, per `vitest.config.ts`, which sets no global and says why. **Do not answer this by putting a
+    global back.**
 
 ## The Interventions Section and its OID arc
 
@@ -627,8 +768,23 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     nothing depends on them, and they were removed rather than re-guessed. **Every spec claim on this
     entry is stated, not traced**, which scopes to this entry only -- `required-sections.ts` cites
     CONF ids genuinely traced to the normative R2.1 Schematron, and nothing here licenses distrusting
-    those. **The OID is this entry's only real behavioural risk and wants a second source before the
-    next publish.**
+    those. **The OID was this entry's only real behavioural risk and it now has its FIRST source,
+    2026-08-07. Call it a first, not a second**: the prior state was "stated, not traced", so there was
+    no source at all to be second to, and the one there is now is NON-NORMATIVE. Fetched for the plan-drops slice from
+    `raw.githubusercontent.com/jddamore/ccda-search/master/templates/2.16.840.1.113883.10.20.21.2.3.html`,
+    C-CDA Online's generated Interventions Section (V3) page states `@root =
+    "2.16.840.1.113883.10.20.21.2.3"` (CONF:1198-10461), `@extension = "2015-08-01"`
+    (CONF:1198-32559) and `@code = "62387-6"` (CONF:1198-15378). **The arc, the root, the version stamp
+    and the LOINC are confirmed; nothing else on this entry is, and the "stated, not traced" bound on
+    the rest still holds and still licenses nothing about `required-sections.ts`.** The same page
+    carries the conformance statement that grounds the widened `PLAN_ENTRY_NOT_MODELED` scope
+    (CONF:1198-32402 / 1198-32403); see `#closing-the-two-silent-plan-drops-2026-08-07`, **and note
+    there that the page is good enough to quote a CONF statement from and NOT good enough to
+    enumerate a contained set from.** A draft of this slice did enumerate one here and it is
+    retracted; nothing in this repo's behaviour rests on it.
+    **`hl7.org/ccdasearch` is NOT a usable source from this container** (HTTP 202, zero-byte body,
+    reads like an empty page), and **a label proves the label exists, not that the body carries the
+    sentence**: search for the sentence and require exactly one hit, which is how this was verified.
     **Monotonicity, measured over thirteen section shapes by running the same matrix against base
     `src/` and against the change and diffing.** There are **FOUR** classes of move, and the first cut
     of this work claimed two, for two reasons worth remembering. The matrix filtered `said` to
