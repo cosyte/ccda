@@ -1653,9 +1653,10 @@ preserved from the pre-scaffold planning `CLAUDE.md`, which the sections above t
 file already superseded wherever the two overlapped. **It is reproduced verbatim, its own heading
 levels included**, which is why an `H1` and three `H2`s appear below inside this record rather than
 being demoted; demoting them would have been an edit, and the premise of this file is that nothing
-is edited on the way in. The one imperative in it that is stated nowhere else, the `coverageDirs`
-rule, was kept in `CLAUDE.md`'s coverage guardrail rather than relocated. Everything else here is
-either superseded by the standard sections of `CLAUDE.md` or is design intent read on demand.
+is edited on the way in. **Two** imperatives in it are stated nowhere else and both were kept in
+`CLAUDE.md` rather than relocated: the `coverageDirs` rule, in the coverage guardrail, and the
+commit style, in its own guardrail bullet. Everything else here is either superseded by the standard
+sections of `CLAUDE.md` or is design intent read on demand.
 
 ---
 
