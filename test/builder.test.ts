@@ -1823,6 +1823,11 @@ describe("planned medication effectiveTime diagnostic, on both writers", () => {
     expect(edited?.message).toBe(built?.message);
     expect(built?.message).not.toContain("buildCcda");
     expect(built?.message).not.toContain("editCcda");
+    // And it does not overclaim in the other direction either. It is scoped to
+    // the ACT, not to the document, because `editCcda`'s check covers only what
+    // that call wrote: a universal ("the emitted document carries…") would make
+    // the warning's ABSENCE read as a guarantee the check never gives.
+    expect(built?.message).toContain("Only content the emitting call itself wrote is checked");
     // Still the registry entry rather than anything assembled per call site.
     expect(ALL_WARNING_MESSAGES.has(built?.message ?? "")).toBe(true);
   });

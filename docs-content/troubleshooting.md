@@ -327,7 +327,9 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   code to filter on instead of an entry that vanishes **in the places the report covers**.
   Reporting is not modelling: nothing about the returned list changed. A direct entry is reported in
   **two** sections, Plan of Treatment and the **Interventions Section (V3)** (`…21.2.3`, which admits
-  a Handoff as a direct entry in as many words, CONF:1198-32402 / 1198-32403); an Instruction in the
+  a Handoff as a direct entry in as many words, CONF:1198-32402 / 1198-32403). That citation is V3's,
+  while the matching is this library's usual section recognition and so is wider: templateId root
+  first, LOINC `62387-6` as the fallback, no `@extension` check. An Instruction in the
   Instructions Section (`…22.2.45`), where it is that section's own required entry, still draws
   nothing. The nested half is reported wherever the Planned Intervention Act sits. **That scope is a
   bound this library chose, not a catalog of which sections C-CDA admits these templates in: they

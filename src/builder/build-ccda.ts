@@ -16,15 +16,15 @@
  *
  * **"Clean" now has one build-time exception, and it is not a round-trip
  * failure.** The returned document's `warnings` are the re-parse's warnings plus
- * any diagnostic the builder raises about the *input it was handed*: today that
- * is exactly one code, `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, appended
- * after the parse warnings. It reports that a Planned Medication Activity was
- * built without the `effectiveTime` its template makes a SHALL, which the
- * published input type still permits. A build whose input carries no such gap is
- * warning-free exactly as before, and this diagnostic can never appear on a
- * document `buildCcda` did not produce: neither `parseCcda` nor `editCcda`
- * raises it. The `editCcda` half is a stated residual rather than an oversight;
- * see {@link BuildCcdaPlannedItemBase.effectiveTime}.
+ * any diagnostic the builder raises about the *document it just wrote*: today
+ * that is exactly one code, `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`,
+ * appended after the parse warnings. It reports that a Planned Medication
+ * Activity was emitted without the `effectiveTime` its template makes a SHALL,
+ * which the published input type still permits. A build carrying no such gap is
+ * warning-free exactly as before. **`parseCcda` never raises it**, deliberately,
+ * so it cannot appear on a third-party document that was merely read.
+ * **`editCcda` DOES raise it**, on the sections that edit grafted, through the
+ * same shared check; see {@link BuildCcdaPlannedItemBase.effectiveTime}.
  *
  * **Scope.** The builder's default document is a **Continuity of Care
  * Document (CCD)**, emitted with the full US Realm Header and populated
@@ -1378,13 +1378,14 @@ interface BuildCcdaPlannedItemBase {
    * document is still emitted, still short that element, and no date is ever
    * fabricated to fill it.
    *
-   * **`editCcda` does NOT report it, and that residual is filed rather than
-   * hidden.** It writes this section through the same emitter from this same
-   * type, so a planned medication grafted in by an edit is emitted short the
-   * SHALL element in silence, exactly as it always was. Closing it needs a check
-   * that reads what survived into the emitted DOM rather than the caller's edit
-   * list (a later edit can discard an earlier one's content) and a diagnostic
-   * message that names neither emitter; that is its own item.
+   * **`editCcda` reports it too**, so a planned medication grafted in by an edit
+   * is no longer emitted short the SHALL element in silence. Its check is scoped
+   * to the sections **that call grafted** and that **survived** into the emitted
+   * document: an offending edit a later edit in the same call discarded says
+   * nothing (reading the caller's ordered edit list instead reports a violation
+   * against a conformant document), and an offending act the source already
+   * carried is never re-reported. So a clean `editCcda(...).warnings` means the
+   * sections that call wrote are clean, **not** that the whole document is.
    */
   readonly effectiveTime?: string;
 }
@@ -1458,7 +1459,7 @@ export interface BuildCcdaPlannedOrder extends BuildCcdaPlannedItemBase {
  * Making the field required on `BuildCcdaPlannedOrder` would be a breaking
  * change to a published type, so the field stands as it is and the omission is
  * **reported** instead (`MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, raised by
- * `buildCcda` on the returned document; `editCcda` does not, a stated residual).
+ * both writers on the document they emit, never by `parseCcda`).
  * No such diagnostic exists for this template, and adding one would be dead
  * code: omitting the field here does not compile.
  *
@@ -2097,7 +2098,17 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
  * citing one that does not resolve is the open `@example` defect already filed.)
  *
  * @param emitted - The DOM subtrees just written, to be searched for offending
- *   acts. Each is walked in document order.
+ *   acts. Each is walked in document order. **Precondition, which holds for both
+ *   in-tree callers and is the caller's to keep:** the act's `effectiveTime`, if
+ *   present at all, is the SHALL one. R2.1 also gives `…22.4.42` a `[0..1]`
+ *   frequency `effectiveTime` (`@operator="A"`, `xsi:type="PIVL_TS"`/`"EIVL_TS"`,
+ *   CONF:1098-32943 / 32945 / 32946), and this check asks only whether an
+ *   `<effectiveTime>` child exists, so an act carrying **only** the frequency
+ *   sibling would pass while violating CONF:1098-30468. Neither writer can build
+ *   that shape (`BuildCcdaPlannedItemBase.effectiveTime` is one optional
+ *   timestamp and emits one element), so distinguishing the two here would be
+ *   dead code today. A future caller handing it foreign DOM must not assume
+ *   otherwise.
  * @returns One warning per offending act, in document order; empty when none.
  * @example
  * ```ts
@@ -4188,8 +4199,8 @@ function plannedItemEntry(
   // immunization; a Planned Medication Activity built with no `effectiveTime` is
   // still emitted short that SHALL element, because closing it means a breaking
   // change to a published input type. What changed is that the omission is no
-  // longer silent: `plannedItemDiagnostics` raises
-  // `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` on the returned document. The
+  // longer silent: `plannedMedicationDiagnostics` reads the emitted DOM back and
+  // raises `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` for both writers. The
   // emitted XML is byte-identical to what it was; do not "fix" this by
   // fabricating a date or a nullFlavor here.
   if (p.effectiveTime !== undefined) {

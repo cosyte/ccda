@@ -192,7 +192,7 @@ immutability + explicit mutation, and the profile system.
     matrix filters nothing, and there are FOUR classes of move, not the two the first cut claimed.
     **`UNKNOWN_SECTION_CODE` is NOT withdrawn on "every document carrying `62387-6`"** - that
     universal was published once and is false.
-    **The OID had a second source 2026-08-07**: root and LOINC confirmed, entries traced.
+    **The OID got a FIRST source 2026-08-07**, non-normative: root + LOINC only.
     Why: `documentation/agent-notes.md#the-interventions-section-and-its-oid-arc`
   - **`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`'s precondition is each arm's LEAD `<code>`, and the
     message must keep saying so.** A safety-critical warning that misdescribes the document it is

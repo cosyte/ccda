@@ -4217,6 +4217,47 @@ describe("clinical entries, the admitted-but-unmodelled plan entries", () => {
     }
   });
 
+  it("matches the section the way every section is matched, which is wider than the V3 citation", () => {
+    // STATED SCOPE, MEASURED. The citation (CONF:1198-32402 / 1198-32403) is the
+    // V3 section's, but `sectionKeyOf` resolves `interventions` from the
+    // templateId root with the LOINC as its fallback and checks no `@extension`,
+    // exactly as it does for every other section. So these three shapes are in
+    // scope too. That is recognition behaving normally, not a rule invented here,
+    // and narrowing it would give this one section a matching rule no other has.
+    const shapes: ReadonlyArray<readonly [string, string]> = [
+      // V2 stamp rather than V3's `2015-08-01`.
+      [
+        "V2 extension",
+        '<templateId root="2.16.840.1.113883.10.20.21.2.3" extension="2014-06-09"/>\n          <code code="62387-6" codeSystem="2.16.840.1.113883.6.1"/>',
+      ],
+      // No templateId at all: recognized by the LOINC fallback.
+      ["LOINC only", '<code code="62387-6" codeSystem="2.16.840.1.113883.6.1"/>'],
+      // Root and <code> disagree; recognition resolves on the root, silently,
+      // which is a filed limitation of recognition rather than a rule here.
+      [
+        "root vs code disagreement",
+        '<templateId root="2.16.840.1.113883.10.20.21.2.3" extension="2015-08-01"/>\n          <code code="30954-2" codeSystem="2.16.840.1.113883.6.1"/>',
+      ],
+    ];
+    for (const [, header] of shapes) {
+      const doc = parseCcda(
+        buildCcda({
+          sections: `
+      <component>
+        <section>
+          ${header}
+          <title>Interventions</title>
+          <text><content ID="ivn8">Interventions</content></text>
+          ${entry(HANDOFF_XML)}
+        </section>
+      </component>`,
+        }),
+      );
+      expect(doc.getPlannedItems()).toStrictEqual([]);
+      expect(planEntry(doc.warnings)).toHaveLength(1);
+    }
+  });
+
   it("is still bounded: an Intervention Act container, and an unrecognized section, stay silent", () => {
     // THE RESIDUAL AFTER THE WIDENING, MEASURED rather than left to be
     // discovered. Handoff's contained-by set is four: Plan of Treatment Section,

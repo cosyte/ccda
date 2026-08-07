@@ -313,7 +313,10 @@ normalized away**. An unrecognized `value xsi:type` is kept as `unsupported`; no
   every place C-CDA admits these templates.** A direct entry is reported in **two** sections: Plan of
   Treatment, and the **Interventions Section (V3)** (`…21.2.3`), which admits a Handoff as a direct
   entry in as many words (CONF:1198-32402 / 1198-32403) and is where R2.1 puts the container the
-  nested half already reads. An Instruction in the Instructions Section (`…22.2.45`), where
+  nested half already reads. **The citation is V3's; the matching is this library's usual section
+  recognition, which is wider**: templateId root `…21.2.3` first, LOINC `62387-6` as the fallback, no
+  `@extension` check, so a V2-stamped or LOINC-only Interventions Section is in scope too. An
+  Instruction in the Instructions Section (`…22.2.45`), where
   it is that section's own required entry, still draws nothing; nested in a Planned Intervention Act
   there is no section condition, because the container is what the report is relative to and it is
   read wherever it sits. **These three templates appear in more places than the report covers, and an

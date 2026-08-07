@@ -322,7 +322,7 @@ export const WARNING_MESSAGES: Readonly<Record<WarningCode, string>> = Object.fr
   PLANNED_VS_PERFORMED_AMBIGUOUS:
     "Procedure entry has no moodCode; performed (EVN) vs planned (INT) is ambiguous, never conflated, left unclassified.",
   MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME:
-    "The emitted document carries a Planned Medication Activity with no effectiveTime, which the template makes a SHALL (exactly one, CONF:1098-30468): the caller supplied none and this library never fabricates a date, so the document is short that element and says nothing about when the drug is to be given.",
+    "A Planned Medication Activity was just written with no effectiveTime, which the template makes a SHALL (exactly one, CONF:1098-30468): the caller supplied none and this library never fabricates a date, so the act is emitted short that element and says nothing about when the drug is to be given. Only content the emitting call itself wrote is checked, so the absence of this warning says nothing about sections that call did not write.",
   PLAN_ENTRY_NOT_MODELED:
     "An entry template the Plan of Treatment reading admits was found where planned items are read (a section entry, or an act nested in a Planned Intervention Act); this parser recognizes it but does not model it as a planned item, so it is excluded from getPlannedItems(), reaches no other model field, and survives only in the re-serialized document.",
   SMOKING_STATUS_UNKNOWN:

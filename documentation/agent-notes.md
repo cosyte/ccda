@@ -659,6 +659,14 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     than eliding it: the message string is what consumers see on `warning.message`, so the wording
     moved on a published code.** The `code` did not, which is the documented thing to key on, and
     `ALL_WARNING_MESSAGES` is not re-exported from `src/index.ts`.
+    **The reword's FIRST draft then overclaimed in the other direction, and the correction is worth
+    keeping.** It opened "The emitted document carries a Planned Medication Activity with no
+    effectiveTime", a universal about the document, while `editCcda`'s check is graft-scoped: an
+    offending act the source carried is not reported, so the warning's ABSENCE would have read as a
+    guarantee the check never makes. The shipped wording is act-scoped and says the bound in as many
+    words ("Only content the emitting call itself wrote is checked"). **Any future wording here must
+    keep that clause or an equivalent**; it is the same shape as "a clean run means those five slots
+    passed, NOT that the document was terminology-verified".
   - **2. `PLAN_ENTRY_NOT_MODELED`'s DIRECT-ENTRY HALF WAS WIDENED FROM ONE SECTION TO TWO:
     `planOfTreatment` and `interventions`** (`PLAN_ENTRY_REPORT_SECTION_KEYS`). **The citation is
     verbatim and was re-fetched for this slice**, 2026-08-07, from
@@ -674,14 +682,27 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     act's conformant home is the Interventions Section. So before this, moving a Handoff one level up,
     out of the container and into a direct entry of the same section, took it from reported to silent.
     A report a document's own nesting depth switches off is an accident, not a bound.
-  - **ALL THREE TEMPLATES ARE IN SCOPE IN THE NEW SECTION, AND THAT IS A CHOICE WITH A TRACED
-    BOUNDARY, NOT AN EXTENSION OF THE CITATION.** The same page gives the Interventions Section's
-    contained set as exactly three: Intervention Act (`…22.4.131`), Handoff (`…22.4.141`), Planned
-    Intervention Act (`…22.4.146`). An Instruction or a Nutrition Recommendation as a **direct** entry
-    there is therefore **not** admitted, and is reported anyway, because the warning has always been
-    about a **modelling gap, not conformance**: those acts are still recognized and still dropped, so
-    silence would say less than the report does. Splitting the scope per template would encode a
-    containment catalog, which is the untraced move this area already retracted once.
+  - **ALL THREE TEMPLATES ARE IN SCOPE IN THE NEW SECTION, AND THE REASON IS DELIBERATELY NOT A
+    CONTAINMENT CLAIM.** The warning has always been about a **modelling gap, not conformance**:
+    wherever one of the three sits, this package recognizes it and drops it, so silence says less than
+    the report does. Scoping per template would need a catalog of which sections admit what, and an
+    untraced catalog is the move this area already retracted once. **NO CONTAINMENT COUNT IS
+    ASSERTED**, here or in the code. A first draft of this slice did assert one ("exactly three")
+    from the cited page; the refuter was right that a generated navigation site which says of itself
+    that HL7's own C-CDA page remains definitive is not a normative source for a catalog, whatever it
+    is for the quoted conformance statement. **The rule stands: do not restore a containment count
+    anywhere in this repo without a normative source in hand, and note that the same page is good
+    enough to quote a CONF statement from and not good enough to enumerate from.**
+  - **THE SECTION IS MATCHED WIDER THAN THE CITATION, AND THAT IS STATED RATHER THAN NARROWED.**
+    `sectionKeyOf` resolves `interventions` from the `…21.2.3` `templateId` root with LOINC `62387-6`
+    as the fallback, and checks **no `@extension`**. So a **V2**-stamped Interventions Section, one
+    carrying only the LOINC and no `templateId`, and one whose root and `<code>` disagree are all in
+    scope, while CONF:1198-32402 / 1198-32403 is **V3**'s. Measured base to head: all three of those
+    shapes went from silent to reported, exactly like the V3 shape. That is this package's recognition
+    behaving as it does everywhere else, not a decision taken here, and the report stays true in every
+    one of them because it is a statement about this package rather than about the document's
+    conformance. **Do not narrow recognition to fix this**; that would give the Interventions Section
+    a matching rule no other section has.
   - **THE BASE-MEASURED MATRIX, taken on `a29202d` and again after, four templates x seven
     positions.** Only three cells moved, all in the same row, and `getPlannedItems()` returned `[]` on
     every cell before and after (reporting is not modelling):
@@ -747,8 +768,9 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     nothing depends on them, and they were removed rather than re-guessed. **Every spec claim on this
     entry is stated, not traced**, which scopes to this entry only -- `required-sections.ts` cites
     CONF ids genuinely traced to the normative R2.1 Schematron, and nothing here licenses distrusting
-    those. **The OID was this entry's only real behavioural risk and it now HAS a second source,
-    2026-08-07.** Fetched for the plan-drops slice from
+    those. **The OID was this entry's only real behavioural risk and it now has its FIRST source,
+    2026-08-07. Call it a first, not a second**: the prior state was "stated, not traced", so there was
+    no source at all to be second to, and the one there is now is NON-NORMATIVE. Fetched for the plan-drops slice from
     `raw.githubusercontent.com/jddamore/ccda-search/master/templates/2.16.840.1.113883.10.20.21.2.3.html`,
     C-CDA Online's generated Interventions Section (V3) page states `@root =
     "2.16.840.1.113883.10.20.21.2.3"` (CONF:1198-10461), `@extension = "2015-08-01"`

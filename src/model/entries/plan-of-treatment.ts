@@ -282,23 +282,34 @@ const UNMODELED_PLAN_ENTRY_ROOTS: ReadonlyMap<string, UnmodeledPlanEntry> = new 
  * silent. A report that a document's own nesting depth turns off is not a bound,
  * it is an accident.
  *
- * **Instruction and Nutrition Recommendation are in scope here too, and that is a
- * choice with a stated reason rather than an extension of the citation.** The
- * Interventions Section's contained-template set is exactly three: Intervention
- * Act (`…22.4.131`), Handoff (`…22.4.141`), Planned Intervention Act
- * (`…22.4.146`). An Instruction or a Nutrition Recommendation as a *direct* entry
- * there is therefore not admitted, but it is still recognized here and still
- * dropped, so reporting it says something true about this package that silence
- * does not. The warning has always been about a **modelling gap, not
- * conformance**, and splitting the scope per template would encode a containment
- * catalog, which is the untraced move this area has already retracted once.
+ * **Instruction and Nutrition Recommendation are in scope here too, and the
+ * reason is deliberately NOT a containment claim.** The warning has always been
+ * about a **modelling gap, not conformance**: wherever one of the three sits,
+ * this package recognizes it and drops it, so reporting it says something true
+ * that silence does not. Scoping per template would require a catalog of which
+ * sections admit what, and an untraced catalog is the move this area has already
+ * retracted once. **No count is asserted here.** The page cited above does list
+ * the section's contained templates, but it is a generated navigation site that
+ * says of itself that HL7's own C-CDA page remains definitive, so it grounds the
+ * quoted conformance statement and nothing wider.
+ *
+ * **The section is matched the way this package matches every section, which is
+ * WIDER than the citation.** {@link sectionKeyOf} resolves `interventions` from
+ * the `…21.2.3` `templateId` root, with the section `<code>` LOINC `62387-6` as
+ * the fallback, and it checks **no `@extension`**. So a V2-stamped Interventions
+ * Section, one carrying the LOINC and no `templateId` at all, and one whose root
+ * and `<code>` disagree all land in scope, while the citation
+ * (CONF:1198-32402 / 1198-32403) is V3's. That is recognition behaving as it does
+ * everywhere else rather than a decision taken here, and it is stated rather than
+ * narrowed: the report is a modelling-gap statement that is true in every one of
+ * those shapes.
  *
  * **What this still does NOT cover, measured rather than implied.** Handoff's own
- * contained-by set is four: Plan of Treatment Section, Planned Intervention Act,
- * Intervention Act, Interventions Section. The first, second and fourth report;
- * the **third does not**, because an Intervention Act (`…22.4.131`) is not a
- * container this package descends into at all. That is unchanged by this widening
- * and pinned by test. @internal
+ * contained-by set on that page is four: Plan of Treatment Section, Planned
+ * Intervention Act, Intervention Act, Interventions Section. The first, second and
+ * fourth report; the **third does not**, because an Intervention Act (`…22.4.131`)
+ * is not a container this package descends into at all. That is unchanged by this
+ * widening and pinned by test. @internal
  */
 const PLAN_ENTRY_REPORT_SECTION_KEYS: ReadonlySet<string> = new Set([
   "planOfTreatment",
