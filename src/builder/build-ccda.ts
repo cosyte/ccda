@@ -14,7 +14,7 @@
  * `parseCcda(doc.toString()).toString() === doc.toString()` (the serializer
  * fixed-point) holds automatically. A clean build produces **zero warnings**.
  *
- * **"Clean" now has one build-time exception, and it is not a round-trip
+ * **"Clean" now has one emit-time exception, and it is not a round-trip
  * failure.** The returned document's `warnings` are the re-parse's warnings plus
  * any diagnostic the builder raises about the *input it was handed*: today that
  * is exactly one code, `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, appended
@@ -22,7 +22,9 @@
  * built without the `effectiveTime` its template makes a SHALL, which the
  * published input type still permits. A build whose input carries no such gap is
  * warning-free exactly as before, and this diagnostic can never appear on a
- * document that was parsed rather than built.
+ * document that was **parsed** rather than emitted: `parseCcda` does not raise
+ * it. `editCcda` does, for the planned items it was handed, because it emits
+ * this section through the same emitter from the same input type.
  *
  * **Scope.** The builder's default document is a **Continuity of Care
  * Document (CCD)**, emitted with the full US Realm Header and populated
@@ -1367,12 +1369,16 @@ interface BuildCcdaPlannedItemBase {
    * error; {@link BuildCcdaPlannedOrder} does not, so `buildCcda` will emit a
    * Planned Medication Activity short that SHALL element if you leave it out.
    *
-   * **The field stays optional, and the omission is now REPORTED rather than
-   * silent.** Making it required would be a breaking change to a published input
-   * type, so the decision taken was to keep the type as it is and have
-   * `buildCcda` raise `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` on the returned
-   * document. The document is still emitted, still short that element, and no
-   * date is ever fabricated to fill it.
+   * **The field stays optional, and the omission is REPORTED rather than silent
+   * by both emitters.** Making it required would be a breaking change to a
+   * published input type, so the decision taken was to keep the type as it is
+   * and have {@link buildCcda} raise
+   * `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` on the returned document.
+   * `editCcda` raises it too, for the planned items **it** was handed, because it
+   * writes this section through the same emitter from this same type; it does
+   * **not** re-report a Plan of Treatment section it did not touch, which is the
+   * source's content rather than the caller's. The document is still emitted,
+   * still short that element, and no date is ever fabricated to fill it.
    */
   readonly effectiveTime?: string;
 }
@@ -1446,9 +1452,9 @@ export interface BuildCcdaPlannedOrder extends BuildCcdaPlannedItemBase {
  * Making the field required on `BuildCcdaPlannedOrder` would be a breaking
  * change to a published type, so the field stands as it is and the omission is
  * **reported** instead (`MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, raised by
- * `buildCcda` on the returned document). No such diagnostic exists for this
- * template, and adding one would be dead code: omitting the field here does not
- * compile.
+ * `buildCcda` and by `editCcda` on the returned document). No such diagnostic
+ * exists for this template, and adding one would be dead code: omitting the
+ * field here does not compile.
  *
  * @example
  * ```ts
@@ -1896,7 +1902,7 @@ export interface BuildCcdaOptions {
  *   adapter, every primary value is emitted verbatim and a `<translation>` is only
  *   ever an additional alternate coding.
  * @returns The parsed document, the parse of the spec-clean XML just emitted,
- *   carrying the re-parse's warnings plus any build-time diagnostic about the
+ *   carrying the re-parse's warnings plus any emit-time diagnostic about the
  *   input (today: `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, appended last).
  * @throws {TypeError} When `documentType` is anything other than `"ccd"` or
  *   `"referralNote"` (the only two types this builder supports), when an allergy
@@ -2038,40 +2044,60 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
   // exactly what it was given. Appended after the parse warnings (never
   // interleaved), and `withWarnings` returns a new document rather than mutating
   // the parsed one.
-  const diagnostics = buildDiagnostics(init);
+  const diagnostics = plannedItemDiagnostics(init.planOfTreatment ?? []);
   return diagnostics.length === 0 ? parsed : parsed.withWarnings(diagnostics);
 }
 
 /**
- * The diagnostics `buildCcda` raises about its own **input**, as distinct from
- * the warnings the re-parse of the emitted document produces.
+ * The diagnostics the **emit side** raises about its own **input**, as distinct
+ * from the warnings the re-parse of the emitted document produces.
  *
  * There is exactly one today. A Planned Medication Activity (`…22.4.42`) SHALL
  * carry exactly one `effectiveTime` (CONF:1098-30468), and
- * {@link BuildCcdaPlannedOrder} types the field as optional, so the builder can
+ * {@link BuildCcdaPlannedOrder} types the field as optional, so an emitter can
  * be handed a planned drug order with no timing at all. The decision taken was
  * to **keep the field optional and report the omission**: making it required is
- * a breaking change to a published input type, and the builder must not
+ * a breaking change to a published input type, and the emitter must not
  * fabricate a date the caller never supplied. So the document is emitted short
  * that element, exactly as before, and the returned document now says so.
  *
- * **Why the check reads `init` and not the emitted DOM.** The two are the same
- * fact, and reading the input is the one that cannot drift: the builder emits an
- * `<effectiveTime>` for this variant if and only if `p.effectiveTime !== undefined`.
- * Re-walking the DOM to rediscover that would be a second implementation of the
- * emit rule, and this repo has been burned by a claim and its code drifting
- * apart.
+ * **Both emitters run it, and that is load-bearing rather than tidy.**
+ * `buildCcda` and `editCcda` write a Plan of Treatment section through the
+ * *same* emitter from the *same* `BuildCcdaPlannedItem` input, so a check wired
+ * to one of them would leave the other emitting the identical non-conformant act
+ * in silence while this field's own TSDoc promised otherwise. The claim is
+ * written on the shared type, so the check belongs to the shared path.
+ *
+ * **Why the check reads the input and not the emitted DOM.** The two are the
+ * same fact, and reading the input is the one that cannot drift: the emitter
+ * writes an `<effectiveTime>` for this variant if and only if
+ * `p.effectiveTime !== undefined`. Re-walking the DOM to rediscover that would
+ * be a second implementation of the emit rule, and this repo has been burned by
+ * a claim and its code drifting apart.
  *
  * **The Planned Immunization Activity is not checked here and must not be
  * added.** Its `effectiveTime` is `[1..1]` too, but
  * {@link BuildCcdaPlannedImmunization} makes the field **required**, so omitting
  * it is a compile error and a runtime warning would be unreachable, a dead
  * diagnostic. The other five planned templates make it `[0..1]`; an absence
- * there is conformant and draws nothing. @internal
+ * there is conformant and draws nothing.
+ *
+ * (No `@example` import: this helper is not on the package entry point, and
+ * citing one that does not resolve is the open `@example` defect already filed.)
+ *
+ * @param items - The planned items this emitter was handed.
+ * @returns One warning per offending item, in input order; empty when none.
+ * @example
+ * ```ts
+ * plannedItemDiagnostics(init.planOfTreatment ?? []);
+ * ```
+ * @internal
  */
-function buildDiagnostics(init: BuildCcdaInit): readonly CcdaWarning[] {
+export function plannedItemDiagnostics(
+  items: readonly BuildCcdaPlannedItem[],
+): readonly CcdaWarning[] {
   const out: CcdaWarning[] = [];
-  for (const p of init.planOfTreatment ?? []) {
+  for (const p of items) {
     if (p.kind === "medicationActivity" && p.effectiveTime === undefined) {
       out.push(
         missingPlannedMedicationEffectiveTime({
@@ -4121,7 +4147,7 @@ function plannedItemEntry(
   // immunization; a Planned Medication Activity built with no `effectiveTime` is
   // still emitted short that SHALL element, because closing it means a breaking
   // change to a published input type. What changed is that the omission is no
-  // longer silent: `buildDiagnostics` raises
+  // longer silent: `plannedItemDiagnostics` raises
   // `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` on the returned document. The
   // emitted XML is byte-identical to what it was; do not "fix" this by
   // fabricating a date or a nullFlavor here.

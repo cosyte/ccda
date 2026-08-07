@@ -21,6 +21,7 @@ import type { Element } from "@xmldom/xmldom";
 
 import {
   buildCcda,
+  editCcda,
   parseCcda,
   serializeCcda,
   type BuildCcdaInit,
@@ -1769,6 +1770,75 @@ describe("buildCcda, planned medication effectiveTime diagnostic", () => {
       codes.indexOf("MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME"),
     );
     expect(codes.at(-1)).toBe("MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME");
+  });
+
+  it("fires from editCcda too, for the planned items THAT call was handed", () => {
+    // The claim lives on the SHARED input type, and `editCcda` writes this
+    // section through the same emitter from the same type. A check wired to
+    // `buildCcda` alone left this path emitting the identical non-conformant act
+    // in silence while the field's own TSDoc promised otherwise.
+    const base = buildCcda({ patient: { mrn: "M" } });
+    const revised = editCcda(base, {
+      sections: [
+        {
+          kind: "planOfTreatment",
+          mode: "upsert",
+          content: [
+            {
+              kind: "medicationActivity",
+              code: { code: "314076", displayName: "Lisinopril 10 MG" },
+            },
+          ],
+        },
+      ],
+    });
+    expect(revised.warnings.map((w) => w.code)).toContain(
+      "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
+    );
+  });
+
+  it("does not re-report a Plan of Treatment section editCcda did not touch", () => {
+    // An untouched section is the SOURCE's content, not this caller's. Reporting
+    // it would turn an edit into a validator, and would double-count the same
+    // gap on every subsequent edit of the same document.
+    const source = buildCcda(noTime);
+    expect(source.warnings.map((w) => w.code)).toStrictEqual([
+      "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
+    ]);
+    const revised = editCcda(source, {
+      sections: [
+        {
+          kind: "problems",
+          mode: "upsert",
+          content: [{ problem: { code: "38341003", displayName: "Hypertension" } }],
+        },
+      ],
+    });
+    expect(revised.warnings.map((w) => w.code)).not.toContain(
+      "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
+    );
+  });
+
+  it("stays silent from editCcda when the grafted planned medication carries its time", () => {
+    const base = buildCcda({ patient: { mrn: "M" } });
+    const revised = editCcda(base, {
+      sections: [
+        {
+          kind: "planOfTreatment",
+          mode: "upsert",
+          content: [
+            {
+              kind: "medicationActivity",
+              code: { code: "314076", displayName: "Lisinopril 10 MG" },
+              effectiveTime: "20240801",
+            },
+          ],
+        },
+      ],
+    });
+    expect(revised.warnings.map((w) => w.code)).not.toContain(
+      "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
+    );
   });
 
   it("never fires on a PARSED document, only on a built one", () => {

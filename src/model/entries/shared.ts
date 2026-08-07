@@ -121,26 +121,33 @@ export const PLANNED_IMMUNIZATION_ACTIVITY = "2.16.840.1.113883.10.20.22.4.120";
  */
 export const PLANNED_INTERVENTION_ACT = "2.16.840.1.113883.10.20.22.4.146";
 /**
- * Instruction (V2), an `<act>` carrying patient/provider instructions. Admitted
- * by the Plan of Treatment Section and by the Planned Intervention Act, and
- * **not** a {@link PlannedItem}: it describes something to be *told*, not an act
- * to be performed on the patient at a future time. Recognized only so the entry
- * can be reported (`PLAN_ENTRY_NOT_MODELED`) rather than excluded in silence.
+ * Instruction (V2), an `<act>` carrying patient/provider instructions. **Not** a
+ * {@link PlannedItem}: it describes something to be *told*, not an act to be
+ * performed on the patient at a future time. Recognized only so the entry can be
+ * reported (`PLAN_ENTRY_NOT_MODELED`) where planned items are read, rather than
+ * excluded in silence.
+ *
+ * **Do not read that as a catalog.** This constant says nothing about which
+ * sections C-CDA admits it in, and the earlier wording here, that it and the two
+ * below are admitted "in the same two places", was an untraced claim and has been
+ * retracted. What is stated, and is this package's own behaviour rather than a
+ * spec reading, is where the report fires: see {@link extractPlannedItems}.
  */
 export const INSTRUCTION = "2.16.840.1.113883.10.20.22.4.20";
 /**
  * Handoff Communication Participants, an `<act>` naming who handed care over to
- * whom. Admitted in the same two places as {@link INSTRUCTION} and modelled in
- * neither: it describes a communication, not a planned act. Reported, never
- * returned.
+ * whom. Not a {@link PlannedItem} either: it describes a communication, not a
+ * planned act. Reported where planned items are read, never returned. No
+ * containment claim, for the reason given on {@link INSTRUCTION}.
  */
 export const HANDOFF_COMMUNICATION_PARTICIPANTS = "2.16.840.1.113883.10.20.22.4.141";
 /**
- * Nutrition Recommendation, an `<act>` carrying dietary advice. Admitted in the
- * same two places as {@link INSTRUCTION} and modelled in neither. **It is also a
- * container** (it inline-holds six of the seven planned templates), and this
- * package does **not** descend into it: reporting the act is not the same as
- * reaching what it holds, and widening the nesting walk is its own decision.
+ * Nutrition Recommendation, an `<act>` carrying dietary advice. Not a
+ * {@link PlannedItem}. **It is also a container** (it inline-holds six of the
+ * seven planned templates), and this package does **not** descend into it:
+ * reporting the act is not the same as reaching what it holds, and widening the
+ * nesting walk is its own decision. No containment claim, for the reason given on
+ * {@link INSTRUCTION}.
  */
 export const NUTRITION_RECOMMENDATION = "2.16.840.1.113883.10.20.22.4.130";
 /** Functional Status Organizer, clusters Functional Status Observations. */

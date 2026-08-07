@@ -346,18 +346,28 @@ const PLANNED_CODE_SLOTS: ReadonlyMap<PlannedItemKind, "medication" | "vaccine">
  * non-item templates the section itself admits (Instruction `…22.4.20`, Handoff
  * Communication Participants `…22.4.141`, Nutrition Recommendation `…22.4.130`).
  * **Those three are now REPORTED at both levels** (`PLAN_ENTRY_NOT_MODELED`),
- * still not returned. The performed acts are not, and must not be: they are not
- * admitted-but-unmodelled, they are modelled elsewhere and reached by their own
- * extractors, so a "dropped" report on one would be false.
+ * still not returned. The performed acts are not, and must not be: they are
+ * modelled elsewhere and reached by their own extractors, so a "not modelled"
+ * report on one would be false.
  *
- * **The two levels are scoped differently, on purpose.** A direct `<entry>` is
- * reported only when the section resolves to `planOfTreatment`, because that is
- * the section whose catalog admits the three; an Instruction sitting in the
- * Instructions Section (`…22.2.45`), where it is the section's own required
- * entry, is conformant and draws nothing. Inside a Planned Intervention Act the
- * container does the admitting, and its conformant home is the Interventions
- * Section rather than the Plan of Treatment, so that half carries no section
- * condition at all.
+ * **The two levels are scoped differently, and the scope is a CHOICE this
+ * package makes, not a claim about which sections C-CDA admits these templates
+ * in.** A direct `<entry>` is reported only when the section resolves to
+ * `planOfTreatment`, the section this accessor is named for and the one whose
+ * planned reading a consumer is relying on. That bound exists for a measured
+ * reason: an Instruction sitting in the Instructions Section (`…22.2.45`) is the
+ * section's own required entry, and reporting a conformant document's required
+ * entry as "not modelled" would be noise. Inside a Planned Intervention Act
+ * there is no section condition at all, because the container is what the report
+ * is relative to there and it is read wherever it sits.
+ *
+ * **The residual, stated rather than implied: these three templates appear in
+ * more places than those two, and an occurrence outside them is still dropped in
+ * silence.** This is a bound on the report, not a claim that the report covers
+ * every occurrence; an earlier draft justified the scope by asserting which
+ * sections admit the three, which was an untraced spec claim and is retracted
+ * rather than replaced with another one. Widening the report is a decision with
+ * its own grounding and its own base-measured matrix, not a tidy-up.
  *
  * **A returned item does not say whether it was a direct `<entry>` or nested.**
  * The Planned Intervention Act is not modelled: this package carries no container
@@ -380,8 +390,8 @@ export function extractPlannedItems(
 ): readonly PlannedItem[] {
   const out: PlannedItem[] = [];
   // Resolved once per section, not per entry: the direct-entry report below is
-  // scoped to the section that admits those three templates, and recognition
-  // walks the section's templateIds and <code>.
+  // scoped to the Plan of Treatment section (a choice, bounded in the docblock
+  // above), and recognition walks the section's templateIds and <code>.
   const inPlanSection = sectionKeyOf(sectionEl) === PLAN_SECTION_KEY;
   for (const entry of childEntries(sectionEl)) {
     for (const variant of PLANNED_VARIANTS) {
@@ -400,7 +410,7 @@ export function extractPlannedItems(
     const act = anyEntryAct(entry);
     if (act === undefined) continue;
     // The admitted-but-unmodelled three, reported rather than excluded in
-    // silence, and scoped to the section that admits them as direct entries.
+    // silence, and scoped to the Plan of Treatment section as a direct entry.
     // Independent of both the variant loop above and the container walk below:
     // an act stacking a planned root and one of these states both, and reporting
     // must never change which acts are extracted.
@@ -436,12 +446,13 @@ function collectNested(
     const variant = PLANNED_VARIANTS.find((v) => hasTemplateRoot(nested, v.root));
     if (variant !== undefined) out.push(buildPlannedItem(nested, variant.kind, narrativeById, ctx));
     // Reported here with **no section-key condition**, unlike the direct-entry
-    // half, and the asymmetry is the templates' rather than a shortcut. What
-    // admits these three at this level is the Planned Intervention Act itself,
-    // and its conformant home is the Interventions Section (`…21.2.3`), not the
-    // Plan of Treatment: gating on the section key would have made this half
-    // silent on exactly the documents that put the container where R2.1 puts it.
-    // The direct-entry half is admitted by the *section*, so it is scoped to it.
+    // half. The report is relative to the container at this level, and the
+    // container is read wherever it sits (this package already reaches it in the
+    // Interventions Section, `…21.2.3`, which is where R2.1 puts it and not the
+    // Plan of Treatment), so gating on the section key would have made this half
+    // silent on exactly the documents that place it conformantly. The
+    // direct-entry half is scoped to the section this accessor is named for; see
+    // the docblock above for what that scope does NOT cover.
     reportUnmodeledPlanEntry(nested, ctx);
     if (hasTemplateRoot(nested, PLANNED_INTERVENTION_ACT)) {
       collectNested(nested, narrativeById, ctx, out);

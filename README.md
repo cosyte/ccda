@@ -309,10 +309,13 @@ normalized away**. An unrecognized `value xsi:type` is kept as `unsupported`; no
   silence: each is reported as `PLAN_ENTRY_NOT_MODELED`, once per matching root, both as a direct
   Plan of Treatment `<entry>` and nested in a Planned Intervention Act.** Reporting is not modelling:
   they are still not returned, still on no model field, and still reachable only through
-  `doc.toString()`. A direct entry is reported only in a section recognized as Plan of Treatment, so
-  an Instruction in the Instructions Section (`…22.2.45`), where it is that section's own required
-  entry, draws nothing; the nested half carries no such condition, because what admits the three
-  there is the container, whose conformant home is the Interventions Section. **A Goal Observation is
+  `doc.toString()`. **Where the report fires is a bound this library chose, not a statement about
+  which sections C-CDA admits these templates in.** A direct entry is reported only in a section
+  recognized as Plan of Treatment, so an Instruction in the Instructions Section (`…22.2.45`), where
+  it is that section's own required entry, draws nothing; nested in a Planned Intervention Act there
+  is no section condition, because the container is what the report is relative to and it is read
+  wherever it sits. **These three templates appear in more places than those two, and an occurrence
+  outside them is still dropped in silence.** **A Goal Observation is
   deliberately not reported**, because the decision taken on it was to model it rather than warn about
   it. A planned entry is read as an `<entry>`'s own
   act **or** nested inside a **Planned Intervention Act** (`…22.4.146`), the act that groups the
@@ -504,8 +507,11 @@ returned document carries `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, appended 
 warnings. The field stays optional on purpose, because requiring it would break a published input
 type, and the builder still emits exactly what it was given: no date is fabricated, no `nullFlavor` is
 invented, and the emitted XML is byte-identical to what it was before the diagnostic existed. This is
-the one warning `buildCcda` can raise that `parseCcda` cannot: re-parsing the same document says
-nothing. The five non-`substanceAdministration` variants are genuinely `[0..1]` and stay silent), and
+the one warning the **emit** side can raise that `parseCcda` cannot: re-parsing the same document says
+nothing. `editCcda` raises it too, for the planned items **it** was handed, because it writes this
+section through the same emitter from the same input type; it does not re-report a Plan of Treatment
+section it did not touch. The five non-`substanceAdministration` variants are genuinely `[0..1]` and
+stay silent), and
 **Family History** (a Family History Organizer `…22.4.45` per relative,
 carrying the `relatedSubject` relationship (SNOMED CT), optional gender/birthTime/`sdtc:deceasedInd`,
 with Family History Observations `…22.4.46` for each condition, optionally nesting an Age Observation

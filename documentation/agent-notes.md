@@ -471,11 +471,21 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     **The emitted XML is byte-identical to what it was.** No date is fabricated, no `nullFlavor` is
     invented, nothing is refused; the diagnostic is a statement *about* the document, never a change
     *to* it. **Do not "finish the job" by making the field required, and do not fill the element.**
-    **It is a BUILD-time diagnostic and must stay one.** `buildCcda` appends it through
+    **It is an EMIT-time diagnostic and must stay one.** `buildCcda` appends it through
     `CcdaDocument.withWarnings` after the re-parse, so it lands **last**, after every parse warning.
     Re-parsing the very same XML raises nothing, and that asymmetry is deliberate: teaching
     `parseCcda` the same check would move rows on every third-party document in the world, which is
     its own decision with its own base-measured matrix. A test pins the parse path staying silent.
+    **BOTH EMITTERS RAISE IT, AND THE FIRST CUT OF THIS SLICE GOT THAT WRONG.** `editCcda` writes a
+    Plan of Treatment section through the **same** emitter (`buildSectionComponent` into
+    `planOfTreatmentSection`) from the **same** `BuildCcdaPlannedItem` input, so a check wired to
+    `buildCcda` alone left `editCcda` emitting the identical non-conformant act in silence **while the
+    TSDoc on the shared field said the omission is reported**. The refuter caught it as an overclaim
+    on a shared type rather than as a missing guard, which is the right reading: the claim is written
+    on `BuildCcdaPlannedItemBase.effectiveTime`, so the check has to belong to the shared path. The
+    check now lives in `plannedItemDiagnostics` and both emitters call it. **`editCcda` reports only
+    the sections THIS call wrote**: an untouched Plan of Treatment is the source's content, not the
+    caller's, and re-reporting it would turn an edit into a validator.
     **The check reads `init`, not the emitted DOM**, because the builder emits the element if and only
     if the input carried it; re-walking the DOM would be a second implementation of the emit rule and
     the two would drift.
@@ -495,16 +505,31 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     conformant Planned Intervention Act must satisfy its `[1..*]` reference to one. A warning would
     pre-empt that with a weaker answer, and a warning code is stable under ADR 0001 the moment it
     ships, so it would then have to be carried forever. **Do not add it to the reported set.**
-    **THE TWO LEVELS ARE SCOPED DIFFERENTLY AND THE ASYMMETRY IS THE TEMPLATES', NOT A SHORTCUT.** A
-    direct `<entry>` is reported only when the section resolves to `planOfTreatment`, because the
-    *section's* catalog is what admits those three there; without that scope an Instruction sitting in
-    the Instructions Section (`…22.2.45`), where it is that section's own **required** entry, would
-    draw a "dropped from the plan" warning on a fully conformant document. Inside a Planned
-    Intervention Act the **container** does the admitting, and its conformant home is the
-    Interventions Section (`…21.2.3`) rather than the Plan of Treatment, so that half carries no
-    section condition at all: gating it on the section key would have made it silent on exactly the
-    documents that put the container where R2.1 puts it. Both halves are pinned by test, including
-    the Instructions-Section negative control.
+    **THE TWO LEVELS ARE SCOPED DIFFERENTLY, AND THE SCOPE IS A CHOSEN BOUND, NOT A CONTAINMENT
+    CATALOG.** A direct `<entry>` is reported only when the section resolves to `planOfTreatment`, the
+    section this accessor is named for; without that scope an Instruction sitting in the Instructions
+    Section (`…22.2.45`), where it is that section's own **required** entry, would draw a "not
+    modelled" warning on a fully conformant document. Inside a Planned Intervention Act there is no
+    section condition at all, because the report is relative to the **container** there and the
+    container is read wherever it sits (this package already reaches it in the Interventions Section,
+    `…21.2.3`, which is where R2.1 puts it): gating that half on the section key would have made it
+    silent on exactly the documents that place it conformantly. Both halves are pinned by test,
+    including the Instructions-Section negative control.
+    **THE FIRST CUT JUSTIFIED THAT SCOPE WITH AN UNTRACED SPEC CLAIM, AND IT SHIPPED TO THREE SITES
+    BEFORE THE REFUTER CAUGHT IT.** It said Handoff and Nutrition Recommendation are "admitted in the
+    same two places as Instruction", and that the Plan of Treatment Section "is the section whose
+    catalog admits the three". Neither was traced, and the refuter produced a counter-citation
+    (Interventions Section CONF:1198-32402/32403, admitting Handoff as a direct entry). **That
+    counter-citation could not be verified from this container either**, so the remedy was to
+    **retract** the claim rather than swap in another untraced one: exactly the lesson this repo
+    already carries, that an unsourced true claim and an unsourced false one are indistinguishable at
+    the time of writing, and that retracting an unverifiable citation is still correct.
+    **What is stated instead is the RESIDUAL, which is this package's own behaviour and needs no
+    citation: these three templates appear in more places than the two the report covers, and an
+    occurrence outside them is still dropped in silence.** Say it that way everywhere. **Do not widen
+    the report to close it as a side effect** - that is a new behavioural surface with its own
+    grounding and its own base-measured matrix. And do not restore a containment count anywhere in
+    this repo without a normative source in hand.
     **`sectionKeyOf` moved from `model/entries/extract.ts` to `model/entries/shared.ts`** so the
     misplaced-entry check and this scoping read one definition rather than two copies of the same
     claim. It is silent by construction (`buildSection` already emitted the recognition warnings), and
@@ -537,6 +562,13 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     **`ClinicalDocument.id` is deliberately NOT labelled.** `deriveNewDocId` mints a fresh document id
     from the source's own root, which is a different act with a different argument, and widening the
     scheme to it was not the decision taken.
+  - **Filed by this slice, not fixed.** Every `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` carries the
+    same `{ path: "substanceAdministration", sectionCode: "18776-5" }`, so two offending orders in one
+    build produce two byte-identical warnings a consumer cannot tell apart. That is defensible rather
+    than accidental (no factory may take a value parameter, `PHI-WARNING-MESSAGE-LEAK`, and `path` is
+    a bounded element local name), but it is a real limit and it is stated rather than left to be
+    discovered. The other residual is the report scope above: an Instruction, Handoff or Nutrition
+    Recommendation outside the two covered places is still dropped in silence.
   - **What this slice deliberately did NOT touch.** The CCD SHALL-set disagreement is untouched and
     still open: `build-ccda.ts` names five `shallSections` **including** `vitalSigns` while
     `required-sections.ts` names four **excluding** it, so `buildCcda` always emits Vital Signs while

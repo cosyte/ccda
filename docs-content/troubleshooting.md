@@ -324,12 +324,15 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   re-serialize faithfully, and they are still not planned items. **Three of the four are no longer
   silent**: Instruction, Handoff Communication Participants and Nutrition Recommendation each draw
   `PLAN_ENTRY_NOT_MODELED` where planned items are read, once per matching root, so a consumer has a
-  code to filter on instead of an entry that vanishes. Reporting is not modelling: nothing about the
-  returned list changed. A direct entry is reported only in a section recognized as Plan of Treatment
-  (an Instruction in the Instructions Section, `…22.2.45`, where it is that section's own required
-  entry, draws nothing), while the nested half is reported wherever the Planned Intervention Act sits,
-  because the container is what admits them there. **Goal Observation is deliberately not reported**,
-  because the decision taken on it was to model it rather than warn about it.
+  code to filter on instead of an entry that vanishes **in the two places the report covers**.
+  Reporting is not modelling: nothing about the returned list changed. A direct entry is reported only
+  in a section recognized as Plan of Treatment (an Instruction in the Instructions Section,
+  `…22.2.45`, where it is that section's own required entry, draws nothing), while the nested half is
+  reported wherever the Planned Intervention Act sits. **Those two places are a bound this library
+  chose, not a claim about which sections C-CDA admits these templates in: they appear in more places
+  than that, and an occurrence outside the two is still dropped in silence.** **Goal Observation is
+  deliberately not reported**, because the decision taken on it was to model it rather than warn about
+  it.
 - **A planned entry nested in a Planned Intervention Act was dropped in silence, for all seven kinds
   (fixed in `0.0.3`).** `getPlannedItems()` used to read an `<entry>`'s own act and go no deeper, so a
   planned flu shot or drug order hanging off a **Planned Intervention Act** (`…22.4.146`, the act that

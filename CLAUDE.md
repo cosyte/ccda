@@ -157,15 +157,21 @@ immutability + explicit mutation, and the profile system.
     Why: `documentation/agent-notes.md#planned-entries-nested-in-a-planned-intervention-act`
   - **Three plan-surface decisions were settled 2026-08-06, all toward REPORTING rather than toward
     changing what is returned or accepted, and each has a "do not finish the job" edge.**
-    (1) `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` is **build-time only** and must stay that way:
-    `buildCcda` appends it last via `withWarnings`, `parseCcda` raises nothing, the field stays
-    optional and the **emitted XML is byte-identical** (no date, no `nullFlavor`). The immunization
-    variant is **not** checked, because its field is required and the diagnostic would be dead.
+    (1) `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` is **emit-time only** and must stay that way:
+    `parseCcda` raises nothing, the field stays optional and the **emitted XML is byte-identical** (no
+    date, no `nullFlavor`). **BOTH emitters raise it** - `buildCcda` and `editCcda` write that section
+    through the same emitter from the same type, so wiring one and not the other left a promise on a
+    shared field false; `editCcda` reports only the planned items IT was handed, never an untouched
+    section. The immunization variant is **not** checked, because its field is required and the
+    diagnostic would be dead.
     (2) `PLAN_ENTRY_NOT_MODELED` reports Instruction / Handoff / Nutrition Recommendation, **not**
     Goal Observation (that one is to be MODELLED, and a code is stable forever once shipped).
-    **The two levels are scoped differently on purpose**: a direct entry only in a section recognized
-    as `planOfTreatment` (or a conformant Instructions Section reds), the nested half everywhere (its
-    container lives in the Interventions Section). **Reporting is not modelling: nothing about
+    **Where it fires is a CHOSEN BOUND, not a containment catalog**: a direct entry only in a section
+    recognized as `planOfTreatment` (so a conformant Instructions Section stays quiet), the nested
+    half wherever the container sits. **These templates appear in more places than those two and an
+    occurrence outside them is still dropped in silence - say that, and do not justify the scope with
+    an untraced claim about which sections admit what** (one such claim shipped to three sites here and
+    was retracted). **Reporting is not modelling: nothing about
     `getPlannedItems()` changed.** (3) `editCcda` **keeps minting** a `setId` (CDA R2 requires the
     replacement and its `parentDocument` to share one) and labels the minted one only:
     `SYNTHETIC_SETID_PREFIX` + the synthetic root, both required by `isSyntheticSetId`. **State the

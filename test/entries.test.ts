@@ -4157,6 +4157,35 @@ describe("clinical entries, the admitted-but-unmodelled plan entries", () => {
     expect(planEntry(doc.warnings)).toStrictEqual([]);
   });
 
+  it("is bounded: the same act outside the two covered places is still dropped in silence", () => {
+    // THE RESIDUAL, MEASURED rather than left to be discovered. The report's
+    // scope is a bound this package chose (the section this accessor is named
+    // for, plus the container), NOT a claim that it covers every occurrence.
+    // These templates appear elsewhere, and an occurrence there is unchanged
+    // from base: no item, no warning. The Interventions Section is used as the
+    // probe only because this package already reaches into it for the container.
+    const doc = parseCcda(buildCcda({ sections: interventions("") }));
+    const withHandoff = parseCcda(
+      buildCcda({
+        sections: `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.21.2.3" extension="2015-08-01"/>
+          <code code="62387-6" codeSystem="2.16.840.1.113883.6.1" displayName="Interventions Provided"/>
+          <title>Interventions</title>
+          <text><content ID="ivn9">Interventions</content></text>
+          ${entry(HANDOFF_XML)}
+        </section>
+      </component>`,
+      }),
+    );
+    expect(withHandoff.getPlannedItems()).toStrictEqual([]);
+    expect(planEntry(withHandoff.warnings)).toStrictEqual([]);
+    // Differential, so the fixture envelope's own warnings are not mistaken for
+    // the claim: the direct Handoff entry contributes nothing at all.
+    expect(codes(withHandoff.warnings).sort()).toStrictEqual(codes(doc.warnings).sort());
+  });
+
   it("does NOT report a Goal Observation, the fourth admitted-but-unreturned template", () => {
     // Deliberate. The decision taken on Goal Observation was to MODEL it, with
     // its own IG grounding; a warning here would pre-empt that with a weaker
