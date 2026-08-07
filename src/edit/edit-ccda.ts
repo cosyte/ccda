@@ -45,11 +45,7 @@
  * @packageDocumentation
  */
 
-import {
-  buildSectionComponent,
-  EDITABLE_SECTIONS,
-  plannedItemDiagnostics,
-} from "../builder/build-ccda.js";
+import { buildSectionComponent, EDITABLE_SECTIONS } from "../builder/build-ccda.js";
 import type { EditableSectionKind, SectionInput } from "../builder/build-ccda.js";
 import { el } from "../builder/dom.js";
 import { LOINC } from "../model/code-systems.js";
@@ -379,23 +375,9 @@ export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): C
   // `SEMANTIC_CODE_INVALID` for any coded value the adapter rejects (in a grafted
   // section or an untouched one). The edit still emits every code **verbatim**; the
   // adapter can only ever add a flag, never coerce a value.
-  const parsed =
-    options.terminology !== undefined
-      ? parseCcda(serializeDocument(dom), { terminology: options.terminology })
-      : parseCcda(serializeDocument(dom));
-
-  // Then the same emit-time diagnostics `buildCcda` raises about ITS input,
-  // because a grafted Plan of Treatment section goes through the *same* emitter
-  // from the *same* `BuildCcdaPlannedItem` type. Wiring the check to `buildCcda`
-  // alone would have left this path emitting the identical non-conformant act in
-  // silence, while the TSDoc on the shared field promised the omission is
-  // reported. Only the sections this call actually wrote are checked: an
-  // untouched section is the source's, not this caller's, and re-reporting it
-  // would turn an edit into a validator.
-  const diagnostics = edits.flatMap((edit) =>
-    edit.kind === "planOfTreatment" ? [...plannedItemDiagnostics(edit.content)] : [],
-  );
-  return diagnostics.length === 0 ? parsed : parsed.withWarnings(diagnostics);
+  return options.terminology !== undefined
+    ? parseCcda(serializeDocument(dom), { terminology: options.terminology })
+    : parseCcda(serializeDocument(dom));
 }
 
 /** Recover the source XML a parsed document retains, or throw `NO_SOURCE_DOCUMENT`. @internal */

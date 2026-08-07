@@ -157,13 +157,15 @@ immutability + explicit mutation, and the profile system.
     Why: `documentation/agent-notes.md#planned-entries-nested-in-a-planned-intervention-act`
   - **Three plan-surface decisions were settled 2026-08-06, all toward REPORTING rather than toward
     changing what is returned or accepted, and each has a "do not finish the job" edge.**
-    (1) `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` is **emit-time only** and must stay that way:
-    `parseCcda` raises nothing, the field stays optional and the **emitted XML is byte-identical** (no
-    date, no `nullFlavor`). **BOTH emitters raise it** - `buildCcda` and `editCcda` write that section
-    through the same emitter from the same type, so wiring one and not the other left a promise on a
-    shared field false; `editCcda` reports only the planned items IT was handed, never an untouched
-    section. The immunization variant is **not** checked, because its field is required and the
-    diagnostic would be dead.
+    (1) `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` is **`buildCcda`-only** and must stay that way
+    until someone does the other one properly: the field stays optional and the **emitted XML is
+    byte-identical** (no date, no `nullFlavor`). **`parseCcda` and `editCcda` both raise nothing**, and
+    the `editCcda` half is a STATED RESIDUAL, not an oversight. **Wiring `editCcda` to the same check
+    was tried in this slice and REVERTED**: its input is an ordered list of edits where a later one
+    discards an earlier one's content, so reading that list warned of a SHALL violation on a document
+    whose emitted DOM carried the element, and the frozen message names `buildCcda`. Closing it needs
+    the surviving DOM and a message naming neither emitter. The immunization variant is **not**
+    checked, because its field is required and the diagnostic would be dead.
     (2) `PLAN_ENTRY_NOT_MODELED` reports Instruction / Handoff / Nutrition Recommendation, **not**
     Goal Observation (that one is to be MODELLED, and a code is stable forever once shipped).
     **Where it fires is a CHOSEN BOUND, not a containment catalog**: a direct entry only in a section

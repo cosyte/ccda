@@ -471,21 +471,34 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     **The emitted XML is byte-identical to what it was.** No date is fabricated, no `nullFlavor` is
     invented, nothing is refused; the diagnostic is a statement *about* the document, never a change
     *to* it. **Do not "finish the job" by making the field required, and do not fill the element.**
-    **It is an EMIT-time diagnostic and must stay one.** `buildCcda` appends it through
+    **It is a BUILD-time diagnostic and must stay one.** `buildCcda` appends it through
     `CcdaDocument.withWarnings` after the re-parse, so it lands **last**, after every parse warning.
     Re-parsing the very same XML raises nothing, and that asymmetry is deliberate: teaching
     `parseCcda` the same check would move rows on every third-party document in the world, which is
     its own decision with its own base-measured matrix. A test pins the parse path staying silent.
-    **BOTH EMITTERS RAISE IT, AND THE FIRST CUT OF THIS SLICE GOT THAT WRONG.** `editCcda` writes a
-    Plan of Treatment section through the **same** emitter (`buildSectionComponent` into
-    `planOfTreatmentSection`) from the **same** `BuildCcdaPlannedItem` input, so a check wired to
-    `buildCcda` alone left `editCcda` emitting the identical non-conformant act in silence **while the
-    TSDoc on the shared field said the omission is reported**. The refuter caught it as an overclaim
-    on a shared type rather than as a missing guard, which is the right reading: the claim is written
-    on `BuildCcdaPlannedItemBase.effectiveTime`, so the check has to belong to the shared path. The
-    check now lives in `plannedItemDiagnostics` and both emitters call it. **`editCcda` reports only
-    the sections THIS call wrote**: an untouched Plan of Treatment is the source's content, not the
-    caller's, and re-reporting it would turn an edit into a validator.
+    **IT IS `buildCcda`-ONLY, `editCcda` IS A STATED RESIDUAL, AND THE ROUTE FROM ONE TO THE OTHER
+    IS THE MOST INSTRUCTIVE THING IN THIS SECTION.** `editCcda` writes a Plan of Treatment section
+    through the **same** emitter (`buildSectionComponent` into `planOfTreatmentSection`) from the
+    **same** `BuildCcdaPlannedItem` input and raises nothing, so a planned medication grafted in by an
+    edit is emitted short the SHALL element in silence.
+    **Refuter pass 1 was right that the FIRST cut overclaimed**: the TSDoc on
+    `BuildCcdaPlannedItemBase.effectiveTime` said "the omission is now reported" on a field
+    `editCcda` also consumes. **The remedy chose to grow the guard as well as fix the claim, and
+    growing the guard is what broke.** `editCcda`'s input is an **ordered list of edits where a later
+    one discards an earlier one's content**, so a check reading that list reported a SHALL violation
+    against a document whose emitted DOM **carried** the element, on a conformant edit; the library's
+    own re-parse of the same bytes said `[]`. The frozen message also names `buildCcda`, and it is a
+    member of the public `ALL_WARNING_MESSAGES` registry, so an `editCcda`-raised warning
+    misdescribed its own document, which this repo already names as the same defect as a warning
+    pointing at a coding that is not there. **Refuter pass 2 caught both and recommended cutting back
+    rather than hardening; the `editCcda` wiring was reverted.**
+    **The lesson worth carrying: "read the input, not the emitted DOM" is `buildCcda`'s argument and
+    it does not travel.** It holds there because `init.planOfTreatment` is one list that is always
+    emitted. It is false wherever the input can be discarded before it reaches the DOM. **Do not wire
+    `editCcda` to `plannedItemDiagnostics`.** Reporting there needs to read what survived into the
+    emitted DOM (or the surviving edits) **and** a message that names neither emitter, which is its
+    own item with its own shape. A test pins both halves: the silence, and the conformant two-edit
+    document that the reverted version warned about.
     **The check reads `init`, not the emitted DOM**, because the builder emits the element if and only
     if the input carried it; re-walking the DOM would be a second implementation of the emit rule and
     the two would drift.
@@ -519,14 +532,25 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     BEFORE THE REFUTER CAUGHT IT.** It said Handoff and Nutrition Recommendation are "admitted in the
     same two places as Instruction", and that the Plan of Treatment Section "is the section whose
     catalog admits the three". Neither was traced, and the refuter produced a counter-citation
-    (Interventions Section CONF:1198-32402/32403, admitting Handoff as a direct entry). **That
-    counter-citation could not be verified from this container either**, so the remedy was to
-    **retract** the claim rather than swap in another untraced one: exactly the lesson this repo
-    already carries, that an unsourced true claim and an unsourced false one are indistinguishable at
-    the time of writing, and that retracting an unverifiable citation is still correct.
-    **What is stated instead is the RESIDUAL, which is this package's own behaviour and needs no
-    citation: these three templates appear in more places than the two the report covers, and an
-    occurrence outside them is still dropped in silence.** Say it that way everywhere. **Do not widen
+    (Interventions Section CONF:1198-32402/32403, admitting Handoff as a direct entry). **The remedy
+    retracted the claim rather than swapping in a counter-claim it had not itself traced**, which was
+    the right call at the time: an unsourced true claim and an unsourced false one are
+    indistinguishable at the time of writing.
+    **THE COUNTER-CITATION IS REAL AND IS NOW TRACED, AND HOW IT WAS MISSED IS THE REUSABLE PART.**
+    `hl7.org/ccdasearch` returns **HTTP 202 with a zero-byte body** through this container's egress,
+    which reads exactly like an empty page rather than a failure, so a fetch there is not evidence of
+    absence. `raw.githubusercontent.com` works: C-CDA Online's generated page for the Interventions
+    Section (V3) says verbatim *"MAY contain zero or more [0..*] entry (CONF:1198-32402) such that it
+    SHALL contain exactly one [1..1] Handoff Communication Participants (identifier:
+    2.16.840.1.113883.10.20.22.4.141) (CONF:1198-32403)."* Verified here, 2026-08-07, at
+    `raw.githubusercontent.com/jddamore/ccda-search/master/templates/2.16.840.1.113883.10.20.21.2.3.html`.
+    **The retraction still stands**: what was wrong was the *original* claim, and the fix was never to
+    replace it with a differently-shaped catalog assertion. What the citation does is make the
+    residual below **measured** rather than merely suspected.
+    **What is stated instead is the RESIDUAL, which is this package's own behaviour: these three
+    templates appear in more places than the two the report covers, and an occurrence outside them is
+    still dropped in silence.** A Handoff as a direct entry of an Interventions Section is the traced
+    example (CONF:1198-32402/32403, above), and a differential test pins that it contributes nothing. Say it that way everywhere. **Do not widen
     the report to close it as a side effect** - that is a new behavioural surface with its own
     grounding and its own base-measured matrix. And do not restore a containment count anywhere in
     this repo without a normative source in hand.
