@@ -1,5 +1,185 @@
 # Changelog
 
+## 0.0.11
+
+### Patch Changes
+
+- 43d6f7a: `CHANGELOG.md`, which ships inside the tarball, is now written by the release instead of by hand, so it stops describing already-published code as unreleased.
+
+  `.changeset/config.json` set `"changelog": false`, so no release ever wrote a version heading
+  into `CHANGELOG.md` and nothing ever rolled `[Unreleased]` over. Every published version of this
+  package therefore carried a changelog with **no version headings at all**: one `[Unreleased]`
+  heading over the whole history, and a preamble stating that the first pre-alpha release "will
+  ship" the API surface listed below it, in a tarball that had shipped that surface several
+  versions earlier. `CHANGELOG.md` is listed in `package.json` `files`, so this was text on the
+  disk of everyone who installed the package, not internal bookkeeping.
+
+  **The flag is what changed, not the prose.** Correcting the sentence by hand would have left the
+  mechanism that wrote it, and the next release would have drifted the same way. `changelog` now
+  names the generator that ships with Changesets, so a release writes its own version heading and
+  its own entry from the changesets it consumed, and **the changeset summary is now the changelog
+  entry**. Nothing new is depended on: the generator is an entry point of `@changesets/cli`, which
+  was already a dev dependency.
+
+  **The file's shape changed with it, deliberately.** Changesets prepends a release by replacing
+  the first newline in the file, so exactly one line can sit above generated output. The
+  hand-written preamble sat on line 3, which means a release would have inserted itself between the
+  heading and the preamble and split the header in two. The hand-maintained history has therefore
+  moved under a `## Released before this file was generated` heading, with the false preamble
+  replaced by an accurate one. Three pieces of hand-workflow scaffolding were dropped and no entry
+  was reworded: the `[Unreleased]` heading, its link definition at the foot of the file, and the
+  four empty section stubs waiting for the next hand-written entry. The history itself is left as
+  it was written rather than re-sorted into version sections, because the file never recorded which
+  release each entry went out in and the text is already on disk in published copies.
+
+  **Changesets' Prettier pass is deliberately left ON here, and that was derived from this repo
+  rather than copied from a sibling.** This repo has no `.prettierignore` at all and its
+  `format:check` globs root markdown, so `CHANGELOG.md` is inside the repo's own formatting gate
+  and its archived history is already Prettier-canonical. Both directions were measured. With the
+  pass on, the archived history comes through a release byte identical, so leaving it on costs
+  nothing. With the pass off, the generator's raw output is not Prettier-canonical even for the
+  simplest possible summary, because it writes the version heading and `### Patch Changes` on
+  adjacent lines with no blank line between them, so every Version PR this repo opened would be red
+  on a file no human had touched. A sibling whose `.prettierignore` lists `*.md` needs the opposite
+  setting, and resyncing the value between repos is how a release starts rewriting already
+  published text.
+
+  Pinned by `test/scripts/changelog-generation.test.ts`, which runs the real `changeset version`
+  against the real `CHANGELOG.md` and the real config in a throwaway package rather than
+  reimplementing where the tool inserts text. Nine of its fourteen cases are red against the
+  previous state, measured on the tree this change was written against rather than recalled. The
+  throwaway package is a real git repository, because the generator prefixes each entry with the
+  short commit sha that added the changeset and a tree with no history would exercise a line shape
+  no release writes. **The rule it enforces is that nothing but the H1 sits above the first
+  heading, and it is asserted on the released document as well as the committed one**: a rule
+  phrased as "the archive heading comes second" holds only until the first release writes its own
+  version heading there, which would have redded the first Version PR this configuration ever
+  opened. Every version-heading comparison is a whole-heading match rather than a substring,
+  demonstrated on real generator output, because this package sits past the point where `## 0.0.1`
+  is a prefix of a heading it does not have. Three further controls: the same inputs with
+  `"changelog": false` must write no version heading at all, so the flag is proved load-bearing
+  rather than incidental; the same inputs with the Prettier pass off must produce a document this
+  repo's own formatting gate rejects; and the old file shape must reproduce the split header, so
+  the shape rule is demonstrated rather than asserted.
+
+  One upstream behaviour is worth knowing before debugging a release, and is recorded in that
+  file: Changesets wraps the changelog write in a try/catch that only warns. A tree whose declared
+  Prettier config cannot be resolved bumps the version, consumes the changeset, and writes no
+  changelog at all. A release that publishes with an unchanged changelog is that failure, not a
+  setting that quietly reverted.
+
+  `.changeset/README.md` and `CLAUDE.md` said to add the entry to `CHANGELOG.md` by hand and now
+  say to write it in the changeset. No runtime code, no public API, no warning code and no parse
+  behaviour changed.
+
+- 1fc7a08: `README.md` named an accessor that does not exist, and the split between `CLAUDE.md` and its long-form record is now checked in CI.
+
+  `README.md` said an Unstructured Document exposes its `nonXMLBody`. That is the correct name for
+  the CDA element, which is why the line survived every reading of it, but the accessor on the parsed
+  document is `doc.nonXmlBody`, and `README.md` ships inside the tarball. A reader copying the name
+  out of it got `undefined` with no error. The accessor's real name was read back off the published
+  type surface, not off the prose, and the sentence now names both: the element it comes from and the
+  property that carries it. **No code changed.** The other two places this is documented already had
+  it right.
+
+  The second half closes an ungated contract rather than a defect. A relocation on 2026-08-04 split
+  this repo's always-read `CLAUDE.md` into short one-line imperatives plus a long-form record at
+  `documentation/agent-notes.md`, and both files state the same promise in their own words: every
+  trap has a one-line imperative pointing at the section that carries its reasoning. Nothing checked
+  it. A heading reworded in the long-form record silently strands every pointer at it, neither file
+  gets a compile error, and a worker who follows a dead pointer is left with a clinical-safety
+  imperative and none of the reasoning behind it. `scripts/check-agent-notes-contract.mjs` and
+  `test/scripts/agent-notes-contract.test.ts` close that, and `pnpm check:agent-notes` runs it by
+  hand.
+
+  **It asserts what this repo promises, and deliberately not a fleet universal.** The relocation
+  landed across many repos but the contract did not: measured over the sibling repos on the day this
+  was written, three package repos carry no such file at all. A gate claiming every repo has one
+  would be an overclaim that three of them already break, so this one is scoped to `ccda`, lives in
+  `ccda`'s own CI, and is not proposed as a shared script.
+
+  **It blocks, which the gate beside it does not.** The public-surface check lives in its own
+  workflow whose context is in none of this repository's rulesets, so it is visible on every pull
+  request and stops nothing. This one runs inside the test suite, which is inside a required context,
+  so the placement was the point rather than an implementation detail.
+
+  Measuring that turned up a stale trap and it is corrected here. `CLAUDE.md` recorded the em-dash
+  gate as "present and reporting, but NOT yet blocking", with the settings change it needed still
+  outstanding. That change had landed: `no-emdash` is a required status check via its own
+  repository-level ruleset, active on the default branch. The line is now accurate, and says to
+  re-read the rulesets rather than trust a prose line about them.
+
+  Three properties are worth knowing before changing it. The corpus is `git ls-files` and is
+  **reconciled**, not merely counted: every tracked path is opened or the run refuses, with no
+  exclusion of any kind, so `read` equals `tracked` on a clean run. A check can print green over a
+  corpus it never opened and no denominator detects that. A tracked file missing from the worktree is a refusal rather than a silent skip, and refusals
+  exit `2` where a contract violation exits `1`. Finding zero pointers is also a refusal, on the same
+  reasoning the `attw` wrapper already uses for a tool that exits `0` having printed nothing: an
+  empty result set is indistinguishable from a clean run.
+
+  Two pointer forms are live here and both are checked, which was measured rather than assumed. The
+  path form is scanned in **every tracked file, with no exclusion list at all**, so no root is
+  declared and a pointer written into a source comment is covered. A bare backticked anchor occurs once, in `CLAUDE.md`; a guard matching
+  only the path form is green while that pointer is broken, and that bypass is reproduced end to end
+  in the test rather than argued. The bare form is keyed on shape, so it is cut narrowly: measured
+  over this tree, a bare backticked anchor also matches `#id` in sources and `#62` in tests, which
+  are XML id references and C-CDA narrative reference targets, so the rule requires three
+  hyphen-joined lowercase runs and is confined to `CLAUDE.md`. A bare anchor anywhere else is
+  deliberately not read as a pointer.
+
+  The one exclusion this gate briefly had was deleted rather than documented, and it is worth knowing
+  why. The first cut skipped any file containing a NUL byte as "binary", reported only as an anonymous
+  count. On this repository that was exactly one file: `src/profiles/merge.ts`, a linted,
+  type-checked, Prettier-formatted TypeScript source that embeds NULs in a join separator. This repo
+  already records that same file as its measured silent-exemption escape, because an earlier em-dash
+  sweep skipped it and left a live banned character behind. A broken pointer planted there was
+  reproduced passing this gate green, byte-identically to a clean run, while the same pointer in a
+  NUL-free sibling reds. Every tracked file is now decoded and scanned, so the read count equals the
+  tracked count on a clean run and no anonymous residue is left for a reader to interpret. That is
+  safe and was measured rather than assumed: the pointer patterns are pure ASCII, and UTF-8 decoding
+  replaces only invalid sequences and resyncs at the next valid byte, so a pointer planted directly
+  against a real NUL still matches. A genuinely binary file can now only cost a false red, which is
+  cheap, and never the silent exemption.
+
+  Nineteen cases pin it. The heading recogniser is pinned in both directions because it fails in
+  both: an indented heading and a setext underline are real headings that a naive test misses, which
+  is a false red, and a `#` inside a fenced code block is not a heading, which counting would make a
+  false green. The emptiness rule carries its negative control, since a heading whose body is its own
+  subsections is legitimate. Four controls cover the states where the gate must refuse rather than
+  pass: an empty repository, a tree with no long-form record, a tracked file missing from the
+  worktree, and a directory that is not a repository. The contract was already intact when this was
+  written, so **it closed no pre-existing break**: the evidence is each defect class reproduced
+  against a real fixture, not a count of existing failures. It did red twice for real. Once on the
+  first run after its own script was staged, against a literal pointer written into that script's
+  header comment. Once against the planted pointer above, after the NUL skip came out. That is also the limit worth knowing locally: the corpus is the tracked tree, so a green
+  run before `git add` says less than the same run in CI.
+
+  One thing CI found in the new script and it is fixed here rather than waived. The helper that
+  escapes the notes path into a pattern escaped `.` only, which is every character this repo's value
+  actually contains; CodeQL flagged it as incomplete sanitization and was right to. A constant input
+  makes it unexploitable today and does not make it correct, because the helper's contract is "escape
+  a string for a regex" while its body handled one character, so the first caller passing anything
+  else would get a silently wrong pattern. It now escapes the full metacharacter set, backslash
+  first. Behaviour is unchanged and it is exercised by every pointer match the nineteen cases make,
+  but it has no unit test of its own.
+
+  No runtime code, no public API, no warning code and no parse behaviour changed.
+
+- 8b5b737: The README lockup now links to cosyte.com (`ASSETS`).
+
+  The `<picture>` block above the H1 is wrapped in an anchor to https://cosyte.com, per the founder
+  requirement of 2026-08-06. Nothing inside the block moved: the `<source>`, the `<img>`, the alt text
+  and both tile URLs are byte-identical.
+
+  What the anchor does was measured on both surfaces by `fhir`, not assumed, because fourteen READMEs
+  carry this shape. On GitHub the anchor works and the colour-scheme switch keeps working, because the
+  `<img>` stays a direct child of `<picture>`, which is the condition the HTML spec puts on `<source>`
+  applying at all. On an npm package page the anchor is lost: npm wraps a README image in its own
+  anchor to the image file, a nested anchor is not representable, so the parser closes ours early and
+  the image ends up linked to the image file rather than to cosyte.com. Shipped anyway by founder
+  decision of 2026-08-07: on npm that is no worse than the unlinked lockup it replaces, and GitHub is
+  where these READMEs are read.
+
 ## Released before this file was generated
 
 Every release section above this heading is written by
