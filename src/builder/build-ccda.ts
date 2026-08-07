@@ -1384,8 +1384,10 @@ interface BuildCcdaPlannedItemBase {
    * document: an offending edit a later edit in the same call discarded says
    * nothing (reading the caller's ordered edit list instead reports a violation
    * against a conformant document), and an offending act the source already
-   * carried is never re-reported. So a clean `editCcda(...).warnings` means the
-   * sections that call wrote are clean, **not** that the whole document is.
+   * carried is never re-reported. So the absence of this code from
+   * `editCcda(...).warnings` says only that the sections **that call wrote**
+   * carry no planned medication short this element; it says nothing about the
+   * rest of the document, and nothing about any other conformance rule.
    */
   readonly effectiveTime?: string;
 }

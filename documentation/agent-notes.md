@@ -776,9 +776,12 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     "2.16.840.1.113883.10.20.21.2.3"` (CONF:1198-10461), `@extension = "2015-08-01"`
     (CONF:1198-32559) and `@code = "62387-6"` (CONF:1198-15378). **The arc, the root, the version stamp
     and the LOINC are confirmed; nothing else on this entry is, and the "stated, not traced" bound on
-    the rest still holds and still licenses nothing about `required-sections.ts`.** The page also
-    gives the section's whole contained set as three templates, which is what grounds the widened
-    `PLAN_ENTRY_NOT_MODELED` scope: see `#closing-the-two-silent-plan-drops-2026-08-07`.
+    the rest still holds and still licenses nothing about `required-sections.ts`.** The same page
+    carries the conformance statement that grounds the widened `PLAN_ENTRY_NOT_MODELED` scope
+    (CONF:1198-32402 / 1198-32403); see `#closing-the-two-silent-plan-drops-2026-08-07`, **and note
+    there that the page is good enough to quote a CONF statement from and NOT good enough to
+    enumerate a contained set from.** A draft of this slice did enumerate one here and it is
+    retracted; nothing in this repo's behaviour rests on it.
     **`hl7.org/ccdasearch` is NOT a usable source from this container** (HTTP 202, zero-byte body,
     reads like an empty page), and **a label proves the label exists, not that the body carries the
     sentence**: search for the sentence and require exactly one hit, which is how this was verified.
