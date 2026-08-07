@@ -3083,6 +3083,21 @@ describe("buildCcda, a narrative label is refused rather than fabricated", () =>
     ["smokingStatus[].value", "social history", { smokingStatus: [{ value: {} }] }],
     ["functionalStatus[].value", "functional status", { functionalStatus: [{ value: {} }] }],
     ["mentalStatus[].value", "mental status", { mentalStatus: [{ value: {} }] }],
+    // The organizer-nested twins of the two rows above. The SAME narrative shape
+    // is reached from a SECOND input path, so the message has to name the path the
+    // caller actually used: a refusal naming `functionalStatus[].value` for a
+    // finding supplied under `functionalStatusOrganizers` is a diagnostic about a
+    // field they never set.
+    [
+      "functionalStatusOrganizers[].findings[].value",
+      "functional status organizers",
+      { functionalStatusOrganizers: [{ code: OK_CODE, findings: [{ value: {} }] }] },
+    ],
+    [
+      "mentalStatusOrganizers[].findings[].value",
+      "mental status organizers",
+      { mentalStatusOrganizers: [{ code: OK_CODE, findings: [{ value: {} }] }] },
+    ],
     [
       "functionalStatusScales[].code",
       "functional status scales",

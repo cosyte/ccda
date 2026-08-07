@@ -41,13 +41,14 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     bare-`displayName` slots** (problems, medications, immunizations, procedures, encounters, past
     medical history, plan of treatment), and, once the sweep was widened past the eight, as
     `"undefined: 1 kg"` in vital signs, `"undefined: x"` / `"Ok: undefined"` in results, and
-    `"undefined: unknown"` in both assessment-scale slots. **Four more slots fabricated a confident
+    `"undefined: unknown"` in both assessment-scale slots. **SEVEN more slots fabricated a confident
     NEGATIVE instead of `undefined`**: smoking status read "Smoking status unknown", functional and
-    mental status read "...: unknown", and family history read "Relative" / "unknown condition",
-    each beside an entry that did carry the code. Those four are the same defect as the allergy one
-    in a quieter register, and they were reachable because their `??` fallback keyed on the
-    enclosing OPTIONAL field rather than on the label. Eighteen slots, one root cause, measured as a
-    matrix on `0c4d67f` and again after.
+    mental status read "...: unknown" from BOTH their input paths (standalone and organizer-nested),
+    and family history read "Relative" / "unknown condition", each beside an entry that did carry the
+    code. Those seven are the same defect as the allergy one in a quieter register, and they were
+    reachable because their `??` fallback keyed on the enclosing OPTIONAL field rather than on the
+    label. **Twenty slots** (one inversion, seven bare `undefined`, five interpolated `undefined`,
+    seven fabricated negatives), one root cause, measured as a matrix on `0c4d67f` and again after.
   - **THE REMEDY IS TO REFUSE, AND SUBSTITUTING A DIFFERENT CONFIDENT STRING WOULD HAVE REPRODUCED
     THE WHOLE DEFECT CLASS.** An empty string, a placeholder, the code rendered as English, all of
     them are a sentence the entry does not support; the shipped `?? "No known allergies"` was
@@ -65,6 +66,17 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     elsewhere; closing this by tightening the type would have closed nothing. `narrativeLabel` widens
     the field to `unknown` before testing it, for the same reason `buildCcda`'s `documentType` guard
     widens to `string`.
+  - **THE FIELD PATH IN THE MESSAGE IS A PARAMETER, NOT A CONSTANT, AND THAT COST A REFUTER
+    FINDING.** One narrative shape can be reached from more than one input path: a functional or
+    mental status finding arrives either standalone (`functionalStatus[]`) or nested in an organizer
+    (`functionalStatusOrganizers[].findings[]`), and an assessment scale arrives under either the
+    functional or the mental key. The first cut hard-coded the standalone path in the label helper,
+    so a caller who used the organizer form got a refusal **naming a field they never set**. **If you
+    add another way in to an existing narrative shape, thread the path from the new call site**; a
+    diagnostic that misdescribes the input it refused is the same class of defect as a narrative that
+    misdescribes its entry. The path always names a `BuildCcdaInit` field; an `editCcda` caller reads
+    it as the content element of the section kind being edited, because an edit's `content` list is
+    the same type as the builder key the path names.
   - **THE BOUND, STATED RATHER THAN OVERCLAIMED. Only NARRATIVE labels are guarded.** A `BuildCode`
     that reaches the entry alone (an allergy `type`, a result `interpretation`, a medication or
     vaccine `route`, a reaction, a severity, a criticality) is deliberately not routed through it:
@@ -84,13 +96,18 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     with that observation's `negationInd`), so the narrative and the entry are graded together rather
     than separately, and an unresolvable reference throws rather than reading as agreement. It
     carries a **negative control**: a document this builder still accepts, with only the narrative
-    sentence moved, must red the invariant. Twenty assertions were RED on `0c4d67f` and GREEN after,
-    and every refusal row has a labelled twin proving the fixture reaches the narrative branch rather
+    sentence moved, must red the invariant. Twenty-two assertions were RED on `0c4d67f` and GREEN
+    after (`22 failed | 3 passed` on base, `25 passed` at head, the three being the controls), and
+    every refusal row has a labelled twin proving the fixture reaches the narrative branch rather
     than failing somewhere earlier.
-  - **Two things deliberately left.** The `TypeError` messages at `observationValue` and
-    `procedureEntry` still interpolate `p.code.displayName`, so an unlabelled code reads
-    `result "undefined"` there; those are diagnostics, not attested narrative, and reordering the
-    calls to fix it would change which error a caller sees. And the CCD SHALL-set disagreement
+  - **Two things deliberately left.** The `TypeError` in `observationValue` still interpolates
+    `testCode.displayName`, so an unlabelled result code reads `result "undefined"` there;
+    `resultObservation` computes the value BEFORE appending the narrative, so that message is the one
+    a caller sees. It is a diagnostic rather than attested narrative, and reordering the two calls
+    would change which error is raised. **`procedureEntry` is NOT a second instance and an earlier
+    draft wrongly said it was**: `proceduresSection` calls `narrativeLabel` before `procedureEntry`
+    in the same iteration, so its `procedure "undefined"` is unreachable. And the CCD SHALL-set
+    disagreement
     between `build-ccda.ts` and `required-sections.ts` is untouched and still blocked on the
     normative R2.1 Schematron.
   - **OWED AND BLOCKED: this trap has no one-line imperative in `CLAUDE.md`.** That file measured

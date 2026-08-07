@@ -1841,7 +1841,12 @@ function assertResolutionConsistent(
  *
  * The message names the field path and the `@code` value, never a display label
  * or any other document text, so a refusal is actionable without echoing content
- * back at the caller.
+ * back at the caller. **The path names a {@link BuildCcdaInit} field**, and it is
+ * passed in by the call site rather than derived, because one narrative shape can
+ * be reached from more than one input path (a status finding arrives either
+ * standalone or nested in an organizer). An `editCcda` caller reads the path as
+ * the content element of the section kind it is editing, since an edit's
+ * `content` list is the same type as the builder key the path names.
  *
  * @internal
  */
@@ -3603,11 +3608,13 @@ function smokingStatusEntry(
  * omitted finding reads "Functional status: unknown", never a fabricated
  * finding. @internal
  */
-function functionalStatusLabel(s: BuildCcdaFunctionalStatus): string {
+function functionalStatusLabel(s: BuildCcdaFunctionalStatus, field: string): string {
   // See `smokingStatusLabel`: absent keeps "unknown", present-without-a-label is
-  // refused rather than narrated as unknown beside its own coded value.
-  const value =
-    s.value === undefined ? "unknown" : narrativeLabel(s.value, "functionalStatus[].value");
+  // refused rather than narrated as unknown beside its own coded value. `field` is
+  // passed in rather than fixed here because this finding shape reaches the
+  // narrative from TWO input paths, and a refusal naming the one the caller did
+  // not use is a diagnostic about a field they never set.
+  const value = s.value === undefined ? "unknown" : narrativeLabel(s.value, field);
   return `${FUNCTIONAL_STATUS_CODE.displayName}: ${value}`;
 }
 
@@ -3645,7 +3652,14 @@ function functionalStatusSection(
     );
   }
   for (const s of findings) {
-    entries.push(el(doc, "entry", undefined, functionalStatusObservation(doc, s, text, id)));
+    entries.push(
+      el(
+        doc,
+        "entry",
+        undefined,
+        functionalStatusObservation(doc, s, text, id, "functionalStatus[].value"),
+      ),
+    );
   }
   const section = sectionElement(
     doc,
@@ -3673,9 +3687,10 @@ function functionalStatusObservation(
   s: BuildCcdaFunctionalStatus,
   text: Element,
   id: (prefix: string) => string,
+  field: string,
 ): Element {
   const contentId = id("func-txt");
-  text.appendChild(textEl(doc, "content", functionalStatusLabel(s), { ID: contentId }));
+  text.appendChild(textEl(doc, "content", functionalStatusLabel(s, field), { ID: contentId }));
   const obs = el(
     doc,
     "observation",
@@ -3748,7 +3763,18 @@ function functionalStatusOrganizerEntry(
   }
   for (const s of org.findings) {
     organizer.appendChild(
-      el(doc, "component", undefined, functionalStatusObservation(doc, s, text, id)),
+      el(
+        doc,
+        "component",
+        undefined,
+        functionalStatusObservation(
+          doc,
+          s,
+          text,
+          id,
+          "functionalStatusOrganizers[].findings[].value",
+        ),
+      ),
     );
   }
   return el(doc, "entry", undefined, organizer);
@@ -3761,10 +3787,10 @@ function functionalStatusOrganizerEntry(
  * omitted finding reads "Cognitive function finding: unknown", never a fabricated
  * finding. @internal
  */
-function mentalStatusLabel(s: BuildCcdaMentalStatus): string {
-  // See `smokingStatusLabel`: absent keeps "unknown", present-without-a-label is
-  // refused rather than narrated as unknown beside its own coded value.
-  const value = s.value === undefined ? "unknown" : narrativeLabel(s.value, "mentalStatus[].value");
+function mentalStatusLabel(s: BuildCcdaMentalStatus, field: string): string {
+  // See `functionalStatusLabel` for why `field` is a parameter: this finding shape
+  // reaches the narrative from two input paths.
+  const value = s.value === undefined ? "unknown" : narrativeLabel(s.value, field);
   return `${MENTAL_STATUS_CODE.displayName}: ${value}`;
 }
 
@@ -3800,7 +3826,14 @@ function mentalStatusSection(
     );
   }
   for (const s of findings) {
-    entries.push(el(doc, "entry", undefined, mentalStatusObservation(doc, s, text, id)));
+    entries.push(
+      el(
+        doc,
+        "entry",
+        undefined,
+        mentalStatusObservation(doc, s, text, id, "mentalStatus[].value"),
+      ),
+    );
   }
   const section = sectionElement(
     doc,
@@ -3827,9 +3860,10 @@ function mentalStatusObservation(
   s: BuildCcdaMentalStatus,
   text: Element,
   id: (prefix: string) => string,
+  field: string,
 ): Element {
   const contentId = id("ment-txt");
-  text.appendChild(textEl(doc, "content", mentalStatusLabel(s), { ID: contentId }));
+  text.appendChild(textEl(doc, "content", mentalStatusLabel(s, field), { ID: contentId }));
   const obs = el(
     doc,
     "observation",
@@ -3906,7 +3940,12 @@ function mentalStatusOrganizerEntry(
   }
   for (const s of org.findings) {
     organizer.appendChild(
-      el(doc, "component", undefined, mentalStatusObservation(doc, s, text, id)),
+      el(
+        doc,
+        "component",
+        undefined,
+        mentalStatusObservation(doc, s, text, id, "mentalStatusOrganizers[].findings[].value"),
+      ),
     );
   }
   return el(doc, "entry", undefined, organizer);
