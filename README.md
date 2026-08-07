@@ -305,7 +305,16 @@ normalized away**. An unrecognized `value xsi:type` is kept as `unsupported`; no
   (`…22.4.20`), Handoff Communication Participants (`…22.4.141`), Nutrition Recommendation
   (`…22.4.130`) and Goal Observation (`…22.4.121`), none of which is an act to be performed on the
   patient at a future time. A Goal Observation is the clearest: it is `moodCode="GOL"`, which this
-  parser classifies as neither performed nor planned. A planned entry is read as an `<entry>`'s own
+  parser classifies as neither performed nor planned. **The first three are no longer excluded in
+  silence: each is reported as `PLAN_ENTRY_NOT_MODELED`, once per matching root, both as a direct
+  Plan of Treatment `<entry>` and nested in a Planned Intervention Act.** Reporting is not modelling:
+  they are still not returned, still on no model field, and still reachable only through
+  `doc.toString()`. A direct entry is reported only in a section recognized as Plan of Treatment, so
+  an Instruction in the Instructions Section (`…22.2.45`), where it is that section's own required
+  entry, draws nothing; the nested half carries no such condition, because what admits the three
+  there is the container, whose conformant home is the Interventions Section. **A Goal Observation is
+  deliberately not reported**, because the decision taken on it was to model it rather than warn about
+  it. A planned entry is read as an `<entry>`'s own
   act **or** nested inside a **Planned Intervention Act** (`…22.4.146`), the act that groups the
   interventions planned toward a goal and the one container C-CDA lets hold all seven inline; until
   `0.0.3` only the first was read, so all seven vanished from the nested shape with nothing raised
@@ -489,8 +498,14 @@ Medication Activity / Supply / Observation / Immunization Activity, each future/
 `statusCode` fixed to `active`, read back via `getPlannedItems` as `disposition: "planned"` and never
 conflated with a performed Procedure/Encounter; the immunization variant's `effectiveTime` is required
 rather than optional, because its template makes it `[1..1]`. Planned Medication Activity is
-`[1..1]` too and its builder input still types the field as optional, so a planned medication can be
-built short that element; the five non-`substanceAdministration` variants are genuinely `[0..1]`), and
+`[1..1]` too (CONF:1098-30468) and its builder input still types the field as optional, so a planned
+medication can be built short that element. **That omission is now reported rather than silent**: the
+returned document carries `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, appended after the re-parse's
+warnings. The field stays optional on purpose, because requiring it would break a published input
+type, and the builder still emits exactly what it was given: no date is fabricated, no `nullFlavor` is
+invented, and the emitted XML is byte-identical to what it was before the diagnostic existed. This is
+the one warning `buildCcda` can raise that `parseCcda` cannot: re-parsing the same document says
+nothing. The five non-`substanceAdministration` variants are genuinely `[0..1]` and stay silent), and
 **Family History** (a Family History Organizer `…22.4.45` per relative,
 carrying the `relatedSubject` relationship (SNOMED CT), optional gender/birthTime/`sdtc:deceasedInd`,
 with Family History Observations `…22.4.46` for each condition, optionally nesting an Age Observation
@@ -558,6 +573,19 @@ parsed header (`setId` / `versionNumber` / `relatedDocuments`). Pass `revision: 
 A source with no `ClinicalDocument.id` cannot be revised: the RPLC link's `parentDocument.id` is a CDA
 R2 SHALL (1..\*) and there is no prior-version id to name, so `editCcda` throws
 `CcdaEditError` (`SOURCE_MISSING_ID`) rather than fabricate one; use `revision: false` to edit it in place.
+
+**A minted `setId` is labelled as synthetic.** CDA R2 requires a replacement and its `parentDocument`
+to share a version-series `setId`, so one is minted when the source has none; minting it invents an
+identifier, and the invention is made obvious rather than hidden. A minted id is
+`SYNTHETIC-SETID-…` under a synthetic assigning-authority root
+(`2.16.840.1.113883.19.5.99999`, in HL7's example arc), and `isSyntheticSetId(doc.header.setId)`
+is the check. Both halves are required, because either alone is something a real document could carry.
+A `setId` the source already asserted, or one you pass as `revision.setId`, is **never** relabelled.
+
+**The residual, stated plainly: nothing forces a receiving system to read the label.** A receiver that
+ignores the prefix and the root treats a minted `setId` exactly as it treats a real one, and this
+library cannot make it do otherwise. A `false` from `isSyntheticSetId` is likewise not a promise the
+id is real, only that this library did not mint it under this scheme.
 
 It is fail-safe: an unedited section is carried by reference (never dropped), an empty content list
 emits a spec-clean `nullFlavor="NI"` shell (never fabricated entries), and an edit that would drop a

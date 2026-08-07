@@ -135,9 +135,12 @@ immutability + explicit mutation, and the profile system.
     variants.** **`PLANNED_VARIANTS` is ORDERED and the immunization row is deliberately LAST.**
     Goal Observation is `moodCode="GOL"`, which `classifyDisposition` calls neither performed nor
     planned, so returning it would contradict this repo's mood model. Whether the other three
-    admitted-but-dropped templates should be REPORTED is **open, not settled**. `BuildCcdaPlannedOrder`
-    still lets `buildCcda` emit a Planned Medication Activity short its SHALL `effectiveTime`:
-    **PRE-EXISTING, filed, still open** (requiring it breaks a published input type). `[1..1]` is
+    admitted-but-dropped templates are now **REPORTED** (`PLAN_ENTRY_NOT_MODELED`, 2026-08-06)
+    and still not returned; **Goal Observation deliberately is NOT reported** (it is to be modelled).
+    `BuildCcdaPlannedOrder` still lets `buildCcda` emit a Planned Medication Activity short its SHALL
+    `effectiveTime` and the field **stays optional**, but the omission is now **REPORTED**
+    (`MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, build-time only) rather than silent; requiring the
+    field breaks a published input type. `[1..1]` is
     **not** unique to `…22.4.120`: `…22.4.42` SHALL carry one too (CONF:1098-30468), so it is the
     other **five** that are `[0..1]`. **Do not re-derive "the other six are `[0..1]`" from anything.**
     Why: `documentation/agent-notes.md#seven-planned-templates-returned-eleven-admitted-by-the-section`
@@ -152,6 +155,23 @@ immutability + explicit mutation, and the profile system.
     refuter, was adopted without re-checking, and shipped to five sites. **Re-check a refuter's spec
     claim exactly as hard as your own.**
     Why: `documentation/agent-notes.md#planned-entries-nested-in-a-planned-intervention-act`
+  - **Three plan-surface decisions were settled 2026-08-06, all toward REPORTING rather than toward
+    changing what is returned or accepted, and each has a "do not finish the job" edge.**
+    (1) `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` is **build-time only** and must stay that way:
+    `buildCcda` appends it last via `withWarnings`, `parseCcda` raises nothing, the field stays
+    optional and the **emitted XML is byte-identical** (no date, no `nullFlavor`). The immunization
+    variant is **not** checked, because its field is required and the diagnostic would be dead.
+    (2) `PLAN_ENTRY_NOT_MODELED` reports Instruction / Handoff / Nutrition Recommendation, **not**
+    Goal Observation (that one is to be MODELLED, and a code is stable forever once shipped).
+    **The two levels are scoped differently on purpose**: a direct entry only in a section recognized
+    as `planOfTreatment` (or a conformant Instructions Section reds), the nested half everywhere (its
+    container lives in the Interventions Section). **Reporting is not modelling: nothing about
+    `getPlannedItems()` changed.** (3) `editCcda` **keeps minting** a `setId` (CDA R2 requires the
+    replacement and its `parentDocument` to share one) and labels the minted one only:
+    `SYNTHETIC_SETID_PREFIX` + the synthetic root, both required by `isSyntheticSetId`. **State the
+    residual: nothing forces a receiver to read the label, and a `false` never certifies an id is
+    real.** **The CCD SHALL-set disagreement was NOT touched and is still blocked on the Schematron.**
+    Why: `documentation/agent-notes.md#the-three-plan-surface-decisions-of-2026-08-06`
   - **The Interventions Section (`…21.2.3`, LOINC `62387-6`) lives in the `…10.20.21.2.*` arc, not
     the `…10.20.22.2.*` arc every other catalog section uses, and `…10.20.22.2.3` is RESULTS. Do not
     "normalize" the arc** (a matrix row exists solely to fail if the two are confused). Exactly one

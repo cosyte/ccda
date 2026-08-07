@@ -396,6 +396,12 @@ section through **byte-for-byte**. By default it stamps a CDA R2 revision: a new
 same version-series `setId`, an incremented `versionNumber`, and a `relatedDocument typeCode="RPLC"`
 naming the version it replaces.
 
+When the source carries no `setId`, one is **minted** (CDA R2 requires the replacement and its
+`parentDocument` to share one) and it is labelled as synthetic: `SYNTHETIC-SETID-…` under a synthetic
+assigning-authority root. Call `isSyntheticSetId(doc.header.setId)` to tell a minted version series
+from one a source system asserted. Nothing forces a receiver to read that label, so treat it as a way
+to recognise a fabricated id, never as a guarantee anyone downstream will notice it.
+
 ```ts runnable
 import { buildCcda, editCcda, parseCcda } from "@cosyte/ccda";
 

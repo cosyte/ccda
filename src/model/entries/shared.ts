@@ -8,8 +8,9 @@
  */
 
 import { attr, child, children, positionOf, xsiType } from "../dom.js";
+import { sectionForLoinc, sectionForTemplateRoot } from "../../parser/templates.js";
 import { parseBlAttr } from "../types/bl.js";
-import type { CD } from "../types/cd.js";
+import { parseCd, type CD } from "../types/cd.js";
 import { parseIi, type II } from "../types/ii.js";
 import type { ParseCtx } from "../types/_shared.js";
 import type { CcdaPosition } from "../../parser/types.js";
@@ -119,6 +120,29 @@ export const PLANNED_IMMUNIZATION_ACTIVITY = "2.16.840.1.113883.10.20.22.4.120";
  * is elsewhere in the document and is reached on its own terms or not at all.
  */
 export const PLANNED_INTERVENTION_ACT = "2.16.840.1.113883.10.20.22.4.146";
+/**
+ * Instruction (V2), an `<act>` carrying patient/provider instructions. Admitted
+ * by the Plan of Treatment Section and by the Planned Intervention Act, and
+ * **not** a {@link PlannedItem}: it describes something to be *told*, not an act
+ * to be performed on the patient at a future time. Recognized only so the entry
+ * can be reported (`PLAN_ENTRY_NOT_MODELED`) rather than excluded in silence.
+ */
+export const INSTRUCTION = "2.16.840.1.113883.10.20.22.4.20";
+/**
+ * Handoff Communication Participants, an `<act>` naming who handed care over to
+ * whom. Admitted in the same two places as {@link INSTRUCTION} and modelled in
+ * neither: it describes a communication, not a planned act. Reported, never
+ * returned.
+ */
+export const HANDOFF_COMMUNICATION_PARTICIPANTS = "2.16.840.1.113883.10.20.22.4.141";
+/**
+ * Nutrition Recommendation, an `<act>` carrying dietary advice. Admitted in the
+ * same two places as {@link INSTRUCTION} and modelled in neither. **It is also a
+ * container** (it inline-holds six of the seven planned templates), and this
+ * package does **not** descend into it: reporting the act is not the same as
+ * reaching what it holds, and widening the nesting walk is its own decision.
+ */
+export const NUTRITION_RECOMMENDATION = "2.16.840.1.113883.10.20.22.4.130";
 /** Functional Status Organizer, clusters Functional Status Observations. */
 export const FUNCTIONAL_STATUS_ORGANIZER = "2.16.840.1.113883.10.20.22.4.66";
 /** Functional Status Observation, a single coded functional-status finding + value. */
@@ -213,6 +237,45 @@ export const ENTRY_ROOT_TO_SECTION: ReadonlyMap<string, string> = new Map([
   [MENTAL_STATUS_OBSERVATION, "mentalStatus"],
   [FAMILY_HISTORY_ORGANIZER, "familyHistory"],
 ]);
+
+/**
+ * The catalog `key` a `<section>` resolves to, `templateId` root first and its
+ * LOINC `<code>` as the fallback, or `undefined` when neither is recognized.
+ *
+ * **Silent by construction, and that is deliberate**: `buildSection` has already
+ * emitted the section-level recognition warnings (`UNKNOWN_SECTION_CODE`,
+ * `SECTION_MATCHED_BY_LOINC_FALLBACK`) by the time any extractor runs, so the
+ * throwaway `{ emit: () => {} }` context here exists to keep this from
+ * double-counting them, not to hide anything. It also resolves a disagreeing
+ * section (`templateId` says one thing, LOINC another) on the `templateId`
+ * without a word, which is a known, filed limitation of recognition rather than
+ * a rule of this function.
+ *
+ * It lives here rather than in `./extract.ts` because two callers need the same
+ * answer: the misplaced-entry check, and the Plan of Treatment reading, which
+ * scopes `PLAN_ENTRY_NOT_MODELED` to the section that admits those templates. A
+ * second copy would be one more claim to keep in step.
+ *
+ * (No `@example` import: this helper is not on the package entry point, and
+ * citing one that does not resolve is the open `@example` defect already filed.)
+ *
+ * @example
+ * ```ts
+ * sectionKeyOf(sectionEl); // "planOfTreatment"
+ * ```
+ */
+export function sectionKeyOf(sectionEl: Element): string | undefined {
+  for (const root of templateRoots(sectionEl)) {
+    const info = sectionForTemplateRoot(root);
+    if (info !== undefined) return info.key;
+  }
+  const code = parseCd(child(sectionEl, "code"), { emit: () => {} });
+  if (code?.code !== undefined) {
+    const info = sectionForLoinc(code.code);
+    if (info !== undefined) return info.key;
+  }
+  return undefined;
+}
 
 /**
  * The `templateId` root OIDs carried by an element, in document order. Used to

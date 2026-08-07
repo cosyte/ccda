@@ -3827,9 +3827,17 @@ describe("clinical entries, planned entries nested in a Planned Intervention Act
     //   that shape IS read. This file has no frequency evidence and should not
     //   pretend to.)
     //
-    // Both come back as nothing with nothing said, exactly as they did on base.
-    // Widening to them is a decision with its own matrix, not a tidy-up, and
-    // this test fails loudly if someone takes it without one.
+    // Neither's CONTENTS is reached, exactly as on base. Widening to them is a
+    // decision with its own matrix, not a tidy-up, and this test fails loudly if
+    // someone takes it without one.
+    //
+    // **What changed, and what did not.** A Nutrition Recommendation is one of
+    // the three admitted-but-unmodelled templates, so the CONTAINER is now
+    // reported (`PLAN_ENTRY_NOT_MODELED`) where before it was silent. That is a
+    // report about the act, not about what it holds: the planned medication one
+    // layer in is still returned as nothing, and nothing about it is said. An
+    // Intervention Act (`…22.4.131`) is not one of the three, so its half is
+    // still silent end to end.
     const med = PLANNED_MEDICATION_XML;
     const nutritionHolding = `<act classCode="ACT" moodCode="INT">
               <templateId root="2.16.840.1.113883.10.20.22.4.130"/>
@@ -3860,10 +3868,17 @@ describe("clinical entries, planned entries nested in a Planned Intervention Act
     // container contributes NOTHING, which is exactly what makes this shape
     // dangerous: there is no code for a consumer to filter on.
     const empty = parseCcda(buildCcda({ sections: planOfTreatment("") }));
-    for (const container of [nutritionHolding, performedIntervention]) {
+    const base = codes(empty.warnings).sort();
+    for (const [container, extra] of [
+      // The container itself is one of the three: reported once, contents still
+      // unreached.
+      [nutritionHolding, ["PLAN_ENTRY_NOT_MODELED"]],
+      // Not one of the three: silent end to end, exactly as on base.
+      [performedIntervention, []],
+    ] as const) {
       const doc = parseCcda(buildCcda({ sections: planOfTreatment(entries([container])) }));
       expect(doc.getPlannedItems()).toStrictEqual([]);
-      expect(codes(doc.warnings).sort()).toStrictEqual(codes(empty.warnings).sort());
+      expect(codes(doc.warnings).sort()).toStrictEqual([...base, ...extra].sort());
     }
   });
 
@@ -4013,5 +4028,205 @@ describe("clinical entries, planned entries nested in a Planned Intervention Act
         "immunizationActivity / nested in an intervention: kind=immunizationActivity code=140 mood=INT disposition=planned | silent",
       ]
     `);
+  });
+});
+
+/**
+ * The three templates the Plan of Treatment Section and the Planned Intervention
+ * Act admit alongside the seven planned kinds, and this package does not return:
+ * Instruction (`…22.4.20`), Handoff Communication Participants (`…22.4.141`),
+ * Nutrition Recommendation (`…22.4.130`). They were excluded in **silence**;
+ * they are now REPORTED (`PLAN_ENTRY_NOT_MODELED`) and still not returned.
+ *
+ * What is worth pinning is mostly what did NOT change. Reporting an entry is not
+ * modelling it, so `getPlannedItems()` must be identical to base on every one of
+ * these documents, and the fourth admitted-but-unreturned template, Goal
+ * Observation, must stay silent because the decision on it was to model it
+ * rather than warn about it.
+ */
+describe("clinical entries, the admitted-but-unmodelled plan entries", () => {
+  const INSTRUCTION_XML = `<act classCode="ACT" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.20" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="instr-1"/>
+              <code code="311401005" codeSystem="2.16.840.1.113883.6.96" displayName="Patient education"/>
+              <statusCode code="completed"/>
+            </act>`;
+  const HANDOFF_XML = `<act classCode="ACT" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.141"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="handoff-1"/>
+              <statusCode code="active"/>
+            </act>`;
+  const NUTRITION_XML = `<act classCode="ACT" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.130"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="nutr-1"/>
+              <statusCode code="active"/>
+            </act>`;
+  /** The fourth admitted-but-unreturned template, deliberately NOT reported. */
+  const GOAL_XML = `<observation classCode="OBS" moodCode="GOL">
+              <templateId root="2.16.840.1.113883.10.20.22.4.121" extension="2022-06-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="goal-1"/>
+              <code code="58410-2" codeSystem="2.16.840.1.113883.6.1" displayName="CBC panel"/>
+              <statusCode code="active"/>
+            </observation>`;
+
+  const planOfTreatment = (inner: string): string => `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.10" extension="2014-06-09"/>
+          <code code="18776-5" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Plan of Treatment</title>
+          <text><content ID="plan1">Plan</content></text>
+          ${inner}
+        </section>
+      </component>`;
+
+  /**
+   * The Instructions Section (`…22.2.45`, LOINC `69730-0`), where an Instruction
+   * is the section's own required entry rather than a dropped plan entry. The
+   * negative control for the section scoping.
+   */
+  const instructionsSection = (inner: string): string => `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.45" extension="2014-06-09"/>
+          <code code="69730-0" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Instructions</title>
+          <text><content ID="ins1">Instructions</content></text>
+          ${inner}
+        </section>
+      </component>`;
+
+  /** A Planned Intervention Act in its conformant home, the Interventions Section. */
+  const interventions = (nested: string): string => `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.21.2.3" extension="2015-08-01"/>
+          <code code="62387-6" codeSystem="2.16.840.1.113883.6.1" displayName="Interventions Provided"/>
+          <title>Interventions</title>
+          <text><content ID="ivn1">Planned toward the recorded goal</content></text>
+          <entry>
+            <act classCode="ACT" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.146" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="ivn-1"/>
+              <statusCode code="active"/>
+              ${nested}
+            </act>
+          </entry>
+        </section>
+      </component>`;
+
+  const entry = (act: string): string => `<entry>${act}</entry>`;
+  const related = (act: string): string =>
+    `<entryRelationship typeCode="REFR">${act}</entryRelationship>`;
+  const planEntry = (w: readonly CcdaWarning[]): CcdaWarning[] =>
+    w.filter((x) => x.code === "PLAN_ENTRY_NOT_MODELED");
+
+  it("reports each of the three as a direct Plan of Treatment entry, and returns none of them", () => {
+    for (const [act, name, id] of [
+      [INSTRUCTION_XML, "Instruction", "instr-1"],
+      [HANDOFF_XML, "Handoff Communication Participants", "handoff-1"],
+      [NUTRITION_XML, "Nutrition Recommendation", "nutr-1"],
+    ] as const) {
+      const doc = parseCcda(buildCcda({ sections: planOfTreatment(entry(act)) }));
+      // Reporting is not modelling: the model is exactly as it was.
+      expect(doc.getPlannedItems()).toStrictEqual([]);
+      const said = planEntry(doc.warnings);
+      expect(said).toHaveLength(1);
+      expect(said[0]?.message).toContain(name);
+      // The act survives the round trip untouched, which is the whole reason a
+      // warning rather than a silent drop is the honest answer: the entry is
+      // still there in `doc.toString()`, it is simply not on the model.
+      expect(doc.toString()).toContain(id);
+    }
+  });
+
+  it("reports each of the three nested in a Planned Intervention Act", () => {
+    for (const act of [INSTRUCTION_XML, HANDOFF_XML, NUTRITION_XML]) {
+      const doc = parseCcda(buildCcda({ sections: interventions(related(act)) }));
+      expect(doc.getPlannedItems()).toStrictEqual([]);
+      expect(planEntry(doc.warnings)).toHaveLength(1);
+    }
+  });
+
+  it("stays silent on an Instruction in the Instructions Section, where it is the section's own entry", () => {
+    // THE SCOPING, measured rather than asserted. The direct-entry half is
+    // scoped to the section whose catalog admits these three; the Instructions
+    // Section's required entry IS an Instruction, and a conformant document
+    // must not draw a "dropped from the plan" report for it.
+    const doc = parseCcda(buildCcda({ sections: instructionsSection(entry(INSTRUCTION_XML)) }));
+    expect(planEntry(doc.warnings)).toStrictEqual([]);
+  });
+
+  it("does NOT report a Goal Observation, the fourth admitted-but-unreturned template", () => {
+    // Deliberate. The decision taken on Goal Observation was to MODEL it, with
+    // its own IG grounding; a warning here would pre-empt that with a weaker
+    // answer, and would then be a stable code to retire later.
+    const doc = parseCcda(buildCcda({ sections: planOfTreatment(entry(GOAL_XML)) }));
+    expect(doc.getPlannedItems()).toStrictEqual([]);
+    expect(planEntry(doc.warnings)).toStrictEqual([]);
+  });
+
+  it("does NOT report a performed act the Planned Intervention Act also holds", () => {
+    // The container admits performed acts too. Those are modelled elsewhere and
+    // reached by their own extractors, so calling one "not modelled" would be
+    // false. Only the three named templates are reported.
+    const performedMed = `<substanceAdministration classCode="SBADM" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.16" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="perf-med-1"/>
+              <statusCode code="completed"/>
+              <effectiveTime value="20240901"/>
+              <consumable><manufacturedProduct><manufacturedMaterial>
+                <code code="314076" codeSystem="2.16.840.1.113883.6.88" displayName="Lisinopril 10 MG Oral Tablet"/>
+              </manufacturedMaterial></manufacturedProduct></consumable>
+            </substanceAdministration>`;
+    const doc = parseCcda(buildCcda({ sections: interventions(related(performedMed)) }));
+    expect(planEntry(doc.warnings)).toStrictEqual([]);
+  });
+
+  it("reports once per matching root, and twice for an act stacking two of the three", () => {
+    // No document ranks these against each other, so both are stated rather
+    // than one picked. A single act carrying two of the roots is malformed, and
+    // reporting both is the reading that hides nothing.
+    const stacked = `<act classCode="ACT" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.20" extension="2014-06-09"/>
+              <templateId root="2.16.840.1.113883.10.20.22.4.130"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="stacked-1"/>
+              <statusCode code="active"/>
+            </act>`;
+    const doc = parseCcda(buildCcda({ sections: planOfTreatment(entry(stacked)) }));
+    expect(planEntry(doc.warnings)).toHaveLength(2);
+  });
+
+  it("reports the container AND still returns a planned act stacked on the same entry", () => {
+    // Reporting must never change what is extracted. An act carrying both a
+    // planned root and one of the three yields its PlannedItem exactly as
+    // before, plus the report.
+    const stacked = `<act classCode="ACT" moodCode="INT">
+              <templateId root="2.16.840.1.113883.10.20.22.4.39" extension="2014-06-09"/>
+              <templateId root="2.16.840.1.113883.10.20.22.4.20" extension="2014-06-09"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="stacked-2"/>
+              <code code="409073007" codeSystem="2.16.840.1.113883.6.96" displayName="Education"/>
+              <statusCode code="active"/>
+            </act>`;
+    const doc = parseCcda(buildCcda({ sections: planOfTreatment(entry(stacked)) }));
+    expect(doc.getPlannedItems().map((p) => p.kind)).toStrictEqual(["act"]);
+    expect(planEntry(doc.warnings)).toHaveLength(1);
+  });
+
+  it("carries a PHI-free registry message naming the template, and a bounded position", () => {
+    const doc = parseCcda(buildCcda({ sections: planOfTreatment(entry(NUTRITION_XML)) }));
+    const w = planEntry(doc.warnings)[0];
+    expect(w?.message).toContain("Nutrition Recommendation");
+    // No factory takes a value parameter, so no document token can be in it.
+    expect(w?.message).not.toContain("nutr-1");
+    expect(w?.position.path).toBe("act");
+  });
+
+  it("is quietable by a profile: it reports a modelling gap, not a misread value", () => {
+    // Not in SAFETY_CRITICAL_CODES, deliberately. Nothing is mis-read here; the
+    // entry is simply not carried, exactly as UNKNOWN_SECTION_CODE reports a
+    // section retained as narrative-only. A profile may tolerate it.
+    expect(SAFETY_CRITICAL_CODES.has("PLAN_ENTRY_NOT_MODELED")).toBe(false);
+    expect(SAFETY_CRITICAL_CODES.has("MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME")).toBe(false);
   });
 });

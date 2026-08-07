@@ -34,6 +34,14 @@
  * C-CDA-Examples "Parent Document Replace Relationship" sample. Pass
  * `revision: false` to edit in place without stamping a new version.
  *
+ * **A minted `setId` is labelled as synthetic** (`SYNTHETIC-SETID-…` under a
+ * synthetic assigning-authority root), so a receiving system can tell an
+ * invented version series from one a source system asserted;
+ * {@link isSyntheticSetId} is the check and {@link SYNTHETIC_SETID_PREFIX}
+ * documents the scheme. **Nothing forces a receiver to read the label**, which
+ * is stated there rather than papered over: a label makes the fabrication
+ * visible, it does not make the identifier true.
+ *
  * @packageDocumentation
  */
 
@@ -44,6 +52,7 @@ import { LOINC } from "../model/code-systems.js";
 import type { CcdaDocument } from "../model/document.js";
 import { attr, child, childElements, children } from "../model/dom.js";
 import type { TerminologyAdapter } from "../model/terminology.js";
+import type { II } from "../model/types/ii.js";
 import { parseCcda } from "../parser/index.js";
 import { missingRequiredSections } from "../parser/required-sections.js";
 import { DEFAULT_LIMITS, parseSecureXml } from "../parser/secure-xml.js";
@@ -53,6 +62,67 @@ import type { Document, Element } from "@xmldom/xmldom";
 
 /** A synthetic (non-real) assigning-authority OID for editor-generated ids. @internal */
 const SYNTH_ROOT = "2.16.840.1.113883.19.5.99999";
+
+/**
+ * The `@extension` prefix every `setId` {@link editCcda} **mints** carries, so a
+ * minted version-series identifier is recognisable as one on sight and in code.
+ *
+ * A minted `setId` looks like `SYNTHETIC-SETID-e1` under the synthetic
+ * assigning-authority root `2.16.840.1.113883.19.5.99999` (an OID in HL7's own
+ * example arc, which is not an organisation's real namespace). Together those
+ * two are the whole scheme; {@link isSyntheticSetId} is the check.
+ *
+ * **A `setId` the source already carried, or one the caller supplied through
+ * `revision.setId`, is never relabelled.** The prefix marks what this library
+ * invented, and only that.
+ *
+ * **The residual, stated rather than implied: nothing forces a receiving system
+ * to read the label.** A receiver that ignores both the prefix and the root will
+ * treat a minted `setId` exactly as it treats a real one, and this library
+ * cannot make it do otherwise. Making it obvious is the whole of what a label
+ * can do; it does not make the identifier true. The alternative considered and
+ * rejected was to stop minting, which would emit a replacement whose `setId`
+ * does not match its own `parentDocument`'s, and CDA R2 requires that it does.
+ *
+ * @example
+ * ```ts
+ * import { SYNTHETIC_SETID_PREFIX } from "@cosyte/ccda";
+ * console.log(SYNTHETIC_SETID_PREFIX); // "SYNTHETIC-SETID"
+ * ```
+ */
+export const SYNTHETIC_SETID_PREFIX = "SYNTHETIC-SETID";
+
+/**
+ * Whether a `setId` was **minted by {@link editCcda}** rather than carried by
+ * the source document or supplied by the caller. True only when the identifier
+ * matches the whole documented scheme: the synthetic assigning-authority root
+ * *and* an `@extension` beginning {@link SYNTHETIC_SETID_PREFIX}. Both, because
+ * either alone is something a real document could carry by coincidence.
+ *
+ * **A `false` is not a promise that the identifier is real.** It says only that
+ * this library did not mint it under this scheme: a `setId` minted by some other
+ * tool, or by a version of this library before the scheme existed
+ * (`setid-e1`, unprefixed), reads `false` here. Use it to recognise a synthetic
+ * id, never to certify a real one.
+ *
+ * @param setId - The `setId` to test, e.g. `doc.header.setId`. `undefined` is
+ *   `false` (a document with no `setId` has nothing to recognise).
+ * @returns `true` when the identifier matches the minted scheme.
+ * @example
+ * ```ts
+ * import { parseCcda, isSyntheticSetId } from "@cosyte/ccda";
+ * const doc = parseCcda(xml);
+ * if (isSyntheticSetId(doc.header.setId)) {
+ *   // the version series was invented by an editor, not asserted by a source system
+ * }
+ * ```
+ */
+export function isSyntheticSetId(setId: II | undefined): boolean {
+  return (
+    setId?.root === SYNTH_ROOT &&
+    (setId.extension?.startsWith(`${SYNTHETIC_SETID_PREFIX}-`) ?? false)
+  );
+}
 
 /**
  * The `ClinicalDocument` child elements that, per the CDA R2 XSD sequence
@@ -136,7 +206,9 @@ export interface DocumentIdInit {
 /**
  * Overrides for the CDA R2 revision an edit stamps. All fields are optional:
  * omit `documentId` to mint a fresh id, omit `setId` to keep the source's
- * version-series id (or mint one when the source has none), and omit
+ * version-series id (or mint a **labelled synthetic** one when the source has
+ * none, see {@link SYNTHETIC_SETID_PREFIX}; a `setId` supplied here is the
+ * caller's assertion and is never relabelled), and omit
  * `versionNumber` to increment the prior version by one. Pass `revision: false`
  * on {@link EditCcdaOptions} instead of a `RevisionInit` to skip revision
  * stamping entirely.
@@ -507,7 +579,8 @@ function collectIds(root: Element): Set<string> {
 
 /**
  * Stamp a CDA R2 `RPLC` revision onto the document: give it a fresh
- * `ClinicalDocument.id`, keep/mint the version-series `setId`, increment
+ * `ClinicalDocument.id`, keep/mint the version-series `setId` (a minted one
+ * labelled synthetic, see {@link SYNTHETIC_SETID_PREFIX}), increment
  * `versionNumber`, and add a `relatedDocument typeCode="RPLC"` whose
  * `parentDocument` names the version being replaced. All new header elements are
  * inserted at their CDA R2 XSD sequence positions (setId/versionNumber after
@@ -575,6 +648,14 @@ function stampRevision(
   // replacement and its parent to share it, hence both. ParentDocument.id is
   // what names the prior document itself, and that is never invented. The
   // disowned extension is carried nowhere.
+  //
+  // **A minted one is labelled as minted** (`SYNTHETIC-SETID-e1` under the
+  // synthetic example-arc root), so a receiving system can tell an invented
+  // version series from an asserted one; `isSyntheticSetId` is the check, and
+  // the residual it cannot close is stated on `SYNTHETIC_SETID_PREFIX`. The
+  // label goes on the minted branch **only**: a setId the source carried, or one
+  // the caller passed as `revision.setId`, is somebody else's assertion and is
+  // never relabelled.
   const usableSetIdEl =
     oldSetIdEl !== undefined && attr(oldSetIdEl, "nullFlavor") === undefined
       ? oldSetIdEl
@@ -582,7 +663,7 @@ function stampRevision(
   const seriesId: DocumentIdInit =
     usableSetIdEl !== undefined
       ? iiFrom(usableSetIdEl)
-      : (init?.setId ?? { root: SYNTH_ROOT, extension: id("setid") });
+      : (init?.setId ?? { root: SYNTH_ROOT, extension: id(SYNTHETIC_SETID_PREFIX) });
 
   // The version the parent carried (a source with no versionNumber is treated as
   // version 1); the replacement increments it unless the caller pins a value.

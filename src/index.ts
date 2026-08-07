@@ -58,7 +58,7 @@ export { serializeCcda } from "./serialize/index.js";
 // Document editing (the read→edit→write loop): re-emit a parsed document with a
 // section added or replaced, preserving every unedited section byte-faithfully
 // and stamping a CDA R2 revision (`relatedDocument` RPLC + setId/versionNumber).
-export { editCcda, CcdaEditError } from "./edit/index.js";
+export { editCcda, CcdaEditError, SYNTHETIC_SETID_PREFIX, isSyntheticSetId } from "./edit/index.js";
 export type {
   EditCcdaOptions,
   SectionEdit,
