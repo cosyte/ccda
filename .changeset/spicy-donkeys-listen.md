@@ -1,0 +1,17 @@
+---
+"@cosyte/ccda": patch
+---
+
+Close the two silent plan drops left stated but unfixed: an edited document short a SHALL element, and a dropped Handoff in the Interventions Section.
+
+**`editCcda` now reports a Planned Medication Activity it emits short its SHALL `effectiveTime`.** The template makes it `[1..1]` (CONF:1098-30468) while the builder input types the field optional, so an edit could graft a planned drug order with no timing at all and say nothing. It now raises `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, the same code `buildCcda` raises for the same document, appended after the re-parse's warnings. The emitted XML is unchanged: no date is fabricated and no `nullFlavor` is invented.
+
+**The check reads the emitted DOM, and its scope is narrow in both directions on purpose.** `editCcda` takes an **ordered** list of edits where a later one discards an earlier one's content, so a check reading that list reports a SHALL violation against a document that carries the element; only reading what survived into the output is correct on both writers. And it covers only what **that call grafted**: an offending act the source brought with it is never re-reported, because an edit is not a validator of a document its caller did not write. Both emitters now share one implementation rather than a claim beside it.
+
+**The warning's message no longer names `buildCcda`.** It opened with that emitter's name while that was the only writer raising it, which made it false the moment a second one did, and a warning that misdescribes its own document is a defect this library treats as seriously as a warning pointing at a coding that is not there. The stable `code` is unchanged and is still the thing to key on; only the human-readable `message` text moved.
+
+**`PLAN_ENTRY_NOT_MODELED` now also fires on a direct `<entry>` of the Interventions Section (V3).** C-CDA R2.1 admits a Handoff Communication Participants act there in as many words (CONF:1198-32402 / 1198-32403), and this library already reported all three unmodelled templates nested in a Planned Intervention Act with no section condition, whose conformant home is that same section. So a Handoff moved one level up, out of the container and into a direct entry of its own section, used to go from reported to silent. Instruction and Nutrition Recommendation are covered there too: the warning is about a **modelling gap, not conformance**, and both are still recognized and still dropped.
+
+**Nothing about what is returned changed.** `getPlannedItems()` returns the same seven templates, no `PlannedItemKind` was added, and every reported act still reaches no model field. **The residual is still stated rather than implied**: a Handoff nested in an Intervention Act (`2.16.840.1.113883.10.20.22.4.131`) stays silent, because that container is not descended into, and a direct entry of an unrecognized section stays silent because there is no section key to match. An Instruction in the Instructions Section, where it is that section's own required entry, still draws nothing.
+
+The CCD SHALL-section disagreement between the builder and the parser is untouched and still open; settling it needs the normative R2.1 Schematron.

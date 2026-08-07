@@ -16,6 +16,17 @@
  * templateIds, LOINC code, SHALL `effectiveTime`, and narrative/entry agreement
  * a freshly-built section would, and re-parses with zero new warnings.
  *
+ * **One emit-time diagnostic, over what the edit actually wrote.** A grafted
+ * Plan of Treatment can carry a Planned Medication Activity short the
+ * `effectiveTime` its template SHALLs (`…22.4.42`, CONF:1098-30468), because that
+ * field is optional on a published input type. The returned document reports it
+ * (`MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`), appended after the re-parse's
+ * warnings, and the emitted XML is unchanged: no date is invented and no
+ * `nullFlavor` is written in its place. It is read off the **surviving** grafted
+ * components, so an edit whose offending content a later edit in the same call
+ * discarded says nothing, and an untouched section the source brought with it is
+ * never re-reported.
+ *
  * **Fail-safe.** An edit never silently drops or corrupts an unedited section
  * (they are carried by reference), never fabricates a clinical value (an empty
  * content list yields that section's spec-clean `nullFlavor="NI"` shell, never
@@ -45,7 +56,11 @@
  * @packageDocumentation
  */
 
-import { buildSectionComponent, EDITABLE_SECTIONS } from "../builder/build-ccda.js";
+import {
+  buildSectionComponent,
+  EDITABLE_SECTIONS,
+  plannedMedicationDiagnostics,
+} from "../builder/build-ccda.js";
 import type { EditableSectionKind, SectionInput } from "../builder/build-ccda.js";
 import { el } from "../builder/dom.js";
 import { LOINC } from "../model/code-systems.js";
@@ -324,8 +339,10 @@ export class CcdaEditError extends Error {
  * @param options - The section edits to apply, the revision behavior, and an
  *   optional bring-your-own `terminology` adapter forwarded to the final re-parse
  *   so the edited document flags adapter-rejected codes (`SEMANTIC_CODE_INVALID`).
- * @returns A new {@link CcdaDocument}, the re-parse of the edited XML. The
- *   `source` is never mutated.
+ * @returns A new {@link CcdaDocument}, the re-parse of the edited XML, plus any
+ *   emit-time diagnostic about what this call grafted (today only
+ *   `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, appended last). The `source` is
+ *   never mutated.
  * @throws {@link CcdaEditError} when the source has no retained XML, has no
  *   `structuredBody` to edit, violates an add/replace precondition, would drop a
  *   SHALL required section, or (when stamping a revision) has no usable
@@ -361,9 +378,7 @@ export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): C
   }
 
   const edits = options.sections ?? [];
-  if (edits.length > 0) {
-    applySectionEdits(dom, root, edits, source.documentType);
-  }
+  const grafted = edits.length > 0 ? applySectionEdits(dom, root, edits, source.documentType) : [];
 
   if (options.revision !== false) {
     stampRevision(dom, root, options.revision, uniqueIdGen(root));
@@ -375,9 +390,29 @@ export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): C
   // `SEMANTIC_CODE_INVALID` for any coded value the adapter rejects (in a grafted
   // section or an untouched one). The edit still emits every code **verbatim**; the
   // adapter can only ever add a flag, never coerce a value.
-  return options.terminology !== undefined
-    ? parseCcda(serializeDocument(dom), { terminology: options.terminology })
-    : parseCcda(serializeDocument(dom));
+  const parsed =
+    options.terminology !== undefined
+      ? parseCcda(serializeDocument(dom), { terminology: options.terminology })
+      : parseCcda(serializeDocument(dom));
+
+  // Then the emit-time diagnostics, over the components this call GRAFTED that
+  // SURVIVED into the emitted DOM. Both halves of that scope are load-bearing and
+  // neither is an optimisation:
+  //
+  // - **Surviving, not supplied.** `options.sections` is an ORDERED list, and a
+  //   later edit to the same section kind discards an earlier one's content. A
+  //   check reading the list reports a SHALL violation against a document that
+  //   carries the element, which is a warning misdescribing its own document.
+  //   That was measured, refuted and reverted before this shape existed.
+  // - **Grafted, not every section.** An untouched section is the SOURCE's
+  //   content, carried by reference; re-reporting it would make an edit a
+  //   validator of a document its caller did not write, and would fire on the
+  //   same act again on every subsequent edit of an unrelated section.
+  //
+  // Appended after the parse warnings rather than interleaved, matching
+  // `buildCcda`; `withWarnings` returns a new document rather than mutating.
+  const diagnostics = plannedMedicationDiagnostics(grafted);
+  return diagnostics.length === 0 ? parsed : parsed.withWarnings(diagnostics);
 }
 
 /** Recover the source XML a parsed document retains, or throw `NO_SOURCE_DOCUMENT`. @internal */
@@ -393,13 +428,24 @@ function sourceXml(source: CcdaDocument): string {
   }
 }
 
-/** Apply every section add/replace to the `structuredBody`, enforcing SHALL safety. @internal */
+/**
+ * Apply every section add/replace to the `structuredBody`, enforcing SHALL
+ * safety, and return the grafted `<component>` elements that **survived** into
+ * the final body.
+ *
+ * A component is dropped from the return when a later edit in the same call
+ * replaced it, so the answer is a fact about the emitted DOM rather than about
+ * the edit list. Survival is decided by walking the body's own children and
+ * keeping the grafted nodes still found there, not by inspecting a removed
+ * node's `parentNode`: the question is "is this in the document", and asking the
+ * document is the reading that cannot be wrong about it. @internal
+ */
 function applySectionEdits(
   dom: Document,
   root: Element,
   edits: readonly SectionEdit[],
   documentType: DocumentType | undefined,
-): void {
+): readonly Element[] {
   const structuredBody = findStructuredBody(root);
   if (structuredBody === undefined) {
     throw new CcdaEditError(
@@ -415,8 +461,9 @@ function applySectionEdits(
       : new Set(missingRequiredSections(documentType, sectionKeys(structuredBody)));
 
   const id = uniqueIdGen(root);
+  const grafted = new Set<Element>();
   for (const edit of edits) {
-    applyOneSectionEdit(dom, structuredBody, edit, id);
+    grafted.add(applyOneSectionEdit(dom, structuredBody, edit, id));
   }
 
   if (documentType !== undefined) {
@@ -430,15 +477,22 @@ function applySectionEdits(
       );
     }
   }
+
+  // Every graft lands as a direct `<component>` of the body (appended or swapped
+  // in place), so the body's own child list is the whole search space.
+  return children(structuredBody, "component").filter((component) => grafted.has(component));
 }
 
-/** Add or replace one section, honoring its {@link SectionEditMode}. @internal */
+/**
+ * Add or replace one section, honoring its {@link SectionEditMode}, and return
+ * the `<component>` this edit grafted into the body. @internal
+ */
 function applyOneSectionEdit(
   dom: Document,
   structuredBody: Element,
   edit: SectionEdit,
   id: (prefix: string) => string,
-): void {
+): Element {
   const meta = EDITABLE_SECTIONS[edit.kind];
   const existing = findSectionComponent(structuredBody, edit.kind);
   const mode = edit.mode ?? "upsert";
@@ -466,6 +520,7 @@ function applyOneSectionEdit(
   } else {
     structuredBody.replaceChild(component, existing);
   }
+  return component;
 }
 
 /** The `structuredBody` element, or `undefined` for an unstructured document. @internal */

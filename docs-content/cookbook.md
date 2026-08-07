@@ -402,6 +402,13 @@ assigning-authority root. Call `isSyntheticSetId(doc.header.setId)` to tell a mi
 from one a source system asserted. Nothing forces a receiver to read that label, so treat it as a way
 to recognise a fabricated id, never as a guarantee anyone downstream will notice it.
 
+Check `revised.warnings` after an edit, not just after a parse. An edit reports the conformance gaps
+in what **it** wrote: a grafted Plan of Treatment carrying a planned medication with no
+`effectiveTime` draws `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, the same code `buildCcda` raises
+for the same document. It is scoped to the sections that edit grafted and that survived into the
+output, so an edit superseded by a later one in the same call is not reported, and an offending act
+the source already carried is not re-reported on every unrelated edit.
+
 ```ts runnable
 import { buildCcda, editCcda, parseCcda } from "@cosyte/ccda";
 

@@ -4157,33 +4157,103 @@ describe("clinical entries, the admitted-but-unmodelled plan entries", () => {
     expect(planEntry(doc.warnings)).toStrictEqual([]);
   });
 
-  it("is bounded: the same act outside the two covered places is still dropped in silence", () => {
-    // THE RESIDUAL, MEASURED rather than left to be discovered. The report's
-    // scope is a bound this package chose (the section this accessor is named
-    // for, plus the container), NOT a claim that it covers every occurrence.
-    // These templates appear elsewhere, and an occurrence there is unchanged
-    // from base: no item, no warning. The Interventions Section is used as the
-    // probe only because this package already reaches into it for the container.
-    const doc = parseCcda(buildCcda({ sections: interventions("") }));
-    const withHandoff = parseCcda(
-      buildCcda({
-        sections: `
+  /** The Interventions Section (V3) with no entry at all, the differential base. */
+  const emptyInterventions = (): string => `
       <component>
         <section>
           <templateId root="2.16.840.1.113883.10.20.21.2.3" extension="2015-08-01"/>
           <code code="62387-6" codeSystem="2.16.840.1.113883.6.1" displayName="Interventions Provided"/>
           <title>Interventions</title>
           <text><content ID="ivn9">Interventions</content></text>
+        </section>
+      </component>`;
+
+  /** The Interventions Section (V3) carrying `inner` as its direct entries. */
+  const interventionsWith = (inner: string): string => `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.21.2.3" extension="2015-08-01"/>
+          <code code="62387-6" codeSystem="2.16.840.1.113883.6.1" displayName="Interventions Provided"/>
+          <title>Interventions</title>
+          <text><content ID="ivn9">Interventions</content></text>
+          ${inner}
+        </section>
+      </component>`;
+
+  it("reports a direct entry of the Interventions Section, which R2.1 admits a Handoff in", () => {
+    // TRACED, not reasoned. C-CDA R2.1 Interventions Section (V3): "MAY contain
+    // zero or more [0..*] entry (CONF:1198-32402) such that it SHALL contain
+    // exactly one [1..1] Handoff Communication Participants (identifier:
+    // 2.16.840.1.113883.10.20.22.4.141) (CONF:1198-32403)."
+    //
+    // The internal reason is the stronger one: the NESTED half already fires in
+    // this same section with no section condition, so before this a Handoff
+    // moved one level up, out of the Planned Intervention Act and into a direct
+    // entry of its own section, went from reported to silent. A report a
+    // document's nesting depth switches off is an accident, not a bound.
+    const base = parseCcda(buildCcda({ sections: emptyInterventions() }));
+    for (const [act, name] of [
+      [HANDOFF_XML, "Handoff Communication Participants"],
+      // The other two are in scope here as a stated CHOICE, not an extension of
+      // the citation: the section's contained set is Intervention Act, Handoff
+      // and Planned Intervention Act, so neither of these is admitted here. The
+      // warning is about a MODELLING gap rather than conformance, and both are
+      // still recognized and still dropped, so silence would say less than the
+      // report does.
+      [INSTRUCTION_XML, "Instruction"],
+      [NUTRITION_XML, "Nutrition Recommendation"],
+    ] as const) {
+      const doc = parseCcda(buildCcda({ sections: interventionsWith(entry(act)) }));
+      // Reporting is not modelling: nothing is returned, before or after.
+      expect(doc.getPlannedItems()).toStrictEqual([]);
+      const said = planEntry(doc.warnings);
+      expect(said).toHaveLength(1);
+      expect(said[0]?.message).toContain(name);
+      // Differential, so the envelope's own warnings are never mistaken for the
+      // claim: the entry contributes exactly the one report and nothing else.
+      expect(codes(doc.warnings).sort()).toStrictEqual(
+        [...codes(base.warnings), "PLAN_ENTRY_NOT_MODELED"].sort(),
+      );
+    }
+  });
+
+  it("is still bounded: an Intervention Act container, and an unrecognized section, stay silent", () => {
+    // THE RESIDUAL AFTER THE WIDENING, MEASURED rather than left to be
+    // discovered. Handoff's contained-by set is four: Plan of Treatment Section,
+    // Planned Intervention Act, Intervention Act, Interventions Section. Three
+    // of the four report; the Intervention Act (`…22.4.131`) does not, because
+    // this package does not descend into that container at all. Widening THAT is
+    // its own decision with its own matrix, and this test fails loudly if
+    // somebody takes it without one.
+    const interventionAct = `<act classCode="ACT" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.131" extension="2015-08-01"/>
+              <id root="2.16.840.1.113883.19.5.99999.20" extension="ia-1"/>
+              <statusCode code="completed"/>
+              <entryRelationship typeCode="REFR">${HANDOFF_XML}</entryRelationship>
+            </act>`;
+    const base = parseCcda(buildCcda({ sections: emptyInterventions() }));
+    const nested = parseCcda(buildCcda({ sections: interventionsWith(entry(interventionAct)) }));
+    expect(nested.getPlannedItems()).toStrictEqual([]);
+    expect(planEntry(nested.warnings)).toStrictEqual([]);
+    expect(codes(nested.warnings).sort()).toStrictEqual(codes(base.warnings).sort());
+
+    // And a section this catalog recognizes as nothing: there is no key to match,
+    // so the direct-entry half cannot fire however the act is templated.
+    const unrecognized = parseCcda(
+      buildCcda({
+        sections: `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.999"/>
+          <code code="99999-9" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Unrecognized</title>
+          <text><content ID="unk1">Unrecognized</content></text>
           ${entry(HANDOFF_XML)}
         </section>
       </component>`,
       }),
     );
-    expect(withHandoff.getPlannedItems()).toStrictEqual([]);
-    expect(planEntry(withHandoff.warnings)).toStrictEqual([]);
-    // Differential, so the fixture envelope's own warnings are not mistaken for
-    // the claim: the direct Handoff entry contributes nothing at all.
-    expect(codes(withHandoff.warnings).sort()).toStrictEqual(codes(doc.warnings).sort());
+    expect(planEntry(unrecognized.warnings)).toStrictEqual([]);
   });
 
   it("does NOT report a Goal Observation, the fourth admitted-but-unreturned template", () => {

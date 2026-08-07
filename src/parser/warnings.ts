@@ -322,7 +322,7 @@ export const WARNING_MESSAGES: Readonly<Record<WarningCode, string>> = Object.fr
   PLANNED_VS_PERFORMED_AMBIGUOUS:
     "Procedure entry has no moodCode; performed (EVN) vs planned (INT) is ambiguous, never conflated, left unclassified.",
   MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME:
-    "buildCcda emitted a Planned Medication Activity with no effectiveTime, which the template makes a SHALL (exactly one, CONF:1098-30468): the caller supplied none and the builder never fabricates a date, so the emitted document is short that element and says nothing about when the drug is to be given.",
+    "The emitted document carries a Planned Medication Activity with no effectiveTime, which the template makes a SHALL (exactly one, CONF:1098-30468): the caller supplied none and this library never fabricates a date, so the document is short that element and says nothing about when the drug is to be given.",
   PLAN_ENTRY_NOT_MODELED:
     "An entry template the Plan of Treatment reading admits was found where planned items are read (a section entry, or an act nested in a Planned Intervention Act); this parser recognizes it but does not model it as a planned item, so it is excluded from getPlannedItems(), reaches no other model field, and survives only in the re-serialized document.",
   SMOKING_STATUS_UNKNOWN:
@@ -1746,17 +1746,31 @@ export function plannedVsPerformedAmbiguous(position: CcdaPosition): CcdaWarning
 }
 
 /**
- * Build a `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` warning. **Emitted by
- * `buildCcda`, never by `parseCcda`**: it reports that the *caller's own build
- * input* omitted the `effectiveTime` a Planned Medication Activity (`…22.4.42`)
- * SHALL carry exactly once (CONF:1098-30468), so the document the builder just
- * emitted is short that element.
+ * Build a `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` warning. **Emitted by the
+ * emit side (`buildCcda` and `editCcda`), never by `parseCcda`**: it reports that
+ * a document this library has just *written* carries a Planned Medication
+ * Activity (`…22.4.42`) short the `effectiveTime` that template SHALL carry
+ * exactly once (CONF:1098-30468).
+ *
+ * **The message names neither emitter, deliberately, and must not be narrowed to
+ * one again.** It was worded around `buildCcda` while that was the only writer
+ * raising it, which made it false the moment a second writer did; a warning that
+ * misdescribes its own document is the same defect this package already names for
+ * a warning pointing at a coding that is not there. Which writer raised it is not
+ * a fact about the document, and a consumer that needs it knows which call it
+ * made.
+ *
+ * **Both raisers read the emitted DOM**, so what the warning asserts is a
+ * property of the bytes the caller is about to receive rather than of the input
+ * that produced them. That distinction is not academic: `editCcda` takes an
+ * *ordered* list of edits where a later one discards an earlier one's content, so
+ * an input-reading check reports a SHALL violation against a conformant document.
  *
  * The field stays **optional** on `BuildCcdaPlannedOrder`: requiring it would be
  * a breaking change to a published input type, and the decision taken was to
- * report the gap rather than close it by breaking callers. The builder does not
- * fabricate a date and does not refuse the build; it emits what it was given and
- * says so.
+ * report the gap rather than close it by breaking callers. Neither emitter
+ * fabricates a date and neither refuses the write; each emits what it was given
+ * and says so.
  *
  * Nothing changes on the read path. A *parsed* Planned Medication Activity with
  * no `effectiveTime` is as silent as it has always been, and widening this to
