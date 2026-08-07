@@ -23,6 +23,100 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
   - `buildCcda` emits **two of the twelve** document types (CCD, Referral Note). The other ten are
     not implemented. Parsing **recognizes** all twelve; only building is limited.
 
+## A narrative label is refused, never fabricated
+
+  - **The Allergies section rendered a positively-asserted allergy as the narrative "No known
+    allergies", and it shipped in `0.0.11`.** `allergiesSection` computed its narrative as
+    `label ?? "No known allergies"`, where `label` was
+    `a.noKnownAllergy === true ? "No known allergies" : a.allergen?.displayName`. With an allergen
+    carrying no `displayName` the `??` fired, so the emitted `<content>` was **byte-identical to the
+    negated no-known-allergies form** while the entry beside it carried `<value code="419199007">`
+    with **no `negationInd`**, the allergen on the `<participant>`, and the manifestation
+    observation. The `<reference>` linkage was intact and `doc.warnings` was `[]`, so the attested
+    narrative, the half a clinician reads, asserted the clinical opposite of its own entry with
+    nothing anywhere saying so. Reproduced independently by both of `#99`'s refuter passes, then
+    again on `0c4d67f` as the first act of the fix. `PRE-EXISTING`; a published version never moves
+    backwards (ADR 0001), so `0.0.11` carries it permanently and this was fix-forward.
+  - **The same root cause emitted the literal string `undefined` as narrative in the other seven
+    bare-`displayName` slots** (problems, medications, immunizations, procedures, encounters, past
+    medical history, plan of treatment), and, once the sweep was widened past the eight, as
+    `"undefined: 1 kg"` in vital signs, `"undefined: x"` / `"Ok: undefined"` in results, and
+    `"undefined: unknown"` in both assessment-scale slots. **SEVEN more slots fabricated a confident
+    NEGATIVE instead of `undefined`**: smoking status read "Smoking status unknown", functional and
+    mental status read "...: unknown" from BOTH their input paths (standalone and organizer-nested),
+    and family history read "Relative" / "unknown condition", each beside an entry that did carry the
+    code. Those seven are the same defect as the allergy one in a quieter register, and they were
+    reachable because their `??` fallback keyed on the enclosing OPTIONAL field rather than on the
+    label. **Twenty slots** (one inversion, seven bare `undefined`, five interpolated `undefined`,
+    seven fabricated negatives), one root cause, measured as a matrix on `0c4d67f` and again after.
+  - **THE REMEDY IS TO REFUSE, AND SUBSTITUTING A DIFFERENT CONFIDENT STRING WOULD HAVE REPRODUCED
+    THE WHOLE DEFECT CLASS.** An empty string, a placeholder, the code rendered as English, all of
+    them are a sentence the entry does not support; the shipped `?? "No known allergies"` was
+    exactly such a substitution, one word smaller. A build-time **warning** was weighed against a
+    refusal and rejected: a warning is fail-open, the document still exists and can be transmitted,
+    and this repo has already written down (for `SYNTHETIC_SETID_PREFIX`) that **nothing forces a
+    receiver to read a label**. `buildCcda` is the conservative-on-emit half of Postel's Law and
+    already refuses seven other unsatisfiable inputs with a `TypeError`, one of which
+    (`documentType`) exists solely as a runtime guard for untyped callers. So `narrativeLabel()`
+    throws, and the `??` fallback was **deleted rather than repointed**: `NO_KNOWN_ALLERGY_NARRATIVE`
+    is now reachable from the `noKnownAllergy === true` branch and no other, structurally, not only
+    by guard.
+  - **THE TYPE IS NOT THE GUARD.** `BuildCode.displayName` is a required `string`, so none of this is
+    reachable from a typed caller, but the package ships JavaScript and does runtime validation
+    elsewhere; closing this by tightening the type would have closed nothing. `narrativeLabel` widens
+    the field to `unknown` before testing it, for the same reason `buildCcda`'s `documentType` guard
+    widens to `string`.
+  - **THE FIELD PATH IN THE MESSAGE IS A PARAMETER, NOT A CONSTANT, AND THAT COST A REFUTER
+    FINDING.** One narrative shape can be reached from more than one input path: a functional or
+    mental status finding arrives either standalone (`functionalStatus[]`) or nested in an organizer
+    (`functionalStatusOrganizers[].findings[]`), and an assessment scale arrives under either the
+    functional or the mental key. The first cut hard-coded the standalone path in the label helper,
+    so a caller who used the organizer form got a refusal **naming a field they never set**. **If you
+    add another way in to an existing narrative shape, thread the path from the new call site**; a
+    diagnostic that misdescribes the input it refused is the same class of defect as a narrative that
+    misdescribes its entry. The path always names a `BuildCcdaInit` field; an `editCcda` caller reads
+    it as the content element of the section kind being edited, because an edit's `content` list is
+    the same type as the builder key the path names.
+  - **THE BOUND, STATED RATHER THAN OVERCLAIMED. Only NARRATIVE labels are guarded.** A `BuildCode`
+    that reaches the entry alone (an allergy `type`, a result `interpretation`, a medication or
+    vaccine `route`, a reaction, a severity, a criticality) is deliberately not routed through it:
+    `@displayName` is optional on a v3 `CD`, so omitting the attribute states nothing false, and
+    guarding it would refuse conformant input. **An ABSENT optional object keeps its fallback** ("no
+    smoking status recorded" really is unknown); only an object that is PRESENT without a label is
+    refused. Empty and whitespace-only labels are refused too, which is the one part of this
+    reachable from TypeScript, on the argument that an empty attested narrative beside a coded entry
+    loses the fact rather than states it.
+  - **`editCcda` inherits the guard for free and that is not an accident to rely on silently.** It
+    grafts sections with `buildSectionComponent`, the same emitter, so the second writer refuses on
+    the same input; `#99` paid for the lesson that a check on one emitter is not a check on the
+    document, so there is a test pinning the edit path rather than an assumption.
+  - **HOW IT IS PINNED, because a probe that cannot fail proves nothing.** The invariant is read off
+    the **emitted bytes** through the document's own `<reference>` linkage (`allergyNarrativePairs`
+    resolves each Allergy-Intolerance Observation's `text/reference` to its `<content>` and pairs it
+    with that observation's `negationInd`), so the narrative and the entry are graded together rather
+    than separately, and an unresolvable reference throws rather than reading as agreement. It
+    carries a **negative control**: a document this builder still accepts, with only the narrative
+    sentence moved, must red the invariant. Twenty-two assertions were RED on `0c4d67f` and GREEN
+    after (`22 failed | 3 passed` on base, `25 passed` at head, the three being the controls), and
+    every refusal row has a labelled twin proving the fixture reaches the narrative branch rather
+    than failing somewhere earlier.
+  - **Two things deliberately left.** The `TypeError` in `observationValue` still interpolates
+    `testCode.displayName`, so an unlabelled result code reads `result "undefined"` there;
+    `resultObservation` computes the value BEFORE appending the narrative, so that message is the one
+    a caller sees. It is a diagnostic rather than attested narrative, and reordering the two calls
+    would change which error is raised. **`procedureEntry` is NOT a second instance and an earlier
+    draft wrongly said it was**: `proceduresSection` calls `narrativeLabel` before `procedureEntry`
+    in the same iteration, so its `procedure "undefined"` is unreachable. And the CCD SHALL-set
+    disagreement
+    between `build-ccda.ts` and `required-sections.ts` is untouched and still blocked on the
+    normative R2.1 Schematron.
+  - **OWED AND BLOCKED: this trap has no one-line imperative in `CLAUDE.md`.** That file measured
+    **34,482 bytes against its 32,000-byte budget** in the meta-repo's `.claude/hooks/doc-budget.mjs`
+    **before this change**, so the hook refuses any write that grows it, including a pointer at this
+    section. Closing that is either a deliberate budget raise (its own umbrella commit, with its own
+    argument, per ADR 0023) or a measured relocation slice here; **do not pay for it by deleting a
+    trap.**
+
 ## The 64 unresolvable example imports
 
   - **OPEN DEFECT, filed rather than fixed: 64 `@example` blocks cite an import that does not

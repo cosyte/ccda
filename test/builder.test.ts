@@ -2893,3 +2893,276 @@ describe("buildCcda, CDA R2 observation element ordering (text before statusCode
     expect(o.text).toBeLessThan(o.value);
   });
 });
+
+/**
+ * The narrative is the half a clinician reads, and the builder regenerates it
+ * from the same `BuildCode.displayName` the coded entry carries, linking the two
+ * with a `<reference>`. `displayName` is required by `BuildCode`, so none of this
+ * is reachable from a typed caller, but the package ships JavaScript and does its
+ * input validation at runtime, so every narrative slot was reachable with it
+ * absent, and eight of them rendered a confident sentence the entry did not
+ * support.
+ *
+ * The worst was the Allergies section: `label ?? "No known allergies"` gave a
+ * **positively-asserted** allergy (`value` `419199007`, NO `negationInd`, the
+ * allergen on the `participant`) a narrative byte-identical to the **negated**
+ * no-known-allergies form, linked to that entry by an intact `<reference>` and
+ * drawing zero warnings, so the attested half asserted the clinical opposite of
+ * its own entry. Seven more slots wrote the literal string `undefined`.
+ *
+ * Every assertion below reads the **emitted bytes**, and the allergy ones follow
+ * the document's own `<reference>` linkage so the narrative and the entry are
+ * graded together rather than separately.
+ */
+describe("buildCcda, a narrative label is refused rather than fabricated", () => {
+  /** A well-formed code, used to isolate the one slot each row is measuring. */
+  const OK_CODE = { code: "1", displayName: "Ok" };
+
+  /**
+   * Every Allergy-Intolerance Observation in `xml`, read as the pair the defect
+   * inverted: whether the observation is negated, and the narrative text its own
+   * `<text><reference>` resolves to. Throws when a reference does not resolve, so
+   * a broken linkage cannot be mistaken for agreement.
+   */
+  function allergyNarrativePairs(xml: string): { negated: boolean; narrative: string }[] {
+    const doc = new DOMParser().parseFromString(xml, "application/xml");
+    const contents = new Map<string, string>();
+    for (const c of Array.from(doc.getElementsByTagName("content"))) {
+      const contentId = c.getAttribute("ID");
+      if (contentId !== null) contents.set(contentId, c.textContent ?? "");
+    }
+    const pairs: { negated: boolean; narrative: string }[] = [];
+    for (const obs of Array.from(doc.getElementsByTagName("observation"))) {
+      const templateId = Array.from(obs.childNodes).find(
+        (n): n is Element => (n as Element).nodeName === "templateId",
+      );
+      if (templateId?.getAttribute("root") !== ALLERGY_OBSERVATION) continue;
+      const reference = Array.from(obs.getElementsByTagName("reference")).find((r) =>
+        (r.getAttribute("value") ?? "").startsWith("#"),
+      );
+      const target = (reference?.getAttribute("value") ?? "").slice(1);
+      const narrative = contents.get(target);
+      if (narrative === undefined) {
+        throw new Error(`allergy observation references "#${target}", which resolves to nothing`);
+      }
+      pairs.push({ negated: obs.getAttribute("negationInd") === "true", narrative });
+    }
+    return pairs;
+  }
+
+  /**
+   * The anti-inversion invariant, over the emitted bytes: the no-known-allergies
+   * sentence appears as an allergy's linked narrative **iff** that allergy's own
+   * observation is negated.
+   */
+  function narrativeAgreesWithEntry(xml: string): boolean {
+    return allergyNarrativePairs(xml).every(
+      ({ negated, narrative }) => negated === (narrative === "No known allergies"),
+    );
+  }
+
+  const PENICILLIN = { code: "7980", codeSystem: "2.16.840.1.113883.6.88" };
+
+  function allergyXml(allergen: Record<string, string>): string {
+    return serializeCcda(
+      buildCcda({
+        patient: { mrn: "M" },
+        // @ts-expect-error, `displayName` is required; exercise the runtime guard.
+        allergies: [{ allergen, reaction: { code: "247472004", displayName: "Hives" } }],
+      }),
+    );
+  }
+
+  it("NEGATIVE CONTROL: the invariant goes red on an inverted document", () => {
+    // The exact shape the defect emitted, reconstructed from a document this
+    // builder still accepts by moving ONLY the narrative sentence: the entry is
+    // untouched, so it stays positively asserted while its linked narrative reads
+    // as the negation. If this passed, every assertion below would be vacuous.
+    const sound = allergyXml({ ...PENICILLIN, displayName: "Penicillin G" });
+    expect(narrativeAgreesWithEntry(sound)).toBe(true);
+    const inverted = sound.replace(">Penicillin G</content>", ">No known allergies</content>");
+    expect(inverted).not.toBe(sound);
+    expect(inverted).toContain(">No known allergies</content>");
+    expect(inverted).not.toContain('negationInd="true"');
+    expect(narrativeAgreesWithEntry(inverted)).toBe(false);
+  });
+
+  it("refuses a positively-asserted allergy whose allergen carries no displayName", () => {
+    // NON-VACUITY: the same fixture WITH a label builds, reaches the narrative
+    // branch, and emits the positively-asserted entry the defect mis-narrated.
+    const sound = allergyXml({ ...PENICILLIN, displayName: "Penicillin G" });
+    expect(sound).toContain(">Penicillin G</content>");
+    expect(sound).toContain('code="419199007"');
+    expect(sound).toContain('<code code="7980" codeSystem="2.16.840.1.113883.6.88"');
+    expect(sound).not.toContain("negationInd");
+    expect(sound).not.toContain("No known allergies");
+    expect(allergyNarrativePairs(sound)).toEqual([{ negated: false, narrative: "Penicillin G" }]);
+
+    // THE DEFECT: with the label absent this built a document whose narrative was
+    // "No known allergies" beside that same un-negated entry, with zero warnings.
+    expect(() => allergyXml(PENICILLIN)).toThrow(TypeError);
+    expect(() => allergyXml(PENICILLIN)).toThrow(/`allergies\[\]\.allergen\.displayName`/);
+    // An empty or whitespace-only label is refused for the same reason: there is
+    // no narrative in it either. Reachable from TypeScript, unlike the case above.
+    expect(() => allergyXml({ ...PENICILLIN, displayName: "" })).toThrow(TypeError);
+    expect(() => allergyXml({ ...PENICILLIN, displayName: "   " })).toThrow(TypeError);
+  });
+
+  it("emits the no-known-allergies narrative only through a negated entry", () => {
+    const nka = serializeCcda(
+      buildCcda({
+        patient: { mrn: "M" },
+        allergies: [
+          { noKnownAllergy: true },
+          { allergen: { ...PENICILLIN, displayName: "Penicillin G" } },
+        ],
+      }),
+    );
+    expect(nka).toContain(">No known allergies</content>");
+    expect(nka).toContain('negationInd="true"');
+    expect(allergyNarrativePairs(nka)).toEqual([
+      { negated: true, narrative: "No known allergies" },
+      { negated: false, narrative: "Penicillin G" },
+    ]);
+    expect(narrativeAgreesWithEntry(nka)).toBe(true);
+  });
+
+  /**
+   * Every narrative slot the builder fills from a caller-supplied `BuildCode`,
+   * with the label absent. On `0c4d67f` the allergy row emitted the negation
+   * sentence and the rest emitted the literal string `undefined` (bare, or
+   * interpolated into a `label: value` line, or replaced by a fabricated
+   * "unknown"), all with zero warnings. Each now refuses, naming its own field.
+   */
+  const SLOTS: ReadonlyArray<readonly [string, string, unknown]> = [
+    ["problems[].problem", "problems", { problems: [{ problem: {} }] }],
+    ["allergies[].allergen", "allergies", { allergies: [{ allergen: {} }] }],
+    ["medications[].drug", "medications", { medications: [{ drug: {} }] }],
+    [
+      "results[].results[].test",
+      "results",
+      { results: [{ code: OK_CODE, results: [{ test: {}, stringValue: "x" }] }] },
+    ],
+    [
+      "results[].results[].codedValue",
+      "results",
+      { results: [{ code: OK_CODE, results: [{ test: OK_CODE, codedValue: {} }] }] },
+    ],
+    [
+      "vitalSigns[].vitals[].code",
+      "vital signs",
+      { vitalSigns: [{ vitals: [{ code: {}, quantity: { value: 1, unit: "kg" } }] }] },
+    ],
+    ["immunizations[].vaccine", "immunizations", { immunizations: [{ vaccine: {} }] }],
+    ["procedures[].code", "procedures", { procedures: [{ code: {} }] }],
+    ["encounters[].type", "encounters", { encounters: [{ type: {} }] }],
+    [
+      "pastMedicalHistory[].problem",
+      "past medical history",
+      { pastMedicalHistory: [{ problem: {} }] },
+    ],
+    [
+      "planOfTreatment[].code",
+      "plan of treatment",
+      { planOfTreatment: [{ kind: "observation", code: {} }] },
+    ],
+    [
+      "familyHistory[].relative.relationship",
+      "family history",
+      {
+        familyHistory: [{ relative: { relationship: {} }, observations: [{ condition: OK_CODE }] }],
+      },
+    ],
+    [
+      "familyHistory[].observations[].condition",
+      "family history",
+      {
+        familyHistory: [{ relative: { relationship: OK_CODE }, observations: [{ condition: {} }] }],
+      },
+    ],
+    ["smokingStatus[].value", "social history", { smokingStatus: [{ value: {} }] }],
+    ["functionalStatus[].value", "functional status", { functionalStatus: [{ value: {} }] }],
+    ["mentalStatus[].value", "mental status", { mentalStatus: [{ value: {} }] }],
+    // The organizer-nested twins of the two rows above. The SAME narrative shape
+    // is reached from a SECOND input path, so the message has to name the path the
+    // caller actually used: a refusal naming `functionalStatus[].value` for a
+    // finding supplied under `functionalStatusOrganizers` is a diagnostic about a
+    // field they never set.
+    [
+      "functionalStatusOrganizers[].findings[].value",
+      "functional status organizers",
+      { functionalStatusOrganizers: [{ code: OK_CODE, findings: [{ value: {} }] }] },
+    ],
+    [
+      "mentalStatusOrganizers[].findings[].value",
+      "mental status organizers",
+      { mentalStatusOrganizers: [{ code: OK_CODE, findings: [{ value: {} }] }] },
+    ],
+    [
+      "functionalStatusScales[].code",
+      "functional status scales",
+      { functionalStatusScales: [{ code: {}, score: 3 }] },
+    ],
+    [
+      "mentalStatusScales[].code",
+      "mental status scales",
+      { mentalStatusScales: [{ code: {}, score: 3 }] },
+    ],
+  ];
+
+  it.each(SLOTS)("refuses %s, the narrative slot in the %s section", (field, _section, extra) => {
+    const init: BuildCcdaInit = { patient: { mrn: "M" }, ...(extra as Partial<BuildCcdaInit>) };
+    expect(() => buildCcda(init)).toThrow(TypeError);
+    expect(() => buildCcda(init)).toThrow(
+      new RegExp(`\`${field.replaceAll("[", "\\[").replaceAll("]", "\\]")}\\.displayName\``),
+    );
+  });
+
+  it("refuses through editCcda too, the second writer of the same sections", () => {
+    // `editCcda` grafts its sections with `buildSectionComponent`, the same
+    // emitter, so the guard reaches the second writer for free. `#99` paid for
+    // the lesson that a check on one emitter is not a check on the document.
+    const source = buildCcda({ patient: { mrn: "M" } });
+    const edit = (allergen: object): (() => unknown) => {
+      return () =>
+        editCcda(source, {
+          sections: [
+            // @ts-expect-error, `displayName` is required; exercise the runtime guard.
+            { kind: "allergies", mode: "upsert", content: [{ allergen }] },
+          ],
+        });
+    };
+    expect(edit({ code: "7980" })).toThrow(TypeError);
+    expect(edit({ code: "7980" })).toThrow(/`allergies\[\]\.allergen\.displayName`/);
+    // NON-VACUITY: labelled, the same edit lands and carries the label, not the
+    // negation sentence, and the entry it links to is not negated.
+    const edited = editCcda(source, {
+      sections: [
+        {
+          kind: "allergies",
+          mode: "upsert",
+          content: [{ allergen: { ...PENICILLIN, displayName: "Penicillin G" } }],
+        },
+      ],
+    });
+    const xml = edited.toString();
+    expect(xml).toContain(">Penicillin G</content>");
+    expect(xml).not.toContain("No known allergies");
+    expect(allergyNarrativePairs(xml)).toEqual([{ negated: false, narrative: "Penicillin G" }]);
+  });
+
+  it("NON-VACUITY: every slot above builds and reaches its narrative when labelled", () => {
+    // The same eighteen fixtures with a label, proving each one genuinely reaches
+    // the narrative branch the refusal guards rather than failing somewhere else.
+    for (const [field, , extra] of SLOTS) {
+      const labelled = JSON.parse(
+        JSON.stringify(extra).replaceAll("{}", '{"code":"9","displayName":"Labelled"}'),
+      ) as Partial<BuildCcdaInit>;
+      const init: BuildCcdaInit = { patient: { mrn: "M" }, ...labelled };
+      const xml = serializeCcda(buildCcda(init));
+      expect(xml, field).toContain("Labelled");
+      expect(xml, field).not.toContain(">undefined<");
+      expect(xml, field).not.toContain("No known allergies");
+    }
+  });
+});
