@@ -401,6 +401,19 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   Problems, Allergies, Medications, Reason for Referral, Assessment, and Plan of Treatment, and
   demotes Results and Vital Signs to populated-only. Any C-CDA section outside that set cannot be
   built.
+- **Every coded value that reaches the narrative needs a `displayName`, and a missing one is
+  refused.** Each populated section regenerates its `<text>` narrative from the same
+  `BuildCode.displayName` the coded entry carries, and links the two with a `<reference>`, so the
+  narrative is the attested restatement a clinician reads. `displayName` is a required field, but the
+  package ships JavaScript and validates at runtime, so `buildCcda` (and `editCcda`, which writes
+  through the same emitter) throws a `TypeError` naming the field path when the label is absent,
+  empty, or not a string. It does **not** substitute a placeholder: any confident stand-in is a
+  sentence the entry does not support. Until `0.0.11` inclusive the allergy slot substituted **"No
+  known allergies"**, so an allergy asserted **positively** could carry a narrative byte-identical to
+  the negated no-known-allergies form, and seven other slots wrote the literal string `undefined`. A
+  `BuildCode` that reaches only the entry (an allergy `type`, a result `interpretation`, a medication
+  `route`) is not covered: `@displayName` is optional on a v3 `CD`, so omitting the attribute states
+  nothing false.
 - **Every entry carries the `effectiveTime` its template requires.** The caller's time when supplied,
   else `nullFlavor="UNK"`: the SHALL cardinality is satisfied without a fabricated clinical
   timestamp, and the parser reads that back as absent, never as a real `Date`.

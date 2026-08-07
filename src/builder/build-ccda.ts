@@ -1818,6 +1818,49 @@ function assertResolutionConsistent(
   }
 }
 
+/**
+ * The narrative label for a caller-supplied {@link BuildCode}, refused when the
+ * code carries no usable `displayName`.
+ *
+ * Every populated section regenerates its `<text>` narrative from the same
+ * `displayName` the coded entry carries, and links the two with a `<reference>`,
+ * so the narrative is the attested restatement of the entry a clinician actually
+ * reads. `displayName` is required by {@link BuildCode}, but this package ships
+ * JavaScript and validates its input at runtime elsewhere, so an untyped caller
+ * reaches every narrative slot with it absent. There is no safe label to
+ * substitute in that state: a fabricated one is a confident sentence the entry
+ * does not support, and the emitted `undefined`/negation strings this guard
+ * replaces were exactly that. The builder is the conservative-on-emit half of
+ * Postel's Law, so it refuses, in the same shape as every other unsatisfiable
+ * build input (`buildCcda` throws a {@link TypeError}).
+ *
+ * Only narrative labels are guarded. A `BuildCode` that reaches the entry alone
+ * (an allergy `type`, a result `interpretation`, a medication `route`) is not
+ * routed here: `@displayName` is optional on a v3 `CD`, so omitting the
+ * attribute states nothing false.
+ *
+ * The message names the field path and the `@code` value, never a display label
+ * or any other document text, so a refusal is actionable without echoing content
+ * back at the caller.
+ *
+ * @internal
+ */
+function narrativeLabel(code: BuildCode, field: string): string {
+  // Widened to `unknown`: `displayName` is a required `string` in the type, so
+  // the runtime guard exists for untyped (JS) callers, exactly as the
+  // `documentType` guard in `buildCcda` does.
+  const displayName: unknown = code.displayName;
+  if (typeof displayName !== "string" || displayName.trim() === "") {
+    throw new TypeError(
+      `buildCcda: \`${field}.displayName\` is required and the code "${code.code}" carries ` +
+        "none. The narrative is regenerated from `displayName` so it agrees with the coded " +
+        "entry; with none there is no truthful narrative to emit, and the builder refuses " +
+        "rather than substitute a label the entry does not support. Supply `displayName`.",
+    );
+  }
+  return displayName;
+}
+
 function concernEffectiveTime(
   doc: Document,
   onset: string | undefined,
@@ -2573,7 +2616,8 @@ function problemsSection(
   const entries: Element[] = [];
   for (const p of problems) {
     const contentId = id("prob-txt");
-    text.appendChild(textEl(doc, "content", p.problem.displayName, { ID: contentId }));
+    const label = narrativeLabel(p.problem, "problems[].problem");
+    text.appendChild(textEl(doc, "content", label, { ID: contentId }));
     entries.push(problemEntry(doc, p, contentId, id, translate));
   }
   const section = sectionElement(doc, PROBLEMS_SECTION_BASE, "11450-4", "Problems", text, true);
@@ -2650,6 +2694,15 @@ function problemEntry(
   return el(doc, "entry", undefined, act);
 }
 
+/**
+ * The narrative sentence for the NEGATED (no-known-allergy) form. It is a
+ * clinical assertion in its own right, the exact opposite of a coded allergy, so
+ * it is emitted **only** where `noKnownAllergy === true` and is never used as a
+ * fallback for a label the caller did not supply. Named so that claim is
+ * greppable. @internal
+ */
+const NO_KNOWN_ALLERGY_NARRATIVE = "No known allergies";
+
 /** Build the Allergies section, populated, or empty when there are none. @internal */
 function allergiesSection(
   doc: Document,
@@ -2663,14 +2716,27 @@ function allergiesSection(
   const text = el(doc, "text");
   const entries: Element[] = [];
   for (const a of allergies) {
-    if (a.noKnownAllergy !== true && a.allergen === undefined) {
+    // NO_KNOWN_ALLERGY_NARRATIVE is reachable from this branch and no other. It
+    // was previously also the `??` fallback for an allergen carrying no
+    // `displayName`, which rendered a positively-asserted allergy (value
+    // `419199007`, NO `negationInd`, the allergen on the `participant`, a
+    // manifestation observation) with a narrative byte-identical to the negated
+    // form, linked to that entry by an intact `<reference>` and drawing no
+    // warning, so the attested half asserted the clinical opposite of its own
+    // entry. The fallback is deleted rather than repointed: substituting any
+    // other confident label reproduces the same defect one word smaller.
+    let label: string;
+    if (a.noKnownAllergy === true) {
+      label = NO_KNOWN_ALLERGY_NARRATIVE;
+    } else if (a.allergen === undefined) {
       throw new TypeError(
         "buildCcda: each allergy must set either `allergen` or `noKnownAllergy: true`.",
       );
+    } else {
+      label = narrativeLabel(a.allergen, "allergies[].allergen");
     }
-    const label = a.noKnownAllergy === true ? "No known allergies" : a.allergen?.displayName;
     const contentId = id("alg-txt");
-    text.appendChild(textEl(doc, "content", label ?? "No known allergies", { ID: contentId }));
+    text.appendChild(textEl(doc, "content", label, { ID: contentId }));
     entries.push(allergyEntry(doc, a, contentId, id, translate));
   }
   const section = sectionElement(doc, ALLERGIES_SECTION_BASE, "48765-2", "Allergies", text, true);
@@ -2830,7 +2896,9 @@ function medicationsSection(
     const contentId = id("med-txt");
     // The narrative must carry the drug label so it agrees with the coded product
     // (the parser reconciles medication code ↔ narrative).
-    text.appendChild(textEl(doc, "content", m.drug.displayName, { ID: contentId }));
+    text.appendChild(
+      textEl(doc, "content", narrativeLabel(m.drug, "medications[].drug"), { ID: contentId }),
+    );
     entries.push(medicationEntry(doc, m, contentId, id, translate));
   }
   const section = sectionElement(
@@ -3043,11 +3111,14 @@ function observationValue(doc: Document, testCode: BuildCode, r: BuildCcdaResult
 
 /** A human-readable narrative line for a result/vital observation. @internal */
 function observationNarrative(code: BuildCode, r: BuildCcdaResult): string {
+  const test = narrativeLabel(code, "results[].results[].test");
   if (r.quantity !== undefined) {
-    return `${code.displayName}: ${r.quantity.value.toString()} ${r.quantity.unit}`;
+    return `${test}: ${r.quantity.value.toString()} ${r.quantity.unit}`;
   }
-  if (r.codedValue !== undefined) return `${code.displayName}: ${r.codedValue.displayName}`;
-  return `${code.displayName}: ${r.stringValue ?? ""}`;
+  if (r.codedValue !== undefined) {
+    return `${test}: ${narrativeLabel(r.codedValue, "results[].results[].codedValue")}`;
+  }
+  return `${test}: ${r.stringValue ?? ""}`;
 }
 
 /** Build a structured `<referenceRange>` (`observationRange/value xsi:type="IVL_PQ"`). @internal */
@@ -3122,7 +3193,8 @@ function vitalObservation(
     textEl(
       doc,
       "content",
-      `${vital.code.displayName}: ${vital.quantity.value.toString()} ${vital.quantity.unit}`,
+      `${narrativeLabel(vital.code, "vitalSigns[].vitals[].code")}: ` +
+        `${vital.quantity.value.toString()} ${vital.quantity.unit}`,
       { ID: contentId },
     ),
   );
@@ -3176,7 +3248,11 @@ function immunizationsSection(
     const contentId = id("imm-txt");
     // The narrative carries the vaccine label so it agrees with the coded product
     // (the parser reconciles the immunization vaccine code ↔ narrative).
-    text.appendChild(textEl(doc, "content", imm.vaccine.displayName, { ID: contentId }));
+    text.appendChild(
+      textEl(doc, "content", narrativeLabel(imm.vaccine, "immunizations[].vaccine"), {
+        ID: contentId,
+      }),
+    );
     entries.push(immunizationEntry(doc, imm, contentId, id, translate));
   }
   const section = sectionElement(
@@ -3293,7 +3369,9 @@ function proceduresSection(
     const contentId = id("proc-txt");
     // The narrative carries the procedure label so it agrees with the coded value
     // (the parser reconciles the procedure code ↔ narrative).
-    text.appendChild(textEl(doc, "content", p.code.displayName, { ID: contentId }));
+    text.appendChild(
+      textEl(doc, "content", narrativeLabel(p.code, "procedures[].code"), { ID: contentId }),
+    );
     entries.push(procedureEntry(doc, p, contentId, id));
   }
   const section = sectionElement(
@@ -3376,7 +3454,9 @@ function encountersSection(
     const contentId = id("enc-txt");
     // The narrative carries the encounter-type label so it agrees with the coded
     // value (the parser reconciles the encounter code ↔ narrative).
-    text.appendChild(textEl(doc, "content", e.type.displayName, { ID: contentId }));
+    text.appendChild(
+      textEl(doc, "content", narrativeLabel(e.type, "encounters[].type"), { ID: contentId }),
+    );
     entries.push(encounterEntry(doc, e, contentId, id));
   }
   const section = sectionElement(doc, ENCOUNTERS_SECTION_BASE, "46240-8", "Encounters", text, true);
@@ -3434,7 +3514,12 @@ function encounterPeriod(
 
 /** The narrative line for a Smoking Status, the status label, or an explicit "unknown". @internal */
 function smokingStatusLabel(s: BuildCcdaSmokingStatus): string {
-  return s.value?.displayName ?? "Smoking status unknown";
+  // An ABSENT `value` is genuinely an unknown status and keeps its fallback; a
+  // `value` that is PRESENT but carries no `displayName` is refused, because
+  // "unknown" beside a coded status is a narrative the entry contradicts.
+  return s.value === undefined
+    ? "Smoking status unknown"
+    : narrativeLabel(s.value, "smokingStatus[].value");
 }
 
 /**
@@ -3519,7 +3604,11 @@ function smokingStatusEntry(
  * finding. @internal
  */
 function functionalStatusLabel(s: BuildCcdaFunctionalStatus): string {
-  return `${FUNCTIONAL_STATUS_CODE.displayName}: ${s.value?.displayName ?? "unknown"}`;
+  // See `smokingStatusLabel`: absent keeps "unknown", present-without-a-label is
+  // refused rather than narrated as unknown beside its own coded value.
+  const value =
+    s.value === undefined ? "unknown" : narrativeLabel(s.value, "functionalStatus[].value");
+  return `${FUNCTIONAL_STATUS_CODE.displayName}: ${value}`;
 }
 
 /**
@@ -3546,7 +3635,14 @@ function functionalStatusSection(
   const entries: Element[] = [];
   for (const org of organizers) entries.push(functionalStatusOrganizerEntry(doc, org, text, id));
   for (const scale of scales) {
-    entries.push(el(doc, "entry", undefined, assessmentScaleObservation(doc, scale, text, id)));
+    entries.push(
+      el(
+        doc,
+        "entry",
+        undefined,
+        assessmentScaleObservation(doc, scale, text, id, "functionalStatusScales[].code"),
+      ),
+    );
   }
   for (const s of findings) {
     entries.push(el(doc, "entry", undefined, functionalStatusObservation(doc, s, text, id)));
@@ -3666,7 +3762,10 @@ function functionalStatusOrganizerEntry(
  * finding. @internal
  */
 function mentalStatusLabel(s: BuildCcdaMentalStatus): string {
-  return `${MENTAL_STATUS_CODE.displayName}: ${s.value?.displayName ?? "unknown"}`;
+  // See `smokingStatusLabel`: absent keeps "unknown", present-without-a-label is
+  // refused rather than narrated as unknown beside its own coded value.
+  const value = s.value === undefined ? "unknown" : narrativeLabel(s.value, "mentalStatus[].value");
+  return `${MENTAL_STATUS_CODE.displayName}: ${value}`;
 }
 
 /**
@@ -3691,7 +3790,14 @@ function mentalStatusSection(
   const entries: Element[] = [];
   for (const org of organizers) entries.push(mentalStatusOrganizerEntry(doc, org, text, id));
   for (const scale of scales) {
-    entries.push(el(doc, "entry", undefined, assessmentScaleObservation(doc, scale, text, id)));
+    entries.push(
+      el(
+        doc,
+        "entry",
+        undefined,
+        assessmentScaleObservation(doc, scale, text, id, "mentalStatusScales[].code"),
+      ),
+    );
   }
   for (const s of findings) {
     entries.push(el(doc, "entry", undefined, mentalStatusObservation(doc, s, text, id)));
@@ -3834,8 +3940,9 @@ function organizerCode(doc: Document, code: BuildCode | undefined): Element {
  * reconciles against the narrative). An omitted score reads "…: unknown", never a
  * fabricated number. @internal
  */
-function assessmentScaleLabel(scale: BuildCcdaAssessmentScale): string {
-  return `${scale.code.displayName}: ${scale.score?.toString() ?? "unknown"}`;
+function assessmentScaleLabel(scale: BuildCcdaAssessmentScale, field: string): string {
+  const label = narrativeLabel(scale.code, field);
+  return `${label}: ${scale.score?.toString() ?? "unknown"}`;
 }
 
 /**
@@ -3866,9 +3973,10 @@ function assessmentScaleObservation(
   scale: BuildCcdaAssessmentScale,
   text: Element,
   id: (prefix: string) => string,
+  field: string,
 ): Element {
   const contentId = id("scale-txt");
-  text.appendChild(textEl(doc, "content", assessmentScaleLabel(scale), { ID: contentId }));
+  text.appendChild(textEl(doc, "content", assessmentScaleLabel(scale, field), { ID: contentId }));
   const obs = el(
     doc,
     "observation",
@@ -3956,7 +4064,11 @@ function pastMedicalHistorySection(
   const entries: Element[] = [];
   for (const p of history) {
     const contentId = id("pmh-txt");
-    text.appendChild(textEl(doc, "content", p.problem.displayName, { ID: contentId }));
+    text.appendChild(
+      textEl(doc, "content", narrativeLabel(p.problem, "pastMedicalHistory[].problem"), {
+        ID: contentId,
+      }),
+    );
     entries.push(el(doc, "entry", undefined, problemObservation(doc, p, contentId, id, translate)));
   }
   const section = sectionElement(
@@ -4139,7 +4251,9 @@ function planOfTreatmentSection(
     const contentId = id("plan-txt");
     // The narrative carries the planned item's label so it agrees with the coded
     // value (the parser reconciles the planned code ↔ narrative).
-    text.appendChild(textEl(doc, "content", p.code.displayName, { ID: contentId }));
+    text.appendChild(
+      textEl(doc, "content", narrativeLabel(p.code, "planOfTreatment[].code"), { ID: contentId }),
+    );
     entries.push(plannedItemEntry(doc, p, contentId, id));
   }
   const section = sectionElement(
@@ -4241,8 +4355,18 @@ function familyHistoryLabel(
   relative: BuildCcdaFamilyMember,
   obs: BuildCcdaFamilyHistoryObservation,
 ): string {
-  const who = relative.relationship?.displayName ?? "Relative";
-  const what = obs.condition?.displayName ?? "unknown condition";
+  // See `smokingStatusLabel`: an omitted relationship/condition keeps its generic
+  // fallback (the caller stated nothing), one supplied without a `displayName` is
+  // refused rather than narrated as "Relative"/"unknown condition" beside a code
+  // the entry does carry.
+  const who =
+    relative.relationship === undefined
+      ? "Relative"
+      : narrativeLabel(relative.relationship, "familyHistory[].relative.relationship");
+  const what =
+    obs.condition === undefined
+      ? "unknown condition"
+      : narrativeLabel(obs.condition, "familyHistory[].observations[].condition");
   return `${who}: ${what}`;
 }
 
