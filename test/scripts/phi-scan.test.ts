@@ -1218,33 +1218,81 @@ describe("phi-scan: the corpus both routes used to skip", () => {
     expect(neighbour.stderr).not.toContain("test/scripts/phi-scan.test.ts");
   });
 
-  it("gives markdown the shape floor and NOT the structured scan (the residual)", () => {
-    // Disclosed rather than closed: a real C-CDA document saved under a `.md`
-    // name is shape-scanned (dashed SSN, non-test email) but its name / DOB /
-    // MRN / address / telecom are not read. Pinned WITH the identical bytes
-    // under `.xml`, which the structured scan does catch, so this asserts a
-    // scope decision rather than a broken detector.
+  it("structurally scans a real C-CDA saved as .md, on ALL THREE routes", () => {
+    // A draft of this slice exempted markdown from the structured scan and was
+    // refuted as INTRODUCED. It reasoned that the exemption could subtract
+    // nothing because no route read a `.md`; there are THREE routes, and the
+    // `paths` one did. A real document saved as `notes.md` went from nine hits
+    // to `OK, no hits` on it. The shape floor offered as mitigation is EMPTY for
+    // this document class: a C-CDA carries its SSN as an undashed
+    // `id@extension` and carries no email, so the floor found nothing. This case
+    // asserts all three routes, on a payload with no dashed SSN and no email, so
+    // it can only pass if the STRUCTURED detectors ran.
+    const repo = makeScanRepo({ git: true });
+    const violator = doc("").replace("<family>Doe</family>", "<family>Anderson</family>");
+    expect(violator, "premise: the payload has no shape-pass token at all").not.toMatch(
+      /\d{3}-\d{2}-\d{4}|@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
+    );
+
+    writeFileSync(join(repo, "notes.md"), violator);
+    gitIn(repo, ["add", "notes.md"]);
+
+    const all = runScannerIn(repo, null);
+    expect(all.code, `all stderr: ${all.stderr}`).toBe(1);
+    expect(all.stderr).toMatch(/Anderson/);
+
+    const staged = runScannerArgsIn(repo, ["--staged"]);
+    expect(staged.code, `staged stderr: ${staged.stderr}`).toBe(1);
+    expect(staged.stderr).toMatch(/Anderson/);
+
+    const paths = runScannerArgsIn(repo, ["notes.md"]);
+    expect(paths.code, `paths stderr: ${paths.stderr}`).toBe(1);
+    expect(paths.stderr).toMatch(/Anderson/);
+  });
+
+  it("exempts CHANGELOG.md from the STRUCTURED scan only, and keeps the shape pass on it", () => {
+    // The one structured exemption, and the only file whose name detection this
+    // slice gives up. It is a literal path, not a predicate: a neighbouring
+    // generated markdown file is still fully scanned. Both halves are asserted
+    // in one case so the clean cell is a decision about a named file.
     const repo = makeScanRepo({ git: true });
     const violator = doc("").replace("<family>Doe</family>", "<family>Anderson</family>");
 
-    writeFileSync(join(repo, "record.md"), violator);
-    gitIn(repo, ["add", "record.md"]);
-    const asMarkdown = runScannerIn(repo, null);
-    expect(asMarkdown.code, `stderr: ${asMarkdown.stderr}`).toBe(0);
+    writeFileSync(join(repo, "CHANGELOG.md"), violator);
+    gitIn(repo, ["add", "CHANGELOG.md"]);
+    const exempted = runScannerIn(repo, null);
+    expect(exempted.code, `stderr: ${exempted.stderr}`).toBe(0);
 
-    writeFileSync(join(repo, "record.xml"), violator);
-    gitIn(repo, ["add", "record.xml"]);
-    const asXml = runScannerIn(repo, null);
-    expect(asXml.code, `stderr: ${asXml.stderr}`).toBe(1);
-    expect(asXml.stderr).toMatch(/Anderson/);
+    // ...but the shape pass still runs over it, so it is never an unread file.
+    writeFileSync(join(repo, "CHANGELOG.md"), `${violator}\n${SSN}\n`);
+    gitIn(repo, ["add", "CHANGELOG.md"]);
+    const shaped = runScannerIn(repo, null);
+    expect(shaped.code, `stderr: ${shaped.stderr}`).toBe(1);
+    expect(shaped.stderr).toContain("CHANGELOG.md");
+    expect(shaped.stderr).not.toMatch(/Anderson/);
 
-    // ...and the floor markdown DOES get, so the 0 above is a scope decision
-    // about which detectors ran, never a file that went unread.
-    writeFileSync(join(repo, "record.md"), `${violator}\n${SSN}\n`);
-    gitIn(repo, ["add", "record.md"]);
-    const withShape = runScannerIn(repo, null);
-    expect(withShape.code, `stderr: ${withShape.stderr}`).toBe(1);
-    expect(withShape.stderr).toContain("record.md");
+    // ...and the exemption does not leak to a neighbour.
+    writeFileSync(join(repo, "CHANGELOG.md"), "# changelog\n");
+    writeFileSync(join(repo, "HISTORY.md"), violator);
+    gitIn(repo, ["add", "CHANGELOG.md", "HISTORY.md"]);
+    const neighbour = runScannerIn(repo, null);
+    expect(neighbour.code, `stderr: ${neighbour.stderr}`).toBe(1);
+    expect(neighbour.stderr).toMatch(/Anderson/);
+    expect(neighbour.stderr).toContain("HISTORY.md");
+  });
+
+  it("upstream bound on that exemption: a changeset carrying a name is still caught", () => {
+    // Why giving up name detection on CHANGELOG.md is bounded rather than open:
+    // its content originates in `.changeset/*.md`, which this slice newly opened
+    // and which gets the full structured scan on every route.
+    const repo = makeScanRepo({ git: true });
+    const violator = doc("").replace("<family>Doe</family>", "<family>Anderson</family>");
+    mkdirSync(join(repo, ".changeset"), { recursive: true });
+    writeFileSync(join(repo, ".changeset", "sour-pandas-clap.md"), violator);
+    gitIn(repo, ["add", ".changeset/sour-pandas-clap.md"]);
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(1);
+    expect(r.stderr).toMatch(/Anderson/);
   });
 
   it("EMAIL declares one mailbox, EMAILDOMAIN would declare every mailbox at it", () => {

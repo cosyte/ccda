@@ -14,43 +14,75 @@
  * C-CDA document by accident.
  *
  * ---------------------------------------------------------------------------
- * WHAT THE TWO ROUTES SCANNED BY NEITHER, AND WHAT CLOSED IT
+ * WHAT ALL THREE ROUTES SCANNED BY NEITHER, AND WHAT CLOSED IT
  * (`PHI-SCAN-WALK-ROOT-SCOPE`). This repo's walk was already rooted at the REPO
  * ROOT rather than at `src/` + `test/fixtures/`, so the sibling form of this
  * defect (tracked files under `test/` reached by neither route) DID NOT EXIST
  * here and is not what was fixed. Measured on this repo rather than ported: of
- * 140 tracked files, 96 were reached by a detector and 44 by neither, of which
- * exactly 4 were under `test/` and all 4 were the `test/scripts/` exclusion.
- * The 44 were three separate causes, each closed on its own terms:
+ * 140 tracked files at `941afff`, 96 were reached by a detector on the sweeping
+ * routes and 44 by neither, of which exactly 4 were under `test/` and all 4 were
+ * the `test/scripts/` exclusion. The 44 were three causes, each closed on its own
+ * terms:
  *
  *   1. 16 `.md` were dropped BY THE WALK, before a byte was read, and dropped
- *      again by `--staged`. They are enumerated and shape-scanned now; see
- *      `looksLikeCda` for why they do not get the structured scan.
+ *      again by `--staged`. They are enumerated now and scanned like any other
+ *      target, structured scan included.
  *   2. 24 were READ and then scanned by nothing, because the shape pass was
  *      bounded to `src/` + `scripts/` JS/TS. Among them the three `scripts/*.sh`
  *      gates, which this docblock already described as covered. See `scanTarget`.
  *   3. 4 were the `test/scripts/` PREFIX exclusion, whose stated reason covers
  *      exactly one file. See `EXCLUDED_PATHS`.
  *
- * Head: 140 tracked, 139 reached by a detector, 1 by neither
+ * Head, on the same 140-file corpus: 139 reached by a detector, 1 by neither
  * (`test/scripts/phi-scan.test.ts`, the pre-existing exclusion, narrowed from the
  * four files a directory prefix covered to the one its reason names), and that 1
- * is the only remaining file under `test/` in neither. 43 files newly opened, 0
- * downgraded: no file lost a route it had at base, so the head's scanned set is a
- * strict SUPERSET of the base's, proved by grid on BOTH routes. Both counts are of
- * the tree each was measured on; the `.changeset/` entry that ships this raises the
- * tracked and the reached figure by one each until a release consumes it, which is
- * why the numbers are dated to their commits rather than asserted as current.
+ * is the only remaining file under `test/` in neither. 43 files newly opened.
+ * Both counts are of the tree each was measured on; the `.changeset/` entry that
+ * ships this raises the tracked and the reached figure by one each until a
+ * release consumes it, which is why the numbers are dated to their commits rather
+ * than asserted as current.
  *
- * THIS CHANGE ADDS NO PATH EXEMPTION, DELIBERATELY, AND THAT COST A SECOND DRAFT.
- * The first one carried a `SHAPE_EXEMPT_PATHS` literal holding `package.json`,
- * whose `author` field is the organisation's published contact mailbox and would
- * otherwise be a standing hit. That is a whole-file bypass of the kind
- * `phi-scan-overrides.md` already says to prefer a token-level declaration over,
- * and it would have left the whole manifest unscanned by both routes to quiet one
- * known string. Replaced by an `EMAIL` allow-list tag naming that one address.
+ * 🛑 COUNT THE ROUTES. THERE ARE THREE, AND A DRAFT OF THIS CHANGE WAS REFUTED
+ * `INTRODUCED` FOR REASONING ABOUT TWO. `all` and `--staged` are the sweeping
+ * ones; `paths` (`pnpm phi-scan <file>`) is the third, it is wired in
+ * `package.json`, and `looksLikeCda` governs it too. That draft exempted markdown
+ * from the structured scan, arguing the exemption was purely additive because no
+ * route read a `.md`. On `paths` the base scanner DID read `.md` and DID run the
+ * structured detectors over one carrying a marker, so a real C-CDA saved as
+ * `notes.md` went from NINE hits and exit 1 to `OK, no hits` and exit 0. Markdown
+ * is now scanned like anything else, and the grid below covers all three routes.
+ *
+ * THE GRID, base tree and head tree, a dashed-SSN payload and then a `<family>`
+ * name payload planted in every tracked file, three routes each. Shape payload:
+ * `all` 96 -> 140, `--staged` 96 -> 140, `paths` 140 -> 141, no regression in any
+ * cell. Name payload: `all` 26 -> 39, `--staged` 26 -> 39, `paths` 42 -> 40.
+ * Non-vacuity: exactly one file is still undetected at head, the one literal
+ * exclusion, so the clean cells are decisions about a named file rather than a
+ * sweep that stopped running.
+ *
+ * 🔴 TWO CELLS GO `1 -> 0` AND BOTH ARE NAMED RATHER THAN CLAIMED AWAY. Both are
+ * on `paths`, and neither is a route that stopped looking:
+ *
+ *   - `CHANGELOG.md` loses the STRUCTURED detectors, and this is the only name
+ *     detection this change gives up. See `STRUCTURED_EXEMPT_PATHS` for the
+ *     argument, the upstream bound, and what it costs. The shape pass still runs
+ *     over it, so it is never an unread file.
+ *   - `package.json` stops hitting on its own `author` mailbox, because that one
+ *     address is now DECLARED in the allow-list. Every allow-list entry ever
+ *     added has this shape; that is what a positive synthetic declaration IS. The
+ *     refused alternatives were `EMAILDOMAIN cosyte.com`, which would excuse every
+ *     mailbox at that domain including one carrying a patient name, and a
+ *     path exemption, which would have left the whole manifest unscanned.
+ *
+ * A THIRD FILE, `docs-content/quickstart.md`, ALSO STOPS HITTING, AND IT IS NOT
+ * THE SCANNER THAT CHANGED. Its second worked example used a placeholder person
+ * name that is not in the allow-list; the example now reuses the corpus's declared
+ * synthetic patient. Measured: the HEAD scanner over the BASE bytes still reports
+ * both tokens. Fixing the corpus was preferred to exempting the page, which is
+ * this repo's most example-dense documentation and must stay fully scanned.
+ *
  * Every one of the 43 newly-opened files was hand-read before this shipped; none
- * carried patient-identifying content, and that address is the only
+ * carried patient-identifying content, and the `author` address above is the only
  * realistic-shaped token in the whole set. It is NAMED here, not scrubbed: it is
  * public, non-patient and org-owned, and deleting it would destroy the evidence
  * that the widened scan opened the file.
@@ -154,8 +186,8 @@
  *     entry, and still drops `EXCLUDED_PATHS`;
  *   - `--staged` still drops `EXCLUDED_PATHS`. It no longer exempts markdown:
  *     that exemption was one of the three causes above and is gone from both
- *     routes, including from the unmerged-`U` refusal, which carried a carve-out
- *     whose whole argument was that this route never read a `.md`.
+ *     sweeping routes, including from the unmerged-`U` refusal, which carried a
+ *     carve-out whose whole argument was that this route never read a `.md`.
  *
  * TWO DIVERGENCES FROM THE SIBLING SCANNERS, BOTH MEASURED ON THIS REPO RATHER
  * THAN INHERITED, because a remedy's prose does not port with its code:
@@ -170,10 +202,11 @@
  *      scan. This opens no hole: a real `dist/` directory's contents are
  *      already out of scope, so a link named `dist` is the same boundary.
  *   2. THE `.md` EXEMPTION WAS DELIBERATELY NOT EXTENDED TO ONE, on either
- *      route, and the exemption itself is now gone: markdown is scanned. The
- *      argument outlived it and still binds any future exemption. A carve-out
- *      is a judgement about a file whose bytes the scan COULD have read; a
- *      link's NAME is no evidence at all about what is on the other side.
+ *      sweeping route, and the exemption itself is now gone: markdown is
+ *      scanned. The argument outlived it and still binds any future exemption.
+ *      A carve-out is a judgement about a file whose bytes the scan COULD have
+ *      read; a link's NAME is no evidence at all about what is on the other
+ *      side.
  *
  * `--diff-filter=AMTU` INCLUDES `T`, AND LEAVING IT OUT MAKES THE MODE CHECK
  * UNREACHABLE FOR A TYPECHANGE. Be precise about which files: a tracked file
@@ -288,7 +321,7 @@ const WALK_SKIP_DIRS = new Set<string>([
   ".vitest-cache",
 ]);
 
-// The scanner's OWN test is excluded from both routes: it necessarily embeds
+// The scanner's OWN test is excluded from every route: it necessarily embeds
 // real-looking violator strings ("Anderson", a fake SSN, a non-555 phone) as
 // adversarial inputs, and its runtime violators are written to a throwaway temp
 // dir, never the repo. Scanning it would flag the gate's own negative-control
@@ -297,11 +330,32 @@ const WALK_SKIP_DIRS = new Set<string>([
 // LITERAL PATHS, NOT A DIRECTORY PREFIX. This was `test/scripts/`, which excluded
 // FOUR files where the reason above covers exactly one: the other three
 // (`agent-notes-contract`, `attw-gate`, `changelog-generation`) embed no violator
-// at all, and were unscanned by both routes for no stated reason. An exemption
+// at all, and were unscanned by every route for no stated reason. An exemption
 // written as a predicate always covers more than its argument does; write it as
 // the paths it is actually about, so adding a neighbouring test file does not
 // silently exempt it too.
 const EXCLUDED_PATHS = new Set<string>(["test/scripts/phi-scan.test.ts"]);
+
+// The one path that is READ AND SHAPE-SCANNED but not run through the STRUCTURED
+// C-CDA detectors, for the same reason as the entry above and written the same
+// way: a LITERAL PATH, never a predicate.
+//
+// `CHANGELOG.md` is generated output that must not be hand-edited, and it quotes
+// this scanner's own negative-control literals verbatim, including the
+// entity-encoded `<family>&#x53;mith</family>` that exists to prove the decoder
+// works. Decoding it and reporting `Smith` is the gate flagging its own
+// documentation of itself, on a file whose content cannot be edited to fix it.
+//
+// WHAT THIS COSTS, STATED RATHER THAN WAVED AT: a person name written into a
+// changeset summary reaches this file unscanned by the name detector. It is
+// bounded upstream rather than here, and the bound is real: `.changeset/*.md` is
+// itself structurally scanned now, on every route, so the text has to pass the
+// full gate before a release can copy it in. The shape pass (dashed SSN,
+// non-test email) still runs over this file.
+//
+// A predicate ("any generated file", "any changelog") was refused. The exemption
+// is one path because one file has the argument.
+const STRUCTURED_EXEMPT_PATHS = new Set<string>(["CHANGELOG.md"]);
 
 // The HL7 v3 OID that identifies a United States Social Security Number. An
 // `<id root="2.16.840.1.113883.4.1" extension="…"/>` is an SSN by declaration.
@@ -621,7 +675,7 @@ function walk(dir: string, out: string[], unscannable: Unscannable[]): void {
     } else if (e.isFile()) {
       // Markdown is enumerated like everything else. It used to be dropped HERE,
       // before any byte was read, which made every tracked `.md` unscanned by
-      // both routes. Scope is decided per file in `scanTarget`, not by the walk.
+      // both sweeping routes. Scope is decided per file in `scanTarget`.
       out.push(join(dir, e.name));
     } else {
       // A tooling directory is out of scope whatever kind of entry occupies its
@@ -836,7 +890,7 @@ function buildTargetsForStaged(): Target[] {
   // "deliberately never reads AT ALL, conflict or no conflict", so refusing over
   // one would announce that a scan could not read something it was never going
   // to read. That premise stopped being true the moment markdown became a scan
-  // target on both routes. Leaving the carve-out in place would have sent an
+  // target on the sweeping routes. Leaving the carve-out in place would have sent an
   // unmerged `.md` on to `git show :<path>`, which fatals ("in the index, but
   // not at stage 0") and refuses anyway, under the generic could-not-read
   // message instead of the one that names the conflict. The cost is real and
@@ -1208,46 +1262,35 @@ function isSourceCode(path: string): boolean {
   );
 }
 
-/** Markdown, by extension. Prose about the parser, never a clinical document. */
-function isMarkdown(path: string): boolean {
-  return path.toLowerCase().endsWith(".md");
-}
-
 /**
  * A target is treated as an actual C-CDA DOCUMENT (→ full structured scan) when
  * it has a native C-CDA extension (`.xml` / `.cda` / `.ccda`), lives under
  * `test/` (this repo's fixtures + suites embed C-CDA there), or carries a C-CDA
- * content marker while NOT being hand-written source code and NOT being
- * markdown. The content-sniff is what closes the "rename the document to dodge
- * the scanner" bypass, detection follows the bytes, not the file name. The
- * `!isSourceCode` guard keeps a marker that appears in a `src/` or `scripts/`
- * comment / example string (including this scanner's own doc comment) from
- * turning code into a "document" and flagging its illustrative tokens; such
- * files still get the conservative shape pass.
+ * content marker while NOT being hand-written source code. The content-sniff is
+ * what closes the "rename the document to dodge the scanner" bypass, detection
+ * follows the bytes, not the file name. The `!isSourceCode` guard keeps a marker
+ * that appears in a `src/` or `scripts/` comment / example string (including this
+ * scanner's own doc comment) from turning code into a "document" and flagging its
+ * illustrative tokens; such files still get the conservative shape pass.
  *
- * `!isMarkdown` is the same judgement applied to prose, and it is the only part
- * of this function that changed when markdown became a scan target. It can
- * subtract nothing: at base NO route read a `.md` at all, so every markdown
- * file's detection count was zero on both routes and this bounds an addition.
- * It is here rather than absent because it was MEASURED: 11 of this repo's 16
- * tracked `.md` carry a C-CDA marker (8 of them the `<ClinicalDocument>` root
- * itself, in the published docs' worked examples), and running the structured
- * scan over them draws three name hits that are documentation rather than
- * leakage: `docs-content/quickstart.md`'s worked example of a second patient,
- * and `CHANGELOG.md` quoting this scanner's own entity-decoding negative
- * control. The refused alternative was allow-listing those tokens, which are
- * three of the commonest English name words, weakening the name detector across
- * the whole corpus to quiet two documentation files.
- *
- * RESIDUAL, DISCLOSED: a genuine C-CDA document saved under a `.md` name gets
- * the shape floor (dashed SSN + non-test email) and not the structured
- * detectors. That is strictly more than the base scanner, which read no `.md`
- * byte on either route, and strictly less than a document under any other name.
+ * 🛑 MARKDOWN IS A DOCUMENT LIKE ANY OTHER HERE, AND A DRAFT THAT EXEMPTED IT WAS
+ * REFUTED AS `INTRODUCED`. That draft added a `!isMarkdown(path)` term, reasoning
+ * that it could subtract nothing because no route read a `.md` at all. THE
+ * PREMISE WAS FALSE AND IT WAS FALSE BECAUSE IT COUNTED TWO ROUTES WHEN THERE ARE
+ * THREE: `paths` mode (`pnpm phi-scan <file>`) reaches this function too, and at
+ * base it ran the STRUCTURED scan over a `.md` carrying a marker. Measured on the
+ * draft: a real C-CDA saved as `notes.md`, carrying a name, a DOB, an SSN by OID,
+ * an MRN, an address and a telecom, went from NINE hits and exit 1 to `OK, no
+ * hits` and exit 0 on that route. The shape floor the draft offered as mitigation
+ * is EMPTY for that document class: C-CDA carries its SSN as an undashed
+ * `id@extension` and carries no email, so the floor found nothing at all.
+ * **Count every route before calling an exemption additive, and never state a
+ * scope claim about "both routes" in a scanner that has three.**
  */
 function looksLikeCda(text: string, path: string): boolean {
   if (/\.(?:xml|cda|ccda)$/i.test(path)) return true;
   if (path.startsWith("test/")) return true;
-  return hasCdaMarker(text) && !isSourceCode(path) && !isMarkdown(path);
+  return hasCdaMarker(text) && !isSourceCode(path);
 }
 
 function scanCda(path: string, text: string, allow: AllowList, hits: Hit[]): void {
@@ -1271,7 +1314,7 @@ function scanCda(path: string, text: string, allow: AllowList, hits: Hit[]): voi
  *
  * EVERY OBSERVED TARGET NOW GETS AT LEAST THE CONSERVATIVE SHAPE PASS. It used
  * to reach `src/` + `scripts/` JS/TS only, which left a large tracked corpus
- * read-but-never-scanned on both routes: the three `scripts/*.sh` gates (which
+ * read-but-never-scanned on the sweeping routes: the three `scripts/*.sh` gates (which
  * the prose already claimed were covered as `scripts/` code), the root build
  * configs (`tsup.config.ts`, `vitest.config.ts`, `eslint.config.js` are
  * hand-written by the same authors but live outside both prefixes), the
@@ -1295,15 +1338,14 @@ function scanTarget(target: Target, allow: AllowList, hits: Hit[]): boolean {
     );
   }
   const text = stripCdata(buf.toString("utf8"));
-  if (looksLikeCda(text, target.path)) {
+  if (looksLikeCda(text, target.path) && !STRUCTURED_EXEMPT_PATHS.has(target.path)) {
     scanCda(target.path, text, allow, hits);
-    scanCommonShapes(target.path, text, allow, hits);
-    return true;
   }
-  // Not a document: conservative shape pass (dashed SSN + non-test email), over
-  // EVERY target with NO path exemption at all. `isSourceCode` is deliberately
-  // not consulted here any more; it bounded this branch to `src/` + `scripts/`
-  // JS/TS, and nothing else read the bytes.
+  // The conservative shape pass (dashed SSN + non-test email) runs over EVERY
+  // target, with no path exemption at all, and it is ADDITIVE rather than an
+  // alternative: a document gets `scanCda` AND this, exactly as it always did.
+  // `isSourceCode` is deliberately not consulted here any more; it bounded this
+  // branch to `src/` + `scripts/` JS/TS, and nothing else read the bytes.
   scanCommonShapes(target.path, text, allow, hits);
   return true;
 }

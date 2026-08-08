@@ -1496,7 +1496,7 @@ deleted; the imperative as it stood is reproduced here verbatim.
   copies and not others: prefer CUTTING a copy to adding a more careful one.**
   Why: `documentation/agent-notes.md#the-attw-wrapper-script`
 
-## The corpus both phi-scan routes read past
+## The corpus every phi-scan route read past
 
 `PHI-SCAN-WALK-ROOT-SCOPE`, closed here 2026-08-08. **The class is: a PHI gate prints `OK - no hits`
 and exits 0 over tracked files no route ever opened.** In the siblings it shows up as a walk rooted
@@ -1508,15 +1508,15 @@ already maximal and the sibling defect was structurally absent. What was open wa
 with the same effect, and it was found only by measuring `ccda`'s own tree.
 
 **THE CENSUS, DERIVED FROM `git ls-files` RATHER THAN WRITTEN DOWN.** Base `941afff`: **140 tracked,
-96 reached by some detector, 44 by neither, 4 of those under `test/`.** Head: **140 tracked, 139
-reached, 1 by neither** (`test/scripts/phi-scan.test.ts`), which is also the only remaining file
-under `test/` in neither. **43 files newly opened, 0 downgraded.** Both counts are of the tree each
-was measured on, and neither is a claim about now: the `.changeset/` entry shipping this raises the
-tracked and the reached figure by one each until a release consumes it, and `git ls-files` re-derives
-the real answer in a second. Three separate causes, closed on their own terms:
+96 reached by some detector on the sweeping routes, 44 by neither, 4 of those under `test/`.** Head,
+same 140-file corpus: **139 reached, 1 by neither** (`test/scripts/phi-scan.test.ts`), which is also
+the only remaining file under `test/` in neither. **43 files newly opened.** Both counts are of the
+tree each was measured on, and neither is a claim about now: the `.changeset/` entry shipping this
+raises the tracked and the reached figure by one each until a release consumes it, and `git ls-files`
+re-derives the real answer in a second. Three separate causes, closed on their own terms:
 
 1. **16 `.md` were dropped BY THE WALK before a byte was read**, and dropped again by `--staged`.
-   Both drops are gone.
+   They are enumerated now and scanned like any other target, structured scan included.
 2. **24 were READ and then scanned by nothing**, because the conservative shape pass was bounded to
    `src/` + `scripts/` JS/TS by `isSourceCode`. Among them the three `scripts/*.sh` gates, which the
    scanner's own docblock already described as covered, plus `tsup.config.ts`, `vitest.config.ts`,
@@ -1525,67 +1525,90 @@ the real answer in a second. Three separate causes, closed on their own terms:
 3. **4 were the `test/scripts/` PREFIX exclusion**, whose stated reason (the gate's own
    negative-control literals) covers **exactly one file**. Narrowed to that literal path.
 
+**🛑 COUNT THE ROUTES. THERE ARE THREE, AND THE FIRST DRAFT WAS REFUTED `INTRODUCED` FOR REASONING
+ABOUT TWO.** `all` and `--staged` are the sweeping ones. **`paths` (`pnpm phi-scan <file>`, wired in
+`package.json`) is the third, and `looksLikeCda` governs it too.** That draft added a
+`!isMarkdown(path)` term to `looksLikeCda`, on the argument that it could subtract nothing because no
+route read a `.md` at all. **The argument was false, and it was false only on the route it forgot.**
+Measured by the refuter: a real C-CDA saved as `notes.md`, carrying a name, a DOB, an SSN by OID, an
+MRN, an address and a telecom, went from **nine hits and exit 1 to `OK, no hits` and exit 0** on
+`paths`. Two tracked files regressed the same way. **And the mitigation the draft offered was
+vacuous: the "shape floor" is EMPTY for a C-CDA**, which carries its SSN as an undashed
+`id@extension` and carries no email, so the floor found nothing at all. The term is gone; markdown is
+scanned like anything else. **Never write a scope claim about "both routes" in a scanner that has
+three, and enumerate the call sites of a dispatch predicate before calling a change to it additive.**
+
 **🛑 `isSourceCode` IS READ IN TWO PLACES WITH OPPOSITE POLARITY, AND WIDENING IT IS A SUBTRACTION
 DISGUISED AS A WIDENING.** It ADDS the shape pass in `scanTarget` and SUBTRACTS the structured scan
 in `looksLikeCda` (`hasCdaMarker(text) && !isSourceCode(path)`). Adding `.sh` to it, the obvious fix
 for cause 2, would have DOWNGRADED any `scripts/*.sh` carrying a C-CDA marker from the full document
 scan to shape-only, losing name / DOB / MRN / address / telecom on it. Measured, not reasoned about.
 The remedy is to extend the ADDITIVE branch and leave that predicate alone; the guard is written into
-its docblock so the next person does not rediscover it.
+its docblock so the next person does not rediscover it. **It is the same defect the `isMarkdown`
+draft shipped, one function along, which is why both guards are written down.**
 
-**🛑 THE GRID, ON BOTH ROUTES, BECAUSE `--staged` IS THE COMMIT-BLOCKING ONE.** Every tracked file
-was planted with a dashed-SSN payload and then with a `<family>` name payload, base tree and head
-tree, `all` and `--staged`. Shape payload: base 95 files detected, head 135, **nothing `1 -> 0` on
-either route**, and the three files the bulk plant had to skip because node parses them
-(`package.json`, `tsconfig.json`, `.npmrc`) were probed individually with valid payloads: **0 at base,
-1 at head, all three.** Name payload: base 26 files, head 29, again **nothing `1 -> 0`**. The head's
-scanned set is a strict SUPERSET of the base's on both routes. **Non-vacuity: exactly one file was
-still undetected at head**, the one literal exclusion, so the clean cells are a decision about a
-named file rather than a sweep that stopped running.
+**🛑 THE GRID, ON ALL THREE ROUTES.** Every tracked file was planted with a dashed-SSN payload and
+then with a `<family>` name payload, base tree and head tree, `all` / `--staged` / `paths`. Shape
+payload: `all` **96 -> 140**, `--staged` **96 -> 140**, `paths` **140 -> 141**, no regression in any
+cell. Name payload: `all` **26 -> 39**, `--staged` **26 -> 39**, `paths` **42 -> 40**.
+**Non-vacuity: exactly one file is still undetected at head**, the one literal exclusion, so the
+clean cells are decisions about a named file rather than a sweep that stopped running.
 
-**🛑 THE FIRST DRAFT SHIPPED A PATH EXEMPTION AND IT WAS REPLACED, NOT DEFENDED.** `package.json`'s
-`author` field carries the organisation's published contact mailbox, which the widened shape pass
-turns into a standing hit. The first cut added a `SHAPE_EXEMPT_PATHS` literal holding that one path.
-That is a whole-file bypass of exactly the kind `phi-scan-overrides.md` already says to prefer a
-token-level declaration over, and it would have left the whole manifest unscanned by both routes to
-quiet one known string. Replaced with a new **`EMAIL <address>`** allow-list tag naming that one
-mailbox. **`EMAILDOMAIN cosyte.com` was refused as the fix**: a domain entry excuses every mailbox at
-it, including one carrying a patient name. A test pins the difference. **This change therefore adds
-no path exemption at all**, which is the cheapest way to satisfy `dicom#98`'s rule that an exemption
-must be a literal path and must never reach the blocking route.
+**🔴 TWO CELLS GO `1 -> 0`, BOTH ON `paths`, AND THEY ARE NAMED RATHER THAN CLAIMED AWAY.** An
+earlier draft of this note asserted "nothing `1 -> 0`" and that was measured wrong; do not restore
+it. Neither cell is a route that stopped looking:
 
-**🩺 THE `.md` RESIDUAL, DISCLOSED RATHER THAN CLOSED, AND WHY THE OTHER ANSWER WAS WORSE.** Markdown
-gets the shape floor (dashed SSN + non-test email) and **not** the structured scan: `looksLikeCda`
-returns false for it. That was measured, not assumed. **11 of the 16 tracked `.md` carry a C-CDA
-marker, 8 of them the `<ClinicalDocument>` root itself**, because the published docs work through
-real examples. Running the structured scan over them draws three name hits that are documentation
-rather than leakage: `docs-content/quickstart.md`'s second worked patient, and `CHANGELOG.md` quoting
-this scanner's own entity-decoding negative control. The alternative was allow-listing those tokens,
-which are three of the commonest English name words, **weakening the name detector across the whole
-corpus to quiet two documentation files**. So a genuine C-CDA document saved under a `.md` name gets
-the floor and not the structured detectors: strictly more than base, which read no `.md` byte on
-either route, and strictly less than the same bytes under any other name. Pinned by a test that
-asserts the residual **beside** the identical bytes under `.xml`, which the structured scan does
-catch, and beside an SSN in the same `.md`, which the floor does catch.
+- **`CHANGELOG.md` loses the structured detectors** (`STRUCTURED_EXEMPT_PATHS`). It is generated
+  output that must not be hand-edited, and it quotes this scanner's own negative-control literals
+  verbatim, including the entity-encoded `<family>` element that exists to prove the decoder works
+  (written out rather than reproduced here, because reproducing it reds this gate: that is how this
+  paragraph was first drafted, and the run that caught it is the evidence the widening works). So the
+  gate was flagging its own documentation of itself, on a file whose content cannot be edited to fix
+  it. **This is the only name detection this change gives up.** The bound is
+  upstream and real: `.changeset/*.md` is itself structurally scanned now, on every route, so the
+  text has to pass the full gate before a release can copy it in. The shape pass still runs over the
+  changelog, so it is never an unread file. **A predicate ("any generated file") was refused; the
+  exemption is one path because one file has the argument.**
+- **`package.json` stops hitting on its own `author` mailbox**, because that one address is now
+  DECLARED in the allow-list. Every allow-list entry ever added has this shape: that is what a
+  positive synthetic declaration IS. The refused alternatives were `EMAILDOMAIN cosyte.com`, which
+  excuses every mailbox at that domain including one carrying a patient name, and a path exemption,
+  which would have left the whole manifest unscanned by the sweeping routes.
 
-**THE UNMERGED-`.md` CARVE-OUT WENT WITH IT, ON ITS OWN ARGUMENT.** `--staged` refused to refuse an
+**A THIRD FILE STOPS HITTING AND IT IS NOT THE SCANNER THAT CHANGED.**
+`docs-content/quickstart.md`'s second worked example used a placeholder person name that is not in
+the allow-list. The example now reuses the corpus's declared synthetic patient, keeping the distinct
+MRN that was the example's actual point. **Measured: the HEAD scanner over the BASE bytes still
+reports both tokens**, so the detector lost nothing and the corpus stopped carrying them. Fixing the
+corpus was preferred to exempting the page, which is this repo's most example-dense documentation
+and must stay fully scanned.
+
+**THE FIRST DRAFT ALSO SHIPPED A PATH EXEMPTION AND IT WAS REPLACED, NOT DEFENDED.** It carried a
+`SHAPE_EXEMPT_PATHS` literal holding `package.json`. That is a whole-file bypass of exactly the kind
+`phi-scan-overrides.md` already says to prefer a token-level declaration over. Replaced with a new
+**`EMAIL <address>`** allow-list tag naming that one mailbox, which is narrower than `EMAILDOMAIN` by
+construction and has a test pinning the difference.
+
+**THE UNMERGED-`.md` CARVE-OUT WENT TOO, ON ITS OWN ARGUMENT.** `--staged` refused to refuse an
 unmerged `.md` because that was "a class this route never reads AT ALL". Once markdown is a target
 the premise is gone, and leaving it would have sent an unmerged `.md` on to `git show :<path>`, which
 fatals anyway, under the generic could-not-read message instead of the one that names the conflict.
-**The cost is real and stated: a conflict in `CHANGELOG.md` now refuses this route.** `git commit`
-rejects an unmerged path before the pre-commit hook runs, so no commit path reaches it.
+**The cost is real and stated: a conflict in `CHANGELOG.md` now refuses this route.** The refuter
+confirmed the premise that bounds it: `git commit` rejects an unmerged path **before** the pre-commit
+hook runs, verified with an instrumented hook that never fired, so no commit path reaches it.
 
 **43 FILES HAND-READ BEFORE THIS SHIPPED**, mechanically for every PHI-shaped token class and then in
 **three fresh contexts** for the qualitative read. **Nothing patient-identifying, in any of the 43.**
 The full inventory of realistic-shaped tokens in the newly-opened set: person-name tokens `Jane` /
-`Doe` / `Q` (allow-listed synthetic), `John` / `Public` (the stock placeholder, in one docs example),
-and the entity-encoded `&#x53;mith` that is this scanner's own negative control quoted in two files;
-identifiers all prefixed-synthetic (`MRN-00042`, `DOC-0001`, and their neighbours), never
-bare-numeric; one allow-listed DOB `19800101`; and two addresses, `changelog@example.com` at a
-reserved domain and `hello@cosyte.com`. **No street address, no postal code, no telecom, no dashed
-SSN anywhere in the 43.** The only assigning-authority OIDs are in HL7's own `…113883.19` example
-arc, and the two composite strings that look like a record (`Doe-Jane-1980.01.01-MRN0012345`, in
-`CHANGELOG.md` and here) are an authored regex-defeat demonstration, not a transcription.
+`Doe` / `Q` (allow-listed synthetic), `John` / `Public` (the stock placeholder, in the one docs
+example now corrected), and the entity-encoded `&#x53;mith` that is this scanner's own negative
+control quoted in two files; identifiers all prefixed-synthetic (`MRN-00042`, `DOC-0001`, and their
+neighbours), never bare-numeric; one allow-listed DOB `19800101`; and two addresses,
+`changelog@example.com` at a reserved domain and `hello@cosyte.com`. **No street address, no postal
+code, no telecom, no dashed SSN anywhere in the 43.** The only assigning-authority OIDs are in HL7's
+own `…113883.19` example arc, and the two composite strings that look like a record
+(`Doe-Jane-1980.01.01-MRN0012345`, in `CHANGELOG.md` and here) are an authored regex-defeat
+demonstration, not a transcription.
 
 **THE ORG-TRACEABLE STRINGS ARE NAMED HERE RATHER THAN SCRUBBED**, because they are public,
 non-patient and deliberate, and deleting them would destroy the evidence that the widened scan opened
@@ -1602,12 +1625,13 @@ org ruleset names, token-permission limits and which sibling repos are currently
 public MIT repo, on a surface `check-no-internal-refs.sh` deliberately excludes from its own scan.
 
 **🔴 THE EXIT CODE, DERIVED FROM THIS REPO'S CONTRACT AND NOT PORTED, WITH THE HALF THAT DIFFERS FROM
-EVERY SIBLING.** `ccda` declares **no scan-root list**: the walk's only root is `process.cwd()`, which
-the OS guarantees is a directory, so **the regular-file-root state is structurally UNREACHABLE here**
-and the sibling figure describes a configuration this repo does not have. What the contract says
-about the class it does reach: any error that is not an `InvocationError` falls to the process-level
-net and exits **2**, never 1. Measured rather than argued: `EACCES` off `readdirSync` inside the walk
-exits **2**; a directory named on the `paths` route exits **2**; a missing allow-list exits **2**;
+EVERY SIBLING.** `ccda` declares **no scan-root list**: `walk()` has exactly one call site and its
+root is `process.cwd()`, which the OS guarantees is a directory, so **the regular-file-root state is
+structurally UNREACHABLE here** and the sibling figure describes a configuration this repo does not
+have. What the contract says about the class it does reach: any error that is not an
+`InvocationError` falls to the process-level net and exits **2**, never 1. Measured rather than
+argued, and independently reproduced by the refuter: `EACCES` off `readdirSync` inside the walk exits
+**2**; a directory named on the `paths` route exits **2**; a missing allow-list exits **2**;
 `ENOTDIR` from the same `readdirSync` call site is a plain system `Error` and takes the identical
 route. So **2**, as `hl7` / `fhir` / `cli` / `dicom` and not `terminology`'s 1, but arrived at from
 this repo's own net.

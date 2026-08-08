@@ -37,23 +37,28 @@ Enumeration + scope keep the scan honest and un-dodgeable:
   marker inside a JSDoc `@example`, a comment or a documentation page does not
   turn prose into a "document" and flag its illustrative tokens (this scanner's
   own doc comment is one, and the published docs work through real examples).
-- **The `.md` residual, disclosed.** A genuine C-CDA document saved under a `.md`
-  name gets the shape floor and not the name / DOB / MRN / address / telecom
-  detectors. It is strictly more than the scanner used to do (markdown was
-  dropped by the walk before a byte was read, and dropped again by `--staged`)
-  and strictly less than the same bytes under any other name. Why it was not
-  closed further: 11 of the 16 tracked `.md` carry a C-CDA marker, and the
-  structured scan over them draws three name hits that are documentation rather
-  than leakage. Quieting those meant allow-listing three of the commonest English
-  name words across the whole corpus. Full measurement:
-  `documentation/agent-notes.md#the-corpus-both-phi-scan-routes-read-past`.
+- **Markdown is a document like any other, and a draft that exempted it was
+  refused.** That draft gave `.md` the shape floor only, arguing it could
+  subtract nothing because no route read a `.md`. **There are three routes, not
+  two:** `paths` (`pnpm phi-scan <file>`) already ran the structured scan over a
+  marker-bearing `.md`, so a real C-CDA saved as `notes.md` went from nine hits
+  to `OK, no hits` on it. The floor is also empty for that document class, which
+  carries its SSN as an undashed `id@extension` and carries no email. Full
+  measurement:
+  `documentation/agent-notes.md#the-corpus-every-phi-scan-route-read-past`.
 - **The scanner's own test is excluded, and the exclusion is a LITERAL PATH.**
   `test/scripts/phi-scan.test.ts` necessarily embeds real-looking violator
   strings as adversarial inputs (and writes its runtime violators to a throwaway
   temp dir), so scanning the gate's negative controls would flag them. It was
   the prefix `test/scripts/`, which covered four files where that reason covers
-  one; the other three are scanned now. **It is the only exclusion, on either
-  route.**
+  one; the other three are scanned now. **It is the only file excluded from every
+  route.** There is exactly one other exemption and it is narrower:
+  `CHANGELOG.md` is read and shape-scanned but not run through the structured
+  detectors, because it is generated output that must not be hand-edited and it
+  quotes this scanner's own negative-control literals verbatim. That is the only
+  name detection this gate gives up, and it is bounded upstream: `.changeset/*.md`
+  is structurally scanned on every route, so changelog text passes the full gate
+  before a release copies it in.
 - **A non-PHI address is declared by VALUE, never by exempting its file.** The
   `EMAIL <address>` tag declares one mailbox; `EMAILDOMAIN` declares every
   mailbox at a domain and is the wrong instrument for a single known address.

@@ -198,8 +198,8 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
   <recordTarget><patientRole>
     <id root="2.16.840.1.113883.19.5" extension="MRN-00099" assigningAuthorityName="Sample Hospital"/>
     <patient>
-      <name><given>John</given><family>Public</family></name>
-      <administrativeGenderCode code="M" codeSystem="2.16.840.1.113883.5.1"/>
+      <name><given>Jane</given><family>Doe</family></name>
+      <administrativeGenderCode code="F" codeSystem="2.16.840.1.113883.5.1"/>
     </patient>
   </patientRole></recordTarget>
   <component><structuredBody>
