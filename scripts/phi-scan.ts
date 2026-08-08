@@ -321,11 +321,21 @@ const WALK_SKIP_DIRS = new Set<string>([
   ".vitest-cache",
 ]);
 
-// The scanner's OWN test is excluded from every route: it necessarily embeds
-// real-looking violator strings ("Anderson", a fake SSN, a non-555 phone) as
-// adversarial inputs, and its runtime violators are written to a throwaway temp
-// dir, never the repo. Scanning it would flag the gate's own negative-control
-// literals.
+// The scanner's OWN test is excluded from THE TWO SWEEPING ROUTES: it necessarily
+// embeds real-looking violator strings ("Anderson", a fake SSN, a non-555 phone)
+// as adversarial inputs, and its runtime violators are written to a throwaway
+// temp dir, never the repo. Scanning it would flag the gate's own
+// negative-control literals.
+//
+// 🛑 "THE TWO SWEEPING ROUTES", NOT "EVERY ROUTE", AND THE PRECISION IS THE WHOLE
+// POINT. This set is consulted in `buildTargetsForAll` and `buildTargetsForStaged`
+// and NOWHERE ELSE, so `phi-scan test/scripts/phi-scan.test.ts` still scans it and
+// still reports its adversarial literals. A draft of this comment said "every
+// route" and it was the same two-versus-three miscount that took an `INTRODUCED`
+// one function along, restated in the very file written to fix it. The direction
+// is safe (more scanning than claimed, never less), but do NOT "finish the job" by
+// wiring this set into `buildTargetsForPaths`: that would turn a two-route
+// exclusion into a total one, which is a real hole rather than a tidy-up.
 //
 // LITERAL PATHS, NOT A DIRECTORY PREFIX. This was `test/scripts/`, which excluded
 // FOUR files where the reason above covers exactly one: the other three
@@ -346,15 +356,47 @@ const EXCLUDED_PATHS = new Set<string>(["test/scripts/phi-scan.test.ts"]);
 // works. Decoding it and reporting `Smith` is the gate flagging its own
 // documentation of itself, on a file whose content cannot be edited to fix it.
 //
-// WHAT THIS COSTS, STATED RATHER THAN WAVED AT: a person name written into a
-// changeset summary reaches this file unscanned by the name detector. It is
-// bounded upstream rather than here, and the bound is real: `.changeset/*.md` is
-// itself structurally scanned now, on every route, so the text has to pass the
-// full gate before a release can copy it in. The shape pass (dashed SSN,
-// non-test email) still runs over this file.
+// WHAT THIS COSTS, MEASURED RATHER THAN WAVED AT, AND IT IS FIVE DETECTORS AND NOT
+// ONE. A draft of this paragraph said "the name detector"; the exemption removes
+// the whole of `scanCda`, which on this file's own content is NINE loci:
+// `name/family` twice, `name/given`, `birthTime@value`, `id@extension` as an SSN
+// by OID, `streetAddressLine`, `city`, `postalCode` and `telecom@value`.
+//
+// THE UPSTREAM BOUND IS REAL BUT NARROWER THAN AN EARLIER DRAFT CLAIMED, AND THE
+// DRAFT'S VERSION WAS REFUTED BY MEASUREMENT. It said `.changeset/*.md` is
+// structurally scanned "so the text has to pass the full gate before a release can
+// copy it in". What actually holds, tested on both routes a changeset travels:
+//
+//   - text carrying a C-CDA MARKER gets all five structured detectors, because
+//     `looksLikeCda` keys on `hasCdaMarker` for a `.md`. A changeset carrying a
+//     marker plus a name exits 1;
+//   - ANY text, marker or not, gets the shape pass, so a dashed SSN or a non-test
+//     email in a changeset summary exits 1;
+//   - MARKER-FREE text does NOT get the structured detectors. A changeset carrying
+//     a bare `<given>`/`<family>`, a `<birthTime>`, an SSN-rooted `<id>` or an
+//     address with no `<ClinicalDocument>` / `urn:hl7-org:v3` / `<recordTarget>` /
+//     `<patientRole>` anywhere exits 0.
+//
+// That last case is PRE-EXISTING and unchanged by this slice: it exits 0 at base
+// on all three routes too. It is NOT the "Free-text names" limitation in
+// `phi-scan-overrides.md`, and citing that one here would be a misattribution:
+// that limitation is about prose versus markup, while the predicate that actually
+// gates this is `hasCdaMarker`, and the structured loci are exactly what leaks.
+//
+// The shape pass (dashed SSN, non-test email) still runs over this file, so it is
+// never an unread one.
 //
 // A predicate ("any generated file", "any changelog") was refused. The exemption
 // is one path because one file has the argument.
+//
+// RESIDUAL, DISCLOSED AND DELIBERATELY NOT CLOSED BY WIDENING: the comparison is
+// case-SENSITIVE, so on a case-insensitive filesystem `phi-scan changelog.md`
+// resolves to the real file and misses this set, and the gate reds on the
+// changelog's own negative-control literals. That is a false RED, which is the
+// safe direction, and the fix is to spell the path as it is on disk. Matching
+// case-insensitively was refused: it would EXEMPT a genuinely distinct
+// `changelog.md` on a case-sensitive filesystem, which is a false GREEN, and
+// widening an exemption is the one direction this class must never take.
 const STRUCTURED_EXEMPT_PATHS = new Set<string>(["CHANGELOG.md"]);
 
 // The HL7 v3 OID that identifies a United States Social Security Number. An

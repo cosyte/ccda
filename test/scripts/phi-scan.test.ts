@@ -1281,18 +1281,41 @@ describe("phi-scan: the corpus both routes used to skip", () => {
     expect(neighbour.stderr).toContain("HISTORY.md");
   });
 
-  it("upstream bound on that exemption: a changeset carrying a name is still caught", () => {
-    // Why giving up name detection on CHANGELOG.md is bounded rather than open:
-    // its content originates in `.changeset/*.md`, which this slice newly opened
-    // and which gets the full structured scan on every route.
+  it("upstream bound on that exemption: a MARKER-BEARING changeset is caught, a marker-free one is NOT", () => {
+    // The bound on giving up `scanCda` for CHANGELOG.md: its content originates
+    // in `.changeset/*.md`, which this slice newly opened.
+    //
+    // THE NEGATIVE HALF IS HERE ON PURPOSE, AND IT IS WHY THIS CASE WAS RENAMED.
+    // It was called "a changeset carrying a name is still caught", which its own
+    // fixture could not falsify: `doc()` is a whole `<ClinicalDocument
+    // xmlns="urn:hl7-org:v3">`, and `looksLikeCda` keys on `hasCdaMarker` for a
+    // `.md`, so the case only ever proved the marker-bearing half. A real
+    // changeset summary is prose. The marker-free half exits 0, it exits 0 at
+    // base too on all three routes, and it must be pinned rather than implied.
     const repo = makeScanRepo({ git: true });
-    const violator = doc("").replace("<family>Doe</family>", "<family>Anderson</family>");
     mkdirSync(join(repo, ".changeset"), { recursive: true });
-    writeFileSync(join(repo, ".changeset", "sour-pandas-clap.md"), violator);
+    const cs = join(repo, ".changeset", "sour-pandas-clap.md");
+
+    // (a) marker-bearing: every structured detector runs.
+    writeFileSync(cs, doc("").replace("<family>Doe</family>", "<family>Anderson</family>"));
     gitIn(repo, ["add", ".changeset/sour-pandas-clap.md"]);
-    const r = runScannerIn(repo, null);
-    expect(r.code, `stderr: ${r.stderr}`).toBe(1);
-    expect(r.stderr).toMatch(/Anderson/);
+    const withMarker = runScannerIn(repo, null);
+    expect(withMarker.code, `stderr: ${withMarker.stderr}`).toBe(1);
+    expect(withMarker.stderr).toMatch(/Anderson/);
+
+    // (b) marker-free: the structured detectors do NOT run. The bound stops here.
+    writeFileSync(cs, '---\n"@cosyte/ccda": patch\n---\n\n<family>Anderson</family>\n');
+    gitIn(repo, ["add", ".changeset/sour-pandas-clap.md"]);
+    const noMarker = runScannerIn(repo, null);
+    expect(noMarker.code, `stderr: ${noMarker.stderr}`).toBe(0);
+
+    // (c) ...but the shape pass still covers any text, marker or not, so the 0
+    // above is a bound on WHICH detectors ran and never on whether it was read.
+    writeFileSync(cs, `---\n"@cosyte/ccda": patch\n---\n\nref ${SSN}\n`);
+    gitIn(repo, ["add", ".changeset/sour-pandas-clap.md"]);
+    const shaped = runScannerIn(repo, null);
+    expect(shaped.code, `stderr: ${shaped.stderr}`).toBe(1);
+    expect(shaped.stderr).toContain(".changeset/sour-pandas-clap.md");
   });
 
   it("EMAIL declares one mailbox, EMAILDOMAIN would declare every mailbox at it", () => {

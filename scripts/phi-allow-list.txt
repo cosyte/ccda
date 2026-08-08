@@ -57,5 +57,5 @@ EMAILDOMAIN example.test
 # that the widened scan opened `package.json` and was read. Declared as ONE
 # address rather than as `EMAILDOMAIN cosyte.com`, which would have excused every
 # mailbox at that domain, and rather than as a path exemption on `package.json`,
-# which would have left that whole file unscanned by both routes.
+# which would have left that whole file unscanned by the two sweeping routes.
 EMAIL hello@cosyte.com

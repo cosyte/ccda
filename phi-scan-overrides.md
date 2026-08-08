@@ -51,14 +51,34 @@ Enumeration + scope keep the scan honest and un-dodgeable:
   strings as adversarial inputs (and writes its runtime violators to a throwaway
   temp dir), so scanning the gate's negative controls would flag them. It was
   the prefix `test/scripts/`, which covered four files where that reason covers
-  one; the other three are scanned now. **It is the only file excluded from every
-  route.** There is exactly one other exemption and it is narrower:
-  `CHANGELOG.md` is read and shape-scanned but not run through the structured
-  detectors, because it is generated output that must not be hand-edited and it
-  quotes this scanner's own negative-control literals verbatim. That is the only
-  name detection this gate gives up, and it is bounded upstream: `.changeset/*.md`
-  is structurally scanned on every route, so changelog text passes the full gate
-  before a release copies it in.
+  one; the other three are scanned now. **It is excluded from the two SWEEPING
+  routes, not from every route**: naming it on the command line still scans it.
+  There is exactly one other exemption and it is narrower: `CHANGELOG.md` is read
+  and shape-scanned but not run through the structured detectors, because it is
+  generated output that must not be hand-edited and it quotes this scanner's own
+  negative-control literals verbatim. That costs the whole of the structured scan
+  on that file (**five detectors, nine loci on its own content**, not just the
+  name one), and the upstream bound is real but narrower than it first reads:
+  `.changeset/*.md` is structurally scanned **when it carries a C-CDA marker**,
+  and gets the dashed-SSN + email shape pass whatever it carries, but a
+  **marker-free** changeset carrying a bare `<given>` / `<family>`,
+  `<birthTime>`, an SSN-rooted `<id>` or an address exits 0. That last case is
+  pre-existing and identical at base on all three routes, and it is **not** the
+  "Free-text names" limitation below: the predicate that gates it is
+  `hasCdaMarker`, not prose-versus-markup.
+- **Writing documentation is now inside the gate, and this is a real authoring
+  constraint.** Eleven files became structurally scanned that were not before
+  (`docs-content/*.md`, `docs/adr/*.md`, `documentation/agent-notes.md`, and any
+  marker-bearing `.changeset/*.md`). A worked example or an incident write-up
+  carrying a non-allow-listed `<given>` / `<family>` / `<name>`, a
+  `birthTime@value`, a bare-numeric 6+ digit `id@extension`, a
+  `streetAddressLine` / `city` / `postalCode`, or a telecom without the `555`
+  convention will now red a **blocking** gate at pre-commit. That is the gate
+  working, and it collides with the `agent-notes.md` contract, which requires
+  write-ups. **The two remedies, in order: reuse the declared synthetic tokens,
+  or describe the locus without reproducing it.** Never delete the write-up to
+  get green. This is not hypothetical: the note for this very change was drafted
+  quoting an entity-encoded name literal, and the gate caught it.
 - **A non-PHI address is declared by VALUE, never by exempting its file.** The
   `EMAIL <address>` tag declares one mailbox; `EMAILDOMAIN` declares every
   mailbox at a domain and is the wrong instrument for a single known address.

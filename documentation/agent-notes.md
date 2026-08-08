@@ -1523,7 +1523,13 @@ re-derives the real answer in a second. Three separate causes, closed on their o
    `eslint.config.js`, every workflow, `LICENSE` and the JSON manifests. The shape pass now runs on
    **every** observed target with no path exemption at all.
 3. **4 were the `test/scripts/` PREFIX exclusion**, whose stated reason (the gate's own
-   negative-control literals) covers **exactly one file**. Narrowed to that literal path.
+   negative-control literals) covers **exactly one file**. Narrowed to that literal path. **Say "the
+   two sweeping routes", never "every route": `EXCLUDED_PATHS` is consulted in `buildTargetsForAll`
+   and `buildTargetsForStaged` and nowhere else**, so naming that file on the command line still
+   scans it. A draft of this note said "every route", which is the same two-versus-three miscount as
+   the `INTRODUCED` below, restated in the text written to fix it. The direction is safe, but **do
+   not "finish the job" by wiring the set into `buildTargetsForPaths`**: that turns a two-route
+   exclusion into a total one.
 
 **🛑 COUNT THE ROUTES. THERE ARE THREE, AND THE FIRST DRAFT WAS REFUTED `INTRODUCED` FOR REASONING
 ABOUT TWO.** `all` and `--staged` are the sweeping ones. **`paths` (`pnpm phi-scan <file>`, wired in
@@ -1564,11 +1570,23 @@ it. Neither cell is a route that stopped looking:
   (written out rather than reproduced here, because reproducing it reds this gate: that is how this
   paragraph was first drafted, and the run that caught it is the evidence the widening works). So the
   gate was flagging its own documentation of itself, on a file whose content cannot be edited to fix
-  it. **This is the only name detection this change gives up.** The bound is
-  upstream and real: `.changeset/*.md` is itself structurally scanned now, on every route, so the
-  text has to pass the full gate before a release can copy it in. The shape pass still runs over the
-  changelog, so it is never an unread file. **A predicate ("any generated file") was refused; the
-  exemption is one path because one file has the argument.**
+  it. **It costs the whole of `scanCda` on that file, five detectors and nine loci on its own
+  content, not just the name one** - a draft of this note said "the only name detection", which was
+  measured wrong and must not be restored. **The upstream bound is real but narrower than that draft
+  claimed, and the refuter falsified the draft by measurement:** `.changeset/*.md` gets the
+  structured detectors **when it carries a C-CDA marker** (`looksLikeCda` keys on `hasCdaMarker` for
+  a `.md`), and gets the dashed-SSN + non-test-email shape pass whatever it carries; but a
+  **marker-free** changeset carrying a bare `<given>` / `<family>`, a `<birthTime>`, an SSN-rooted
+  `<id>` or an address exits **0**. That case is **PRE-EXISTING and identical at base on all three
+  routes**, and **it is NOT the "Free-text names" limitation** in `phi-scan-overrides.md`: citing
+  that one here is a misattribution, because the predicate that actually gates it is `hasCdaMarker`,
+  not prose-versus-markup, and the structured loci are exactly what leaks. The shape pass still runs
+  over the changelog, so it is never an unread file. **A predicate ("any generated file") was
+  refused; the exemption is one path because one file has the argument.** **The comparison is
+  case-SENSITIVE**, so on a case-insensitive filesystem `phi-scan changelog.md` misses the set and
+  reds on the changelog's own literals: a false RED, the safe direction. Matching case-insensitively
+  was refused because it would exempt a genuinely distinct `changelog.md` elsewhere, a false GREEN,
+  and widening an exemption is the one direction this class must never take.
 - **`package.json` stops hitting on its own `author` mailbox**, because that one address is now
   DECLARED in the allow-list. Every allow-list entry ever added has this shape: that is what a
   positive synthetic declaration IS. The refused alternatives were `EMAILDOMAIN cosyte.com`, which
@@ -1616,6 +1634,18 @@ the files: `hello@cosyte.com` (`package.json` author, now declared by value in t
 `@NSchatz` (`.github/CODEOWNERS`), the founder's name as ADR decider in
 `docs/adr/0001-xml-parser.md`, and the public researcher attributions (`jddamore`, D'Amore et al.,
 JAMIA 2014). **Anything patient-identifying would have been different and would have been removed.**
+
+**WRITING DOCUMENTATION IS NOW INSIDE THE GATE, AND NOTHING SAID SO UNTIL THE REFUTER ASKED WHAT THE
+CHANGE MAKES NEWLY POSSIBLE.** Eleven files became structurally scanned that were not before
+(`docs-content/*.md`, `docs/adr/*.md`, this file, and any marker-bearing `.changeset/*.md`). A worked
+example or an incident write-up carrying a non-allow-listed `<given>` / `<family>` / `<name>`, a
+`birthTime@value`, a bare-numeric 6+ digit `id@extension`, a `streetAddressLine` / `city` /
+`postalCode`, or a telecom without the `555` convention now reds a **blocking** gate at pre-commit.
+That is the gate working, and it collides head-on with the `agent-notes` contract, which REQUIRES
+write-ups. **The two remedies, in order: reuse the declared synthetic tokens, or describe the locus
+without reproducing it. Never delete a write-up to get green.** Not hypothetical: this very section
+was drafted quoting an entity-encoded name literal and the gate caught it, which is the run that
+proves the widening works.
 
 **TWO FINDINGS OUT OF THIS SLICE'S SCOPE, FILED RATHER THAN FIXED**, both surfaced by the hand-read
 and neither a PHI question: `docs-content/intro.md`, `installation.md` and `troubleshooting.md` each
