@@ -276,10 +276,11 @@ immutability + explicit mutation, and the profile system.
   text only and does not rewrite history.**
   Why: `documentation/agent-notes.md#the-em-dash-gate`
 - **`phi-scan` scans EVERY tracked file now, markdown included; the two exemptions are literal
-  paths, and writing docs is inside the gate.** 44 of 140 files were in no route (the sibling
-  walk-root defect was absent: this walk is repo-rooted). **THERE ARE THREE ROUTES, not two**
-  (`paths` is the third; reasoning about two shipped an `INTRODUCED`, twice). **Never widen
+  paths, and writing docs is inside the gate.** 44 of 140 files were in neither SWEEPING route (the
+  sibling walk-root defect was absent: this walk is repo-rooted). **THERE ARE THREE ROUTES, not two**
+  (`paths` is the third; miscounting them shipped an `INTRODUCED`, twice). **Never widen
   `isSourceCode`: it also SUBTRACTS the structured scan in `looksLikeCda`.** A refusal exits **2**.
+  **Write no count in this area; three drafts wrote one and were wrong.**
   Why: `documentation/agent-notes.md#the-corpus-every-phi-scan-route-read-past`
 - **The `CLAUDE.md` / `agent-notes.md` contract is gated, and unlike the public-surface gate above
   it BLOCKS** (it runs in the test suite, inside `parser-ci-required-checks`). **It asserts what

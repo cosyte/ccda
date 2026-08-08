@@ -56,20 +56,29 @@ Enumeration + scope keep the scan honest and un-dodgeable:
   There is exactly one other exemption and it is narrower: `CHANGELOG.md` is read
   and shape-scanned but not run through the structured detectors, because it is
   generated output that must not be hand-edited and it quotes this scanner's own
-  negative-control literals verbatim. That costs the whole of the structured scan
-  on that file (**five detectors, nine loci on its own content**, not just the
-  name one), and the upstream bound is real but narrower than it first reads:
+  negative-control content verbatim. That costs the whole of the structured scan
+  on that file (**all five detectors**, not just the name one; no locus count is
+  written here, because the file's content changes on every release and a count
+  written down goes stale by the next one), and the upstream bound is real but
+  narrower than it first reads:
   `.changeset/*.md` is structurally scanned **when it carries a C-CDA marker**,
   and gets the dashed-SSN + email shape pass whatever it carries, but a
   **marker-free** changeset carrying a bare `<given>` / `<family>`,
-  `<birthTime>`, an SSN-rooted `<id>` or an address exits 0. That last case is
+  `<birthTime>`, a bare-numeric `<id>` or an address exits 0 (an SSN-rooted `<id>`
+  with a DASHED extension still exits 1, via the shape pass). That last case is
   pre-existing and identical at base on all three routes, and it is **not** the
   "Free-text names" limitation below: the predicate that gates it is
   `hasCdaMarker`, not prose-versus-markup.
 - **Writing documentation is now inside the gate, and this is a real authoring
-  constraint.** Eleven files became structurally scanned that were not before
-  (`docs-content/*.md`, `docs/adr/*.md`, `documentation/agent-notes.md`, and any
-  marker-bearing `.changeset/*.md`). A worked example or an incident write-up
+  constraint.** Markdown, the ADR, `documentation/agent-notes.md` and the
+  changesets became structurally scanned. **The predicate is `hasCdaMarker`, not
+  the extension, and no file list or count is written here: two drafts wrote one
+  and both were wrong. Derive it.** The distinction is safety-relevant in the
+  unsafe direction, so one instance is named: **`docs-content/troubleshooting.md`
+  carries no C-CDA marker** (it mentions `ClinicalDocument` only in prose) and is
+  therefore shape-pass only. **A worked example added there is NOT gated by the
+  structured detectors**, and adding a marker to that page is what would gate it.
+  A worked example or an incident write-up
   carrying a non-allow-listed `<given>` / `<family>` / `<name>`, a
   `birthTime@value`, a bare-numeric 6+ digit `id@extension`, a
   `streetAddressLine` / `city` / `postalCode`, or a telecom without the `555`

@@ -340,7 +340,9 @@ const WALK_SKIP_DIRS = new Set<string>([
 // LITERAL PATHS, NOT A DIRECTORY PREFIX. This was `test/scripts/`, which excluded
 // FOUR files where the reason above covers exactly one: the other three
 // (`agent-notes-contract`, `attw-gate`, `changelog-generation`) embed no violator
-// at all, and were unscanned by every route for no stated reason. An exemption
+// at all, and were unscanned by the two sweeping routes for no stated reason (the
+// `paths` route always scanned them, as it always scanned every named file). An
+// exemption
 // written as a predicate always covers more than its argument does; write it as
 // the paths it is actually about, so adding a neighbouring test file does not
 // silently exempt it too.
@@ -356,11 +358,14 @@ const EXCLUDED_PATHS = new Set<string>(["test/scripts/phi-scan.test.ts"]);
 // works. Decoding it and reporting `Smith` is the gate flagging its own
 // documentation of itself, on a file whose content cannot be edited to fix it.
 //
-// WHAT THIS COSTS, MEASURED RATHER THAN WAVED AT, AND IT IS FIVE DETECTORS AND NOT
-// ONE. A draft of this paragraph said "the name detector"; the exemption removes
-// the whole of `scanCda`, which on this file's own content is NINE loci:
-// `name/family` twice, `name/given`, `birthTime@value`, `id@extension` as an SSN
-// by OID, `streetAddressLine`, `city`, `postalCode` and `telecom@value`.
+// WHAT THIS COSTS: THE WHOLE OF `scanCda`, ALL FIVE STRUCTURED DETECTORS, NOT
+// JUST THE NAME ONE. A draft said "the name detector", which understated it, and
+// the draft that corrected it enumerated a locus COUNT that was transplanted from
+// a different measurement and was wrong by an order of magnitude. NO NUMBER
+// STANDS HERE NOW, DELIBERATELY: this file's content changes on every release, so
+// any count written down is stale by the next one. Derive it in one command when
+// you need it - empty this set and run `phi-scan CHANGELOG.md` - and do not write
+// the answer back into this comment.
 //
 // THE UPSTREAM BOUND IS REAL BUT NARROWER THAN AN EARLIER DRAFT CLAIMED, AND THE
 // DRAFT'S VERSION WAS REFUTED BY MEASUREMENT. It said `.changeset/*.md` is
@@ -373,9 +378,11 @@ const EXCLUDED_PATHS = new Set<string>(["test/scripts/phi-scan.test.ts"]);
 //   - ANY text, marker or not, gets the shape pass, so a dashed SSN or a non-test
 //     email in a changeset summary exits 1;
 //   - MARKER-FREE text does NOT get the structured detectors. A changeset carrying
-//     a bare `<given>`/`<family>`, a `<birthTime>`, an SSN-rooted `<id>` or an
+//     a bare `<given>`/`<family>`, a `<birthTime>`, a bare-numeric `<id>` or an
 //     address with no `<ClinicalDocument>` / `urn:hl7-org:v3` / `<recordTarget>` /
-//     `<patientRole>` anywhere exits 0.
+//     `<patientRole>` anywhere exits 0. Be exact about the SSN case rather than
+//     folding it in: an SSN-rooted `<id>` whose extension is DASHED still exits 1,
+//     because the shape pass catches the dashed form in any text.
 //
 // That last case is PRE-EXISTING and unchanged by this slice: it exits 0 at base
 // on all three routes too. It is NOT the "Free-text names" limitation in
@@ -392,7 +399,7 @@ const EXCLUDED_PATHS = new Set<string>(["test/scripts/phi-scan.test.ts"]);
 // RESIDUAL, DISCLOSED AND DELIBERATELY NOT CLOSED BY WIDENING: the comparison is
 // case-SENSITIVE, so on a case-insensitive filesystem `phi-scan changelog.md`
 // resolves to the real file and misses this set, and the gate reds on the
-// changelog's own negative-control literals. That is a false RED, which is the
+// changelog's own negative-control content. That is a false RED, which is the
 // safe direction, and the fix is to spell the path as it is on disk. Matching
 // case-insensitively was refused: it would EXEMPT a genuinely distinct
 // `changelog.md` on a case-sensitive filesystem, which is a false GREEN, and
@@ -961,7 +968,7 @@ function buildTargetsForStaged(): Target[] {
   // staged under ANY name / directory (`patient.cda`, a root `.xml`, an
   // `examples/` sample, `notes.md`) is caught, not just `test/` / `.xml` /
   // `src/*.ts`. This route used to drop `.md` here, which is what made every
-  // tracked markdown file unscanned by BOTH routes.
+  // tracked markdown file unscanned by the two sweeping routes.
   const list = inScope.map((s) => s.path);
   return list.map((relPath) => ({
     path: relPath,

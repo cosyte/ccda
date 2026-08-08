@@ -1526,8 +1526,10 @@ re-derives the real answer in a second. Three separate causes, closed on their o
    negative-control literals) covers **exactly one file**. Narrowed to that literal path. **Say "the
    two sweeping routes", never "every route": `EXCLUDED_PATHS` is consulted in `buildTargetsForAll`
    and `buildTargetsForStaged` and nowhere else**, so naming that file on the command line still
-   scans it. A draft of this note said "every route", which is the same two-versus-three miscount as
-   the `INTRODUCED` below, restated in the text written to fix it. The direction is safe, but **do
+   scans it, and always did. A draft of this note said "every route", which is the same
+   two-versus-three miscount as the `INTRODUCED` below, restated in the text written to fix it, and a
+   sentence 12 lines further on in the scanner still carried it after the first correction. The
+   direction is safe, but **do
    not "finish the job" by wiring the set into `buildTargetsForPaths`**: that turns a two-route
    exclusion into a total one.
 
@@ -1570,14 +1572,20 @@ it. Neither cell is a route that stopped looking:
   (written out rather than reproduced here, because reproducing it reds this gate: that is how this
   paragraph was first drafted, and the run that caught it is the evidence the widening works). So the
   gate was flagging its own documentation of itself, on a file whose content cannot be edited to fix
-  it. **It costs the whole of `scanCda` on that file, five detectors and nine loci on its own
-  content, not just the name one** - a draft of this note said "the only name detection", which was
-  measured wrong and must not be restored. **The upstream bound is real but narrower than that draft
+  it. **It costs the whole of `scanCda` on that file, all five structured detectors, not just the
+  name one** - a draft of this note said "the only name detection", which was measured wrong and must
+  not be restored. **NO LOCUS COUNT STANDS HERE, DELIBERATELY, AND THAT IS THE THIRD STATE OF THIS
+  SENTENCE: understated once, then corrected with a number transplanted from a different measurement
+  that was wrong by an order of magnitude.** A count corrected twice is deleted, not incremented.
+  Empty the set and run `phi-scan CHANGELOG.md` when you need the answer; the file is regenerated on
+  every release, so anything written down here is stale by the next one. **The upstream bound is real but narrower than that draft
   claimed, and the refuter falsified the draft by measurement:** `.changeset/*.md` gets the
   structured detectors **when it carries a C-CDA marker** (`looksLikeCda` keys on `hasCdaMarker` for
   a `.md`), and gets the dashed-SSN + non-test-email shape pass whatever it carries; but a
-  **marker-free** changeset carrying a bare `<given>` / `<family>`, a `<birthTime>`, an SSN-rooted
-  `<id>` or an address exits **0**. That case is **PRE-EXISTING and identical at base on all three
+  **marker-free** changeset carrying a bare `<given>` / `<family>`, a `<birthTime>`, a bare-numeric
+  `<id>` or an address exits **0**. **Be exact about the SSN case rather than folding it in: an
+  SSN-rooted `<id>` whose extension is DASHED still exits 1**, because the shape pass catches the
+  dashed form in any text. That case is **PRE-EXISTING and identical at base on all three
   routes**, and **it is NOT the "Free-text names" limitation** in `phi-scan-overrides.md`: citing
   that one here is a misattribution, because the predicate that actually gates it is `hasCdaMarker`,
   not prose-versus-markup, and the structured loci are exactly what leaks. The shape pass still runs
@@ -1636,9 +1644,14 @@ the files: `hello@cosyte.com` (`package.json` author, now declared by value in t
 JAMIA 2014). **Anything patient-identifying would have been different and would have been removed.**
 
 **WRITING DOCUMENTATION IS NOW INSIDE THE GATE, AND NOTHING SAID SO UNTIL THE REFUTER ASKED WHAT THE
-CHANGE MAKES NEWLY POSSIBLE.** Eleven files became structurally scanned that were not before
-(`docs-content/*.md`, `docs/adr/*.md`, this file, and any marker-bearing `.changeset/*.md`). A worked
-example or an incident write-up carrying a non-allow-listed `<given>` / `<family>` / `<name>`, a
+CHANGE MAKES NEWLY POSSIBLE.** Markdown, the ADR, this file and the changesets became structurally
+scanned. **THE PREDICATE IS `hasCdaMarker`, NOT THE EXTENSION, AND NO FILE LIST OR COUNT STANDS HERE:
+two drafts wrote one and both were wrong, the second in the UNSAFE direction because it counted a
+page that is outside the gate.** Derive it. One instance is named because that error was safety
+relevant: **`docs-content/troubleshooting.md` carries no C-CDA marker** (it mentions
+`ClinicalDocument` only in prose, never as an element) and is therefore shape-pass only, so **a
+worked example added there is NOT gated by the structured detectors**. Adding a marker to that page
+is what would gate it. A worked example or an incident write-up carrying a non-allow-listed `<given>` / `<family>` / `<name>`, a
 `birthTime@value`, a bare-numeric 6+ digit `id@extension`, a `streetAddressLine` / `city` /
 `postalCode`, or a telecom without the `555` convention now reds a **blocking** gate at pre-commit.
 That is the gate working, and it collides head-on with the `agent-notes` contract, which REQUIRES
