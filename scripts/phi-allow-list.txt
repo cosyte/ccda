@@ -21,6 +21,11 @@
 #   ID <value>            synthetic id that legitimately matches an SSN / bare-MRN
 #                         (6-9 digit) shape (`id@extension`)
 #   EMAILDOMAIN <domain>  reserved / test email domain that is allowed to appear
+#   EMAIL <address>       ONE full address that is allowed to appear. Narrower
+#                         than EMAILDOMAIN on purpose: a domain entry excuses
+#                         every mailbox at it, including one carrying a patient
+#                         name, so declare the address when the address is what
+#                         you mean. Prefer this over exempting a whole file.
 #
 # To add a new synthetic fixture: reuse the tokens below, or append new ones here
 # and commit. Adding a token is a reviewed, intentional act, never silent.
@@ -44,3 +49,13 @@ EMAILDOMAIN example.com
 EMAILDOMAIN example.org
 EMAILDOMAIN example.net
 EMAILDOMAIN example.test
+
+# --- Individually declared non-PHI addresses ---
+# The organisation's own published contact mailbox, carried by `package.json`'s
+# `author` field. It is a real address and it is deliberately NOT scrubbed: it is
+# public, non-patient and org-owned, and removing it would destroy the evidence
+# that the widened scan opened `package.json` and was read. Declared as ONE
+# address rather than as `EMAILDOMAIN cosyte.com`, which would have excused every
+# mailbox at that domain, and rather than as a path exemption on `package.json`,
+# which would have left that whole file unscanned by both routes.
+EMAIL hello@cosyte.com

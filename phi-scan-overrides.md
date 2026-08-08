@@ -21,26 +21,44 @@ still caught.
 Enumeration + scope keep the scan honest and un-dodgeable:
 
 - **The walk covers the whole working tree, not a fixtures folder.** In CI /
-  all-mode the scanner walks the entire repo (gitignored paths and markdown docs
-  excluded); at pre-commit it takes every staged file. Enumeration is NOT scoped
-  by directory or extension: a real C-CDA document cannot dodge the scanner by
-  its file name (`patient.cda`, a root-level `record.xml`, an `examples/` sample)
-  or by living outside `test/`. **Scope is then decided per file by content**, so
-  incidental config / lockfile data (e.g. the author email in `package.json`) is
-  not scanned and cannot false-positive.
+  all-mode the scanner walks the entire repo (gitignored paths excluded); at
+  pre-commit it takes every staged file. Enumeration is NOT scoped by directory
+  or extension: a real C-CDA document cannot dodge the scanner by its file name
+  (`patient.cda`, a root-level `record.xml`, an `examples/` sample, `notes.md`)
+  or by living outside `test/`. **Scope is then decided per file by content.**
 - **What each file gets.** A file is treated as a C-CDA _document_ (→ full
-  structured scan) when it has a native extension (`.xml` / `.cda` / `.ccda`),
-  lives under `test/` (this repo embeds its synthetic C-CDA in `test/__fixtures__/*.ts`
-  and inline in the suites, there is no separate `test/fixtures/*.xml` tree), or
-  carries a C-CDA content marker while not being hand-written source. Hand-written
-  `src/` + `scripts/` code gets the conservative dashed-SSN + email pass only: a
-  C-CDA marker inside a JSDoc `@example` or comment does not turn code into a
-  "document" (that would flag illustrative tokens, including this scanner's own
-  doc comment).
-- **The scanner's own test is excluded.** `test/scripts/phi-scan.test.ts`
-  necessarily embeds real-looking violator strings as adversarial inputs (and
-  writes its runtime violators to a throwaway temp dir), so it is excluded from
-  the walk: scanning the gate's negative controls would flag them.
+  structured scan **on top of** the shape pass) when it has a native extension
+  (`.xml` / `.cda` / `.ccda`), lives under `test/` (this repo embeds its synthetic
+  C-CDA in `test/__fixtures__/*.ts` and inline in the suites, there is no separate
+  `test/fixtures/*.xml` tree), or carries a C-CDA content marker while being
+  neither hand-written `src/` / `scripts/` source nor markdown. **Every other
+  target gets the conservative dashed-SSN + email pass, with no path exemption at
+  all.** The two carve-outs from the _structured_ scan exist so that a C-CDA
+  marker inside a JSDoc `@example`, a comment or a documentation page does not
+  turn prose into a "document" and flag its illustrative tokens (this scanner's
+  own doc comment is one, and the published docs work through real examples).
+- **The `.md` residual, disclosed.** A genuine C-CDA document saved under a `.md`
+  name gets the shape floor and not the name / DOB / MRN / address / telecom
+  detectors. It is strictly more than the scanner used to do (markdown was
+  dropped by the walk before a byte was read, and dropped again by `--staged`)
+  and strictly less than the same bytes under any other name. Why it was not
+  closed further: 11 of the 16 tracked `.md` carry a C-CDA marker, and the
+  structured scan over them draws three name hits that are documentation rather
+  than leakage. Quieting those meant allow-listing three of the commonest English
+  name words across the whole corpus. Full measurement:
+  `documentation/agent-notes.md#the-corpus-both-phi-scan-routes-read-past`.
+- **The scanner's own test is excluded, and the exclusion is a LITERAL PATH.**
+  `test/scripts/phi-scan.test.ts` necessarily embeds real-looking violator
+  strings as adversarial inputs (and writes its runtime violators to a throwaway
+  temp dir), so scanning the gate's negative controls would flag them. It was
+  the prefix `test/scripts/`, which covered four files where that reason covers
+  one; the other three are scanned now. **It is the only exclusion, on either
+  route.**
+- **A non-PHI address is declared by VALUE, never by exempting its file.** The
+  `EMAIL <address>` tag declares one mailbox; `EMAILDOMAIN` declares every
+  mailbox at a domain and is the wrong instrument for a single known address.
+  `package.json`'s author field is the case this exists for, and the file is
+  still scanned.
 - **A scan that could not read what it enumerated REFUSES (exit 2).** All-mode
   lists the tree first and reads each file afterwards, so a file can be deleted
   inside that window: `tsup` writes `tsup.config.bundled_<hash>.mjs` at the repo
