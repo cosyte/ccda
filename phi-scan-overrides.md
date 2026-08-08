@@ -21,26 +21,78 @@ still caught.
 Enumeration + scope keep the scan honest and un-dodgeable:
 
 - **The walk covers the whole working tree, not a fixtures folder.** In CI /
-  all-mode the scanner walks the entire repo (gitignored paths and markdown docs
-  excluded); at pre-commit it takes every staged file. Enumeration is NOT scoped
-  by directory or extension: a real C-CDA document cannot dodge the scanner by
-  its file name (`patient.cda`, a root-level `record.xml`, an `examples/` sample)
-  or by living outside `test/`. **Scope is then decided per file by content**, so
-  incidental config / lockfile data (e.g. the author email in `package.json`) is
-  not scanned and cannot false-positive.
+  all-mode the scanner walks the entire repo (gitignored paths excluded); at
+  pre-commit it takes every staged file. Enumeration is NOT scoped by directory
+  or extension: a real C-CDA document cannot dodge the scanner by its file name
+  (`patient.cda`, a root-level `record.xml`, an `examples/` sample, `notes.md`)
+  or by living outside `test/`. **Scope is then decided per file by content.**
 - **What each file gets.** A file is treated as a C-CDA _document_ (→ full
-  structured scan) when it has a native extension (`.xml` / `.cda` / `.ccda`),
-  lives under `test/` (this repo embeds its synthetic C-CDA in `test/__fixtures__/*.ts`
-  and inline in the suites, there is no separate `test/fixtures/*.xml` tree), or
-  carries a C-CDA content marker while not being hand-written source. Hand-written
-  `src/` + `scripts/` code gets the conservative dashed-SSN + email pass only: a
-  C-CDA marker inside a JSDoc `@example` or comment does not turn code into a
-  "document" (that would flag illustrative tokens, including this scanner's own
-  doc comment).
-- **The scanner's own test is excluded.** `test/scripts/phi-scan.test.ts`
-  necessarily embeds real-looking violator strings as adversarial inputs (and
-  writes its runtime violators to a throwaway temp dir), so it is excluded from
-  the walk: scanning the gate's negative controls would flag them.
+  structured scan **on top of** the shape pass) when it has a native extension
+  (`.xml` / `.cda` / `.ccda`), lives under `test/` (this repo embeds its synthetic
+  C-CDA in `test/__fixtures__/*.ts` and inline in the suites, there is no separate
+  `test/fixtures/*.xml` tree), or carries a C-CDA content marker while being
+  neither hand-written `src/` / `scripts/` source nor markdown. **Every other
+  target gets the conservative dashed-SSN + email pass, with no path exemption at
+  all.** The two carve-outs from the _structured_ scan exist so that a C-CDA
+  marker inside a JSDoc `@example`, a comment or a documentation page does not
+  turn prose into a "document" and flag its illustrative tokens (this scanner's
+  own doc comment is one, and the published docs work through real examples).
+- **Markdown is a document like any other, and a draft that exempted it was
+  refused.** That draft gave `.md` the shape floor only, arguing it could
+  subtract nothing because no route read a `.md`. **There are three routes, not
+  two:** `paths` (`pnpm phi-scan <file>`) already ran the structured scan over a
+  marker-bearing `.md`, so a real C-CDA saved as `notes.md` went from nine hits
+  to `OK, no hits` on it. The floor is also empty for that document class, which
+  carries its SSN as an undashed `id@extension` and carries no email. Full
+  measurement:
+  `documentation/agent-notes.md#the-corpus-every-phi-scan-route-read-past`.
+- **The scanner's own test is excluded, and the exclusion is a LITERAL PATH.**
+  `test/scripts/phi-scan.test.ts` necessarily embeds real-looking violator
+  strings as adversarial inputs (and writes its runtime violators to a throwaway
+  temp dir), so scanning the gate's negative controls would flag them. It was
+  the prefix `test/scripts/`, which covered four files where that reason covers
+  one; the other three are scanned now. **It is excluded from the two SWEEPING
+  routes, not from every route**: naming it on the command line still scans it.
+  There is exactly one other exemption and it is narrower: `CHANGELOG.md` is read
+  and shape-scanned but not run through the structured detectors, because it is
+  generated output that must not be hand-edited and it quotes this scanner's own
+  negative-control content verbatim. That costs the whole of the structured scan
+  on that file (**all five detectors**, not just the name one; no locus count is
+  written here, because the file's content changes on every release and a count
+  written down goes stale by the next one), and the upstream bound is real but
+  narrower than it first reads:
+  `.changeset/*.md` is structurally scanned **when it carries a C-CDA marker**,
+  and gets the dashed-SSN + email shape pass whatever it carries, but a
+  **marker-free** changeset carrying a bare `<given>` / `<family>`,
+  `<birthTime>`, a bare-numeric `<id>` or an address exits 0 (an SSN-rooted `<id>`
+  with a DASHED extension still exits 1, via the shape pass). That last case is
+  pre-existing and identical at base on all three routes, and it is **not** the
+  "Free-text names" limitation below: the predicate that gates it is
+  `hasCdaMarker`, not prose-versus-markup.
+- **Writing documentation is now inside the gate, and this is a real authoring
+  constraint.** Markdown, the ADR, `documentation/agent-notes.md` and the
+  changesets became structurally scanned. **The predicate is `hasCdaMarker`, not
+  the extension, and no file list or count is written here: two drafts wrote one
+  and both were wrong. Derive it.** The distinction is safety-relevant in the
+  unsafe direction, so one instance is named: **`docs-content/troubleshooting.md`
+  carries no C-CDA marker** (it mentions `ClinicalDocument` only in prose) and is
+  therefore shape-pass only. **A worked example added there is NOT gated by the
+  structured detectors**, and adding a marker to that page is what would gate it.
+  A worked example or an incident write-up
+  carrying a non-allow-listed `<given>` / `<family>` / `<name>`, a
+  `birthTime@value`, a bare-numeric 6+ digit `id@extension`, a
+  `streetAddressLine` / `city` / `postalCode`, or a telecom without the `555`
+  convention will now red a **blocking** gate at pre-commit. That is the gate
+  working, and it collides with the `agent-notes.md` contract, which requires
+  write-ups. **The two remedies, in order: reuse the declared synthetic tokens,
+  or describe the locus without reproducing it.** Never delete the write-up to
+  get green. This is not hypothetical: the note for this very change was drafted
+  quoting an entity-encoded name literal, and the gate caught it.
+- **A non-PHI address is declared by VALUE, never by exempting its file.** The
+  `EMAIL <address>` tag declares one mailbox; `EMAILDOMAIN` declares every
+  mailbox at a domain and is the wrong instrument for a single known address.
+  `package.json`'s author field is the case this exists for, and the file is
+  still scanned.
 - **A scan that could not read what it enumerated REFUSES (exit 2).** All-mode
   lists the tree first and reads each file afterwards, so a file can be deleted
   inside that window: `tsup` writes `tsup.config.bundled_<hash>.mjs` at the repo

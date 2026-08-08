@@ -838,13 +838,28 @@ describe("phi-scan: a non-regular entry refuses the scan", () => {
     expect(r.code, `stderr: ${r.stderr}`).toBe(0);
   });
 
-  it("does NOT refuse a link under the scanner's own excluded test prefix", () => {
+  it("does NOT refuse a link at the scanner's own excluded LITERAL path", () => {
+    const repo = makeScanRepo({ git: true });
+    mkdirSync(join(repo, "test", "scripts"), { recursive: true });
+    const { file } = plantPayload();
+    symlinkSync(file, join(repo, "test", "scripts", "phi-scan.test.ts"));
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(0);
+  });
+
+  it("DOES refuse a link elsewhere under test/scripts/ (the exclusion is a path, not a prefix)", () => {
+    // The exemption used to be the PREFIX `test/scripts/`, which covered four
+    // files where its stated reason (the gate's own negative-control literals)
+    // covers exactly one. Pinned as its own case beside the accepting one above,
+    // so a clean answer there is a decision about one named file rather than a
+    // whole directory nobody re-examined.
     const repo = makeScanRepo({ git: true });
     mkdirSync(join(repo, "test", "scripts"), { recursive: true });
     const { file } = plantPayload();
     symlinkSync(file, join(repo, "test", "scripts", "probe.xml"));
     const r = runScannerIn(repo, null);
-    expect(r.code, `stderr: ${r.stderr}`).toBe(0);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(2);
+    expect(r.stderr).toMatch(/test\/scripts\/probe\.xml \(a symbolic link\)/);
   });
 
   it("still scans a normal staged regular file (the gate did not become a refusal)", () => {
@@ -1020,12 +1035,15 @@ describe("phi-scan: an unmerged path refuses the scan", () => {
     return repo;
   }
 
-  it("does NOT refuse an unmerged markdown file (a class this route never reads)", () => {
-    // The `.md` exemption IS extended to this one, unlike to a link: a link's
-    // name is no evidence about the bytes on the other side, but an unmerged
-    // markdown is a file class the route never scans conflict or no conflict,
-    // so refusing over one announces a failure to read something it was never
-    // going to read. A conflict in CHANGELOG.md would otherwise refuse the gate.
+  it("REFUSES an unmerged markdown file too, now that this route reads markdown", () => {
+    // This asserted 0 until markdown became a scan target. The carve-out's own
+    // argument was that an unmerged `.md` is a class the route never reads
+    // conflict or no conflict, so refusing announced a failure to read something
+    // it was never going to read. That premise is gone. The cost is real and
+    // stated: a conflict in CHANGELOG.md refuses this route. `git commit`
+    // rejects an unmerged path before the pre-commit hook runs, so no commit
+    // path reaches it, and the alternative was the generic could-not-read
+    // refusal off `git show`, which fatals on an unmerged path anyway.
     const repo = repoWithConflict("notes.md", (v) => `# notes\n\n${v}\n`);
     const raw = spawnSync("git", ["diff", "--cached", "--raw"], {
       cwd: repo,
@@ -1034,7 +1052,9 @@ describe("phi-scan: an unmerged path refuses the scan", () => {
     });
     expect(raw.stdout).toMatch(/ U\tnotes\.md/);
     const r = runScannerArgsIn(repo, ["--staged"]);
-    expect(r.code, `stderr: ${r.stderr}`).toBe(0);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(2);
+    expect(r.stderr).toMatch(/notes\.md \(no stage-0 blob\)/);
+    expect(r.stderr).toMatch(/path is unmerged/);
   });
 
   it("--staged REFUSES an unmerged path and does not call it a non-regular file", () => {
@@ -1119,5 +1139,204 @@ describe("phi-scan: a scan that could not run exits 2", () => {
     } finally {
       chmodSync(locked, 0o755);
     }
+  });
+});
+
+/**
+ * `PHI-SCAN-WALK-ROOT-SCOPE`: the tracked corpus that BOTH routes read past.
+ *
+ * This repo's walk was already rooted at the repo root, so the sibling form of
+ * the defect (tracked files under `test/` reached by neither route) did not
+ * exist here. Three other causes did, and each case below pins one of them with
+ * a payload the base scanner demonstrably did not act on. The measured census
+ * and the base/head grid live in `documentation/agent-notes.md`; what is pinned
+ * here is the behaviour, so a later "simplification" of the scope rules reds.
+ *
+ * Every clean expectation in this block is paired with a positive the detector
+ * DOES catch, in the same case. A `0` on its own proves nothing about whether
+ * the file was opened.
+ */
+describe("phi-scan: the corpus both routes used to skip", () => {
+  const SSN = "123-45-6789";
+
+  /** Payload + a control proving the same payload is caught somewhere. */
+  function expectCaught(repo: string, rel: string, body: string): void {
+    const dirOf = join(repo, rel).slice(0, join(repo, rel).lastIndexOf(sep));
+    mkdirSync(dirOf, { recursive: true });
+    writeFileSync(join(repo, rel), body);
+    gitIn(repo, ["add", rel]);
+    const all = runScannerIn(repo, null);
+    expect(all.code, `all-mode stderr: ${all.stderr}`).toBe(1);
+    expect(all.stderr).toContain(rel);
+    const staged = runScannerArgsIn(repo, ["--staged"]);
+    expect(staged.code, `staged stderr: ${staged.stderr}`).toBe(1);
+    expect(staged.stderr).toContain(rel);
+  }
+
+  it("scans a markdown file, which the walk used to drop before reading a byte", () => {
+    const repo = makeScanRepo({ git: true });
+    expectCaught(repo, "docs/notes.md", `# notes\n\nreference: ${SSN}\n`);
+  });
+
+  it("scans a shell script under scripts/, which the extension test never reached", () => {
+    // The docblock already claimed `scripts/` code was covered; `isSourceCode`
+    // is extension-keyed, so the three real `scripts/*.sh` gates were not.
+    const repo = makeScanRepo({ git: true });
+    expectCaught(repo, "scripts/check-thing.sh", `#!/bin/sh\n# ref ${SSN}\necho hi\n`);
+  });
+
+  it("scans hand-written build config outside src/ and scripts/", () => {
+    const repo = makeScanRepo({ git: true });
+    expectCaught(repo, "tsup.config.ts", `export default { note: "${SSN}" };\n`);
+  });
+
+  it("scans a workflow, a manifest and a licence, none of which had a route", () => {
+    const repo = makeScanRepo({ git: true });
+    expectCaught(repo, ".github/workflows/ci.yml", `name: ci\n# ${SSN}\n`);
+    expectCaught(repo, "package.json", `{ "name": "x", "author": "a@realclinic.example" }\n`);
+    expectCaught(repo, "LICENSE", `MIT\n${SSN}\n`);
+  });
+
+  it("excludes ONE literal path, not the whole test/scripts/ directory", () => {
+    // The accepting half and the refusing half in one case, deliberately: the
+    // clean answer is only meaningful next to a positive proving the payload is
+    // caught when it is not the one excluded file.
+    const repo = makeScanRepo({ git: true });
+    const violator = doc("").replace("<family>Doe</family>", "<family>Anderson</family>");
+    mkdirSync(join(repo, "test", "scripts"), { recursive: true });
+
+    writeFileSync(join(repo, "test", "scripts", "phi-scan.test.ts"), violator);
+    gitIn(repo, ["add", "test/scripts/phi-scan.test.ts"]);
+    const excluded = runScannerIn(repo, null);
+    expect(excluded.code, `stderr: ${excluded.stderr}`).toBe(0);
+
+    writeFileSync(join(repo, "test", "scripts", "attw-gate.test.ts"), violator);
+    gitIn(repo, ["add", "test/scripts/attw-gate.test.ts"]);
+    const neighbour = runScannerIn(repo, null);
+    expect(neighbour.code, `stderr: ${neighbour.stderr}`).toBe(1);
+    expect(neighbour.stderr).toContain("test/scripts/attw-gate.test.ts");
+    expect(neighbour.stderr).not.toContain("test/scripts/phi-scan.test.ts");
+  });
+
+  it("structurally scans a real C-CDA saved as .md, on ALL THREE routes", () => {
+    // A draft of this slice exempted markdown from the structured scan and was
+    // refuted as INTRODUCED. It reasoned that the exemption could subtract
+    // nothing because no route read a `.md`; there are THREE routes, and the
+    // `paths` one did. A real document saved as `notes.md` went from nine hits
+    // to `OK, no hits` on it. The shape floor offered as mitigation is EMPTY for
+    // this document class: a C-CDA carries its SSN as an undashed
+    // `id@extension` and carries no email, so the floor found nothing. This case
+    // asserts all three routes, on a payload with no dashed SSN and no email, so
+    // it can only pass if the STRUCTURED detectors ran.
+    const repo = makeScanRepo({ git: true });
+    const violator = doc("").replace("<family>Doe</family>", "<family>Anderson</family>");
+    expect(violator, "premise: the payload has no shape-pass token at all").not.toMatch(
+      /\d{3}-\d{2}-\d{4}|@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
+    );
+
+    writeFileSync(join(repo, "notes.md"), violator);
+    gitIn(repo, ["add", "notes.md"]);
+
+    const all = runScannerIn(repo, null);
+    expect(all.code, `all stderr: ${all.stderr}`).toBe(1);
+    expect(all.stderr).toMatch(/Anderson/);
+
+    const staged = runScannerArgsIn(repo, ["--staged"]);
+    expect(staged.code, `staged stderr: ${staged.stderr}`).toBe(1);
+    expect(staged.stderr).toMatch(/Anderson/);
+
+    const paths = runScannerArgsIn(repo, ["notes.md"]);
+    expect(paths.code, `paths stderr: ${paths.stderr}`).toBe(1);
+    expect(paths.stderr).toMatch(/Anderson/);
+  });
+
+  it("exempts CHANGELOG.md from the STRUCTURED scan only, and keeps the shape pass on it", () => {
+    // The one structured exemption, and the only file whose name detection this
+    // slice gives up. It is a literal path, not a predicate: a neighbouring
+    // generated markdown file is still fully scanned. Both halves are asserted
+    // in one case so the clean cell is a decision about a named file.
+    const repo = makeScanRepo({ git: true });
+    const violator = doc("").replace("<family>Doe</family>", "<family>Anderson</family>");
+
+    writeFileSync(join(repo, "CHANGELOG.md"), violator);
+    gitIn(repo, ["add", "CHANGELOG.md"]);
+    const exempted = runScannerIn(repo, null);
+    expect(exempted.code, `stderr: ${exempted.stderr}`).toBe(0);
+
+    // ...but the shape pass still runs over it, so it is never an unread file.
+    writeFileSync(join(repo, "CHANGELOG.md"), `${violator}\n${SSN}\n`);
+    gitIn(repo, ["add", "CHANGELOG.md"]);
+    const shaped = runScannerIn(repo, null);
+    expect(shaped.code, `stderr: ${shaped.stderr}`).toBe(1);
+    expect(shaped.stderr).toContain("CHANGELOG.md");
+    expect(shaped.stderr).not.toMatch(/Anderson/);
+
+    // ...and the exemption does not leak to a neighbour.
+    writeFileSync(join(repo, "CHANGELOG.md"), "# changelog\n");
+    writeFileSync(join(repo, "HISTORY.md"), violator);
+    gitIn(repo, ["add", "CHANGELOG.md", "HISTORY.md"]);
+    const neighbour = runScannerIn(repo, null);
+    expect(neighbour.code, `stderr: ${neighbour.stderr}`).toBe(1);
+    expect(neighbour.stderr).toMatch(/Anderson/);
+    expect(neighbour.stderr).toContain("HISTORY.md");
+  });
+
+  it("upstream bound on that exemption: a MARKER-BEARING changeset is caught, a marker-free one is NOT", () => {
+    // The bound on giving up `scanCda` for CHANGELOG.md: its content originates
+    // in `.changeset/*.md`, which this slice newly opened.
+    //
+    // THE NEGATIVE HALF IS HERE ON PURPOSE, AND IT IS WHY THIS CASE WAS RENAMED.
+    // It was called "a changeset carrying a name is still caught", which its own
+    // fixture could not falsify: `doc()` is a whole `<ClinicalDocument
+    // xmlns="urn:hl7-org:v3">`, and `looksLikeCda` keys on `hasCdaMarker` for a
+    // `.md`, so the case only ever proved the marker-bearing half. A real
+    // changeset summary is prose. The marker-free half exits 0, it exits 0 at
+    // base too on all three routes, and it must be pinned rather than implied.
+    const repo = makeScanRepo({ git: true });
+    mkdirSync(join(repo, ".changeset"), { recursive: true });
+    const cs = join(repo, ".changeset", "sour-pandas-clap.md");
+
+    // (a) marker-bearing: every structured detector runs.
+    writeFileSync(cs, doc("").replace("<family>Doe</family>", "<family>Anderson</family>"));
+    gitIn(repo, ["add", ".changeset/sour-pandas-clap.md"]);
+    const withMarker = runScannerIn(repo, null);
+    expect(withMarker.code, `stderr: ${withMarker.stderr}`).toBe(1);
+    expect(withMarker.stderr).toMatch(/Anderson/);
+
+    // (b) marker-free: the structured detectors do NOT run. The bound stops here.
+    writeFileSync(cs, '---\n"@cosyte/ccda": patch\n---\n\n<family>Anderson</family>\n');
+    gitIn(repo, ["add", ".changeset/sour-pandas-clap.md"]);
+    const noMarker = runScannerIn(repo, null);
+    expect(noMarker.code, `stderr: ${noMarker.stderr}`).toBe(0);
+
+    // (c) ...but the shape pass still covers any text, marker or not, so the 0
+    // above is a bound on WHICH detectors ran and never on whether it was read.
+    writeFileSync(cs, `---\n"@cosyte/ccda": patch\n---\n\nref ${SSN}\n`);
+    gitIn(repo, ["add", ".changeset/sour-pandas-clap.md"]);
+    const shaped = runScannerIn(repo, null);
+    expect(shaped.code, `stderr: ${shaped.stderr}`).toBe(1);
+    expect(shaped.stderr).toContain(".changeset/sour-pandas-clap.md");
+  });
+
+  it("EMAIL declares one mailbox, EMAILDOMAIN would declare every mailbox at it", () => {
+    // Why `package.json` needs no path exemption. The allow-list ships
+    // `EMAIL hello@cosyte.com`; a different mailbox at the same domain is still
+    // a hit, which is the whole difference from an `EMAILDOMAIN` entry.
+    const repo = makeScanRepo({ git: true });
+    const allowList = readFileSync(join(repo, "scripts", "phi-allow-list.txt"), "utf8");
+    expect(allowList, "premise: the shipped allow-list declares the address").toMatch(
+      /^EMAIL hello@cosyte\.com$/m,
+    );
+
+    writeFileSync(join(repo, "package.json"), `{ "author": "Cosyte <hello@cosyte.com>" }\n`);
+    gitIn(repo, ["add", "package.json"]);
+    const declared = runScannerIn(repo, null);
+    expect(declared.code, `stderr: ${declared.stderr}`).toBe(0);
+
+    writeFileSync(join(repo, "package.json"), `{ "author": "Cosyte <j.doe@cosyte.com>" }\n`);
+    gitIn(repo, ["add", "package.json"]);
+    const sibling = runScannerIn(repo, null);
+    expect(sibling.code, `stderr: ${sibling.stderr}`).toBe(1);
+    expect(sibling.stderr).toMatch(/j\.doe@cosyte\.com/);
   });
 });
