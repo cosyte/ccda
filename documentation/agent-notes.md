@@ -1345,6 +1345,38 @@ deleted; the imperative as it stood is reproduced here verbatim.
     sample "spec-conformant" is strictly still overclaiming: the sentence *this* slice added is
     correctly scoped to `REQUIRED_SECTION_MISSING` and is true, but the older adjective is not.
     **Do not fix it by widening the SHALL tables; it is an emit bug, not a validation bug.**
+    **It is the largest open conformance gap in this package, and this slice deliberately did not
+    widen any sentence to cover it**: everything the slice added is scoped to
+    `REQUIRED_SECTION_MISSING`, never to "conformant" in general.
+  - **THE SCOPING PREDICATE IS EXISTENTIAL, AND FIRST-MATCH-WINS IS A DIFFERENT PREDICATE.** The
+    refuter's second pass caught that `r21Stamped` originally read only the extension of the tid
+    that happened to resolve the document type. The Schematron context is
+    `cda:ClinicalDocument[cda:templateId[@root='…' and @extension='2015-08-01']]`, which matches when
+    **ANY** templateId carries both, in any order. A document carrying the bare root **first** and
+    the stamped root second is inside the rule's context, yet first-match-wins read it as unstamped
+    and **silently dropped two safety-critical warnings on sibling ordering alone**. That dual-stamp
+    shape is the ordinary backward-compat form (our own section-author guidance emits it), not an
+    exotic one. Fixed by scanning all `templateIds` for the root+extension pair, so **the code
+    matches the XPath its own docblock quotes**; all four orderings are pinned by test. **The
+    remedy chosen was to fix the code, not to downgrade the docblock**, because a dropped
+    safety-critical warning is worse than a false one.
+    **`TEMPLATE_EXTENSION_ABSENT` was deliberately NOT re-pointed at the existential test** and
+    keeps its narrower meaning ("the tid that resolved the type carried no stamp"), so a
+    dual-stamped document can raise it while still being R2.1-scoped. Widening that warning is a
+    separate, reviewable change to established behaviour.
+  - **FILED, NOT FIXED (three, all from the refuter, none absorbed into this slice).**
+    (1) **`editCcda` is not threaded**: `edit-ccda.ts` takes the default six-key reading, so an
+    R1.1 document is *edited* under a stricter set than it is *parsed* under. Verified fail-closed
+    and exotic: the delta shape (`newlyMissing = missingAfter.filter(k => !requiredBefore.has(k))`)
+    puts the scoped keys in `requiredBefore`, so they can never be newly missing; the one exposed
+    path is replacing a section that carried a nested `vitalSigns`/`socialHistory` subsection, which
+    would raise `CcdaEditError` citing an R2.1-scoped clause on an R1.1 document. **`CcdaDocument`
+    does not expose the stamp, so threading it is a public-surface change, not a one-liner.**
+    (2) The Medications `@extension` defect above.
+    (3) **Nothing in CI validates an emit against the Schematron**, so every CONF id this code now
+    cites is unenforced. A harness running even one golden document through the `.sch` would have
+    caught (2) and the entries-required residual mechanically. **File it; it is a real gate, not
+    worker coordination, but it is its own slice.**
 
 ## What editCcda covers
 

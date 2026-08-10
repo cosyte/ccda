@@ -834,6 +834,13 @@ interface BuildOptions {
   readonly docTypeOid?: string | undefined;
   readonly extension?: string | undefined;
   readonly includeDocTemplate?: boolean;
+  /**
+   * Raw `<templateId/>` markup emitted in place of the generated document-type
+   * `templateId`, so a test can control how many there are and in what ORDER
+   * (the dual-stamp backward-compat shape, for instance). The header templateId
+   * is still emitted before it.
+   */
+  readonly rawTemplateIds?: string;
   readonly includeHeaderTemplate?: boolean;
   readonly recordTargets?: number;
   readonly birthTime?: string;
@@ -901,7 +908,9 @@ export function buildCcda(opts: BuildOptions = {}): string {
   if (includeHeaderTemplate) {
     templateIds.push(`<templateId root="${DOC_OID}.1" extension="${R21}"/>`);
   }
-  if (includeDocTemplate && docTypeOid !== undefined) {
+  if (opts.rawTemplateIds !== undefined) {
+    templateIds.push(opts.rawTemplateIds);
+  } else if (includeDocTemplate && docTypeOid !== undefined) {
     const ext = extension === undefined ? "" : ` extension="${extension}"`;
     templateIds.push(`<templateId root="${docTypeOid}"${ext}/>`);
   }

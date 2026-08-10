@@ -346,6 +346,31 @@ describe("required-section (SHALL) validation", () => {
     expect(codes(doc.warnings)).not.toContain(WARNING_CODES.REQUIRED_SECTION_MISSING);
   });
 
+  it("reads the R2.1 stamp existentially, so sibling ORDER cannot drop a SHALL warning", () => {
+    // The Schematron context predicate is
+    //   cda:ClinicalDocument[cda:templateId[@root='…22.1.2' and @extension='2015-08-01']]
+    // which matches when ANY templateId carries both, in any order. A
+    // first-match-wins read would drop socialHistory + vitalSigns on a document
+    // that carries the bare root before the stamped one, purely on ordering, and
+    // both are safety-critical. The dual-stamp shape is the ordinary
+    // backward-compat form, so all four orderings are pinned here.
+    const CCD = "2.16.840.1.113883.10.20.22.1.2";
+    const tid = (ext?: string): string =>
+      ext === undefined
+        ? `<templateId root="${CCD}"/>`
+        : `<templateId root="${CCD}" extension="${ext}"/>`;
+    const scoped = (ids: string): string[] =>
+      parseCcda(buildCcda({ rawTemplateIds: ids, sections: "" }))
+        .warnings.filter((w) => w.code === WARNING_CODES.REQUIRED_SECTION_MISSING)
+        .map((w) => w.message)
+        .filter((m) => m.includes("socialHistory") || m.includes("vitalSigns"));
+
+    expect(scoped(tid("2015-08-01"))).toHaveLength(2); // stamped only
+    expect(scoped(tid() + tid("2015-08-01"))).toHaveLength(2); // bare FIRST, then stamped
+    expect(scoped(tid("2015-08-01") + tid())).toHaveLength(2); // stamped first, then bare
+    expect(scoped(tid())).toHaveLength(0); // bare only: correctly out of scope
+  });
+
   it("scopes only the two NEW keys by version, never the pre-existing four", () => {
     // Narrowing the original four for an unstamped CCD would be as unsourced as
     // broadening them: there is no R1.1 Schematron in hand. An unstamped CCD is
