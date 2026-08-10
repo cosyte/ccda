@@ -379,6 +379,12 @@ R2.1 Schematron's CCD (V3) rule: **Allergies** (CONF:1198-30662), **Medications*
 asserted. This is the same set `buildCcda` emits for a CCD: the parser warns about exactly the
 sections the builder guarantees, in both directions.
 
+**The six section templates do not share one version stamp.** Each assert names a `@root` _and_ an
+`@extension`, and **Medications (`…22.2.1.1`) is `2014-06-09`** where the other five are
+`2015-08-01`: R2.1 revised that section at the earlier stamp and never re-issued it. `buildCcda`
+emits the pair the Schematron asks for. Section _recognition_ on parse matches the root alone, so a
+document stamped either way still reads back the same.
+
 **Those six CONF ids are scoped to the R2.1 stamp**, because the rule they live in matches only a
 `ClinicalDocument` whose CCD `templateId` carries `@extension="2015-08-01"`. **Social History** and
 **Vital Signs** are therefore asserted only against an R2.1-stamped document. An R1.1-origin CCD

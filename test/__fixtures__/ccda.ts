@@ -100,7 +100,7 @@ export const PROBLEMS_SECTION = `
 export const MEDICATIONS_SECTION = `
       <component>
         <section>
-          <templateId root="2.16.840.1.113883.10.20.22.2.1.1" extension="2015-08-01"/>
+          <templateId root="2.16.840.1.113883.10.20.22.2.1.1" extension="2014-06-09"/>
           <code code="10160-0" codeSystem="2.16.840.1.113883.6.1"/>
           <title>Medications</title>
           <text><content ID="med1">Lisinopril 10 MG Oral Tablet</content></text>

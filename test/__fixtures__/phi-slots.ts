@@ -204,7 +204,7 @@ function medicationsSection(doseXml: string): string {
   return `
       <component>
         <section>
-          <templateId root="2.16.840.1.113883.10.20.22.2.1.1" extension="2015-08-01"/>
+          <templateId root="2.16.840.1.113883.10.20.22.2.1.1" extension="2014-06-09"/>
           <code code="10160-0" codeSystem="${LOINC}"/>
           <title>Medications</title>
           <text>Medications.</text>

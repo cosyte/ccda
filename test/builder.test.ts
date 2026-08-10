@@ -504,7 +504,9 @@ describe("buildCcda, emit conformance (header + section cardinality)", () => {
     const xml = serializeCcda(buildCcda({ patient: { mrn: "M" } }));
     // Empty Medications/Results must NOT carry the entries-required (.1) template
     // with zero entries, that violates its "SHALL contain ≥1 entry" statement.
-    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.1" extension="2015-08-01"');
+    // Medications is stamped 2014-06-09, NOT 2015-08-01: R2.1 never re-issued
+    // this section at the later stamp. See CCD_SHALL_SECTION_STAMPS below.
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.1" extension="2014-06-09"');
     expect(xml).not.toContain("2.16.840.1.113883.10.20.22.2.1.1");
     expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.3" extension="2015-08-01"');
     expect(xml).not.toContain("2.16.840.1.113883.10.20.22.2.3.1");
@@ -518,6 +520,89 @@ describe("buildCcda, emit conformance (header + section cardinality)", () => {
       }),
     );
     expect(xml).toContain("2.16.840.1.113883.10.20.22.2.5.1");
+  });
+});
+
+/**
+ * The six CCD SHALL section templates, transcribed from the normative C-CDA R2.1
+ * Schematron's CCD (V3) errors rule. Source: `HL7/CDA-ccda-2.1`,
+ * `validation/Consolidated CDA Templates for Clinical Notes (US Realm) DSTU R2.1.sch`,
+ * 1,010,531 bytes, sha256
+ * `04be58046a675735616e46cf52053688a2fc9d0c88010f14fd1c5a2f4ca5bd54`.
+ *
+ * The asserts sit in the ABSTRACT rule
+ * `r-urn-hl7ii-2.16.840.1.113883.10.20.22.1.2-2015-08-01-errors-abstract`, which
+ * carries no context of its own; the selecting context comes from the concrete
+ * rule that `sch:extends` it,
+ * `cda:ClinicalDocument[cda:templateId[@root='2.16.840.1.113883.10.20.22.1.2' and @extension='2015-08-01']]`,
+ * i.e. an R2.1-stamped CCD.
+ *
+ * Each assert tests a `@root` **and** an `@extension`. Medications is the odd one
+ * out at `2014-06-09`; emitting its root under `2015-08-01` failed CONF:1198-30664
+ * on every CCD this builder produced.
+ *
+ * This is a TRANSCRIPTION of six asserts, not a Schematron run. It pins this
+ * defect class for the six SHALL sections and nothing wider.
+ */
+const CCD_SHALL_SECTION_STAMPS = [
+  { conf: "1198-30662", name: "Allergies (entries required) (V3)", root: "2.16.840.1.113883.10.20.22.2.6.1", ext: "2015-08-01" }, // prettier-ignore
+  { conf: "1198-30664", name: "Medications (entries required) (V2)", root: "2.16.840.1.113883.10.20.22.2.1.1", ext: "2014-06-09" }, // prettier-ignore
+  { conf: "1198-30666", name: "Problem (entries required) (V3)", root: "2.16.840.1.113883.10.20.22.2.5.1", ext: "2015-08-01" }, // prettier-ignore
+  { conf: "1198-30670", name: "Results (entries required) (V3)", root: "2.16.840.1.113883.10.20.22.2.3.1", ext: "2015-08-01" }, // prettier-ignore
+  { conf: "1198-30688", name: "Social History (V3)", root: "2.16.840.1.113883.10.20.22.2.17", ext: "2015-08-01" }, // prettier-ignore
+  { conf: "1198-30690", name: "Vital Signs (entries required) (V3)", root: "2.16.840.1.113883.10.20.22.2.4.1", ext: "2015-08-01" }, // prettier-ignore
+] as const;
+
+describe("buildCcda, the six CCD SHALL section template stamps", () => {
+  const xml = serializeCcda(buildCcda(RICH_INIT));
+
+  it.each(CCD_SHALL_SECTION_STAMPS)(
+    "a fully populated CCD carries $name at $ext (CONF:$conf)",
+    ({ root, ext }) => {
+      expect(xml).toContain(`root="${root}" extension="${ext}"`);
+    },
+  );
+
+  it("never emits the Medications section under the 2015-08-01 stamp", () => {
+    // The regression proper. R2.1 defines NO 2015-08-01 variant of either
+    // Medications section root, so this pair is unsatisfiable by any rule and
+    // its presence means the R21 default leaked back in.
+    expect(xml).not.toContain('root="2.16.840.1.113883.10.20.22.2.1" extension="2015-08-01"');
+    expect(xml).not.toContain('root="2.16.840.1.113883.10.20.22.2.1.1" extension="2015-08-01"');
+  });
+
+  it("stamps the Medications section identically when it is empty", () => {
+    // An empty CCD emits the entries-OPTIONAL root only (declaring
+    // entries-required with zero entries violates its own "SHALL contain at
+    // least one entry"), so such a document does NOT satisfy CONF:1198-30664 --
+    // that is inherent to having no medications, not something this fix closes.
+    // What is pinned here is that the stamp is right on whichever root is used.
+    const empty = serializeCcda(buildCcda({ patient: { mrn: "M" } }));
+    expect(empty).toContain('root="2.16.840.1.113883.10.20.22.2.1" extension="2014-06-09"');
+    expect(empty).not.toContain("2.16.840.1.113883.10.20.22.2.1.1");
+  });
+
+  it("stamps the Referral Note's Medications section the same way", () => {
+    // The Referral Note errors rule requires …22.2.1.1 at 2014-06-09 too: the
+    // section template's identity is document-type independent.
+    const rn = serializeCcda(
+      buildCcda({
+        documentType: "referralNote",
+        patient: { mrn: "RN003" },
+        medications: [{ drug: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" } }],
+      }),
+    );
+    expect(rn).toContain('root="2.16.840.1.113883.10.20.22.2.1.1" extension="2014-06-09"');
+    expect(rn).not.toContain('root="2.16.840.1.113883.10.20.22.2.1.1" extension="2015-08-01"');
+    expect(rn).not.toContain('root="2.16.840.1.113883.10.20.22.2.1" extension="2015-08-01"');
+  });
+
+  it("re-parses the restamped Medications section with zero warnings", () => {
+    // Section recognition matches on templateId ROOT alone, so restamping must
+    // not disturb parse, and the round-trip must stay clean.
+    const doc = buildCcda(RICH_INIT);
+    expect(doc.findSection("medications")?.code?.code).toBe("10160-0");
+    expect(parseCcda(xml).warnings).toEqual([]);
   });
 });
 

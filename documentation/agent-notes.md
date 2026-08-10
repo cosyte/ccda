@@ -1378,6 +1378,73 @@ deleted; the imperative as it stood is reproduced here verbatim.
     caught (2) and the entries-required residual mechanically. **File it; it is a real gate, not
     worker coordination, but it is its own slice.**
 
+## The Medications section stamp is 2014-06-09
+
+  Closes item (2) of the three the SHALL-set slice filed. Landed 2026-08-10.
+
+  **Provenance: PRIMARY, single artifact, hash-pinned.** No `deep-research` fan-out and no secondary
+  source was used or needed: every conformance claim below is read directly off the **normative**
+  Schematron HL7 publishes, 1,010,531 bytes, sha256
+  `04be58046a675735616e46cf52053688a2fc9d0c88010f14fd1c5a2f4ca5bd54`, fetched fresh and hash-checked
+  before it was read. The `conformance-refuter` **independently re-fetched and re-hashed it** and
+  re-walked the abstract-rule chain, the sentence-uniqueness check and the both-roots sweep from the
+  bytes rather than from this write-up. **The residual risk is drift, not sourcing:** the six-row
+  table in `test/builder.test.ts` is a **hand transcription** that names that sha256 in a comment,
+  and **nothing in CI re-verifies the hash**, so the table can silently diverge from the artifact it
+  cites. That is the same gap as open item (3) and is closed by the same harness.
+
+  - **THE SIX CCD SHALL SECTIONS DO NOT SHARE ONE STAMP, AND THAT IS THE WHOLE LESSON.** Each of the
+    six asserts tests a `@root` **and** an `@extension`, as a pair. Five are `2015-08-01`: Allergies
+    `…22.2.6.1`, Problem `…22.2.5.1`, Results `…22.2.3.1`, Social History `…22.2.17`, Vital Signs
+    `…22.2.4.1`. **Medications `…22.2.1.1` is `2014-06-09`.** `medicationsSection` called
+    `sectionElement`/`emptySection` without an extension argument, so both took the `R21` default and
+    emitted `…22.2.1.1` under `2015-08-01`, failing **CONF:1198-30664** on every CCD and every
+    Referral Note this builder produced. Fixed by adding `MED_SECTION_EXT` and passing it at both
+    sites. **Read the pair, never the root alone: the right root under the wrong stamp fails the CONF
+    exactly as completely as omitting the section.**
+  - **RE-MEASURED, NOT INHERITED, AND THE RULE CONTEXT IS THE PART THAT BITES.** `1198-30664` is
+    **sentence-unique** (exactly one hit in the 1,010,531-byte `.sch`, sha256
+    `04be58046a675735616e46cf52053688a2fc9d0c88010f14fd1c5a2f4ca5bd54`). Its enclosing
+    `<sch:rule>` is `…22.1.2-2015-08-01-errors-abstract`, which is **`abstract="true"` and carries no
+    `context` at all**. The selecting context comes from the concrete rule that `sch:extends` it:
+    `cda:ClinicalDocument[cda:templateId[@root='…22.1.2' and @extension='2015-08-01']]`, an
+    **existential** predicate over the document's `templateId` children, i.e. an R2.1-stamped CCD.
+    **Reading the assert's nearest enclosing rule and stopping there gives you an abstract rule and
+    no context** -- the same shape that got `#106`'s pass 1 refuted.
+  - **CORROBORATED TWO WAYS.** The `.sch` carries `cda:section` rule contexts for **both** Medications
+    roots (`…22.2.1` and `…22.2.1.1`) at `2014-06-09`, and **zero** rule contexts for either root at
+    `2015-08-01` -- R2.1 revised this section at `2014-06-09` and never re-issued it. The Referral
+    Note's own errors rule (`…22.1.14`) requires the same `…22.2.1.1:2014-06-09`, confirming the
+    section template's identity is **document-type independent**, so one fix corrects both emitters.
+  - **WHY A ROOT-ONLY TEST NEVER CAUGHT IT.** The pre-existing test asserted
+    `xml).toContain("2.16.840.1.113883.10.20.22.2.1.1")` -- the root, with no stamp -- and passed
+    throughout. The new tests assert the **pair**, and additionally assert the `2015-08-01` pair is
+    **absent**, so a reverted default reds rather than passing vacuously.
+  - **NOT A WIDENING OF THE CONFORMANCE CLAIM.** *That CONF* now passes for a populated document.
+    Nothing here upgrades the package's general conformance claim, because item (3) is still open and
+    **nothing mechanically enforces the rest**. "A built document round-trips with zero warnings"
+    still does not mean "a validator would pass it".
+  - **THE EMPTY-DOCUMENT CASE IS NOT CLOSED AND IS NOT CLOSEABLE HERE.** A CCD with no medications
+    emits the entries-**optional** root only, because declaring entries-required with zero entries
+    violates its own "SHALL contain at least one entry". Such a document still fails `1198-30664`.
+    That is inherent to having no medications, not a residue of this fix, and it applies equally to
+    Allergies, Problems, Results and Vital Signs. **Do not "fix" it by emitting `…22.2.1.1` on an
+    empty section**; that trades one violation for a worse one.
+  - **WIRE FORMAT.** The emitted bytes change on every document carrying a Medications section, so
+    a consumer keyed on the exact old pair stops matching. It is not a breaking API change: this
+    package's own parser, `sectionForTemplateRoot` and `EDITABLE_SECTIONS` all match on **root
+    alone**, so parse, edit and section lookup are unaffected, and the old pair was **unsatisfiable
+    by any rule in the IG** -- no conformant consumer could have been keyed on it. `patch` on the
+    `0.0.x` ladder (ADR 0001).
+  - **ITEM (3) WAS WEIGHED AND DECLINED, DELIBERATELY.** A real Schematron harness needs an XPath
+    engine (`@xmldom/xmldom` has none) plus correct `sch:extends` expansion, phase handling and
+    first-rule-wins semantics. Getting rule-context semantics *wrong* in a harness would be worse
+    than having none -- that is precisely this defect's family. And the `.sch` is deliberately not
+    vendored, so a CI harness first needs a fetch-or-vendor decision. **It stays its own slice.**
+    What landed instead is a **transcription of the six asserts** with the source sha256 recorded:
+    it pins this defect class for the six SHALL sections and **nothing wider**, and it is not a
+    validator. Do not describe it as one.
+
 ## What editCcda covers
 
   - `editCcda` covers **twelve single-list section kinds**. Functional Status and Mental Status are
@@ -1993,6 +2060,19 @@ is edited on the way in. **Two** imperatives in it are stated nowhere else and b
 `CLAUDE.md` rather than relocated: the `coverageDirs` rule, in the coverage guardrail, and the
 commit style, in its own guardrail bullet. Everything else here is either superseded by the standard
 sections of `CLAUDE.md` or is design intent read on demand.
+
+**The trailing note that announced this relocation was itself relocated here on 2026-08-10**, to pay
+for the Medications-stamp trap under a 32,000-byte ratchet with three bytes of headroom. It read,
+verbatim:
+
+> **The pre-scaffold C-CDA planning notes were relocated verbatim 2026-08-07.** Where they overlapped
+> the standard above, the standard above wins. The **two** imperatives stated nowhere else are kept
+> above: the `coverageDirs` rule and the commit style.
+
+**The precedence rule it states still binds**, and is restated here because it is the only place it
+now lives: where the pre-scaffold notes below overlap the standard sections of `CLAUDE.md`, **the
+standard sections win.** No imperative was deleted to make room; the two it names are still in
+`CLAUDE.md`.
 
 ---
 
