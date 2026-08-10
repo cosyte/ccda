@@ -1382,6 +1382,17 @@ deleted; the imperative as it stood is reproduced here verbatim.
 
   Closes item (2) of the three the SHALL-set slice filed. Landed 2026-08-10.
 
+  **Provenance: PRIMARY, single artifact, hash-pinned.** No `deep-research` fan-out and no secondary
+  source was used or needed: every conformance claim below is read directly off the **normative**
+  Schematron HL7 publishes, 1,010,531 bytes, sha256
+  `04be58046a675735616e46cf52053688a2fc9d0c88010f14fd1c5a2f4ca5bd54`, fetched fresh and hash-checked
+  before it was read. The `conformance-refuter` **independently re-fetched and re-hashed it** and
+  re-walked the abstract-rule chain, the sentence-uniqueness check and the both-roots sweep from the
+  bytes rather than from this write-up. **The residual risk is drift, not sourcing:** the six-row
+  table in `test/builder.test.ts` is a **hand transcription** that names that sha256 in a comment,
+  and **nothing in CI re-verifies the hash**, so the table can silently diverge from the artifact it
+  cites. That is the same gap as open item (3) and is closed by the same harness.
+
   - **THE SIX CCD SHALL SECTIONS DO NOT SHARE ONE STAMP, AND THAT IS THE WHOLE LESSON.** Each of the
     six asserts tests a `@root` **and** an `@extension`, as a pair. Five are `2015-08-01`: Allergies
     `…22.2.6.1`, Problem `…22.2.5.1`, Results `…22.2.3.1`, Social History `…22.2.17`, Vital Signs
