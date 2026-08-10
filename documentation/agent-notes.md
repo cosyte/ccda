@@ -1388,7 +1388,12 @@ deleted; the imperative as it stood is reproduced here verbatim.
   `04be58046a675735616e46cf52053688a2fc9d0c88010f14fd1c5a2f4ca5bd54`, fetched fresh and hash-checked
   before it was read. The `conformance-refuter` **independently re-fetched and re-hashed it** and
   re-walked the abstract-rule chain, the sentence-uniqueness check and the both-roots sweep from the
-  bytes rather than from this write-up. **The residual risk is drift, not sourcing:** the six-row
+  bytes rather than from this write-up. **⚠ THAT VOUCH WAS ITSELF ONE SENTENCE TOO BROAD WHEN IT WAS
+  WRITTEN, AND PASS 2 CAUGHT IT:** the Referral Note's CONF id below was **not** read off the
+  artifact, it was assumed from the CCD's (see the correction bullet). It is now, and the vouch holds
+  as written - but **an umbrella "everything below is sourced" is only ever as true as its weakest
+  claim, and it hides that claim rather than flagging it.** Prefer citing per claim.
+  **The residual risk is drift, not sourcing:** the six-row
   table in `test/builder.test.ts` is a **hand transcription** that names that sha256 in a comment,
   and **nothing in CI re-verifies the hash**, so the table can silently diverge from the artifact it
   cites. That is the same gap as open item (3) and is closed by the same harness.
@@ -1398,10 +1403,46 @@ deleted; the imperative as it stood is reproduced here verbatim.
     `…22.2.6.1`, Problem `…22.2.5.1`, Results `…22.2.3.1`, Social History `…22.2.17`, Vital Signs
     `…22.2.4.1`. **Medications `…22.2.1.1` is `2014-06-09`.** `medicationsSection` called
     `sectionElement`/`emptySection` without an extension argument, so both took the `R21` default and
-    emitted `…22.2.1.1` under `2015-08-01`, failing **CONF:1198-30664** on every CCD and every
-    Referral Note this builder produced. Fixed by adding `MED_SECTION_EXT` and passing it at both
+    emitted `…22.2.1.1` under `2015-08-01`, failing every CCD and every Referral Note this builder
+    produced, each against **its own document type's** Medications assert: a CCD **CONF:1198-30664**,
+    a Referral Note **CONF:1198-30923**. Fixed by adding `MED_SECTION_EXT` and passing it at both
     sites. **Read the pair, never the root alone: the right root under the wrong stamp fails the CONF
     exactly as completely as omitting the section.**
+  - **🛑 AND THE CONF ID THAT WENT WITH IT WAS WRONG FOR ONE OF THE TWO DOCUMENT TYPES, IN THREE
+    COPIES, CAUGHT BY `#107`'s PASS 2 (2026-08-10, fixed in [`#108`](https://github.com/cosyte/ccda/pull/108)).** The original write-up attributed the Referral
+    Note's failure to `1198-30664` as well. **It cannot fail that CONF**: `1198-30664` sits in the
+    `…22.1.2` (CCD) pattern, whose concrete rule context selects only a `…22.1.2`-stamped
+    `ClinicalDocument`, and `buildCcda({documentType:"referralNote"})` emits `…22.1.1` + `…22.1.14`
+    and never `…22.1.2`. The Referral Note's equivalent is **`1198-30923`** (sentence-unique,
+    pattern `…22.1.14`).
+    **🛑 AND THE FIRST CORRECTION CITED THE WRONG ONE OF THE TWO, WHICH IS THE REAL LESSON HERE.**
+    Pass 2 named `1198-30922` and the fix adopted it; reading the assert's **full sentence** rather
+    than its label showed `30922` is the **COMPONENT** requirement, the analogue of the CCD's
+    `1198-30663`, while the **SECTION** requirement naming this template is the id nested after
+    *"such that"*: CCD `1198-30664`, Referral Note `1198-30923`. **Every one of these asserts carries
+    two CONF ids and the `<sch:assert id>` is the component one**, so citing the `@id` for a section
+    requirement is wrong by exactly one and looks entirely plausible. Caught before merge by the
+    author, on `f907c64`, and fixed in `136d8c7` rather than by amending a sha under grading.
+    **▶ THIS IS THE `CLAUDE.md` TRAP "re-check a refuter's spec claim exactly as hard as your own"
+    firing a second time, and it very nearly shipped to four sites again.** A refuter's CONF id is
+    evidence, not an answer. **The general rule, now paid for twice: the assert LABEL is not the
+    sentence. Search for the sentence, require exactly one hit, and read which of its ids names the
+    thing you are actually citing.**
+    **▶ TWO MORE DOCUMENT TYPES ASSERT THE SAME STAMP, neither of which this builder emits**, so
+    they bound the claim rather than widening it: Transfer Summary (`…22.1.13`, SHALL, section CONF
+    `1198-28278`) and Consultation Note (`…22.1.4`, **SHOULD**, in the `-warnings` pattern, section
+    CONF `1198-28926`). Four asserts in total require `…22.2.1.1` at `2014-06-09`; **only the CCD's
+    and the Referral Note's are reachable from `buildCcda`.**
+
+    **The SUBSTANCE was right and only the citation was wrong** - both asserts
+    are byte-identical in their `test` XPath, both requiring `…22.2.1.1` at `2014-06-09`, so one fix
+    genuinely does correct both document types. **The error is the SAME rule-context misreading that
+    refuted `#106` pass 1: an assert was read without following the rule that selects it.** That is
+    now three times in this repo. **Reading the assert body is never enough; walk to the concrete
+    rule's `context` and check the document actually falls inside it.** Corrected in all three
+    copies at once (`build-ccda.ts` docblock, the pending changeset, this note) per `#82` pass 3's
+    "fewer copies, not more careful copies". **It never published:** the changeset was still pending
+    and `CHANGELOG.md` carried no copy, so no wrong CONF id ever reached the registry.
   - **RE-MEASURED, NOT INHERITED, AND THE RULE CONTEXT IS THE PART THAT BITES.** `1198-30664` is
     **sentence-unique** (exactly one hit in the 1,010,531-byte `.sch`, sha256
     `04be58046a675735616e46cf52053688a2fc9d0c88010f14fd1c5a2f4ca5bd54`). Its enclosing

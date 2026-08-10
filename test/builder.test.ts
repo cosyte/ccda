@@ -583,8 +583,14 @@ describe("buildCcda, the six CCD SHALL section template stamps", () => {
   });
 
   it("stamps the Referral Note's Medications section the same way", () => {
-    // The Referral Note errors rule requires …22.2.1.1 at 2014-06-09 too: the
-    // section template's identity is document-type independent.
+    // The Referral Note errors rule requires …22.2.1.1 at 2014-06-09 too, so
+    // the section template's identity is document-type independent. Its assert
+    // is CONF:1198-30923, NOT 1198-30664: the latter sits in the CCD (…22.1.2)
+    // pattern, whose concrete rule selects only a ClinicalDocument carrying
+    // …22.1.2 at 2015-08-01 (both halves of the predicate), and a Referral Note
+    // carries …22.1.1 + …22.1.14 instead,
+    // so it falls outside that context entirely. The two asserts are
+    // byte-identical in their test XPath and differ only in the selecting rule.
     const rn = serializeCcda(
       buildCcda({
         documentType: "referralNote",
