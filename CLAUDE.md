@@ -245,6 +245,10 @@ immutability + explicit mutation, and the profile system.
     History emit guarded or a CCD emits it twice**
     (`#the-ccd-shall-set-settled-against-the-normative-schematron`)
     Why: `documentation/agent-notes.md#the-required-section-shall-tables-and-their-provenance`
+  - **The six CCD SHALL sections do NOT share one stamp: Medications is `2014-06-09`, the rest
+    `2015-08-01`.** Read the `@root`+`@extension` PAIR, not the root alone: the `R21` default
+    failed CONF:1198-30664 on every CCD emitted.
+    Why: `documentation/agent-notes.md#the-medications-section-stamp-is-2014-06-09`
   - `editCcda` covers **twelve single-list section kinds**; Functional Status, Mental Status and the
     Referral Note's two narrative-only sections are **buildable but not editable**. There is no
     entry-level append and no section removal.
@@ -375,10 +379,3 @@ Mirrors the three disciplines in the meta-repo's `documentation/conventions.md`.
    **breaking change**.
 3. **Crew + knowledgebase loop**: if this parser's public API or warning codes change, flag/update
    the matching `crew` healthcare skill + the KB product doc.
-
----
-
-**The pre-scaffold C-CDA planning notes were relocated verbatim 2026-08-07.** Where they overlapped
-the standard above, the standard above wins. The **two** imperatives stated nowhere else are kept
-above: the `coverageDirs` rule and the commit style.
-Why: `documentation/agent-notes.md#the-pre-scaffold-planning-notes`

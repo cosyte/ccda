@@ -59,7 +59,9 @@
  * Immunizations, and unlike the four CCD SHALL sections, are emitted only when
  * populated; neither is a CCD SHALL section, so an empty one is never fabricated.
  * The Procedures section and its entry templates carry the R2.1 `2014-06-09`
- * stamp (not the `2015-08-01` stamp the other sections use).
+ * stamp (not the `2015-08-01` stamp most other sections use). **Procedures is not
+ * the only one:** the Medications section carries `2014-06-09` too, and is the
+ * only CCD SHALL section that does. See {@link MED_SECTION_EXT}.
  *
  * **Social History (Smoking Status).** A **Social History**
  * section (`…22.2.17`, LOINC `29762-2`) is a **CCD SHALL** section
@@ -359,6 +361,24 @@ const REASON_FOR_REFERRAL_EXT = "2014-06-09";
 const REASON_FOR_REFERRAL_CODE = { code: "42349-1", displayName: "Reason for Referral" } as const;
 /** The R2.1 `@extension` stamp the Medication Activity/Information templates carry. @internal */
 const MED_EXT = "2014-06-09";
+/**
+ * The `@extension` stamp carried by **both** Medications Section templates, the
+ * entries-optional `…22.2.1` and the entries-required `…22.2.1.1`. R2.1 revised
+ * this section at `2014-06-09` and **never re-issued it at `2015-08-01`**, so it
+ * is the odd one out among the CCD SHALL sections: Allergies (`…22.2.6.1`),
+ * Problem (`…22.2.5.1`), Results (`…22.2.3.1`), Social History (`…22.2.17`) and
+ * Vital Signs (`…22.2.4.1`) all carry `2015-08-01`, and Medications alone does
+ * not. Emitting {@link R21} here made **every** CCD and Referral Note this
+ * builder produced fail **CONF:1198-30664**.
+ *
+ * Grounded in the normative Schematron (`HL7/CDA-ccda-2.1`,
+ * `validation/Consolidated CDA Templates for Clinical Notes (US Realm) DSTU R2.1.sch`,
+ * sha256 `04be58046a675735616e46cf52053688a2fc9d0c88010f14fd1c5a2f4ca5bd54`), which
+ * carries `cda:section` rule contexts for `…22.2.1` and `…22.2.1.1` at
+ * `2014-06-09` and **zero** rule contexts for either root at `2015-08-01`.
+ * @internal
+ */
+const MED_SECTION_EXT = "2014-06-09";
 /** The R2.1 `@extension` stamp the Vital Sign *Observation* template carries. @internal */
 const VITAL_OBS_EXT = "2014-06-09";
 /** The `@extension` stamp the Immunization Medication Information template carries. @internal */
@@ -1737,6 +1757,12 @@ interface DocTypeSpec {
  * this set. See `documentation/agent-notes.md` § "The CCD SHALL set, settled
  * against the normative Schematron".
  *
+ * **The six do not share one stamp.** Each assert names a `@root` *and* an
+ * `@extension`, and Medications is the odd one out at `2014-06-09` where the
+ * other five are `2015-08-01` ({@link MED_SECTION_EXT}). Read the pair, never the
+ * root alone: emitting the right root under the wrong stamp fails the CONF just
+ * as completely as omitting the section.
+ *
  * **Referral Note** SHALL (confirmed against
  * the C-CDA R2.1 IG StructureDefinition + the CC0 onc-healthit ToC sample):
  * Problems, Allergies, Medications (entries-required), Reason for Referral,
@@ -2532,7 +2558,8 @@ function cdValue(
 
 /**
  * Build a section's `<templateId>`s. The entries-**optional** template
- * (`root` = base, `@2015-08-01`) is always emitted; the entries-**required**
+ * (`root` = base, stamped `extension`, {@link R21} unless the caller overrides
+ * it) is always emitted; the entries-**required**
  * template (`${base}.1`) is added only when the section carries entries, an
  * entries-required template with zero entries violates its "SHALL contain at
  * least one entry" conformance statement, so an empty (`nullFlavor="NI"`)
@@ -2929,7 +2956,7 @@ function medicationsSection(
   translate?: Translate,
 ): Element {
   if (meds.length === 0) {
-    return emptySection(doc, MEDICATIONS_SECTION_BASE, "10160-0", "Medications");
+    return emptySection(doc, MEDICATIONS_SECTION_BASE, "10160-0", "Medications", MED_SECTION_EXT);
   }
   const text = el(doc, "text");
   const entries: Element[] = [];
@@ -2949,6 +2976,8 @@ function medicationsSection(
     "Medications",
     text,
     true,
+    undefined,
+    MED_SECTION_EXT,
   );
   for (const entry of entries) section.appendChild(entry);
   return el(doc, "component", undefined, section);
