@@ -333,6 +333,40 @@ describe("required-section (SHALL) validation", () => {
     expect(codes(doc.warnings)).not.toContain(WARNING_CODES.REQUIRED_SECTION_MISSING);
   });
 
+  it("does NOT assert the R2.1-scoped SHALL keys against an R1.1-origin CCD", () => {
+    // The six CONF ids live in a Schematron rule whose context predicate is
+    // `...22.1.2` AND `@extension='2015-08-01'`. They say nothing about a CCD
+    // carrying the same root with no extension, which is exactly the document
+    // that raises TEMPLATE_EXTENSION_ABSENT. Asserting them there would be a
+    // named clause applied outside its own scope, and REQUIRED_SECTION_MISSING
+    // is safety-critical, so no profile could tolerate the false positive.
+    const four = `${ALLERGY_ENTRY_SECTION}${MEDICATIONS_SECTION}${PROBLEMS_SECTION}${RESULTS_SECTION}`;
+    const doc = parseCcda(buildCcda({ extension: undefined, sections: four }));
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.TEMPLATE_EXTENSION_ABSENT);
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.REQUIRED_SECTION_MISSING);
+  });
+
+  it("scopes only the two NEW keys by version, never the pre-existing four", () => {
+    // Narrowing the original four for an unstamped CCD would be as unsourced as
+    // broadening them: there is no R1.1 Schematron in hand. An unstamped CCD is
+    // therefore asserted exactly as it was before this table was traced.
+    expect(requiredSectionKeys("ccd", { r21Stamped: false })).toEqual([
+      "allergies",
+      "medications",
+      "problems",
+      "results",
+    ]);
+    expect(requiredSectionKeys("ccd", { r21Stamped: true })).toEqual(requiredSectionKeys("ccd"));
+    // An unstamped CCD missing the old four still warns for all four.
+    const doc = parseCcda(buildCcda({ extension: undefined, sections: "" }));
+    const missing = doc.warnings
+      .filter((w) => w.code === WARNING_CODES.REQUIRED_SECTION_MISSING)
+      .map((w) => w.message);
+    expect(missing).toHaveLength(4);
+    expect(missing.some((m) => m.includes("socialHistory"))).toBe(false);
+    expect(missing.some((m) => m.includes("vitalSigns"))).toBe(false);
+  });
+
   it("still warns for a CCD carrying only the old four-section set", () => {
     // The regression this locks: before the Schematron settled the set, this
     // composite counted as complete. It is not: a third-party CCD lacking Vital
@@ -382,7 +416,12 @@ describe("required-section (SHALL) validation", () => {
     // vitalSigns) while this table named four (excluding it), so `buildCcda`
     // always emitted Vital Signs while `parseCcda` stayed silent when a
     // third-party CCD lacked one. Both are now the Schematron's six. A freshly
-    // built, entirely empty CCD must therefore satisfy its own SHALL set.
+    // built, entirely empty CCD must therefore draw no REQUIRED_SECTION_MISSING.
+    // Note the exact scope of that claim: it means the six keys are PRESENT in
+    // this parser's catalog framing, NOT that the document would pass a
+    // validator. It would not: the empty entries-required shells drop their `.1`
+    // templates, so five of the six CONFs fail (see agent-notes,
+    // "THE RESIDUAL THIS SLICE DID NOT FIX").
     // `buildCcda` returns an already-parsed CcdaDocument, so its `warnings` are
     // the parser's own reading of what the builder just emitted.
     const doc = buildRealCcda({ patient: { mrn: "M" } });

@@ -632,7 +632,7 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
     .filter((t): t is II => t !== undefined)
     .map(boundTemplateId);
 
-  const documentType = recognizeDocumentType(root, templateIds, ctx);
+  const { documentType, r21Stamped } = recognizeDocumentType(root, templateIds, ctx);
 
   const header = buildHeader(root, ctx);
 
@@ -700,7 +700,7 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
       out.mentalStatus = entries.mentalStatus;
       out.familyHistory = entries.familyHistory;
       out.pastMedicalHistory = entries.pastMedicalHistory;
-      validateRequiredSections(root, documentType, out.sections, ctx);
+      validateRequiredSections(root, documentType, out.sections, ctx, r21Stamped);
     } else {
       const nonXmlBody = child(component, "nonXMLBody");
       if (nonXmlBody !== undefined) {
@@ -739,25 +739,31 @@ function recognizeDocumentType(
   root: Element,
   templateIds: readonly II[],
   ctx: ParseCtx,
-): DocumentType | undefined {
+): { readonly documentType: DocumentType | undefined; readonly r21Stamped: boolean } {
   if (templateIds.length === 0) {
     ctx.emit(missingTemplateId(positionOf(root)));
-    return undefined;
+    return { documentType: undefined, r21Stamped: false };
   }
 
   for (const tid of templateIds) {
     if (tid.root === undefined) continue;
     const documentType = documentTypeForOid(tid.root);
     if (documentType !== undefined) {
-      if (tid.extension !== R21_EXTENSION) {
+      // The same test that raises TEMPLATE_EXTENSION_ABSENT also decides which
+      // version-scoped SHALL constraints reach this document, so it is reported
+      // rather than recomputed: a document-level CONF scoped to
+      // `@extension='2015-08-01'` must not be asserted against a document that
+      // does not carry it.
+      const r21Stamped = tid.extension === R21_EXTENSION;
+      if (!r21Stamped) {
         ctx.emit(templateExtensionAbsent(templateIdPosition(root, tid.root)));
       }
-      return documentType;
+      return { documentType, r21Stamped };
     }
   }
 
   ctx.emit(unknownDocumentTemplate(positionOf(root)));
-  return undefined;
+  return { documentType: undefined, r21Stamped: false };
 }
 
 /**
@@ -792,6 +798,7 @@ function validateRequiredSections(
   documentType: DocumentType | undefined,
   sections: readonly CcdaSection[],
   ctx: ParseCtx,
+  r21Stamped: boolean,
 ): void {
   if (documentType === undefined) return;
   const presentKeys = new Set<string>();
@@ -800,7 +807,7 @@ function validateRequiredSections(
     for (const sub of section.subsections) visit(sub);
   };
   for (const section of sections) visit(section);
-  for (const key of missingRequiredSections(documentType, presentKeys)) {
+  for (const key of missingRequiredSections(documentType, presentKeys, { r21Stamped })) {
     ctx.emit(requiredSectionMissing(positionOf(root), key));
   }
 }

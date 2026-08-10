@@ -58,6 +58,8 @@ const REQUIRED_SECTIONS: Readonly<Record<DocumentType, readonly string[]>> = {
   // *warnings* rule as SHOULD, so neither is asserted. All six are in this
   // parser's recognized catalog, so the whole set is assertable.
   ccd: ["allergies", "medications", "problems", "results", "socialHistory", "vitalSigns"],
+  // (see R21_SCOPED_SECTIONS below: two of those six are asserted only against a
+  // document that actually carries the R2.1 stamp the CONF ids are scoped by)
   dischargeSummary: ["allergies", "hospitalDischargeDiagnosis", "dischargeMedications"],
   // Referral Note (…22.1.14) SHALL: Problem (CONF:1198-29087), Allergies
   // (-30912), Medications (-30923), and Reason for Referral (-30925). The
@@ -77,6 +79,62 @@ const REQUIRED_SECTIONS: Readonly<Record<DocumentType, readonly string[]>> = {
 };
 
 /**
+ * Per-document-type SHALL keys whose normative constraint is **scoped to the
+ * R2.1 stamp**, and which are therefore asserted only against a document whose
+ * document-level `templateId` actually carries `@extension="2015-08-01"`.
+ *
+ * **Why this exists.** The CCD's six CONF ids do not float free: they live in a
+ * Schematron rule whose context predicate is
+ * `cda:ClinicalDocument[cda:templateId[@root='…22.1.2' and @extension='2015-08-01']]`.
+ * They bind an R2.1-stamped CCD and say nothing at all about a document carrying
+ * the same root with **no** extension (an R1.1-origin CCD, exactly the shape that
+ * raises `TEMPLATE_EXTENSION_ABSENT`). Reading the asserts without their context
+ * asserts a named clause against a document that clause does not reach.
+ *
+ * **Only the keys this package NEWLY asserted are scoped**, not all six.
+ * `allergies`/`medications`/`problems`/`results` were asserted for every CCD
+ * before the Schematron was obtained and stay that way: narrowing them would be
+ * as unsourced as broadening them, and **there is no R1.1 Schematron in hand**.
+ * So an unstamped CCD is asserted **exactly as it was before**, and the two new
+ * keys are added only where a normative sentence actually covers them.
+ *
+ * **This is emphatically NOT a claim that R1.1 did not require Social History or
+ * Vital Signs.** It is the absence of a source, recorded as silence rather than
+ * guessed in either direction. If the R1.1 Schematron is ever obtained, the
+ * honest move is to give R1.1 its own traced row, never to assume this one.
+ * @internal
+ */
+const R21_SCOPED_SECTIONS: Partial<Readonly<Record<DocumentType, ReadonlySet<string>>>> = {
+  ccd: new Set(["socialHistory", "vitalSigns"]),
+};
+
+/**
+ * How a required-section lookup should treat version-scoped SHALL constraints.
+ */
+export interface RequiredSectionOptions {
+  /**
+   * Whether the document carries the R2.1 `@extension="2015-08-01"` stamp on its
+   * document-level `templateId`. Defaults to `true`, because these tables are
+   * written against C-CDA R2.1. Pass `false` for an R1.1-origin document (the
+   * condition that raises `TEMPLATE_EXTENSION_ABSENT`) to drop the SHALL keys
+   * whose normative constraint is scoped to the R2.1 stamp.
+   */
+  readonly r21Stamped?: boolean;
+}
+
+/** The SHALL keys asserted for `documentType` under `options`. @internal */
+function assertedKeys(
+  documentType: DocumentType,
+  options?: RequiredSectionOptions,
+): readonly string[] {
+  const all = REQUIRED_SECTIONS[documentType];
+  if (options?.r21Stamped !== false) return all;
+  const scoped = R21_SCOPED_SECTIONS[documentType];
+  if (scoped === undefined) return all;
+  return all.filter((key) => !scoped.has(key));
+}
+
+/**
  * The catalog section keys a {@link DocumentType} SHALL contain, in a stable
  * order. Returns an empty array when no unconditional in-catalog SHALL section
  * is asserted for that type (see the module note, empty ≠ "no requirements").
@@ -87,10 +145,17 @@ const REQUIRED_SECTIONS: Readonly<Record<DocumentType, readonly string[]>> = {
  * requiredSectionKeys("ccd");
  * // ["allergies", "medications", "problems", "results", "socialHistory", "vitalSigns"]
  * requiredSectionKeys("progressNote"); // []
+ *
+ * // An R1.1-origin CCD (no R2.1 stamp) drops the R2.1-scoped keys:
+ * requiredSectionKeys("ccd", { r21Stamped: false });
+ * // ["allergies", "medications", "problems", "results"]
  * ```
  */
-export function requiredSectionKeys(documentType: DocumentType): readonly string[] {
-  return REQUIRED_SECTIONS[documentType];
+export function requiredSectionKeys(
+  documentType: DocumentType,
+  options?: RequiredSectionOptions,
+): readonly string[] {
+  return assertedKeys(documentType, options);
 }
 
 /**
@@ -105,11 +170,16 @@ export function requiredSectionKeys(documentType: DocumentType): readonly string
  * import { missingRequiredSections } from "@cosyte/ccda";
  * missingRequiredSections("ccd", new Set(["allergies", "problems"]));
  * // ["medications", "results", "socialHistory", "vitalSigns"]
+ *
+ * // The same document without the R2.1 stamp:
+ * missingRequiredSections("ccd", new Set(["allergies", "problems"]), { r21Stamped: false });
+ * // ["medications", "results"]
  * ```
  */
 export function missingRequiredSections(
   documentType: DocumentType,
   presentKeys: ReadonlySet<string>,
+  options?: RequiredSectionOptions,
 ): readonly string[] {
-  return REQUIRED_SECTIONS[documentType].filter((key) => !presentKeys.has(key));
+  return assertedKeys(documentType, options).filter((key) => !presentKeys.has(key));
 }

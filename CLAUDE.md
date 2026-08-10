@@ -24,10 +24,10 @@ immutability + explicit mutation, and the profile system.
 
 - **Published on npm, public, MIT.** **This line names no version on purpose: it was stale every
   time anyone checked, so `npm view @cosyte/ccda version` is the only source of truth**, and a
-  **`@cosyte/ccda`** version quoted elsewhere in this file is a historical statement about that
-  release, not the current one; the `@cosyte/test-utils`, TypeScript and `pnpm` pins below are live
-  and mean what they say. Pre-alpha on the shared cosyte `0.0.x`-until-first-alpha ladder (ADR
-  0001). A published version never moves backwards.
+  `@cosyte/ccda` version quoted elsewhere in this file is historical, not
+  current; the `@cosyte/test-utils`, TypeScript and `pnpm` pins below are live
+  and mean what they say. Pre-alpha, `0.0.x` ladder (ADR 0001). A published version never moves
+  backwards.
   Why: `documentation/agent-notes.md#the-published-version-line-names-no-version`
 - **There are no stubs left.** `src/index.ts` exports a working parser (`parseCcda`), serializer
   (`serializeCcda`), document builder (`buildCcda`), and document editor (`editCcda`), plus the
@@ -240,8 +240,9 @@ immutability + explicit mutation, and the profile system.
     assert nothing. **Empty means "no unconditional in-catalog SHALL section is asserted yet", never
     "this type has no requirements".** Provenance varies per type. **Do not broaden or narrow an
     untraced set without the Schematron in hand. The CCD row IS traced: SIX (Allergies, Medications,
-    Problems, Results, Social History, Vital Signs); `build-ccda.ts` names the same six; its
-    conditional Social History emit stays guarded or a CCD emits it twice**
+    Problems, Results, Social History, Vital Signs), the last two ONLY on an R2.1-STAMPED document
+    (their CONFs' rule context). `build-ccda.ts` names the same six; keep its conditional Social
+    History emit guarded or a CCD emits it twice**
     (`#the-ccd-shall-set-settled-against-the-normative-schematron`)
     Why: `documentation/agent-notes.md#the-required-section-shall-tables-and-their-provenance`
   - `editCcda` covers **twelve single-list section kinds**; Functional Status, Mental Status and the

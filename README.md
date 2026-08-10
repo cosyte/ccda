@@ -379,6 +379,15 @@ R2.1 Schematron's CCD (V3) rule: **Allergies** (CONF:1198-30662), **Medications*
 asserted. This is the same set `buildCcda` emits for a CCD: the parser warns about exactly the
 sections the builder guarantees, in both directions.
 
+**Those six CONF ids are scoped to the R2.1 stamp**, because the rule they live in matches only a
+`ClinicalDocument` whose CCD `templateId` carries `@extension="2015-08-01"`. **Social History** and
+**Vital Signs** are therefore asserted only against an R2.1-stamped document. An R1.1-origin CCD
+(the same root with no extension, the condition that raises `TEMPLATE_EXTENSION_ABSENT`) is asserted
+exactly as it was before this table was traced: Allergies, Medications, Problems, Results. That is
+not a claim that R1.1 omitted the other two; it is the absence of a source, recorded rather than
+guessed. Both `requiredSectionKeys` and `missingRequiredSections` take an optional
+`{ r21Stamped: false }` to ask for the unstamped reading.
+
 The **Referral Note**
 asserts **Reason for Referral** alongside Problems, Allergies, and Medications (traced to the
 normative R2.1 Schematron, CONF:1198-30925), so the SHALL check does not stay silent when a Referral

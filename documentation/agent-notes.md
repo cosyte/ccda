@@ -1302,6 +1302,28 @@ deleted; the imperative as it stood is reproduced here verbatim.
     (-7938) and `text` (-7939), and its Smoking Status entry is **SHOULD** (CONF:1198-14823), so no
     clinical fact is invented. Social History (V3) also has **no entries-required variant**, so the
     shell still carries the exact `@root`/`@extension` pair CONF:1198-30688 names.
+  - **THE REFUTER CAUGHT A REAL DEFECT, AND IT IS THE LESSON OF THIS WHOLE ENTRY: A CONF ID IS
+    SCOPED BY ITS RULE CONTEXT, NOT JUST BY ITS ASSERT.** The first cut of this slice read the six
+    asserts and **not** the predicate they hang under. That rule's context is
+    `cda:ClinicalDocument[cda:templateId[@root='…22.1.2' and @extension='2015-08-01']]`, so all six
+    CONFs bind an **R2.1-stamped** CCD and say nothing about a CCD carrying the same root with no
+    `@extension` (an R1.1-origin document). Because `documentTypeForOid` resolves the type from the
+    **root alone**, that first cut asserted `socialHistory` + `vitalSigns` against R1.1-origin CCDs
+    and produced false SHALL violations. It was worse than a stray warning:
+    `REQUIRED_SECTION_MISSING` is in `SAFETY_CRITICAL_CODES`, so **no profile could tolerate it**,
+    including `legacyR11`, whose entire reason for existing is that document class. It also broke
+    this very file's own standing rule that the tables assert only **unconditional** constraints.
+  - **THE FIX, AND WHY IT SCOPES ONLY TWO OF THE SIX.** `R21_SCOPED_SECTIONS` names the keys whose
+    SHALL is version-scoped (`ccd`: `socialHistory`, `vitalSigns`), and they are dropped when the
+    document is not R2.1-stamped. The **discriminator was already computed** and merely thrown away:
+    it is the same test that raises `TEMPLATE_EXTENSION_ABSENT`, so `recognizeDocumentType` now
+    reports it instead of recomputing it. **The pre-existing four are deliberately NOT scoped.**
+    They were asserted for every CCD before the Schematron was in hand, and narrowing them would be
+    exactly as unsourced as broadening them: **there is no R1.1 Schematron in hand.** So an unstamped
+    CCD is asserted precisely as it was before this slice. **This is NOT a claim that R1.1 omitted
+    Social History or Vital Signs** - it is the absence of a source, recorded as silence instead of
+    guessed in either direction. If the R1.1 Schematron is ever obtained, give R1.1 its **own traced
+    row**; never assume this one covers it.
   - **THE RESIDUAL THIS SLICE DID NOT FIX, STATED.** That last point does **not** generalize. The
     other five CCD SHALL sections are **entries-required** templates, and `emptySection` emits the
     base root only, dropping the `.1` template. So a CCD built with, say, no vital signs carries
@@ -1310,6 +1332,19 @@ deleted; the imperative as it stood is reproduced here verbatim.
     its own SHALL entry constraint) and it predates this slice, applying equally to Allergies,
     Medications, Problems, Results and Vital Signs. **It is filed, not fixed, and "a built document
     round-trips with zero warnings" still does not mean "a validator would pass it".**
+  - **A SECOND, SEPARATE PRE-EXISTING DEFECT, FOUND BY THE REFUTER AND DELIBERATELY NOT FOLDED IN:
+    every CCD `buildCcda` emits fails CONF:1198-30664.** That assert tests the Medications Section
+    (entries required) at `@root='…22.2.1.1'` **`and @extension='2014-06-09'`** (the V2 stamp).
+    `medicationsSection` calls `sectionElement` without an extension argument, so the parameter
+    defaults to `R21` and the emit carries `extension="2015-08-01"` on `…22.2.1.1`, **a stamp no
+    C-CDA template carries**. It is on `main` too, so it is pre-existing, and it is a section-level
+    slip rather than a knowledge gap: the repo already holds `MED_EXT = "2014-06-09"` and applies it
+    correctly to the medication **entry** templates (`…22.4.16`, `…22.4.23`). It mis-reads no dose,
+    allergy, code system or identifier, so it is not stop-the-line, but **it should be its own item
+    ahead of further CCD conformance work.** It is also why `docs-content/quickstart.md` calling its
+    sample "spec-conformant" is strictly still overclaiming: the sentence *this* slice added is
+    correctly scoped to `REQUIRED_SECTION_MISSING` and is true, but the older adjective is not.
+    **Do not fix it by widening the SHALL tables; it is an emit bug, not a validation bug.**
 
 ## What editCcda covers
 

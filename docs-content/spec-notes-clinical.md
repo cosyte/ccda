@@ -115,3 +115,9 @@ C-CDA R2.1 Schematron's CCD (V3) errors rule: Allergies (CONF:1198-30662), Medic
 Problems (-30666), Results (-30670), Social History (-30688) and Vital Signs (-30690). Procedures
 (-30668) and Plan of Treatment (-30686) sit in that template's _warnings_ rule as SHOULD, so neither
 is asserted. `buildCcda` emits exactly this set for a CCD, so the two halves cannot drift.
+
+Those CONF ids are **scoped to the R2.1 stamp**: their Schematron rule matches only a document whose
+CCD `templateId` carries `@extension="2015-08-01"`. Social History and Vital Signs are therefore
+asserted only against an R2.1-stamped document; an R1.1-origin CCD keeps the older four-key reading,
+because there is no R1.1 Schematron in hand and narrowing would be as unsourced as broadening. Pass
+`{ r21Stamped: false }` to `requiredSectionKeys` / `missingRequiredSections` for that reading.
