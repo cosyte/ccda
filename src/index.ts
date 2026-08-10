@@ -217,7 +217,11 @@ export {
 export type { DocumentType, SectionInfo } from "./parser/templates.js";
 
 // Per-document-type required-section (SHALL) validation tables.
-export { requiredSectionKeys, missingRequiredSections } from "./parser/required-sections.js";
+export {
+  requiredSectionKeys,
+  missingRequiredSections,
+  type RequiredSectionOptions,
+} from "./parser/required-sections.js";
 
 // HL7 v3 datatype layer (interfaces + parsers + null-flavor / datetime helpers).
 export * from "./model/types/index.js";

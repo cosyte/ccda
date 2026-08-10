@@ -632,7 +632,7 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
     .filter((t): t is II => t !== undefined)
     .map(boundTemplateId);
 
-  const documentType = recognizeDocumentType(root, templateIds, ctx);
+  const { documentType, r21Stamped } = recognizeDocumentType(root, templateIds, ctx);
 
   const header = buildHeader(root, ctx);
 
@@ -700,7 +700,7 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
       out.mentalStatus = entries.mentalStatus;
       out.familyHistory = entries.familyHistory;
       out.pastMedicalHistory = entries.pastMedicalHistory;
-      validateRequiredSections(root, documentType, out.sections, ctx);
+      validateRequiredSections(root, documentType, out.sections, ctx, r21Stamped);
     } else {
       const nonXmlBody = child(component, "nonXMLBody");
       if (nonXmlBody !== undefined) {
@@ -739,25 +739,44 @@ function recognizeDocumentType(
   root: Element,
   templateIds: readonly II[],
   ctx: ParseCtx,
-): DocumentType | undefined {
+): { readonly documentType: DocumentType | undefined; readonly r21Stamped: boolean } {
   if (templateIds.length === 0) {
     ctx.emit(missingTemplateId(positionOf(root)));
-    return undefined;
+    return { documentType: undefined, r21Stamped: false };
   }
 
   for (const tid of templateIds) {
     if (tid.root === undefined) continue;
     const documentType = documentTypeForOid(tid.root);
     if (documentType !== undefined) {
+      // `r21Stamped` is EXISTENTIAL, deliberately, because the Schematron context
+      // predicate it stands in for is:
+      //   cda:ClinicalDocument[cda:templateId[@root='…' and @extension='2015-08-01']]
+      // That matches when ANY templateId child carries both, in any order. Reading
+      // only THIS tid's extension would be first-match-wins, which is a different
+      // predicate: a document carrying the bare root first and the stamped root
+      // second is squarely inside the rule's context, yet would be read as
+      // unstamped and would silently DROP two safety-critical warnings on sibling
+      // ordering alone. That dual-stamp shape is the ordinary backward-compat
+      // form, not an exotic one, so the scan matches the XPath rather than the
+      // loop that happens to be here.
+      const r21Stamped = templateIds.some(
+        (t) => t.root === tid.root && t.extension === R21_EXTENSION,
+      );
+      // TEMPLATE_EXTENSION_ABSENT keeps its own, narrower pre-existing meaning
+      // ("the templateId that resolved the type carried no R2.1 stamp") and is
+      // deliberately NOT re-pointed at the existential test here: widening it is a
+      // separate, reviewable change to an established warning. So a dual-stamped
+      // document can legitimately raise it while still being R2.1-scoped.
       if (tid.extension !== R21_EXTENSION) {
         ctx.emit(templateExtensionAbsent(templateIdPosition(root, tid.root)));
       }
-      return documentType;
+      return { documentType, r21Stamped };
     }
   }
 
   ctx.emit(unknownDocumentTemplate(positionOf(root)));
-  return undefined;
+  return { documentType: undefined, r21Stamped: false };
 }
 
 /**
@@ -792,6 +811,7 @@ function validateRequiredSections(
   documentType: DocumentType | undefined,
   sections: readonly CcdaSection[],
   ctx: ParseCtx,
+  r21Stamped: boolean,
 ): void {
   if (documentType === undefined) return;
   const presentKeys = new Set<string>();
@@ -800,7 +820,7 @@ function validateRequiredSections(
     for (const sub of section.subsections) visit(sub);
   };
   for (const section of sections) visit(section);
-  for (const key of missingRequiredSections(documentType, presentKeys)) {
+  for (const key of missingRequiredSections(documentType, presentKeys, { r21Stamped })) {
     ctx.emit(requiredSectionMissing(positionOf(root), key));
   }
 }

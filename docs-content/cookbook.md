@@ -371,17 +371,18 @@ doc.getSmokingStatus()[1]?.unknown; // => true
 ```
 
 > Current builder scope: `buildCcda` emits a **CCD** (the default) or a **Referral Note**
-> (`documentType: "referralNote"`). A CCD carries the US Realm header, the CCD SHALL sections
-> (Problems, Allergies, Medications, Results, Vital Signs, emitted empty as `nullFlavor="NI"` when no
-> content is supplied), and **Immunizations**, **Procedures**, **Encounters**, **Social History**
-> (Smoking Status), **Functional Status**, **Mental Status** (each carrying standalone findings,
+> (`documentType: "referralNote"`). A CCD carries the US Realm header, the six CCD SHALL sections
+> (Problems, Allergies, Medications, Results, Vital Signs and **Social History** (Smoking Status),
+> emitted empty as `nullFlavor="NI"` when no
+> content is supplied), and **Immunizations**, **Procedures**, **Encounters**,
+> **Functional Status**, **Mental Status** (each carrying standalone findings,
 > Functional/Mental Status Organizers, and **direct-entry Assessment Scale Observations** `…22.4.69` with
 > their Supporting Observations `…22.4.86` and an `INT` score), **Past Medical History**, **Plan of
 > Treatment** (planned entries, never conflated with performed), and **Family History** (a Family
 > History Organizer per relative, with conditions carrying optional age-at-onset + cause-of-death)
 > sections when populated. A Referral Note specializes the header and always emits Problems,
 > Allergies, Medications, **Reason for Referral**, **Assessment**, and Plan of Treatment, which makes
-> Results and Vital Signs populated-only. Both accept an optional bring-your-own `terminology`
+> Results, Vital Signs and Social History populated-only. Both accept an optional bring-your-own `terminology`
 > adapter. The other ten C-CDA R2.1 document types are not implemented.
 
 ## 6. Edit a parsed document: add or replace a section, keep a revision trail

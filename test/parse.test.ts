@@ -215,6 +215,17 @@ describe("parseCcda, the Interventions Section joins the catalog", () => {
     // carries the fixture's own constant `MISSING_ASSIGNING_AUTHORITY`, and
     // `RSM` abbreviates `REQUIRED_SECTION_MISSING`):
     //
+    // READ THE ROWS BELOW AS THEY WERE MEASURED, THEN APPLY ONE UNIFORM DELTA.
+    // The `RSM(...)` shorthand below is the *historical* base reading and is left
+    // exactly as measured. Since then the CCD SHALL set was settled against the
+    // normative R2.1 Schematron and grew from four sections to six, so EVERY row
+    // in this matrix additionally and uniformly carries
+    // `RSM(socialHistory)` + `RSM(vitalSigns)` -- none of these documents has
+    // either section. That is a constant added to every row, exactly like the
+    // fixture's own `MISSING_ASSIGNING_AUTHORITY`, so it shifts no row relative
+    // to another and leaves all four classes of move below intact. The snapshot
+    // is the authority on the literal current strings.
+    //
     //   rows 1-4, 6, 7  key=none by=none        | RSM(a,m,p,r) UNKNOWN_SECTION_CODE
     //   row 5           key=problems by=loinc   | RSM(a,m,r)   SECTION_MATCHED_BY_LOINC_FALLBACK
     //   rows 8, 9, 10   key=planOfTreatment     | RSM(a,m,p,r)
@@ -336,19 +347,19 @@ describe("parseCcda, the Interventions Section joins the catalog", () => {
     });
     expect(matrix).toMatchInlineSnapshot(`
       [
-        "V3 stamp + LOINC (conformant): key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
-        "V2 stamp (2014-06-09): key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
-        "unversioned root (R1.1): key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
-        "LOINC only, no templateId: key=interventions by=loinc | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) SECTION_MATCHED_BY_LOINC_FALLBACK",
-        "templateId + a wrong section code: key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
-        "conformant entry (Planned Intervention Act): key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
-        "misplaced entry (a Planned Act): key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) SECTION_PLACEMENT_SUSPECT",
-        "double-stamped, Interventions first: key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
-        "double-stamped, Plan of Treatment first: key=planOfTreatment by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
-        "double-stamped, foreign root + 62387-6: key=planOfTreatment by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results)",
-        "control: unrecognized LOINC: key=none by=none | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) UNKNOWN_SECTION_CODE",
-        "control: Problems by LOINC fallback: key=problems by=loinc | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(results) SECTION_MATCHED_BY_LOINC_FALLBACK",
-        "control: Results (…22.2.3, one arc away): key=results by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems)",
+        "V3 stamp + LOINC (conformant): key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) REQUIRED_SECTION_MISSING(socialHistory) REQUIRED_SECTION_MISSING(vitalSigns)",
+        "V2 stamp (2014-06-09): key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) REQUIRED_SECTION_MISSING(socialHistory) REQUIRED_SECTION_MISSING(vitalSigns)",
+        "unversioned root (R1.1): key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) REQUIRED_SECTION_MISSING(socialHistory) REQUIRED_SECTION_MISSING(vitalSigns)",
+        "LOINC only, no templateId: key=interventions by=loinc | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) REQUIRED_SECTION_MISSING(socialHistory) REQUIRED_SECTION_MISSING(vitalSigns) SECTION_MATCHED_BY_LOINC_FALLBACK",
+        "templateId + a wrong section code: key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) REQUIRED_SECTION_MISSING(socialHistory) REQUIRED_SECTION_MISSING(vitalSigns)",
+        "conformant entry (Planned Intervention Act): key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) REQUIRED_SECTION_MISSING(socialHistory) REQUIRED_SECTION_MISSING(vitalSigns)",
+        "misplaced entry (a Planned Act): key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) REQUIRED_SECTION_MISSING(socialHistory) REQUIRED_SECTION_MISSING(vitalSigns) SECTION_PLACEMENT_SUSPECT",
+        "double-stamped, Interventions first: key=interventions by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) REQUIRED_SECTION_MISSING(socialHistory) REQUIRED_SECTION_MISSING(vitalSigns)",
+        "double-stamped, Plan of Treatment first: key=planOfTreatment by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) REQUIRED_SECTION_MISSING(socialHistory) REQUIRED_SECTION_MISSING(vitalSigns)",
+        "double-stamped, foreign root + 62387-6: key=planOfTreatment by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) REQUIRED_SECTION_MISSING(socialHistory) REQUIRED_SECTION_MISSING(vitalSigns)",
+        "control: unrecognized LOINC: key=none by=none | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(results) REQUIRED_SECTION_MISSING(socialHistory) REQUIRED_SECTION_MISSING(vitalSigns) UNKNOWN_SECTION_CODE",
+        "control: Problems by LOINC fallback: key=problems by=loinc | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(results) REQUIRED_SECTION_MISSING(socialHistory) REQUIRED_SECTION_MISSING(vitalSigns) SECTION_MATCHED_BY_LOINC_FALLBACK",
+        "control: Results (…22.2.3, one arc away): key=results by=templateId | MISSING_ASSIGNING_AUTHORITY REQUIRED_SECTION_MISSING(allergies) REQUIRED_SECTION_MISSING(medications) REQUIRED_SECTION_MISSING(problems) REQUIRED_SECTION_MISSING(socialHistory) REQUIRED_SECTION_MISSING(vitalSigns)",
       ]
     `);
   });
