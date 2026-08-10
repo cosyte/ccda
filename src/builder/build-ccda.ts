@@ -372,8 +372,9 @@ const MED_EXT = "2014-06-09";
  * this builder produced fail its own document type's Medications assert: a CCD
  * fails **CONF:1198-30664**, a Referral Note **CONF:1198-30923**. Cite the one
  * that matches the document: `1198-30664` lives in the CCD pattern
- * (`…22.1.2`) and its concrete rule selects only a `…22.1.2`-stamped
- * `ClinicalDocument`, so a Referral Note is outside its context and can never
+ * (`…22.1.2`) and its concrete rule selects only a `ClinicalDocument` carrying
+ * `…22.1.2` at `2015-08-01` (both halves of the predicate), so a Referral Note,
+ * which carries `…22.1.1` + `…22.1.14`, is outside its context and can never
  * fail it. The two asserts are byte-identical in their `test` XPath, both
  * requiring `…22.2.1.1` at `2014-06-09`, and differ only in the rule that
  * selects them, so the section template's identity is document-type

@@ -1409,7 +1409,7 @@ deleted; the imperative as it stood is reproduced here verbatim.
     sites. **Read the pair, never the root alone: the right root under the wrong stamp fails the CONF
     exactly as completely as omitting the section.**
   - **🛑 AND THE CONF ID THAT WENT WITH IT WAS WRONG FOR ONE OF THE TWO DOCUMENT TYPES, IN THREE
-    COPIES, CAUGHT BY PASS 2 (2026-08-10, `#109`).** The original write-up attributed the Referral
+    COPIES, CAUGHT BY `#107`'s PASS 2 (2026-08-10, fixed in [`#108`](https://github.com/cosyte/ccda/pull/108)).** The original write-up attributed the Referral
     Note's failure to `1198-30664` as well. **It cannot fail that CONF**: `1198-30664` sits in the
     `…22.1.2` (CCD) pattern, whose concrete rule context selects only a `…22.1.2`-stamped
     `ClinicalDocument`, and `buildCcda({documentType:"referralNote"})` emits `…22.1.1` + `…22.1.14`
@@ -1432,7 +1432,9 @@ deleted; the imperative as it stood is reproduced here verbatim.
     they bound the claim rather than widening it: Transfer Summary (`…22.1.13`, SHALL, section CONF
     `1198-28278`) and Consultation Note (`…22.1.4`, **SHOULD**, in the `-warnings` pattern, section
     CONF `1198-28926`). Four asserts in total require `…22.2.1.1` at `2014-06-09`; **only the CCD's
-    and the Referral Note's are reachable from `buildCcda`.** **The SUBSTANCE was right and only the citation was wrong** - both asserts
+    and the Referral Note's are reachable from `buildCcda`.**
+
+    **The SUBSTANCE was right and only the citation was wrong** - both asserts
     are byte-identical in their `test` XPath, both requiring `…22.2.1.1` at `2014-06-09`, so one fix
     genuinely does correct both document types. **The error is the SAME rule-context misreading that
     refuted `#106` pass 1: an assert was read without following the rule that selects it.** That is
