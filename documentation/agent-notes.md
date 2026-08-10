@@ -1422,7 +1422,7 @@ deleted; the imperative as it stood is reproduced here verbatim.
     *"such that"*: CCD `1198-30664`, Referral Note `1198-30923`. **Every one of these asserts carries
     two CONF ids and the `<sch:assert id>` is the component one**, so citing the `@id` for a section
     requirement is wrong by exactly one and looks entirely plausible. Caught before merge by the
-    author, on `f907c64`, and fixed in `1e4e7b0` rather than by amending a sha under grading.
+    author, on `f907c64`, and fixed in `136d8c7` rather than by amending a sha under grading.
     **▶ THIS IS THE `CLAUDE.md` TRAP "re-check a refuter's spec claim exactly as hard as your own"
     firing a second time, and it very nearly shipped to four sites again.** A refuter's CONF id is
     evidence, not an answer. **The general rule, now paid for twice: the assert LABEL is not the
