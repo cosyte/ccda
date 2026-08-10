@@ -1405,7 +1405,7 @@ deleted; the imperative as it stood is reproduced here verbatim.
     `sectionElement`/`emptySection` without an extension argument, so both took the `R21` default and
     emitted `…22.2.1.1` under `2015-08-01`, failing every CCD and every Referral Note this builder
     produced, each against **its own document type's** Medications assert: a CCD **CONF:1198-30664**,
-    a Referral Note **CONF:1198-30922**. Fixed by adding `MED_SECTION_EXT` and passing it at both
+    a Referral Note **CONF:1198-30923**. Fixed by adding `MED_SECTION_EXT` and passing it at both
     sites. **Read the pair, never the root alone: the right root under the wrong stamp fails the CONF
     exactly as completely as omitting the section.**
   - **🛑 AND THE CONF ID THAT WENT WITH IT WAS WRONG FOR ONE OF THE TWO DOCUMENT TYPES, IN THREE
@@ -1413,8 +1413,26 @@ deleted; the imperative as it stood is reproduced here verbatim.
     Note's failure to `1198-30664` as well. **It cannot fail that CONF**: `1198-30664` sits in the
     `…22.1.2` (CCD) pattern, whose concrete rule context selects only a `…22.1.2`-stamped
     `ClinicalDocument`, and `buildCcda({documentType:"referralNote"})` emits `…22.1.1` + `…22.1.14`
-    and never `…22.1.2`. The Referral Note's equivalent is **`1198-30922`** (sentence-unique,
-    pattern `…22.1.14`). **The SUBSTANCE was right and only the citation was wrong** - both asserts
+    and never `…22.1.2`. The Referral Note's equivalent is **`1198-30923`** (sentence-unique,
+    pattern `…22.1.14`).
+    **🛑 AND THE FIRST CORRECTION CITED THE WRONG ONE OF THE TWO, WHICH IS THE REAL LESSON HERE.**
+    Pass 2 named `1198-30922` and the fix adopted it; reading the assert's **full sentence** rather
+    than its label showed `30922` is the **COMPONENT** requirement, the analogue of the CCD's
+    `1198-30663`, while the **SECTION** requirement naming this template is the id nested after
+    *"such that"*: CCD `1198-30664`, Referral Note `1198-30923`. **Every one of these asserts carries
+    two CONF ids and the `<sch:assert id>` is the component one**, so citing the `@id` for a section
+    requirement is wrong by exactly one and looks entirely plausible. Caught before merge by the
+    author, on `f907c64`, and fixed in `1e4e7b0` rather than by amending a sha under grading.
+    **▶ THIS IS THE `CLAUDE.md` TRAP "re-check a refuter's spec claim exactly as hard as your own"
+    firing a second time, and it very nearly shipped to four sites again.** A refuter's CONF id is
+    evidence, not an answer. **The general rule, now paid for twice: the assert LABEL is not the
+    sentence. Search for the sentence, require exactly one hit, and read which of its ids names the
+    thing you are actually citing.**
+    **▶ TWO MORE DOCUMENT TYPES ASSERT THE SAME STAMP, neither of which this builder emits**, so
+    they bound the claim rather than widening it: Transfer Summary (`…22.1.13`, SHALL, section CONF
+    `1198-28278`) and Consultation Note (`…22.1.4`, **SHOULD**, in the `-warnings` pattern, section
+    CONF `1198-28926`). Four asserts in total require `…22.2.1.1` at `2014-06-09`; **only the CCD's
+    and the Referral Note's are reachable from `buildCcda`.** **The SUBSTANCE was right and only the citation was wrong** - both asserts
     are byte-identical in their `test` XPath, both requiring `…22.2.1.1` at `2014-06-09`, so one fix
     genuinely does correct both document types. **The error is the SAME rule-context misreading that
     refuted `#106` pass 1: an assert was read without following the rule that selects it.** That is

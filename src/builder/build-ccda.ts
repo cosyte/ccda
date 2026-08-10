@@ -370,7 +370,7 @@ const MED_EXT = "2014-06-09";
  * Vital Signs (`…22.2.4.1`) all carry `2015-08-01`, and Medications alone does
  * not. Emitting {@link R21} here made **every** CCD and **every** Referral Note
  * this builder produced fail its own document type's Medications assert: a CCD
- * fails **CONF:1198-30664**, a Referral Note **CONF:1198-30922**. Cite the one
+ * fails **CONF:1198-30664**, a Referral Note **CONF:1198-30923**. Cite the one
  * that matches the document: `1198-30664` lives in the CCD pattern
  * (`…22.1.2`) and its concrete rule selects only a `…22.1.2`-stamped
  * `ClinicalDocument`, so a Referral Note is outside its context and can never
@@ -378,6 +378,13 @@ const MED_EXT = "2014-06-09";
  * requiring `…22.2.1.1` at `2014-06-09`, and differ only in the rule that
  * selects them, so the section template's identity is document-type
  * independent and one fix corrects both.
+ *
+ * **Take the SECOND CONF id in the sentence, not the assert's `@id`.** Each of
+ * these asserts carries two: the `<sch:assert id>` is the **component**
+ * requirement (CCD `1198-30663`, Referral Note `1198-30922`), and the
+ * **section** requirement naming this template is the one nested after "such
+ * that" (CCD `1198-30664`, Referral Note `1198-30923`). Citing the `@id` for a
+ * section requirement swaps in the wrong CONF, off by one and plausible.
  *
  * Grounded in the normative Schematron (`HL7/CDA-ccda-2.1`,
  * `validation/Consolidated CDA Templates for Clinical Notes (US Realm) DSTU R2.1.sch`,

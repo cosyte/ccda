@@ -585,7 +585,7 @@ describe("buildCcda, the six CCD SHALL section template stamps", () => {
   it("stamps the Referral Note's Medications section the same way", () => {
     // The Referral Note errors rule requires …22.2.1.1 at 2014-06-09 too, so
     // the section template's identity is document-type independent. Its assert
-    // is CONF:1198-30922, NOT 1198-30664: the latter sits in the CCD (…22.1.2)
+    // is CONF:1198-30923, NOT 1198-30664: the latter sits in the CCD (…22.1.2)
     // pattern, whose concrete rule selects only a …22.1.2-stamped
     // ClinicalDocument, and a Referral Note carries …22.1.1 + …22.1.14 instead,
     // so it falls outside that context entirely. The two asserts are
