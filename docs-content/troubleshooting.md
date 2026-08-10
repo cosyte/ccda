@@ -393,14 +393,14 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
 - **`buildCcda` emits two of the twelve document types.** A **CCD** (the default) and a **Referral
   Note** (`documentType: "referralNote"`). Any other value throws a `TypeError` rather than emitting
   something that merely resembles the type you asked for. The other ten types are not implemented.
-- **Which sections a build can carry.** For a CCD, Problems, Allergies, Medications, Results, and
-  Vital Signs are always emitted, as spec-clean empty `nullFlavor="NI"` sections when you supply no
-  content. Immunizations, Procedures, Encounters, Social History (smoking status), Functional
-  Status, Mental Status, Past Medical History, Plan of Treatment, and Family History are emitted
-  only when populated, so an empty one is never fabricated. A Referral Note instead always emits
-  Problems, Allergies, Medications, Reason for Referral, Assessment, and Plan of Treatment, and
-  demotes Results and Vital Signs to populated-only. Any C-CDA section outside that set cannot be
-  built.
+- **Which sections a build can carry.** For a CCD, its six SHALL sections are always emitted, as
+  spec-clean empty `nullFlavor="NI"` sections when you supply no content: Problems, Allergies,
+  Medications, Results, Vital Signs, and Social History (smoking status). Immunizations, Procedures,
+  Encounters, Functional Status, Mental Status, Past Medical History, Plan of Treatment, and Family
+  History are emitted only when populated, so an empty one is never fabricated. A Referral Note
+  instead always emits Problems, Allergies, Medications, Reason for Referral, Assessment, and Plan of
+  Treatment, and demotes Results, Vital Signs and Social History to populated-only. Any C-CDA section
+  outside that set cannot be built.
 - **Every coded value that reaches the narrative needs a `displayName`, and a missing one is
   refused.** Each populated section regenerates its `<text>` narrative from the same
   `BuildCode.displayName` the coded entry carries, and links the two with a `<reference>`, so the

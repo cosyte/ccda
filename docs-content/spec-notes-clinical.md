@@ -109,3 +109,9 @@ data that _is_ present. The table is **conservative**: it asserts only unconditi
 high-confidence SHALL constraints and omits choice constraints (`SHALL contain A OR B`), SHOULD/MAY
 sections, and SHALL sections outside the recognized catalog. `requiredSectionKeys(documentType)` and
 `missingRequiredSections(documentType, presentKeys)` expose the table directly.
+
+The **CCD** row is the one traced end to end. It asserts **six** sections, read off the normative
+C-CDA R2.1 Schematron's CCD (V3) errors rule: Allergies (CONF:1198-30662), Medications (-30664),
+Problems (-30666), Results (-30670), Social History (-30688) and Vital Signs (-30690). Procedures
+(-30668) and Plan of Treatment (-30686) sit in that template's _warnings_ rule as SHOULD, so neither
+is asserted. `buildCcda` emits exactly this set for a CCD, so the two halves cannot drift.

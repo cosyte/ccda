@@ -370,7 +370,16 @@ The table is **conservative**: it asserts only unconditional, in-catalog, high-c
 constraints and deliberately omits choice constraints (`SHALL contain A OR B`), SHOULD/MAY sections,
 and SHALL sections outside the recognized catalog (e.g. Hospital Course, Physical Exam). A document
 type with an empty table therefore means _"no unconditional in-catalog SHALL section is asserted yet"_,
-not _"this type has no requirements"_. Broadening a table is additive and safe. The **Referral Note**
+not _"this type has no requirements"_. Broadening a table is additive and safe.
+
+The **CCD** table is fully traced. It asserts **six** sections, read directly off the normative C-CDA
+R2.1 Schematron's CCD (V3) rule: **Allergies** (CONF:1198-30662), **Medications** (-30664),
+**Problems** (-30666), **Results** (-30670), **Social History** (-30688), and **Vital Signs**
+(-30690). Procedures (-30668) and Plan of Treatment (-30686) are **SHOULD**, not SHALL, so neither is
+asserted. This is the same set `buildCcda` emits for a CCD: the parser warns about exactly the
+sections the builder guarantees, in both directions.
+
+The **Referral Note**
 asserts **Reason for Referral** alongside Problems, Allergies, and Medications (traced to the
 normative R2.1 Schematron, CONF:1198-30925), so the SHALL check does not stay silent when a Referral
 Note omits it. Its Assessment/Plan requirement stays out (a choice constraint), as do its Results and
@@ -424,8 +433,9 @@ entries-required **Problems**, **Allergies**, and **Medications** (empty `nullFl
 unpopulated), plus the narrative **Reason for Referral** (`1.3.6.1.4.1.19376.1.5.3.1.3.1`, LOINC
 `42349-1`, from the optional `reasonForReferral` string), **Assessment** (`…22.2.8`, LOINC `51848-0`,
 unversioned, a root-only `templateId` with no `@extension`, from the optional `assessment` string),
-and **Plan of Treatment** (`…22.2.10`, LOINC `18776-5`). Results and Vital Signs are not Referral Note
-SHALL sections, so, unlike in a CCD, they are emitted only when the caller supplies them.
+and **Plan of Treatment** (`…22.2.10`, LOINC `18776-5`). Results, Vital Signs and Social History are
+not Referral Note SHALL sections, so, unlike in a CCD, they are emitted only when the caller supplies
+them.
 
 ```ts
 import { buildCcda, serializeCcda } from "@cosyte/ccda";
@@ -537,7 +547,7 @@ condition is resolved, per Problem Observation `…22.4.4`) is emitted only for 
 `buildCcda` throws on a `resolution` without `status: "resolved"`, and a resolved-but-undated concern
 keeps the `nullFlavor="UNK"` high, never a fabricated date. Each CCD SHALL section for which no content
 is supplied is emitted as a spec-clean empty `nullFlavor="NI"` section; the non-required Immunizations /
-Procedures / Encounters / Social History / Functional Status / Mental Status / Past Medical History /
+Procedures / Encounters / Functional Status / Mental Status / Past Medical History /
 Plan of Treatment / Family History sections are emitted only when populated. The builder emits two of
 the twelve document types (**CCD** and **Referral Note**); the other ten are **not implemented**, and any
 other `documentType` throws a `TypeError` rather than emitting something that merely resembles the type
@@ -834,8 +844,9 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
 - **Serializer re-emits a parsed document; the builder constructs one**: `serializeCcda` / `toString()`
   faithfully re-emit a _parsed_ document (the spec-clean emit half of Postel's Law). To construct a
   document from scratch, `buildCcda` emits a spec-clean **CCD** or **Referral Note**
-  (`documentType: "referralNote"`) with the US Realm header + **Problems, Allergies, Medications,
-  Results, and Vital Signs**, plus **Immunizations, Procedures, Encounters, Social History, Functional
+  (`documentType: "referralNote"`) with the US Realm header + the CCD's six SHALL sections
+  (**Problems, Allergies, Medications, Results, Vital Signs, and Social History**), plus
+  **Immunizations, Procedures, Encounters, Functional
   Status, Mental Status, Past Medical History, Plan of Treatment, and Family History** emitted only
   when populated (none is a CCD SHALL section); a Referral Note additionally
   specializes the header and emits its own SHALL set (Reason for Referral, Assessment, Plan of Treatment).

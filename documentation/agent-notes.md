@@ -109,7 +109,8 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     in the same iteration, so its `procedure "undefined"` is unreachable. And the CCD SHALL-set
     disagreement
     between `build-ccda.ts` and `required-sections.ts` is untouched and still blocked on the
-    normative R2.1 Schematron.
+    normative R2.1 Schematron. **SETTLED 2026-08-10, the Schematron was obtained and the answer is
+    six: `#the-ccd-shall-set-settled-against-the-normative-schematron`.**
   - **PAID 2026-08-07: this trap now HAS its one-line imperative in `CLAUDE.md`.** It was owed and
     blocked when the fix landed, because that file measured **34,482 bytes against its 32,000-byte
     budget** in the meta-repo's `.claude/hooks/doc-budget.mjs` and the hook refuses any write that
@@ -715,7 +716,9 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     `required-sections.ts` names four **excluding** it, so `buildCcda` always emits Vital Signs while
     `parseCcda` will not warn when a third-party CCD lacks one. **It is blocked on a normative source
     (the R2.1 Schematron), not on a decision, and this slice did not let either half quietly pick a
-    set.** Modelling Goal Observation and emitting the Planned Intervention Act are a roadmap phase,
+    set.** **SETTLED 2026-08-10: the Schematron was obtained and the set is SIX (both halves were
+    wrong, the roadmap was right), see
+    `#the-ccd-shall-set-settled-against-the-normative-schematron`.** Modelling Goal Observation and emitting the Planned Intervention Act are a roadmap phase,
     not a drain unit. Neither new code was added to `SAFETY_CRITICAL_CODES`: `PLAN_ENTRY_NOT_MODELED`
     reports a **modelling gap**, not a misread value, which is the same class as
     `UNKNOWN_SECTION_CODE` (a section retained as narrative-only, also not in that set), and
@@ -755,6 +758,7 @@ here verbatim, and what is LEFT there is the rule plus this pointer.
     `SYNTHETIC_SETID_PREFIX` + the synthetic root, both required by `isSyntheticSetId`. **State the
     residual: nothing forces a receiver to read the label, and a `false` never certifies an id is
     real.** **The CCD SHALL-set disagreement was NOT touched and is still blocked on the Schematron.**
+    **SETTLED 2026-08-10: `#the-ccd-shall-set-settled-against-the-normative-schematron`.**
     Why: `documentation/agent-notes.md#the-three-plan-surface-decisions-of-2026-08-06`
 
 ## Closing the two silent plan drops (2026-08-07)
@@ -869,6 +873,9 @@ here verbatim, and what is LEFT there is the rule plus this pointer.
     `build-ccda.ts` (five `shallSections`, including `vitalSigns`), `required-sections.ts` (four,
     excluding it) and the roadmap (a third set) is **untouched and still blocked on the normative R2.1
     Schematron, not on a decision**. Neither half of this slice was allowed to quietly pick a set.
+    **SETTLED 2026-08-10, see `#the-ccd-shall-set-settled-against-the-normative-schematron`; the
+    three-way reading above is preserved as the state at the time of that slice. The roadmap's set
+    was the correct one.**
     Modelling Goal Observation and emitting the Planned Intervention Act remain a roadmap phase.
     `getPlannedItems()` returns the same seven templates it always did.
   - **The chore folded in, and why it is a per-test budget rather than a global one.**
@@ -1229,6 +1236,80 @@ deleted; the imperative as it stood is reproduced here verbatim.
     SHOULD-not-SHALL exclusions beside it, see the comment at `required-sections.ts:44`), while the
     others are asserted conservatively without that end-to-end tracing. Do not broaden or narrow an
     untraced set without the Schematron in hand.
+  - **The CCD row is the exception and is now traced end to end (2026-08-10).** See
+    `#the-ccd-shall-set-settled-against-the-normative-schematron` below. "Six of the twelve assert
+    nothing" is unchanged by it: the CCD row was never one of the empty six.
+
+## The published version line names no version
+
+  - **Relocated out of `CLAUDE.md` 2026-08-10** to buy budget for the CCD SHALL-set trap below, per
+    ADR 0023's relocate-never-delete remedy. The narrative, kept verbatim: that Status bullet named
+    `0.0.10` (re-derived from the registry 2026-08-04), where the line had said `0.0.4`, and `0.0.2`
+    before that. **It has been stale every single time anyone checked it**, which is the whole reason
+    the line now names no version and defers to `npm view @cosyte/ccda version`. The imperative
+    itself stayed in `CLAUDE.md`; only the history moved here.
+
+## The CCD SHALL set, settled against the normative Schematron
+
+  - **THE DISAGREEMENT, AND WHAT IT COST.** Three places in this tree named three different CCD
+    SHALL sets. `build-ccda.ts` named **five** `shallSections` **including** `vitalSigns`;
+    `required-sections.ts` named **four**, **excluding** it; and this project's roadmap, which lives
+    outside this repo, named **six**, adding Social History. The live consequence
+    was an asymmetry between the two halves of this package: **`buildCcda` always emitted Vital
+    Signs while `parseCcda` would not warn when a third-party CCD lacked it.** `#98` was held to the
+    no-guessing rule and neither half was allowed to pick a set, correctly: a clinical conformance
+    set without normative grounding is exactly what that rule refuses.
+  - **THE SOURCE, AND THE EXACT ROUTE.** The artifact is **public, unauthenticated, and needed no
+    licence click-through, no HL7 account and no
+    payment**: HL7 publishes it in its own GitHub org at
+    `github.com/HL7/CDA-ccda-2.1`, path
+    `validation/Consolidated CDA Templates for Clinical Notes (US Realm) DSTU R2.1.sch`, fetched
+    over `raw.githubusercontent.com` (HTTP 200, **1,010,531 bytes**, sha256
+    `04be58046a675735616e46cf52053688a2fc9d0c88010f14fd1c5a2f4ca5bd54`). Its header carries the
+    Lantana Consulting Group "AS IS" warranty disclaimer. That repo's README states its contents
+    were copied from the HL7 SDWG SVN repository, which is no longer updated, and that errata now
+    land in the GitHub copy. **The file is NOT vendored into this repo** (it is a 1 MB third-party
+    artifact on a public package); re-fetch it from that path when you need it again.
+  - **THE ANSWER: SIX.** The CCD document-level template (`2.16.840.1.113883.10.20.22.1.2`,
+    `@extension` `2015-08-01`) has exactly **one** rule context in the file, and its `-errors`
+    abstract rule asserts six sections:
+    Allergies and Intolerances (entries required) (V3) **CONF:1198-30662**;
+    Medications (entries required) (V2) **-30664**;
+    Problem (entries required) (V3) **-30666**;
+    Results (entries required) (V3) **-30670**;
+    Social History (V3) **-30688**;
+    Vital Signs (entries required) (V3) **-30690**.
+    Procedures (**-30668**) and Plan of Treatment (**-30686**) are in the **`-warnings`** rule as
+    SHOULD, so neither is SHALL and neither is asserted.
+  - **HOW IT WAS VERIFIED, AND WHY THAT MATTERS.** A label proves a label exists, not that its body
+    carries the sentence. Each of those eight CONF ids was grepped for as a **sentence** and each
+    returned **exactly one** hit. The rule contexts naming the CCD root were enumerated to confirm
+    there is no second, competing CCD context (e.g. an unversioned one) carrying a different set.
+    **So the roadmap's six was right all along and both call sites in this repo were wrong** -- the
+    parser by two sections, the builder by one. **Do not "restore" four or five.**
+  - **WHAT LANDED.** Both call sites now name the same six. `required-sections.ts` gained
+    `socialHistory` + `vitalSigns`; `build-ccda.ts` gained `socialHistory` to its
+    `ShallSectionKey` union, its `DOC_TYPE_SPECS.ccd.shallSections`, and the `shallSection`
+    dispatch. The roadmap needed no change and **was not touched** (it lives outside this repo).
+  - **THE DUPLICATE-EMIT TRAP.** Social History was previously emitted by a populated-only
+    conditional. That conditional still exists, because document types whose SHALL set excludes
+    Social History (the Referral Note) still need it. It is now guarded by
+    `!shall.has("socialHistory")`. **Without that guard a CCD carrying a smoking status emits the
+    Social History section TWICE**, silently. A test pins the single-emit.
+  - **WHY AN EMPTY SOCIAL HISTORY IS CONFORMANT, AND WHY THAT IS NOT LUCK.** An unpopulated SHALL
+    section is emitted as a `nullFlavor="NI"` shell. For Social History that shell is **fully**
+    conformant: the section's own errors rule requires only `code` (CONF:1198-14819), `title`
+    (-7938) and `text` (-7939), and its Smoking Status entry is **SHOULD** (CONF:1198-14823), so no
+    clinical fact is invented. Social History (V3) also has **no entries-required variant**, so the
+    shell still carries the exact `@root`/`@extension` pair CONF:1198-30688 names.
+  - **THE RESIDUAL THIS SLICE DID NOT FIX, STATED.** That last point does **not** generalize. The
+    other five CCD SHALL sections are **entries-required** templates, and `emptySection` emits the
+    base root only, dropping the `.1` template. So a CCD built with, say, no vital signs carries
+    `…22.2.4` but not `…22.2.4.1`, and therefore does **not** satisfy CONF:1198-30690 as written.
+    That is a deliberate, pre-existing trade (an entries-required section with zero entries violates
+    its own SHALL entry constraint) and it predates this slice, applying equally to Allergies,
+    Medications, Problems, Results and Vital Signs. **It is filed, not fixed, and "a built document
+    round-trips with zero warnings" still does not mean "a validator would pass it".**
 
 ## What editCcda covers
 

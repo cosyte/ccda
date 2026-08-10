@@ -22,13 +22,13 @@ immutability + explicit mutation, and the profile system.
 
 ## Status
 
-- **Published on npm at `0.0.10`**, public, MIT (re-derived from the registry 2026-08-04, where this
-  line said `0.0.4`, and `0.0.2` before that; it has been stale every time anyone checked, so
-  **`npm view @cosyte/ccda version` is the only source of truth** and a **`@cosyte/ccda`** version
-  quoted elsewhere in this file is a historical statement about that release, not the current one;
-  the `@cosyte/test-utils`, TypeScript and `pnpm` pins below are live and mean what they say).
-  Pre-alpha on the shared cosyte `0.0.x` ladder
-  (`0.0.x` until first alpha, ADR 0001). A published version never moves backwards.
+- **Published on npm, public, MIT.** **This line names no version on purpose: it was stale every
+  time anyone checked, so `npm view @cosyte/ccda version` is the only source of truth**, and a
+  **`@cosyte/ccda`** version quoted elsewhere in this file is a historical statement about that
+  release, not the current one; the `@cosyte/test-utils`, TypeScript and `pnpm` pins below are live
+  and mean what they say. Pre-alpha on the shared cosyte `0.0.x`-until-first-alpha ladder (ADR
+  0001). A published version never moves backwards.
+  Why: `documentation/agent-notes.md#the-published-version-line-names-no-version`
 - **There are no stubs left.** `src/index.ts` exports a working parser (`parseCcda`), serializer
   (`serializeCcda`), document builder (`buildCcda`), and document editor (`editCcda`), plus the
   `CcdaDocument` model, the HL7 v3 datatype layer, the entry extractors for fourteen families
@@ -180,7 +180,6 @@ immutability + explicit mutation, and the profile system.
     `getPlannedItems()` changed.** (3) `editCcda` **keeps minting** a `setId` and labels the minted
     one only. **State the residual: nothing forces a receiver to read the label, and a `false` never
     certifies an id is real.**
-    **The CCD SHALL-set disagreement was NOT touched and is still blocked on the Schematron.**
     Why: `documentation/agent-notes.md#the-three-plan-surface-decisions-of-2026-08-06`
   - **The Interventions Section (`…21.2.3`, LOINC `62387-6`) lives in the `…10.20.21.2.*` arc, not
     the `…10.20.22.2.*` arc every other catalog section uses, and `…10.20.22.2.3` is RESULTS. Do not
@@ -240,7 +239,10 @@ immutability + explicit mutation, and the profile system.
   - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`
     assert nothing. **Empty means "no unconditional in-catalog SHALL section is asserted yet", never
     "this type has no requirements".** Provenance varies per type. **Do not broaden or narrow an
-    untraced set without the Schematron in hand.**
+    untraced set without the Schematron in hand. The CCD row IS traced: SIX (Allergies, Medications,
+    Problems, Results, Social History, Vital Signs); `build-ccda.ts` names the same six; its
+    conditional Social History emit stays guarded or a CCD emits it twice**
+    (`#the-ccd-shall-set-settled-against-the-normative-schematron`)
     Why: `documentation/agent-notes.md#the-required-section-shall-tables-and-their-provenance`
   - `editCcda` covers **twelve single-list section kinds**; Functional Status, Mental Status and the
     Referral Note's two narrative-only sections are **buildable but not editable**. There is no
@@ -375,8 +377,7 @@ Mirrors the three disciplines in the meta-repo's `documentation/conventions.md`.
 
 ---
 
-**The pre-scaffold C-CDA planning notes were relocated verbatim 2026-08-07** (north star, the
-sibling-package pointer, the hard gates and the commit style). Where they overlapped the standard
-above, the standard above wins. The **two** imperatives in them stated nowhere else are kept above:
-the `coverageDirs` rule, in the coverage guardrail, and the commit style, in its own bullet.
+**The pre-scaffold C-CDA planning notes were relocated verbatim 2026-08-07.** Where they overlapped
+the standard above, the standard above wins. The **two** imperatives stated nowhere else are kept
+above: the `coverageDirs` rule and the commit style.
 Why: `documentation/agent-notes.md#the-pre-scaffold-planning-notes`

@@ -6,6 +6,15 @@
  * **warning**, never a fatal: a missing required section never blocks reading
  * the data that *is* present).
  *
+ * **The CCD row is fully traced.** Its six keys are read directly off the
+ * normative C-CDA R2.1 Schematron's CCD (V3) *errors* rule (see the comment on
+ * the `ccd` entry for the six CONF ids). This table and the builder's
+ * `DOC_TYPE_SPECS.ccd.shallSections` now name the **same six**; they disagreed
+ * (four here, five there, excluding/including Vital Signs and both omitting
+ * Social History) until the Schematron settled it. Keep them in lockstep: if they
+ * drift again, `buildCcda` emits a set the parser will not validate, or vice
+ * versa. The other rows' provenance is unchanged and varies per type.
+ *
  * **Conservative by design.** This table asserts only *unconditional*,
  * high-confidence SHALL constraints whose section is in this parser's
  * recognized catalog. It deliberately **omits**:
@@ -40,7 +49,15 @@ import type { DocumentType } from "./templates.js";
  * @internal
  */
 const REQUIRED_SECTIONS: Readonly<Record<DocumentType, readonly string[]>> = {
-  ccd: ["allergies", "medications", "problems", "results"],
+  // CCD (…22.1.2:2015-08-01) SHALL: six sections, read off the normative C-CDA
+  // R2.1 Schematron's CCD (V3) *errors* rule: Allergies and Intolerances
+  // (entries required) (V3) CONF:1198-30662, Medications (entries required) (V2)
+  // -30664, Problem (entries required) (V3) -30666, Results (entries required)
+  // (V3) -30670, Social History (V3) -30688, Vital Signs (entries required) (V3)
+  // -30690. Procedures (-30668) and Plan of Treatment (-30686) are in the
+  // *warnings* rule as SHOULD, so neither is asserted. All six are in this
+  // parser's recognized catalog, so the whole set is assertable.
+  ccd: ["allergies", "medications", "problems", "results", "socialHistory", "vitalSigns"],
   dischargeSummary: ["allergies", "hospitalDischargeDiagnosis", "dischargeMedications"],
   // Referral Note (…22.1.14) SHALL: Problem (CONF:1198-29087), Allergies
   // (-30912), Medications (-30923), and Reason for Referral (-30925). The
@@ -67,7 +84,8 @@ const REQUIRED_SECTIONS: Readonly<Record<DocumentType, readonly string[]>> = {
  * @example
  * ```ts
  * import { requiredSectionKeys } from "@cosyte/ccda";
- * requiredSectionKeys("ccd"); // ["allergies", "medications", "problems", "results"]
+ * requiredSectionKeys("ccd");
+ * // ["allergies", "medications", "problems", "results", "socialHistory", "vitalSigns"]
  * requiredSectionKeys("progressNote"); // []
  * ```
  */
@@ -86,7 +104,7 @@ export function requiredSectionKeys(documentType: DocumentType): readonly string
  * ```ts
  * import { missingRequiredSections } from "@cosyte/ccda";
  * missingRequiredSections("ccd", new Set(["allergies", "problems"]));
- * // ["medications", "results"]
+ * // ["medications", "results", "socialHistory", "vitalSigns"]
  * ```
  */
 export function missingRequiredSections(

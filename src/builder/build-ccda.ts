@@ -62,7 +62,10 @@
  * stamp (not the `2015-08-01` stamp the other sections use).
  *
  * **Social History (Smoking Status).** A **Social History**
- * section (`…22.2.17`, LOINC `29762-2`) emits one or more Smoking Status,
+ * section (`…22.2.17`, LOINC `29762-2`) is a **CCD SHALL** section
+ * (CONF:1198-30688), always emitted for a CCD, as a `nullFlavor="NI"` shell when
+ * no smoking status is supplied, since the section's own `entry` is only SHOULD
+ * (CONF:1198-14823). When populated it emits one or more Smoking Status,
  * Meaningful Use observations (`…22.4.78`, the `2014-06-09` stamp), each with
  * the fixed LOINC `code` (`72166-2` "Tobacco smoking status"), a SHALL
  * `statusCode`, a SHALL `effectiveTime` (the recorded time, `nullFlavor="UNK"`
@@ -1549,9 +1552,9 @@ export type BuildCcdaPlannedItem =
 
 /**
  * Input to {@link buildCcda}. `patient` is required; each clinical collection
- * (`problems`, `allergies`, `medications`, `results`, `vitalSigns`) defaults to
- * empty, in which case its section is emitted as a spec-clean empty
- * `nullFlavor="NI"` section. `immunizations` is optional, its section is emitted
+ * backing a CCD SHALL section (`problems`, `allergies`, `medications`, `results`,
+ * `vitalSigns`, `smokingStatus`) defaults to empty, in which case its section is
+ * emitted as a spec-clean empty `nullFlavor="NI"` section. `immunizations` is optional, its section is emitted
  * only when populated (Immunizations is not a CCD SHALL section). `documentType`
  * is `"ccd"` (the default) or `"referralNote"`; the other ten C-CDA R2.1
  * document types are not implemented.
@@ -1603,7 +1606,12 @@ export interface BuildCcdaInit {
   readonly procedures?: readonly BuildCcdaProcedure[];
   /** Encounter Activities; the Encounters section is emitted only when non-empty (a CCD SHOULD section). */
   readonly encounters?: readonly BuildCcdaEncounter[];
-  /** Smoking Status observations for the Social History section; emitted only when non-empty (a CCD SHOULD section). */
+  /**
+   * Smoking Status observations for the Social History section. Social History is
+   * a **CCD SHALL** section (CONF:1198-30688), so for a CCD the section is always
+   * emitted, as a `nullFlavor="NI"` shell when this is empty. For document types
+   * whose SHALL set excludes it, the section is emitted only when non-empty.
+   */
   readonly smokingStatus?: readonly BuildCcdaSmokingStatus[];
   /** Standalone Functional Status findings; the Functional Status section is emitted when this or {@link functionalStatusOrganizers} is non-empty (a CCD SHOULD section). */
   readonly functionalStatus?: readonly BuildCcdaFunctionalStatus[];
@@ -1682,9 +1690,10 @@ export interface BuildCcdaInit {
 /**
  * A section the builder always emits for a given document type (its SHALL set).
  * `"problems"`/`"allergies"`/`"medications"` are the entries-required clinical
- * sections; `"results"`/`"vitalSigns"` are always-on for a CCD; `"assessment"`,
- * `"reasonForReferral"`, and `"planOfTreatment"` are the Referral Note's
- * narrative SHALL sections. @internal
+ * sections; `"results"`/`"vitalSigns"`/`"socialHistory"` complete the CCD's
+ * six-section SHALL set; `"assessment"`, `"reasonForReferral"`, and
+ * `"planOfTreatment"` are the Referral Note's narrative SHALL sections.
+ * @internal
  */
 type ShallSectionKey =
   | "problems"
@@ -1692,6 +1701,7 @@ type ShallSectionKey =
   | "medications"
   | "results"
   | "vitalSigns"
+  | "socialHistory"
   | "reasonForReferral"
   | "assessment"
   | "planOfTreatment";
@@ -1714,8 +1724,20 @@ interface DocTypeSpec {
 
 /**
  * The document types the builder can emit, each with its header + SHALL-section
- * specialization. **CCD** SHALL: Allergies, Medications, Problems, Results (+ the
- * builder always emits Vital Signs). **Referral Note** SHALL (confirmed against
+ * specialization.
+ *
+ * **CCD** SHALL contain **six** sections, traced to the normative C-CDA R2.1
+ * Schematron's CCD (V3) errors rule
+ * (`r-urn-hl7ii-2.16.840.1.113883.10.20.22.1.2-2015-08-01-errors`): Allergies and
+ * Intolerances (entries required) (V3) **CONF:1198-30662**, Medications (entries
+ * required) (V2) **-30664**, Problem (entries required) (V3) **-30666**, Results
+ * (entries required) (V3) **-30670**, Social History (V3) **-30688**, and Vital
+ * Signs (entries required) (V3) **-30690**. Procedures (**-30668**) and Plan of
+ * Treatment (**-30686**) sit in the *warnings* rule as SHOULD, so neither is in
+ * this set. See `documentation/agent-notes.md` § "The CCD SHALL set, settled
+ * against the normative Schematron".
+ *
+ * **Referral Note** SHALL (confirmed against
  * the C-CDA R2.1 IG StructureDefinition + the CC0 onc-healthit ToC sample):
  * Problems, Allergies, Medications (entries-required), Reason for Referral,
  * Assessment, and Plan of Treatment, the last three satisfying the document's
@@ -1727,7 +1749,14 @@ const DOC_TYPE_SPECS: Readonly<Record<"ccd" | "referralNote", DocTypeSpec>> = {
   ccd: {
     documentTemplateRoot: CCD_TEMPLATE,
     documentCode: CCD_DOC_CODE,
-    shallSections: ["problems", "allergies", "medications", "results", "vitalSigns"],
+    shallSections: [
+      "problems",
+      "allergies",
+      "medications",
+      "results",
+      "vitalSigns",
+      "socialHistory",
+    ],
   },
   referralNote: {
     documentTemplateRoot: REFERRAL_NOTE_TEMPLATE,
@@ -2038,7 +2067,12 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
   if ((init.encounters?.length ?? 0) > 0) {
     structuredBody.appendChild(encountersSection(doc, init.encounters ?? [], id));
   }
-  if ((init.smokingStatus?.length ?? 0) > 0) {
+  // Social History is a CCD SHALL section (CONF:1198-30688) and so is emitted by
+  // the loop above for a CCD; this conditional covers the document types whose
+  // SHALL set does not include it (e.g. Referral Note), where it is emitted only
+  // when populated. Without the `shall.has` guard a CCD carrying a smoking status
+  // would emit the section TWICE.
+  if (!shall.has("socialHistory") && (init.smokingStatus?.length ?? 0) > 0) {
     structuredBody.appendChild(socialHistorySection(doc, init.smokingStatus ?? [], id));
   }
   if (
@@ -2236,6 +2270,8 @@ function shallSection(
       return resultsSection(doc, init.results ?? [], id);
     case "vitalSigns":
       return vitalsSection(doc, init.vitalSigns ?? [], id);
+    case "socialHistory":
+      return socialHistorySection(doc, init.smokingStatus ?? [], id);
     case "reasonForReferral":
       return reasonForReferralSection(doc, init.reasonForReferral);
     case "assessment":
@@ -3528,12 +3564,21 @@ function smokingStatusLabel(s: BuildCcdaSmokingStatus): string {
 }
 
 /**
- * Build the Social History section from one or more {@link BuildCcdaSmokingStatus}
- * observations. Only called with a non-empty list (see {@link buildCcda}),
- * Social History is a CCD SHOULD (not SHALL) section, so an unpopulated one is not
- * fabricated. The Social History Section template (`…22.2.17`) has no
- * entries-required variant, so only the base `templateId` is emitted even though
- * the section carries entries.
+ * Build the Social History section from zero or more {@link BuildCcdaSmokingStatus}
+ * observations. Social History (V3) **is** a CCD SHALL section
+ * (**CONF:1198-30688**), so an empty list yields the same spec-clean
+ * `nullFlavor="NI"` shell every other SHALL section uses rather than being
+ * skipped. That shell is fully conformant here: the section's own errors rule
+ * requires only `code` (CONF:1198-14819), `title` (-7938) and `text` (-7939),
+ * and its `entry` (a Smoking Status - Meaningful Use observation) sits in the
+ * *warnings* rule as SHOULD (**CONF:1198-14823**), so an unpopulated Social
+ * History invents no clinical claim and breaks no SHALL.
+ *
+ * The Social History Section template (`…22.2.17`) has **no** entries-required
+ * variant, so only the base `templateId` is emitted even when the section carries
+ * entries, which also means the empty shell still carries exactly the
+ * `@root`/`@extension` pair CONF:1198-30688 names, unlike the entries-required
+ * sections whose NI shell drops their `.1` template.
  * @internal
  */
 function socialHistorySection(
@@ -3541,6 +3586,9 @@ function socialHistorySection(
   statuses: readonly BuildCcdaSmokingStatus[],
   id: (prefix: string) => string,
 ): Element {
+  if (statuses.length === 0) {
+    return emptySection(doc, SOCIAL_HISTORY_SECTION_BASE, "29762-2", "Social History");
+  }
   const text = el(doc, "text");
   const entries: Element[] = [];
   for (const s of statuses) {

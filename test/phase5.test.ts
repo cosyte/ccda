@@ -13,6 +13,9 @@ import {
   WARNING_CODES,
   missingRequiredSections,
   requiredSectionKeys,
+  // The real builder, aliased: `buildCcda` in this file is the *fixture* raw-XML
+  // assembler imported below, which is a different thing.
+  buildCcda as buildRealCcda,
   type CcdaWarning,
   type DocumentType,
 } from "../src/index.js";
@@ -28,6 +31,7 @@ import {
   MEDICATIONS_SECTION,
   ALLERGY_ENTRY_SECTION,
   RESULTS_SECTION,
+  VITALS_SECTION,
   REASON_FOR_REFERRAL_SECTION,
 } from "./__fixtures__/ccda.js";
 
@@ -320,9 +324,28 @@ describe("required-section (SHALL) validation", () => {
   });
 
   it("emits no required-section warning when every SHALL section is present", () => {
-    const all = `${PROBLEMS_SECTION}${MEDICATIONS_SECTION}${ALLERGY_ENTRY_SECTION}${RESULTS_SECTION}`;
+    // All SIX of the CCD's SHALL sections. Social History and Vital Signs are as
+    // much SHALL as the other four (CONF:1198-30688 / -30690), so a composite
+    // that omits them is NOT "every SHALL section present" and must still warn,
+    // pinned below.
+    const all = `${PROBLEMS_SECTION}${MEDICATIONS_SECTION}${ALLERGY_ENTRY_SECTION}${RESULTS_SECTION}${SOCIAL_HISTORY_SECTION}${VITALS_SECTION}`;
     const doc = parseCcda(buildCcda({ sections: all }));
     expect(codes(doc.warnings)).not.toContain(WARNING_CODES.REQUIRED_SECTION_MISSING);
+  });
+
+  it("still warns for a CCD carrying only the old four-section set", () => {
+    // The regression this locks: before the Schematron settled the set, this
+    // composite counted as complete. It is not: a third-party CCD lacking Vital
+    // Signs or Social History is non-conformant and the parser now says so.
+    const four = `${PROBLEMS_SECTION}${MEDICATIONS_SECTION}${ALLERGY_ENTRY_SECTION}${RESULTS_SECTION}`;
+    const doc = parseCcda(buildCcda({ sections: four }));
+    const missing = doc.warnings
+      .filter((w) => w.code === WARNING_CODES.REQUIRED_SECTION_MISSING)
+      .map((w) => w.message);
+    expect(missing.some((m) => m.includes("vitalSigns"))).toBe(true);
+    expect(missing.some((m) => m.includes("socialHistory"))).toBe(true);
+    expect(missing.some((m) => m.includes('"problems"'))).toBe(false);
+    expect(missing.some((m) => m.includes('"results"'))).toBe(false);
   });
 
   it("asserts nothing for a document type with an empty SHALL table", () => {
@@ -338,8 +361,35 @@ describe("required-section (SHALL) validation", () => {
   });
 
   it("exposes the SHALL table via requiredSectionKeys", () => {
-    expect(requiredSectionKeys("ccd")).toEqual(["allergies", "medications", "problems", "results"]);
+    // The CCD SHALL set is SIX sections, read off the normative C-CDA R2.1
+    // Schematron's CCD (V3) errors rule: Allergies CONF:1198-30662, Medications
+    // -30664, Problem -30666, Results -30670, Social History -30688, Vital Signs
+    // -30690. Procedures (-30668) and Plan of Treatment (-30686) are SHOULD (they
+    // live in the *warnings* rule), so neither belongs here.
+    expect(requiredSectionKeys("ccd")).toEqual([
+      "allergies",
+      "medications",
+      "problems",
+      "results",
+      "socialHistory",
+      "vitalSigns",
+    ]);
     expect(requiredSectionKeys("progressNote")).toEqual([]);
+  });
+
+  it("keeps the parser's CCD SHALL table in lockstep with what the builder emits", () => {
+    // The defect this pins: `build-ccda.ts` named five SHALL sections (including
+    // vitalSigns) while this table named four (excluding it), so `buildCcda`
+    // always emitted Vital Signs while `parseCcda` stayed silent when a
+    // third-party CCD lacked one. Both are now the Schematron's six. A freshly
+    // built, entirely empty CCD must therefore satisfy its own SHALL set.
+    // `buildCcda` returns an already-parsed CcdaDocument, so its `warnings` are
+    // the parser's own reading of what the builder just emitted.
+    const doc = buildRealCcda({ patient: { mrn: "M" } });
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.REQUIRED_SECTION_MISSING);
+    for (const key of requiredSectionKeys("ccd")) {
+      expect(doc.findSection(key)).toBeDefined();
+    }
   });
 
   it("asserts Reason for Referral in the Referral Note SHALL set (CONF:1198-30925)", () => {
@@ -379,9 +429,19 @@ describe("required-section (SHALL) validation", () => {
     expect(missingRequiredSections("ccd", new Set(["allergies", "problems"]))).toEqual([
       "medications",
       "results",
+      "socialHistory",
+      "vitalSigns",
     ]);
+    // The old four-key present-set is no longer complete: Social History and
+    // Vital Signs are SHALL too (CONF:1198-30688 / -30690).
     expect(
       missingRequiredSections("ccd", new Set(["allergies", "medications", "problems", "results"])),
+    ).toEqual(["socialHistory", "vitalSigns"]);
+    expect(
+      missingRequiredSections(
+        "ccd",
+        new Set(["allergies", "medications", "problems", "results", "socialHistory", "vitalSigns"]),
+      ),
     ).toEqual([]);
   });
 

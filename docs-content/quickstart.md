@@ -115,6 +115,41 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
       </organizer></entry>
     </section></component>
     <component><section>
+      <templateId root="2.16.840.1.113883.10.20.22.2.4" extension="2015-08-01"/>
+      <templateId root="2.16.840.1.113883.10.20.22.2.4.1" extension="2015-08-01"/>
+      <code code="8716-3" codeSystem="2.16.840.1.113883.6.1"/>
+      <title>Vital Signs</title>
+      <text><content ID="vit1">Heart rate: 72 /min</content></text>
+      <entry><organizer classCode="CLUSTER" moodCode="EVN">
+        <templateId root="2.16.840.1.113883.10.20.22.4.26" extension="2015-08-01"/>
+        <code code="46680005" codeSystem="2.16.840.1.113883.6.96" displayName="Vital signs"/>
+        <statusCode code="completed"/>
+        <effectiveTime value="20240101120000-0500"/>
+        <component><observation classCode="OBS" moodCode="EVN">
+          <templateId root="2.16.840.1.113883.10.20.22.4.27" extension="2014-06-09"/>
+          <code code="8867-4" codeSystem="2.16.840.1.113883.6.1" displayName="Heart rate"/>
+          <text><reference value="#vit1"/></text>
+          <statusCode code="completed"/>
+          <effectiveTime value="20240101120000-0500"/>
+          <value xsi:type="PQ" value="72" unit="/min"/>
+        </observation></component>
+      </organizer></entry>
+    </section></component>
+    <component><section>
+      <templateId root="2.16.840.1.113883.10.20.22.2.17" extension="2015-08-01"/>
+      <code code="29762-2" codeSystem="2.16.840.1.113883.6.1"/>
+      <title>Social History</title>
+      <text><content ID="soc1">Never smoker</content></text>
+      <entry><observation classCode="OBS" moodCode="EVN">
+        <templateId root="2.16.840.1.113883.10.20.22.4.78" extension="2014-06-09"/>
+        <code code="72166-2" codeSystem="2.16.840.1.113883.6.1" displayName="Tobacco smoking status"/>
+        <text><reference value="#soc1"/></text>
+        <statusCode code="completed"/>
+        <effectiveTime value="20240101"/>
+        <value xsi:type="CD" code="266919005" codeSystem="2.16.840.1.113883.6.96" displayName="Never smoker"/>
+      </observation></entry>
+    </section></component>
+    <component><section>
       <templateId root="2.16.840.1.113883.10.20.22.2.2.1" extension="2015-08-01"/>
       <code code="11369-6" codeSystem="2.16.840.1.113883.6.1"/>
       <title>Immunizations</title>
@@ -168,7 +203,14 @@ result?.interpretation?.code; // => "N"
 // Immunizations: the CVX vaccine code.
 doc.getImmunizations()[0]?.vaccine?.code; // => "140"
 
-// Clean, spec-conformant input: nothing tolerated, nothing flagged.
+// Vital Signs and Social History complete the CCD's six SHALL sections.
+doc.getVitals()[0]?.vitals[0]?.code?.code; // => "8867-4"
+doc.getSmokingStatus()[0]?.value?.code; // => "266919005"
+
+// Clean, spec-conformant input: nothing tolerated, nothing flagged. This sample
+// carries all six sections a CCD SHALL contain -- Problems, Medications,
+// Allergies, Results, Social History and Vital Signs -- so no
+// REQUIRED_SECTION_MISSING warning fires.
 doc.warnings.length; // => 0
 ```
 

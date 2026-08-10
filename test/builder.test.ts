@@ -959,11 +959,38 @@ describe("buildCcda, social history (smoking status) round-trip", () => {
     expect(status?.effectiveTime?.nullFlavor).toBe("UNK");
   });
 
-  it("does NOT emit a Social History section when none is supplied", () => {
+  it("emits an empty nullFlavor=NI Social History section when none is supplied", () => {
+    // Social History (V3) IS a CCD SHALL section (CONF:1198-30688), so it is
+    // always emitted for a CCD. Empty means a spec-clean nullFlavor="NI" shell,
+    // exactly as for the other five: the section's own errors rule demands only
+    // code/title/text (CONF:1198-14819 / -7938 / -7939) and its Smoking Status
+    // entry is SHOULD (CONF:1198-14823), so the shell asserts no clinical fact.
     const doc = buildCcda({ patient: { mrn: "M" } });
-    expect(doc.findSection("socialHistory")).toBeUndefined();
+    expect(doc.findSection("socialHistory")).toBeDefined();
+    // Still no fabricated smoking status: an NI shell carries no entry.
     expect(doc.getSmokingStatus()).toEqual([]);
-    expect(serializeCcda(doc)).not.toContain('code="29762-2"');
+    const xml = serializeCcda(doc);
+    expect(xml).toContain('code="29762-2"');
+    // The Social History Section template has no entries-required variant, so the
+    // shell carries the very @root/@extension pair CONF:1198-30688 names.
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.17" extension="2015-08-01"');
+    expect(xml).not.toContain('root="2.16.840.1.113883.10.20.22.2.17.1"');
+  });
+
+  it("emits the Social History section exactly once when a smoking status IS supplied", () => {
+    // Regression guard: Social History is now emitted by the SHALL loop, and the
+    // populated-only conditional that used to emit it still exists for the
+    // document types whose SHALL set excludes it. Without the `shall.has` guard
+    // on that conditional, a CCD carrying a smoking status emits the section
+    // TWICE.
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      smokingStatus: [{ value: { code: "266919005", displayName: "Never smoker" } }],
+    });
+    const xml = serializeCcda(doc);
+    expect(xml.split('code="29762-2"').length - 1).toBe(1);
+    expect(doc.getSmokingStatus()).toHaveLength(1);
+    expect(doc.warnings).toEqual([]);
   });
 
   it("does not flag the smoking-status entry as misplaced (it homes to Social History)", () => {
