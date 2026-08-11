@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.0.15
+
+### Patch Changes
+
+- d3807af: PHI scanner: the repository-wide sweep now reads the bytes git carries, as a union with the working-tree walk.
+
+  `pnpm phi-scan` with no arguments (the sweep CI runs) enumerated the working tree and nothing else. Where the working tree and the index disagree, the walk was the only voice, so the gate could print `OK, no hits` and exit 0 over tracked content it never opened. Four such states were reproduced on the previous release, each over a tracked file holding a whole synthetic patient identity: the path occupied by a directory, the path under a name the walk skips wholesale (`dist`, `coverage`, `.cache` and the rest), the working tree missing almost every tracked file, and a submodule whose working tree is absent. No such content existed in this package; the states were reproduced rather than found.
+
+  The sweep now also scans the stage-0 blob of every tracked path whose bytes the walk did not already read. Deduplication is by content rather than by path, so a clean checkout reads nothing twice, and a path whose two copies differ (end-of-line normalization, a scrubbed working copy) has both scanned rather than one standing in for the other. A hit found this way names its locus as `<path> (as git carries it)`.
+
+  Three new refusals, all exit 2. A tracked path git records as a symbolic link or as a submodule carries no content to scan there; an unmerged path has no single merged blob, only two sides and their base, and is refused under its own message; and a sweep cannot run at all when git will not name the index or names it empty. No refusal ever prints a link target.
+
+  The suite now carries a positive control: it copies every tracked file into a throwaway repository, reproduces the clean result over it, and then proves the same sweep fires on that corpus with one synthetic marker planted, once on disk and once reachable only through git. A clean report is a decision, not an absence.
+
+- 498ef6d: Docs: name the real reason the branch-and-merge fixture went red, and drop the reading that said the index came back empty.
+
+  The note and the test comment covering the unmerged-index case both explained the red CI run as `git ls-files -s` returning no records for the path at all. That is false. The run's own output reads `expected [ Array(1) ] to have a length of 3 but got 1`, and the calls above it assert a clean exit on the add and the commits, so a stage-0 record necessarily existed. What actually happened is that the draft handed its `git merge` no committer identity, so the merge died before it touched the index and left the record the last commit wrote; the premise assertion, written as "not zero means it conflicts", accepted that crash as a conflict. A premise assertion that accepts any non-zero exit accepts a crash.
+
+  No behavior change: the scanner, the fixture and every assertion are untouched.
+
 ## 0.0.14
 
 ### Patch Changes
