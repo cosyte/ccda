@@ -1602,8 +1602,7 @@ describe("phi-scan: the all-mode sweep reads the bytes git carries", () => {
     //
     // THE STAGES ARE WRITTEN WITH `update-index`, NOT PRODUCED BY A REAL MERGE,
     // AND THAT IS A CORRECTNESS FIX RATHER THAN A SHORTCUT. A draft built them
-    // by branching and merging; it passed here and went RED IN CI, where
-    // `ls-files -s` came back with no records for the path at all, so the case
+    // by branching and merging; it passed here and went RED IN CI, so the case
     // was grading the fixture's environment rather than the scanner. What the
     // scanner is about is an INDEX HOLDING NO STAGE-0 RECORD FOR A PATH, and
     // that state is what this writes, directly and identically everywhere. It is
