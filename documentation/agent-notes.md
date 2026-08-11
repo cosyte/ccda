@@ -2118,6 +2118,67 @@ non-regular branch, not on `isFile()`). It is harmless - the file holds a `gitdi
 direction is more scanning than claimed, never less. Reproduced on this repo's checkout under the
 meta-repo; a standalone clone has a real `.git` directory and never reaches it.
 
+## The completeness rule
+
+`PHI-SCAN`'s second half, closed here 2026-08-11. It is independent of the union half above and was
+still live after it: **CI could print a clean verdict over a corpus it never opened.** **The rule
+itself, the four argv shapes it closes, what it costs and why the comparison is a set difference are
+stated ONCE, in `scripts/phi-scan.ts`'s docblock.** This section carries what a docblock cannot: what
+was measured here, and which claims were checked rather than inherited.
+
+**THE DEFECT WAS REPRODUCED IN THIS FILE, NOT PORTED AS A STORY.** `--allow-fixture` withdrew a path
+from the target list and the run reported on whatever remained, so the withdrawal was invisible in
+the verdict. Four argv shapes reached `OK, no hits` at exit 0 over a corpus holding a live, detectable
+violator, and the subtlest of them is the one a reader will miss: the seed read
+`paths.length > 0 ? paths : [...allowFixtures]`, so with any positional path present the flag was a
+silent no-op and the named file was never ADMITTED to the run rather than withdrawn from it. All four
+are enumerated in the docblock and all four are pinned by test.
+
+**AND AGAIN, THE HONEST ANSWER IS A NULL RESULT: THERE WAS NO REAL UNREAD CORPUS HERE.** Measured on
+this branch with the rule in place, `all` mode enumerates 140 paths and reads all 140, with nothing
+tolerated and nothing unread, so the sweep exits 0 on its own corpus. That 140 is **not** the tracked
+count wearing a different hat, and the arithmetic is written out because it looks like a coincidence:
+140 tracked, minus the one declared literal exclusion, is 139 in-scope tracked paths reached by both
+the walk and the union, plus the `.git` **gitfile** this submodule checkout carries in place of a
+directory (the pre-existing, filed observation in the section above). Both figures were taken with two
+tools, because `grep -c` has mis-reported a zero on this class three times. **`ncpdp` reproduced the
+same null result on the union half, so the fleet premise that "every repo is hiding something" is now
+broken twice. Do not manufacture a gap to match a sibling.**
+
+**WHAT IT COSTS THIS REPO, STATED RATHER THAN LEFT TO BE DISCOVERED. `--allow-fixture` CAN NO LONGER
+REACH EXIT 0 IN ANY MODE.** The flag, `phi-scan-overrides.md` and the log gate all stay, so an attempt
+is RECORDED AND REFUSED rather than silently honored, and `scripts/phi-allow-list.txt` is now the only
+mechanism that reaches a clean run. The hit footer stopped advertising the flag as a remedy for the
+same reason: a printed remedy that walks a developer from exit 1 into exit 2 is the same defect as one
+that reaches a false green, with the sign flipped. **The log gate did not become decorative and the
+test that used to assert "honors a logged bypass, exit 0" now asserts it reaches a DIFFERENT refusal**,
+which is the boundary between the two tiers.
+
+**THE VANISH TOLERANCE IS THE ONE ACCOUNTED-FOR NON-READ, AND SUBTRACTING IT IS A DECISION.** A target
+skipped under `Target.tolerateVanish` is excluded from the unread difference, or the `ccda@0.0.5`
+publish-time refusal would come straight back. It cannot launder a bypass: an `--allow-fixture` path is
+skipped BEFORE `scanTarget` is ever called, so it can never enter the vanished set, and the tolerance
+is bounded to an untracked file the walk enumerated itself that failed with `ENOENT`. **If you widen
+that tolerance, you widen this hole in the same edit.**
+
+**⚖️ THE POSITIVE CONTROL IS THE POINT, AND IT IS BUILT AGAINST THIS REPO'S OWN CAUTIONARY LINEAGE.**
+`#110`'s final fix shipped ungraded and `#111` found that its branch-and-merge fixture had gone red on
+a **committer identity** (`git merge` dying at exit 128 before it touched the index) while an
+`expect(...).not.toBe(0)` waved it through. **A premise assertion that accepts any non-zero exit
+accepts a crash**, and this scanner has three distinct exit-2 tiers, so every assertion in the new
+block pins an exact code AND the message that names the tier. The control itself runs the same argv
+against a copy of the scanner with the rule's one line mutated out, asserts the mutation landed (so it
+cannot go vacuous when the rule is reworded), and asserts the mutant reproduces both pre-fix results
+exactly: the HITS code where the corpus still holds a readable violator, and `OK, no hits` at exit 0
+where it does not. Re-run against the pre-change scanner, seven of the nine new cases red and the two
+that pass are the anti-vacuity premise and the no-false-refusal case, which must hold on both trees.
+
+**THE EXTERNAL DEFINITION OF DONE.** `config`'s `pnpm drift` runs a capability PROBE, not a regex over
+this file's prose, and it named this repo's drift as "reported only its HITS code (1) over a run that
+withdrew `test/fixtures/phi-scan-probe-decoy.txt` after enumerating it". It is `ok` here now. **The
+probe grades behaviour on purpose: this class has produced defects that lived entirely in a prose
+carrier while the code was right, so matching prose would grade the comment.**
+
 ## The agent-notes contract gate
 
 `CLAUDE-MD-AUDIT` (2026-08-04) split this file out of `CLAUDE.md` and nothing checked the result.

@@ -1824,7 +1824,16 @@ describe("phi-scan: the completeness rule", () => {
     );
     gitIn(d, ["init", "-q"]);
     gitIn(d, ["add", "-A"]);
-    gitIn(d, ["-c", "user.name=vitest", "-c", "user.email=vitest@example.invalid", "commit", "-qm", "corpus", "--no-verify"]);
+    gitIn(d, [
+      "-c",
+      "user.name=vitest",
+      "-c",
+      "user.email=vitest@example.invalid",
+      "commit",
+      "-qm",
+      "corpus",
+      "--no-verify",
+    ]);
     return d;
   }
 
