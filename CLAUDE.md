@@ -269,8 +269,8 @@ immutability + explicit mutation, and the profile system.
   Why: `documentation/agent-notes.md#the-public-surface-gate`
 - **Em-dash gate present AND BLOCKING.** `U+2014` is banned outright by founder directive, and
   **when it goes red the fix is never to re-encode the character**: rewrite with a period, colon,
-  comma or parentheses. It is a required status check via the repository-level
-  `emdash-required-check` ruleset; **re-read the rulesets rather than this line.** It scans every
+  comma or parentheses. `no-emdash` is required via the repository-level `emdash-required-check`
+  ruleset; **re-read the rulesets rather than this line.** It scans every
   tracked file **except the script itself**, **and** the PR title, body and commit messages, so
   **keep the script free of the literal character.** **It is the text-only variant, and dropping
   `grep -I` is the load-bearing part** (`src/profiles/merge.ts` carries raw NULs and would otherwise
@@ -298,8 +298,8 @@ immutability + explicit mutation, and the profile system.
   THIS repo promises, never a fleet universal**: `config`, `hl7` and `workflow` carry no
   `agent-notes.md` at all. **Do not promote it to an umbrella script.** It scans **EVERY tracked
   file, no exclusion list: do not re-add a binary/NUL skip** - the first cut had one and silently
-  exempted `src/profiles/merge.ts`. The bare `` `#anchor` ``
-  form is confined to `CLAUDE.md` by shape and scope and **must not be widened** (`#id`/`#62` are
+  exempted `src/profiles/merge.ts`. The bare `` `#anchor` `` form is
+  confined to `CLAUDE.md` by shape and scope and **must not be widened** (`#id`/`#62` are
   XML and C-CDA narrative references). **Never delete an imperative or a section to get green.**
   Why: `documentation/agent-notes.md#the-agent-notes-contract-gate`
 
@@ -351,10 +351,11 @@ a summary.
   token.** **`.npmignore` versus `files` is about the file's DEPTH, not its existence.**
   `test/scripts/attw-gate.test.ts` pins two of the three, the upstream exit-0 itself, a real failure
   and a negative control; **the printed-nothing backstop is pinned by NO test, a stated gap rather
-  than an oversight. Do not carry the test file's "16 of 21" figure forward, re-measure it.** **Per-repo
-  script**; a sibling still on the bare CLI still has the defect. Write no repo count here, derive
-  it. The meta-repo's `scripts/verify.sh` **must not be touched** for this. **The guard is described in four committed files and three corrections have landed in some
-  copies and not others: prefer CUTTING a copy to adding a more careful one.**
+  than an oversight. Do not carry the test file's "16 of 21" figure forward, re-measure it.**
+  **Per-repo script**; a sibling still on the bare CLI still has the defect. Write no repo count,
+  derive it. The meta-repo's `scripts/verify.sh` **must not be touched** for this. **The guard is
+  described in four committed files and three corrections have landed in some copies and not
+  others: prefer CUTTING a copy to adding a more careful one.**
   Why: `documentation/agent-notes.md#the-attw-wrapper-script`
 
 ## Standing disciplines (every change)
