@@ -1935,10 +1935,179 @@ argued, and independently reproduced by the refuter: `EACCES` off `readdirSync` 
 route. So **2**, as `hl7` / `fhir` / `cli` / `dicom` and not `terminology`'s 1, but arrived at from
 this repo's own net.
 
-**🔴 THE ESCAPE THIS DOES NOT CLOSE, AND NO REPO HAS.** The gate has no reconciliation against
-`git ls-files` at all, so it does not even reach the sibling residual where a reconciliation compares
-path SETS rather than the bytes git carries at those paths. What widening buys here is narrowness:
-the corpus a decoy would have to mirror to keep the gate quiet went from 96 files to 139.
+**🟢 THE ESCAPE THIS DID NOT CLOSE IS NOW CLOSED, AND THE LINE THAT NAMED IT IS SUPERSEDED RATHER
+THAN DELETED.** It read: the gate has no reconciliation against `git ls-files` at all, so it does not
+even reach the sibling residual where a reconciliation compares path SETS rather than the bytes git
+carries at those paths; what widening buys here is narrowness, the corpus a decoy would have to
+mirror going from 96 files to 139. **That was true and it is no longer the state.** The sweep now
+reads the bytes git carries as a union with the walk. See
+`#the-all-mode-sweep-reads-the-bytes-git-carries`.
+
+## The all-mode sweep reads the bytes git carries
+
+`PHI-SCAN`, the union half, closed here 2026-08-11. **The rule, what it costs, and why the
+deduplication is by content are stated ONCE, in `scripts/phi-scan.ts`'s docblock.** This section
+carries what a docblock cannot: what was measured, what the premise got right and wrong, and which
+sibling lessons did not port.
+
+**THE PREMISE HELD ON SHAPE AND FAILED ON OUTCOME, AND BOTH HALVES MATTER.** The dispatch premise was
+"2 `ls-files`, 0 `reconcile`, 0 `WALK_ROOT`, 11 `execFileSync`, so close to the ABSENCE shape". Every
+one of those numbers re-measured correct here, with two tools (`rg` and a Node read, because `grep -c`
+has now mis-reported a zero three times on this class). The single `ls-files` call fed
+`Target.tolerateVanish` and nothing else; there was no reconciliation of any kind.
+
+**BUT THE OUTCOME DID NOT MATCH THE SIBLINGS AND THE HONEST ANSWER IS THE NULL RESULT.** `hl7`,
+`mllp`, `astm` and `deid` each found real unscanned corpus sitting in the tree. **`ccda` had none.**
+Measured on `dbdf84d`: 140 tracked paths, 140 enumerated by the walk, the only tracked path no
+sweeping route opens is `test/scripts/phi-scan.test.ts` (the one declared literal exclusion), and all
+140 index blobs are byte-identical to the working tree. **Nothing was hiding. The walk here has been
+rooted at the repo root since before this class was filed, and the corpus is ordinary.** Reporting
+that is the finding; manufacturing a gap to match a sibling's would not have been.
+
+**WHAT THE UNION CLOSES HERE IS THE STATE SPACE, NOT A LIVE GAP, AND FOUR STATES WERE REPRODUCED ON
+BASE AT `exit 0` WITH `OK, no hits`**, each over a TRACKED file holding a whole synthetic patient
+identity (name, DOB, SSN by OID, bare-numeric MRN, street, city, postal code, non-555 telecom):
+
+1. **THE PATH IS OCCUPIED BY A DIRECTORY.** `git ls-files` still names the path, `Dirent.isFile()` is
+   false, `walk` descends into the directory and scans what is inside, and the tracked blob is never
+   read. **This is the decoy-contents shape the class says no repo has closed, and it is the reason
+   the remedy had to read OBJECTS rather than re-read paths: a path-set reconciliation cannot see it,
+   because the path IS present.**
+2. **THE PATH IS UNDER A `WALK_SKIP_DIRS` NAME.** That set is matched by NAME at any depth, so a
+   tracked file at `dist/...`, `coverage/...`, `.cache/...` is dropped before a byte is read. Nothing
+   tracks such a path today; nothing stops one being added, and the drop is silent.
+3. **THE WORKING TREE IS SHORT.** Removing 137 of the 140 tracked files still printed `OK, no hits`
+   at exit 0. **The floor-of-one only asks that SOMETHING was observed, and a count counts the files
+   that DID exist.** This repo was NOT the `deid` absence shape on this axis: it already had the
+   floor, and the floor is exactly what failed to notice.
+4. **A GITLINK'S WORKING TREE IS ABSENT.** `git ls-files` names the path, the walk finds nothing
+   there, and no route said so. It now refuses, under the same rule and the same closed-set token the
+   `--staged` route already used for mode `160000`.
+
+**🛑 THE STATES A ROUTE CLOSES ARE PER-REPO AND A SIBLING'S NOTE DOES NOT NAME THEM.** None of the
+above is the "tracked files outside every walk root" shape `astm` and `deid` closed, because that
+shape cannot exist in a repo-rooted walk. `deid`'s corpus-partition lesson (a NUL-bearing-file skip
+dropping hand-written sources) has no analogue either: this scanner has no binary skip to get wrong,
+and the two exemptions it does have are LITERAL PATHS. **Nothing was credited to this route that was
+already closed here.**
+
+**🛑 THE SHAPE OF THE REMEDY WAS TAKEN FROM THIS REPO, NOT FROM A SIBLING.**
+`scripts/check-agent-notes-contract.mjs` already enumerates from `git ls-files` and RECONCILES,
+refusing on an unreadable tracked file and on an empty index. The union follows that shape
+deliberately, including refusing the empty-index state, so the two corpus gates in this repo answer
+"what does this repository carry" the same way. **It goes one step further than that precedent,
+which reads the WORKING TREE at each tracked path: reading `git cat-file blob <oid>` names the
+object, so state 1 above cannot redirect it.**
+
+**DEDUPLICATION IS BY CONTENT AND THAT IS THE EOL AXIS, RE-DERIVED RATHER THAN INHERITED.** A walk
+target is skipped by the union only when the bytes it read hash to the index entry's own object id
+under git's `blob <len>\0` framing, so **on a clean checkout the union adds zero reads and never
+invokes `git cat-file`** (measured with a logging `git` shim, and a test pins it). **BE EXACT ABOUT
+THE FIXED COST RATHER THAN SAYING "no subprocess", WHICH THREE DRAFTS OF THIS SLICE SAID AND THE
+REFUTER MEASURED FALSE:** the union adds ONE `git rev-parse --show-object-format` per run, always,
+because the dedup needs the algorithm before it can compare anything. On this repo's clean checkout:
+**two `git` calls before this change, three after.**
+Where the two copies differ, BOTH are scanned. That is what makes it correct under EOL normalization
+rather than merely untested by it. **This repo has NO `.gitattributes` and no `core.autocrlf`
+setting, and all 140 blobs measured byte-identical, so today the union is free. That is a
+measurement, not a guarantee, and it is why the dedup is on content and not on path.**
+
+**THE OBJECT FORMAT IS ASKED FOR, NOT ASSUMED.** `git rev-parse --show-object-format` arrived
+together with sha256 support, so a git too old to answer it cannot be a sha256 repository and the
+sha1 fallback is a derivation. **An answer we do not recognise disables deduplication rather than
+guessing, which scans MORE, never less.**
+
+**A REPORTED LOCUS SAYS WHICH COPY LEAKED.** A union target's hits are reported at
+`<path> (as git carries it)`. The `path` itself is deliberately left undecorated, because it is what
+`EXCLUDED_PATHS`, `STRUCTURED_EXEMPT_PATHS` and `looksLikeCda` key on, so decorating it would
+silently re-scope a target rather than re-label it. **A diagnostic naming a file the reader then
+opens and finds clean is the same defect as one pointing at a symbolic link that is not there**,
+which is the reason `refuseUnscannable` already takes an overridable noun.
+
+**THREE PINNED CASES CHANGED THEIR MESSAGE AND ONE HAD TO BE REBUILT. SAY WHICH AND WHY.** `all` mode
+now needs the index for the union, so a missing or empty index refuses the SWEEP before any byte is
+read instead of refusing the vanish TOLERANCE at the first bad read: same exit 2, earlier, with a
+message that names the real cause. The two tolerance cases assert the new message rather than being
+widened to accept either. **The observed-nothing floor had to be rebuilt to stay reachable**: it used
+to be driven by an empty index, which is now refused one step sooner, so it is now driven by an index
+holding nothing but the one literally EXCLUDED path. **The branch was kept and re-pinned rather than
+deleted as unreachable** - it is a cheap standing guard, and deleting a trap to get green is the one
+move this repo does not make.
+
+**🛑 THE ORDER OF THE `git` CALLS IN `buildTargetsForAll` IS LOAD-BEARING AND IS PINNED BY TEST.**
+Every one of them happens AFTER the walk lists the tree and BEFORE the first byte is read, which is
+what makes the enumerate-then-read window a deterministic hook for the TOCTOU cases (a `git` shim on
+`PATH`). **A first draft read the index in `main`, before the walk, and silently closed that window:
+three TOCTOU cases went green by never reaching the state they exist to pin.** They failed loudly
+here only because they assert the message and not just the code.
+
+**THE POSITIVE CONTROL, BECAUSE A DETECTOR ZERO CAN BE A GAP RATHER THAN A CLEARANCE.** The suite
+copies every file this repo tracks into a throwaway git repo, runs the REAL sweep over it and
+reproduces the clean result, then plants ONE synthetic marker and proves the same sweep exits 1 -
+**once with the marker on disk (the walk half) and once with it committed and then removed from disk,
+so only the index can reach it (the union half).** The copy is used rather than the repo itself so a
+marker is never written where a commit or a parallel worker could see it. **Without this pair, the
+`OK, no hits` line above is indistinguishable from a scanner that stopped reading.**
+
+**🛑 THE AXIS THAT DID NOT PORT, AND IT WAS CAUGHT BY THE REFUTER RATHER THAN BY THE BUILD.** The
+non-blob refusal was taken from the `--staged` route, and the state that route detects is NOT
+detectable the same way here. **`--staged` spots an unmerged path from `--raw`'s status `U` and a
+destination mode of `000000`. `git ls-files -s` reports the same path only at stages 1, 2 and/or 3 and
+NEVER at stage 0, and its records normally carry ORDINARY BLOB MODES**, so the mode rule cannot see it
+at all. The first
+draft took the first record per path and never read the stage digit it was already capturing. It cost
+two measured things: **stage 1, THE MERGE BASE, was scanned and reported as `(as git carries it)`**,
+which is a claim about content no side of the conflict holds; and **a marker living only in stage 3
+printed `OK, no hits` at exit 0.** The union now keys on stage 0 and refuses a path that has none,
+under the same NOUN `--staged` already uses (the sentences differ deliberately, because the two
+routes learn the state from different commands).
+
+**🛑 THE RULE IS THE ABSENCE OF STAGE 0, WHICH IS SHAPE-INDEPENDENT. DO NOT RE-DERIVE IT FROM A
+RECORD COUNT OR FROM A MODE.** The paragraph above first asserted the unhedged form of both, and a
+refuter falsified each in one run: **add/add and modify/delete conflicts carry TWO records, not
+three, and a symlink-versus-file conflict carries a `120000` record.** The code was right in every
+one of those shapes precisely because it keys on the absence, so this was a diagnostic-accuracy
+defect and not a safety one. **THIS SLICE WROTE A COUNT INTO PROSE AND HAD IT FALSIFIED THREE TIMES**
+(routes, call sites, conflict records). **The file's own WRITE NO COUNT rule is the whole remedy; do
+not grow a guard for it.** The `refuseUnscannable` docblock lost its "two groups is the ceiling" line
+to the same defect, one function over, when the union added a third group under it.
+
+**The stage-3 silence was
+`PRE-EXISTING` (base is identically quiet) and closing it fell out of making the docblock's own
+authoritative sentence true; it is not credited as this route's find.** **This is the item's
+"THE PORT IS NOT A COPY" rule paying out inside the one axis the acceptance criterion names.**
+
+**🛑 BUILD AN INDEX STATE WITH `git update-index --index-info`, NEVER BY BRANCHING AND MERGING, AND
+THIS COST A RED CI RUN.** The first version of the unmerged case produced its stages by making two
+branches conflict. It passed locally and **went RED on both CI runners, where `git ls-files -s` came
+back with no records for the path at all** - so the case was grading the fixture's environment rather
+than the scanner, and it would have gone on doing that in whichever direction the runner happened to
+fall. **The state the scanner is about is "an index holding no stage-0 record for a path", so write
+exactly that**: `git hash-object -w --stdin` for each side, then `update-index --index-info`. It is
+identical everywhere, needs no committer identity, no default-branch name and no merge driver, and it
+is the same index a real `git merge` produces (verified by hand against one). **The premise assertion
+now prints what `ls-files -s` actually said**, so the next failure names its own cause.
+
+**RESIDUALS, DISCLOSED RATHER THAN CLOSED.** `git cat-file blob` inherits `execFileSync`'s 1 MiB
+`maxBuffer`, so a tracked blob larger than that REFUSES (exit 2) rather than reporting a truncated
+scan clean - the identical bound, and the identical trade, as the `git show` call `--staged` makes,
+and reached only for a path the walk did not already cover. **The mitigation "reached only for a path
+the walk did not already cover" is WEAKEST in exactly the EOL scenario this section argues for**,
+where every text path diverges and therefore qualifies; no live exposure today, the largest tracked
+blob being 263,368 bytes. **`ls-files` was given 64 MiB instead, and the asymmetry is deliberate: a
+truncated LIST is a SHORT list, and a short list is the unscanned corpus this whole rule is about.**
+**And `--staged` and `paths` were re-derived and
+deliberately left alone**: `--staged` already reads stage-0 blobs for exactly the records a commit
+carries, so widening its SCOPE is the hook decision this class has declined three times, and `paths`
+is bounded by an argv a human typed. **`mllp`'s characterization case, which asserts `exit 0` over
+PID bytes under its own tier rule, was NOT copied: this repo's tier rule differs and those bytes exit
+1 here.**
+
+**PRE-EXISTING, FILED NOT FIXED: in a SUBMODULE checkout `.git` is a FILE, not a directory**, so the
+walk enumerates and scans it (`WALK_SKIP_DIRS` is consulted on the `isDirectory()` branch and on the
+non-regular branch, not on `isFile()`). It is harmless - the file holds a `gitdir:` pointer - and the
+direction is more scanning than claimed, never less. Reproduced on this repo's checkout under the
+meta-repo; a standalone clone has a real `.git` directory and never reaches it.
 
 ## The agent-notes contract gate
 
