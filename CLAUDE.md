@@ -61,8 +61,7 @@ immutability + explicit mutation, and the profile system.
     Why: `documentation/agent-notes.md#the-64-unresolvable-example-imports`
   - **Recognition resolves a disagreeing section silently, in BOTH of its two shapes, with no
     warning**: `templateId` vs LOINC resolves on the root, and root vs root resolves on document
-    order. Scope any eventual warning code to **both** halves. No clinical fact is lost meanwhile:
-    `extractClinical` runs every extractor on every section regardless of `key`.
+    order. Scope any eventual warning code to **both** halves.
     Why: `documentation/agent-notes.md#section-recognition-resolves-a-disagreement-silently`
   - A `TerminologyAdapter` is consulted at the **five `CodeSlot`s only** (`problem`, `medication`,
     `allergen`, `route`, `vaccine`), on the slot's primary coding; `<translation>` alternates are
@@ -283,12 +282,16 @@ immutability + explicit mutation, and the profile system.
   text only and does not rewrite history.**
   Why: `documentation/agent-notes.md#the-em-dash-gate`
 - **`phi-scan` scans EVERY tracked file now, markdown included; the two exemptions are literal
-  paths, and writing docs is inside the gate.** 44 of 140 files were in neither SWEEPING route (the
-  sibling walk-root defect was absent: this walk is repo-rooted). **THERE ARE THREE ROUTES, not two**
+  paths, and writing docs is inside the gate.** **THERE ARE THREE ROUTES, not two**
   (`paths` is the third; miscounting them shipped an `INTRODUCED`, twice). **Never widen
   `isSourceCode`: it also SUBTRACTS the structured scan in `looksLikeCda`.** A refusal exits **2**.
   **Write no count in this area; three drafts wrote one and were wrong.**
   Why: `documentation/agent-notes.md#the-corpus-every-phi-scan-route-read-past`
+- **`all` mode UNIONS the bytes git carries with the walk, deduped by CONTENT not path (the EOL
+  axis). Keep every `git` call in `buildTargetsForAll` AFTER the walk and BEFORE the first read; do
+  not decorate `Target.path`. A non-blob index mode or an EMPTY index refuses. `ccda` had NO real
+  unscanned corpus: the four states were reproduced, not found.**
+  Why: `documentation/agent-notes.md#the-all-mode-sweep-reads-the-bytes-git-carries`
 - **The `CLAUDE.md` / `agent-notes.md` contract is gated, and unlike the public-surface gate above
   it BLOCKS** (it runs in the test suite, inside `parser-ci-required-checks`). **It asserts what
   THIS repo promises, never a fleet universal**: `config`, `hl7` and `workflow` carry no
@@ -342,9 +345,7 @@ a summary.
   `pnpm test:coverage`; the gated directories are declared in `vitest.config.ts` (`coverageDirs`)
   and you **add one there when you add one under `src/`**.
 - **`attw` SAYS "does not contain types" AND EXITS 0, SO THE `attw` SCRIPT IS A WRAPPER, NOT THE
-  BARE CLI** (`ATTW-FALSE-GREEN-PORT`). **A false red costs an hour; a false green merges.** The
-  race only supplies the condition; it is not the defect, so **the answer is not a lock, a lease or
-  a build queue** - the gate must be able to say its own inputs were missing, whatever removed them.
+  BARE CLI** (`ATTW-FALSE-GREEN-PORT`). **A false red costs an hour; a false green merges.**
   `scripts/attw.mjs` carries **THREE guards, not two**. **Blinding options are refused BY OPTION
   NAME, wholesale, not by value, and short options BY LETTER ANYWHERE IN THE CLUSTER, not by whole
   token.** **`.npmignore` versus `files` is about the file's DEPTH, not its existence.**

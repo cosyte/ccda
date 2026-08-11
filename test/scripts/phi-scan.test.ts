@@ -611,9 +611,15 @@ describe("phi-scan: enumeration TOCTOU", () => {
     expect(r.stderr).toMatch(/EISDIR/);
   });
 
-  it("REFUSES the tolerance outright when git cannot say what is tracked", () => {
-    // Fail closed: with no tracked set there is no way to tell a build transient
-    // from committed content, so nothing is tolerated.
+  it("REFUSES the whole sweep when git cannot say what is tracked", () => {
+    // Fail closed. The bound this case has always been about is unchanged: with
+    // no tracked set there is no way to tell a build transient from committed
+    // content. WHERE IT IS ENFORCED MOVED, and the assertion moved with it
+    // rather than being widened to accept both: `all` mode now also needs the
+    // index for its union half, so a missing index refuses the SWEEP before any
+    // byte is read instead of refusing the TOLERANCE at the first bad read. The
+    // outcome a developer sees is the same exit 2, earlier and with a message
+    // that names the real cause.
     const repo = makeScanRepo({ git: false });
     const decoy = join(repo, BUNDLED);
     writeFileSync(decoy, "export default {};\n");
@@ -621,28 +627,43 @@ describe("phi-scan: enumeration TOCTOU", () => {
       GIT_CEILING_DIRECTORIES: tmpdir(),
     });
     expect(r.code, `stderr: ${r.stderr}`).toBe(2);
-    expect(r.stderr).toMatch(/could not read/);
+    expect(r.stderr).toMatch(/could not name this repository's index/);
   });
 
-  it("REFUSES the tolerance when git answers with an EMPTY tracked set", () => {
+  it("REFUSES the whole sweep when git answers with an EMPTY index", () => {
     // An empty index would make every file untracked, which is the one state in
-    // which the tracked-file bound stops existing, so it counts as no answer.
+    // which the tracked-file bound stops existing AND the one that makes a
+    // reconciliation vacuous rather than wrong, so it counts as no answer.
+    // `scripts/check-agent-notes-contract.mjs` refuses the same state.
     const repo = makeScanRepo({ git: true, track: false });
     const decoy = join(repo, BUNDLED);
     writeFileSync(decoy, "export default {};\n");
     const r = runScannerIn(repo, gitShim(`rm -f '${decoy}'`));
     expect(r.code, `stderr: ${r.stderr}`).toBe(2);
-    expect(r.stderr).toMatch(/could not read/);
+    expect(r.stderr).toMatch(/could not name this repository's index/);
   });
 
   it("REFUSES an all-mode sweep that observed no files", () => {
-    // The refuse-a-scan-that-observes-nothing rule, now explicit: tolerating a
-    // vanished file must never be able to decay into a clean report of nothing.
-    // Nothing tracked and everything ignored, so the walk finds files and the
-    // filters leave zero targets. (`git check-ignore` never reports a TRACKED
-    // path as ignored, which is why the allow-list is left unstaged here.)
+    // The refuse-a-scan-that-observes-nothing rule: tolerating a vanished file
+    // must never be able to decay into a clean report of nothing.
+    //
+    // THE STATE HAD TO BE REBUILT, AND THE REASON IS THE POINT OF THE UNION.
+    // This case used to reach the floor with an EMPTY index, which is now
+    // refused one step earlier and for a stronger reason. With a NON-EMPTY index
+    // the floor is much harder to reach, because every tracked path the walk
+    // misses becomes a union target: it needs the index to hold nothing but the
+    // one literally EXCLUDED path, and everything else in the tree to be
+    // untracked and ignored. The branch is kept, and pinned, rather than deleted
+    // as unreachable. (`git check-ignore` never reports a TRACKED path as
+    // ignored, which is why the excluded file is the only thing staged here.)
     const repo = makeScanRepo({ git: true, track: false });
     writeFileSync(join(repo, ".gitignore"), "*\n");
+    mkdirSync(join(repo, "test", "scripts"), { recursive: true });
+    writeFileSync(
+      join(repo, "test", "scripts", "phi-scan.test.ts"),
+      "// excluded by literal path\n",
+    );
+    gitIn(repo, ["add", "-f", "test/scripts/phi-scan.test.ts"]);
     const r = runScannerIn(repo, null);
     expect(r.code, `stderr: ${r.stderr}`).toBe(2);
     expect(r.stderr).toMatch(/observed no files/);
@@ -1338,5 +1359,386 @@ describe("phi-scan: the corpus both routes used to skip", () => {
     const sibling = runScannerIn(repo, null);
     expect(sibling.code, `stderr: ${sibling.stderr}`).toBe(1);
     expect(sibling.stderr).toMatch(/j\.doe@cosyte\.com/);
+  });
+});
+
+/**
+ * `all` MODE READS THE BYTES GIT CARRIES AS A UNION WITH THE WALK.
+ *
+ * The rule, what it costs and why deduplication is by content are stated once,
+ * in `scripts/phi-scan.ts`'s docblock. These cases pin it rather than restate it.
+ *
+ * EVERY CASE HERE WAS REPRODUCED ON THE BASE COMMIT FIRST, at `exit 0` with
+ * `OK, no hits`, over a TRACKED file carrying a whole synthetic patient identity.
+ * The identity is wholly invented and lives nowhere but this file's fixture
+ * builder; it is not in the allow-list, which is what makes it detectable.
+ *
+ * THE STATES ARE NOT A SIBLING'S LIST. `hl7`, `mllp`, `astm` and `deid` each
+ * closed this half against a different weakness, and this repo's walk has been
+ * rooted at the REPO ROOT throughout, so the "tracked files outside every walk
+ * root" shape those notes describe DOES NOT EXIST here. What does exist is the
+ * set below: the walk answers a question about the disk, and four ways the disk
+ * and the index disagree while the walk still had the only voice.
+ */
+describe("phi-scan: the all-mode sweep reads the bytes git carries", () => {
+  /**
+   * A synthetic C-CDA carrying one token for every structured detector: a
+   * person name, a date of birth, an SSN by OID, a bare-numeric MRN, a street
+   * address, a city, a postal code and a non-555 telecom. The SSN is built from
+   * parts so no literal nine-digit run lives in this source, matching the
+   * identifier cases above.
+   */
+  function payload(): string {
+    const ssn = ["529", "44", "7311"].join("");
+    return `<?xml version="1.0"?>
+<ClinicalDocument xmlns="urn:hl7-org:v3">
+  <recordTarget><patientRole>
+    <id root="2.16.840.1.113883.4.1" extension="${ssn}"/>
+    <id root="1.2.3.4" extension="4471902238"/>
+    <addr>
+      <streetAddressLine>4417 Kestrel Hollow Way</streetAddressLine>
+      <city>Marlingford</city>
+      <postalCode>44107</postalCode>
+    </addr>
+    <telecom value="tel:+1-216-448-7712"/>
+    <patient>
+      <name><given>Corvin</given><family>Ashgrove</family></name>
+      <birthTime value="19731105"/>
+    </patient>
+  </patientRole></recordTarget>
+</ClinicalDocument>
+`;
+  }
+
+  /** Every locus the payload above is meant to trip, asserted together. */
+  function expectWholeIdentityCaught(r: RunResult): void {
+    expect(r.stderr).toMatch(/Corvin/);
+    expect(r.stderr).toMatch(/Ashgrove/);
+    expect(r.stderr).toMatch(/19731105/);
+    expect(r.stderr).toMatch(/name\/given/);
+    expect(r.stderr).toMatch(/birthTime@value/);
+    expect(r.stderr).toMatch(/id@extension/);
+    expect(r.stderr).toMatch(/streetAddressLine/);
+    expect(r.stderr).toMatch(/postalCode/);
+    expect(r.stderr).toMatch(/telecom@value/);
+  }
+
+  /** Commit `content` at `rel` in a throwaway repo, then hand the repo back. */
+  function repoTracking(rel: string, content: string): string {
+    const repo = makeScanRepo({ git: true });
+    const abs = join(repo, rel);
+    mkdirSync(join(abs, ".."), { recursive: true });
+    writeFileSync(abs, content);
+    gitIn(repo, ["add", "-f", rel]);
+    return repo;
+  }
+
+  it("catches a tracked blob whose PATH is occupied by a DIRECTORY", () => {
+    // The decoy-contents shape, and the one a path-set reconciliation cannot
+    // see: `git ls-files` still names the path, so the path IS present. Only
+    // reading the OBJECT distinguishes it from a file that was scanned.
+    const repo = repoTracking("corpus.xml", payload());
+    rmSync(join(repo, "corpus.xml"), { force: true });
+    mkdirSync(join(repo, "corpus.xml"), { recursive: true });
+    writeFileSync(join(repo, "corpus.xml", "readme.txt"), "nothing to see here\n");
+
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(1);
+    expectWholeIdentityCaught(r);
+    // The locus says WHICH copy leaked, so a reader who opens the path and finds
+    // a directory is not left thinking the diagnostic was wrong.
+    expect(r.stderr).toMatch(/corpus\.xml \(as git carries it\)/);
+  });
+
+  it("catches a tracked blob under a WALK_SKIP_DIRS name", () => {
+    // `WALK_SKIP_DIRS` is matched by NAME at any depth, so the walk drops the
+    // whole subtree before a byte is read. Nothing in this repo tracks such a
+    // path today; nothing stops one being added, and the skip is silent.
+    const repo = repoTracking("dist/corpus.xml", payload());
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(1);
+    expectWholeIdentityCaught(r);
+    expect(r.stderr).toMatch(/dist\/corpus\.xml \(as git carries it\)/);
+  });
+
+  it("catches a tracked blob that is ABSENT from the working tree", () => {
+    // The short-working-tree shape. A floor-of-one does not detect it and a
+    // denominator does not either: a count counts the files that DID exist.
+    const repo = repoTracking("corpus.xml", payload());
+    rmSync(join(repo, "corpus.xml"), { force: true });
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(1);
+    expectWholeIdentityCaught(r);
+  });
+
+  it("catches a tracked blob that is BOTH gitignored and absent from the working tree", () => {
+    // Scanned by nothing at base: the walk never saw the file, and the ignore
+    // filter would have dropped it if it had. `git check-ignore` does not report
+    // a TRACKED path as ignored, so the premise is asserted rather than assumed.
+    const repo = repoTracking("corpus.xml", payload());
+    writeFileSync(join(repo, ".gitignore"), "corpus.xml\n");
+    const ci = spawnSync("git", ["check-ignore", "corpus.xml"], {
+      cwd: repo,
+      encoding: "utf8",
+      shell: false,
+    });
+    expect(ci.status, "premise: git says a tracked path is not ignored").not.toBe(0);
+    rmSync(join(repo, "corpus.xml"), { force: true });
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(1);
+    expectWholeIdentityCaught(r);
+  });
+
+  it("REFUSES a tracked GITLINK, whose working tree may not exist at all", () => {
+    // A gitlink carries a commit id and no bytes at this path, so there is
+    // nothing to scan and nothing that may be reported clean. Same rule and the
+    // same closed-set token as the `--staged` route.
+    const repo = makeScanRepo({ git: true });
+    const nested = join(repo, "nested");
+    mkdirSync(nested, { recursive: true });
+    gitIn(nested, ["init", "-q"]);
+    writeFileSync(join(nested, "doc.xml"), payload());
+    gitIn(nested, ["add", "-A"]);
+    gitIn(nested, ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "n"]);
+    gitIn(repo, ["add", "nested"]);
+    // The working tree is removed, which is exactly the state the walk cannot
+    // report on and used to pass green over.
+    rmSync(nested, { recursive: true, force: true });
+
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(2);
+    expect(r.stderr).toMatch(/index entry is not a regular blob/);
+    expect(r.stderr).toMatch(/nested \(a gitlink \(a nested repository\)\)/);
+  });
+
+  it("REFUSES a tracked SYMBOLIC LINK without ever printing its target", () => {
+    // A link's blob IS its target path, which is working-tree text that can
+    // itself carry PHI, so the refusal names the entry and an engine-owned token
+    // for the mode and nothing else.
+    const repo = makeScanRepo({ git: true });
+    symlinkSync("../patients/record.xml", join(repo, "link.xml"));
+    gitIn(repo, ["add", "link.xml"]);
+    rmSync(join(repo, "link.xml"), { force: true });
+
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(2);
+    expect(r.stderr).toMatch(/link\.xml \(a symbolic link\)/);
+    expect(r.stderr).not.toContain("patients/record.xml");
+  });
+
+  it("scans BOTH copies when the working tree and the index disagree (the EOL axis)", () => {
+    // Deduplication is by CONTENT, so a path whose two copies differ is scanned
+    // twice rather than once, and the union is a superset by construction. This
+    // is the property that makes it correct under EOL normalization, where the
+    // index carries LF and the working tree CRLF: a leak present in either form
+    // is found, and neither form stands in for the other.
+    const repo = repoTracking("corpus.xml", payload());
+    // The working copy is scrubbed; the committed blob is not.
+    writeFileSync(join(repo, "corpus.xml"), "<ClinicalDocument/>\n");
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(1);
+    expectWholeIdentityCaught(r);
+    expect(r.stderr).toMatch(/corpus\.xml \(as git carries it\)/);
+
+    // And the reverse: a clean blob with a leaking working copy is still caught
+    // by the walk, under the UNdecorated locus.
+    const repo2 = repoTracking("corpus.xml", "<ClinicalDocument/>\n");
+    writeFileSync(join(repo2, "corpus.xml"), payload());
+    const r2 = runScannerIn(repo2, null);
+    expect(r2.code, `stderr: ${r2.stderr}`).toBe(1);
+    expectWholeIdentityCaught(r2);
+    expect(r2.stderr).toMatch(/HIT: corpus\.xml\n/);
+  });
+
+  it("reads nothing twice, and its ONLY fixed cost is one `rev-parse`, when the tree matches", () => {
+    // The cost claim, asserted rather than reasoned about, and asserted at the
+    // width the prose claims rather than narrower. An earlier draft of this case
+    // was titled "no subprocess" and checked only that `cat-file` was absent,
+    // which is a measurement narrower than its own title: the union DOES add one
+    // `git rev-parse --show-object-format` per run, because the deduplication
+    // needs the algorithm before it can compare anything. The whole call list is
+    // pinned, so a fourth call cannot appear unremarked. A shim that LOGS each
+    // git call is the measurement; it delegates to the real git so the run is
+    // otherwise identical.
+    const repo = repoTracking("corpus.xml", "<ClinicalDocument/>\n");
+    const logDir = tempDir("ccda-phi-gitlog-");
+    const log = join(logDir, "calls.log");
+    const shim = tempDir("ccda-phi-countshim-");
+    writeFileSync(
+      join(shim, "git"),
+      `#!/bin/sh\nprintf '%s\\n' "$1" >> '${log}'\nexec '${realGit()}' "$@"\n`,
+      { mode: 0o755 },
+    );
+
+    const r = runScannerIn(repo, shim);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(0);
+    expect(r.stdout).toMatch(/OK, no hits/);
+    const calls = readFileSync(log, "utf8").split("\n").filter(Boolean);
+    // Sorted, because the ORDER is pinned by the TOCTOU cases and asserting it
+    // twice would make this case fail for their reason rather than its own.
+    expect([...calls].sort(), `git calls: ${calls.join(", ")}`).toEqual([
+      "check-ignore",
+      "ls-files",
+      "rev-parse",
+    ]);
+  });
+
+  it("REFUSES an UNMERGED path, which has no single blob for the sweep to read", () => {
+    // THE AXIS THAT DID NOT PORT. `--staged` spots this state from `--raw`'s
+    // status `U` and a destination mode of `000000`; `git ls-files -s` reports
+    // the same path only at stages 1, 2 and/or 3 and NEVER at stage 0, its
+    // records normally at ordinary blob modes. A draft that took the first
+    // record per path and never read the stage scanned stage 1, THE MERGE BASE,
+    // and reported it as the bytes git carries; the same draft printed
+    // `OK, no hits` at exit 0 over a marker living only in stage 3. Both were
+    // measured before this case existed.
+    //
+    // THE FIXTURE IS ONE SHAPE AND THE RULE IS NOT. This writes the three-record
+    // modify/modify shape; add/add and modify/delete carry two, and a
+    // symlink-versus-file conflict carries a `120000` one. The code keys on the
+    // ABSENCE OF STAGE 0, which holds for all of them, so the premise asserted
+    // below is about THIS fixture and is deliberately not written as a rule. A
+    // draft wrote it as one and a refuter falsified it.
+    //
+    // THE STAGES ARE WRITTEN WITH `update-index`, NOT PRODUCED BY A REAL MERGE,
+    // AND THAT IS A CORRECTNESS FIX RATHER THAN A SHORTCUT. A draft built them
+    // by branching and merging; it passed here and went RED IN CI, where
+    // `ls-files -s` came back with no records for the path at all, so the case
+    // was grading the fixture's environment rather than the scanner. What the
+    // scanner is about is an INDEX HOLDING NO STAGE-0 RECORD FOR A PATH, and
+    // that state is what this writes, directly and identically everywhere. It is
+    // the same index a real `git merge` produces, verified by hand against one.
+    const repo = makeScanRepo({ git: true });
+    const blob = (content: string): string => {
+      const r = spawnSync("git", ["hash-object", "-w", "--stdin"], {
+        cwd: repo,
+        input: content,
+        encoding: "utf8",
+        shell: false,
+      });
+      expect(r.status, r.stderr).toBe(0);
+      return r.stdout.trim();
+    };
+    const base = blob(payload()); // stage 1: the merge BASE carries the identity
+    const ours = blob("<ClinicalDocument><!-- ours --></ClinicalDocument>\n");
+    const theirs = blob("<ClinicalDocument/>\n");
+    const written = spawnSync("git", ["update-index", "--index-info"], {
+      cwd: repo,
+      input:
+        `100644 ${base} 1\tc.xml\n` + `100644 ${ours} 2\tc.xml\n` + `100644 ${theirs} 3\tc.xml\n`,
+      encoding: "utf8",
+      shell: false,
+    });
+    expect(written.status, written.stderr).toBe(0);
+    // The working tree gets the conflicted-looking file, so the WALK has
+    // something clean to read and the refusal cannot come from the walk instead.
+    writeFileSync(
+      join(repo, "c.xml"),
+      "<ClinicalDocument><!-- conflicted --></ClinicalDocument>\n",
+    );
+
+    // THIS FIXTURE'S premise, asserted rather than assumed: three records, none
+    // at stage 0, all at a mode the non-blob rule would happily accept.
+    const listed = spawnSync("git", ["ls-files", "-s", "c.xml"], {
+      cwd: repo,
+      encoding: "utf8",
+      shell: false,
+    });
+    const stages = listed.stdout.trim().split("\n");
+    expect(stages, `ls-files -s said: ${JSON.stringify(listed.stdout)}`).toHaveLength(3);
+    for (const line of stages) expect(line).toMatch(/^100644 [0-9a-f]+ [123]\t/);
+
+    const r = runScannerIn(repo, null);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(2);
+    expect(r.stderr).toMatch(/path is unmerged/);
+    expect(r.stderr).toMatch(/c\.xml \(no stage-0 blob\)/);
+    // It must NOT be reported as a link or a gitlink, and it must NOT be scanned
+    // as if the merge base were what git carries.
+    expect(r.stderr).not.toMatch(/regular blob/);
+    expect(r.stderr).not.toMatch(/as git carries it/);
+  });
+});
+
+/**
+ * THE POSITIVE CONTROL. A detector zero can be a gap rather than a clearance,
+ * and the only thing that tells them apart is watching the same sweep fire over
+ * the same corpus.
+ *
+ * `pnpm phi-scan` reports `OK, no hits` over this repo's committed corpus, and
+ * one case above already pins that clean result. On its own it is worth nothing:
+ * a scanner that had silently stopped reading would print exactly the same line.
+ * So these two cases run the REAL sweep over a byte-for-byte COPY of the real
+ * corpus, first clean (reproducing the claim) and then with one synthetic marker
+ * planted in it (proving the claim was a decision and not an absence). The copy
+ * is used rather than the repo itself so a marker is never written into the tree
+ * a parallel worker or a commit could see.
+ *
+ * BOTH HALVES OF THE ROUTE ARE CONTROLLED, because they can fail independently:
+ * the walk half with the marker on disk, and the union half with the marker
+ * reachable only through git.
+ */
+describe("phi-scan: positive control over the corpus this repo claims to clear", () => {
+  /** A throwaway git repo holding a copy of every file THIS repo tracks. */
+  function corpusClone(): string {
+    const d = tempDir("ccda-phi-corpus-");
+    const listed = spawnSync("git", ["ls-files", "-z"], {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      shell: false,
+    });
+    expect(listed.status, listed.stderr).toBe(0);
+    const tracked = listed.stdout.split("\0").filter((p) => p !== "");
+    expect(tracked.length, "premise: this repo tracks files").toBeGreaterThan(0);
+    for (const rel of tracked) {
+      const dest = join(d, rel);
+      mkdirSync(join(dest, ".."), { recursive: true });
+      copyFileSync(join(REPO_ROOT, rel), dest);
+    }
+    gitIn(d, ["init", "-q"]);
+    gitIn(d, ["add", "-A"]);
+    return d;
+  }
+
+  it("reproduces the clean result over the copied corpus, and then FIRES on it", () => {
+    const clone = corpusClone();
+    const clean = runScannerIn(clone, null);
+    expect(clean.code, `stderr: ${clean.stderr}`).toBe(0);
+    expect(clean.stdout).toMatch(/OK, no hits/);
+
+    // The same sweep, the same corpus, one synthetic marker added. `.xml` is
+    // enough for `looksLikeCda`; the token itself is what must be found.
+    const planted = join(clone, "control-record.xml");
+    writeFileSync(
+      planted,
+      `<ClinicalDocument xmlns="urn:hl7-org:v3"><recordTarget><patientRole><patient>` +
+        `<name><family>Ashgrove</family></name></patient></patientRole></recordTarget>` +
+        `</ClinicalDocument>\n`,
+    );
+    gitIn(clone, ["add", "-f", "control-record.xml"]);
+    const fired = runScannerIn(clone, null);
+    expect(fired.code, `stderr: ${fired.stderr}`).toBe(1);
+    expect(fired.stderr).toMatch(/control-record\.xml/);
+    expect(fired.stderr).toMatch(/Ashgrove/);
+  });
+
+  it("fires on the copied corpus when the marker is reachable ONLY through git", () => {
+    // The union half of the same control. The marker is committed and then taken
+    // off the disk, so the walk has nothing to find and only the index does.
+    const clone = corpusClone();
+    const planted = join(clone, "control-record.xml");
+    writeFileSync(
+      planted,
+      `<ClinicalDocument xmlns="urn:hl7-org:v3"><recordTarget><patientRole><patient>` +
+        `<name><family>Ashgrove</family></name></patient></patientRole></recordTarget>` +
+        `</ClinicalDocument>\n`,
+    );
+    gitIn(clone, ["add", "-f", "control-record.xml"]);
+    rmSync(planted, { force: true });
+    expect(existsSync(planted), "premise: the walk has nothing to find").toBe(false);
+
+    const fired = runScannerIn(clone, null);
+    expect(fired.code, `stderr: ${fired.stderr}`).toBe(1);
+    expect(fired.stderr).toMatch(/control-record\.xml \(as git carries it\)/);
+    expect(fired.stderr).toMatch(/Ashgrove/);
   });
 });
