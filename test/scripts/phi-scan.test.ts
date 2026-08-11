@@ -1872,8 +1872,15 @@ describe("phi-scan: the completeness rule", () => {
   });
 
   it("REFUSES the headline case: the run's ONLY violator is withdrawn", () => {
-    // This exact argv reported `OK, no hits` at exit 0 before the rule. It is
-    // the drift `config`'s capability probe measured on this repo.
+    // This exact argv reported `OK, no hits` at exit 0 before the rule: a floor
+    // of one at whole-run scope withdrew the entire target list and the empty
+    // result reported clean.
+    //
+    // THE EXTERNALLY-GRADED SHAPE IS THE CASE ABOVE, NOT THIS ONE. `config`'s
+    // capability probe runs `[violator, decoy, --allow-fixture decoy]` and named
+    // this repo's drift as the HITS code (1), which is that case's pre-rule
+    // result; this case's is exit 0. One run cannot have produced both, so
+    // do not re-attach the probe to this argv.
     const corpus = makeCorpus();
     const r = runIn(corpus, SCANNER_PATH, [VIOLATOR, "--allow-fixture", VIOLATOR]);
     expect(r.code, `stderr: ${r.stderr}`).toBe(2);
