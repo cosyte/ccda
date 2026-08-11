@@ -2134,16 +2134,19 @@ violator, and the subtlest of them is the one a reader will miss: the seed read
 silent no-op and the named file was never ADMITTED to the run rather than withdrawn from it. All four
 are enumerated in the docblock and all four are pinned by test.
 
-**AND AGAIN, THE HONEST ANSWER IS A NULL RESULT: THERE WAS NO REAL UNREAD CORPUS HERE.** Measured on
-this branch with the rule in place, `all` mode enumerates 140 paths and reads all 140, with nothing
-tolerated and nothing unread, so the sweep exits 0 on its own corpus. That 140 is **not** the tracked
-count wearing a different hat, and the arithmetic is written out because it looks like a coincidence:
-140 tracked, minus the one declared literal exclusion, is 139 in-scope tracked paths reached by both
-the walk and the union, plus the `.git` **gitfile** this submodule checkout carries in place of a
-directory (the pre-existing, filed observation in the section above). Both figures were taken with two
-tools, because `grep -c` has mis-reported a zero on this class three times. **`ncpdp` reproduced the
-same null result on the union half, so the fleet premise that "every repo is hiding something" is now
-broken twice. Do not manufacture a gap to match a sibling.**
+**AND AGAIN, THE HONEST ANSWER IS A NULL RESULT: THERE WAS NO REAL UNREAD CORPUS HERE.** Measured at
+`1978bf7` with the rule in place: `all` mode enumerates 141 paths and reads all 141, nothing
+tolerated and nothing unread, so the sweep exits 0 on its own corpus. **The figures are DATED TO THAT
+COMMIT rather than asserted as current**, for the reason the section above gives: the `.changeset/`
+entry that ships this raises the tracked figure by one until a release consumes it. The arithmetic is
+written out because 141 looks like the tracked count wearing a different hat and is not: 141 tracked,
+minus the one declared literal exclusion, is 140 in-scope tracked paths reached by both the walk and
+the union, plus the `.git` **gitfile** this submodule checkout carries in place of a directory (the
+pre-existing, filed observation in the section above). The tracked figure was taken with three tools
+(`wc -l`, `rg -c` and a stage-0 filter over `ls-files -s`), because `grep -c` has mis-reported a zero
+on this class three times. **`ncpdp` reproduced the same null result on the union half, so the fleet
+premise that "every repo is hiding something" is now broken twice. Do not manufacture a gap to match
+a sibling.**
 
 **WHAT IT COSTS THIS REPO, STATED RATHER THAN LEFT TO BE DISCOVERED. `--allow-fixture` CAN NO LONGER
 REACH EXIT 0 IN ANY MODE.** The flag, `phi-scan-overrides.md` and the log gate all stay, so an attempt
