@@ -128,15 +128,127 @@
  *
  * Modes:
  *   --staged                 - scan only files staged in `git diff --cached`
- *   --allow-fixture <path>   - bypass one path; rejected unless logged in
- *                              phi-scan-overrides.md
  *   <path> [<path>...]       - scan specific paths
  *   (no args)                - scan all in-scope working-tree files
+ *
+ * `--allow-fixture <path>` IS A MODIFIER, NOT A MODE, and that is load-bearing
+ * rather than cosmetic. A bypass is SUBTRACTIVE, so it must not also be the
+ * thing that decides what gets scanned: this file used to let a lone
+ * `--allow-fixture X` select `paths` mode over exactly `X`, which then withdrew
+ * `X` and reported a clean whole run having opened nothing at all. The flag is
+ * still rejected unless `phi-scan-overrides.md` logs the same path, and in
+ * `paths` mode it is now UNCONDITIONALLY UNIONED INTO THE TARGET LIST, deduped
+ * by repo-relative path, so it means the same thing in every argv.
  *
  * Exit codes: 0 (clean), 1 (hits found), 2 (invocation error, OR a scan that
  * refused, OR one that could not run at all). Read the 2 as the whole class,
  * not as `InvocationError`: an `EACCES` off `readdirSync` is a plain system
  * error and exits 2 as well, deliberately. See the net at the bottom.
+ *
+ * ---------------------------------------------------------------------------
+ * THE COMPLETENESS RULE: A TARGET THIS RUN ENUMERATED AND NEVER READ REFUSES
+ * (exit 2), IN EVERY MODE, NAMING THE PATHS.
+ *
+ * THE DEFECT IT CLOSES, MEASURED IN THIS FILE AND NOT INHERITED AS A STORY. All
+ * four of these argv shapes reported `[phi-scan] OK, no hits` and exit 0 over a
+ * corpus carrying a live, detectable hit:
+ *
+ *   phi-scan <clean> --allow-fixture <violator>   the violator was never
+ *       ADMITTED to the run rather than withdrawn from it: the seed read
+ *       `paths.length > 0 ? paths : [...allowFixtures]`, so the flag seeded the
+ *       target list ONLY when no positional path was given, and was a silent
+ *       no-op the moment one was;
+ *   phi-scan <violator> --allow-fixture <violator>  a floor of one at whole-run
+ *       scope: the run's entire target list was withdrawn and the empty result
+ *       reported clean;
+ *   phi-scan --allow-fixture <violator>           the same floor with no
+ *       positional at all, which is the worst of the four because it reads to a
+ *       caller like a full-corpus sweep;
+ *   phi-scan --staged --allow-fixture <violator>  the identical floor on the
+ *       route a commit is actually blocked on.
+ *
+ * In every one of them the file was validated, checked against the override log,
+ * and OPENED NEVER. A scan that did not open a file has no clean verdict to give
+ * about it, so the only true thing left to say is that the scan is incomplete.
+ *
+ * THE COMPARISON IS A SET DIFFERENCE, NEVER A SIZE. Counting reads against
+ * targets and comparing two numbers is a different and weaker test, because a
+ * count counts the targets that DID get read: a plausible-looking total hides
+ * exactly the paths that did not. The refusal names the paths because no number
+ * can.
+ *
+ * ENUMERATION IS THIS RUN'S OWN DECLARATION OF WHAT IT WILL READ, so the filters
+ * UPSTREAM of it do not violate the rule and are not weakened by it. What the
+ * rule catches is a path that BECAME a target and then did not get opened. In
+ * `all` mode the enumerated set is the walk's targets UNION
+ * `unionCandidatePaths(index)`, computed before the first byte is read, so the
+ * union half's tracked paths are covered too.
+ *
+ * 🛑 WHICH FILTERS THOSE ARE IS PER-ROUTE, AND A DRAFT OF THIS PARAGRAPH LISTED
+ * THE WALK'S AS IF THEY BOUNDED THE WHOLE SWEEP. Only `EXCLUDED_PATHS` is
+ * honored by both halves of `all` mode. The walk's other two are NOT:
+ *
+ *   - A TRACKED PATH UNDER A `WALK_SKIP_DIRS` NAME IS ENUMERATED, by the union
+ *     half, and read from the index. Measured, not reasoned about: a committed
+ *     `dist/leaked.txt` whose working copy is clean reports
+ *     `HIT: dist/leaked.txt (as git carries it)` at exit 1. Nothing is tracked
+ *     under such a name here today, so it is latent, and the direction is MORE
+ *     scanning than the walk alone, never less. It cannot produce a false
+ *     refusal either, because the union both enumerates AND reads it.
+ *   - The gitignore filter is only VACUOUSLY true of the union, and saying so is
+ *     the point: `git check-ignore` never reports a TRACKED path as ignored, so
+ *     the union has no gitignored candidate to drop. See `unionCandidatePaths`.
+ *
+ * A BYPASS NAMING A PATH THIS RUN DOES NOT ENUMERATE ALSO REFUSES. It is the
+ * other half of the same claim: such a flag subtracts nothing, so honoring it
+ * silently would let a developer believe a file was acknowledged when the run
+ * never had it in scope. BOUND, so the tier is not read as wider than it is: in
+ * `paths` mode a bypass naming a path that does not exist never reaches this
+ * tier, because the flag is unioned into the target list and
+ * `buildTargetsForPaths` throws `File not found` first. Same exit 2, earlier and
+ * more specific message; the tier is reached in `all` and `staged` mode.
+ *
+ * WHAT THIS COSTS, STATED RATHER THAN LEFT TO BE DISCOVERED: `--allow-fixture`
+ * CAN NO LONGER REACH EXIT 0 IN ANY MODE. The flag, the override log and the
+ * rejection gate are all kept, so an attempt is RECORDED AND REFUSED rather than
+ * silently honored, and `scripts/phi-allow-list.txt` is the mechanism that
+ * reaches a clean run. THE HIT FOOTER THEREFORE NO LONGER ADVERTISES
+ * `--allow-fixture` AS A REMEDY: a printed remedy that leads to exit 2 is the
+ * same defect as one that leads to a false green, with the sign flipped.
+ *
+ * THE RULE IS PATH-LEVEL, AND "READ" MEANS THE BYTES WENT THROUGH `scanTarget`,
+ * NOT THAT EVERY DETECTOR RAN OVER THEM. Stated because the headline sentence
+ * ("a scan that did not open a file has no clean verdict to give about it") is
+ * otherwise easy to read as the stronger claim: `STRUCTURED_EXEMPT_PATHS` names
+ * `CHANGELOG.md`, which is read and shape-scanned but never structurally
+ * scanned, and it counts as READ here. That exemption is pre-existing, argued
+ * where it is declared, and deliberately NOT re-litigated by this rule; what
+ * this rule adds is that a file nothing opened at all can no longer pass.
+ *
+ * THE VANISH TOLERANCE IS THE ONE ACCOUNTED-FOR NON-READ, AND ITS BOUNDS ARE
+ * WHY IT IS NOT A HOLE IN THIS RULE. A target skipped under
+ * `Target.tolerateVanish` is recorded and excluded from the unread difference,
+ * because it is already reported on stderr by its own branch and re-checked for
+ * reappearance there. It cannot launder a bypass: an `--allow-fixture` path is
+ * skipped BEFORE `scanTarget` is called, so it never enters the vanished set;
+ * and the tolerance is bounded to an UNTRACKED file the walk enumerated itself
+ * that failed with `ENOENT`. Every other non-read is either an in-loop refusal
+ * or lands in the unread difference below.
+ *
+ * A HIT IS NEVER SWALLOWED BY A POST-SWEEP REFUSAL. Hits are printed as soon as
+ * both sweeps finish and BEFORE the vanish, floor and unread refusals, so a run
+ * that is both incomplete AND carrying hits prints both; the code is 2, because
+ * the incompleteness is the larger claim and the hits are already on stderr
+ * where a human reads them. THE GUARANTEE IS ABOUT THE POST-SWEEP REFUSALS AND
+ * NOT ABOUT REFUSALS IN GENERAL, and the others are named here rather than left
+ * to be assumed: the unmatched-bypass refusal fires BEFORE any target is read,
+ * so no hit exists for it to swallow; and a target whose bytes cannot be read
+ * refuses from INSIDE the loop, which does discard the hits found before it.
+ * That last one is pre-existing and is left alone deliberately: it exits 2, so
+ * it is loud rather than green, and re-ordering the loop to salvage a partial
+ * hit list would be a claim about a corpus the scan just said it could not
+ * account for.
+ * ---------------------------------------------------------------------------
  *
  * ---------------------------------------------------------------------------
  * AN IN-SCOPE ENTRY THAT IS NOT A REGULAR FILE REFUSES THE SCAN (exit 2). This
@@ -636,21 +748,48 @@ function parseArgs(argv: string[]): Args {
     throw new InvocationError("--staged cannot be combined with positional paths");
   }
 
-  // An `--allow-fixture` path is a *subtractive* acknowledgement on a broader
-  // scan, never a scan target on its own, so it also seeds the positional path
-  // set. That makes `--allow-fixture X` mean "scan X, but allow it" (proving the
-  // override gate actually subtracts a scanned target) instead of a silent no-op.
-  const scanPaths = paths.length > 0 ? paths : [...allowFixtures];
-
+  // THE MODE IS CHOSEN BY POSITIONAL PATHS ALONE. A bypass is subtractive, so
+  // letting one select the mode made `--allow-fixture X` scan exactly `X`, then
+  // withdraw it, then report a clean whole run over a corpus it never touched.
+  // With the mode decided here, a lone bypass leaves the run in `all` mode and
+  // the two refusal tiers in `main` account for the flag.
   let mode: Args["mode"];
   if (staged) {
     mode = "staged";
-  } else if (scanPaths.length > 0) {
+  } else if (paths.length > 0) {
     mode = "paths";
   } else {
     mode = "all";
   }
+
+  // UNCONDITIONAL, DEDUPED SEEDING, so the flag has ONE meaning in every argv.
+  // The old form was `paths.length > 0 ? paths : [...allowFixtures]`, which
+  // seeded the target list ONLY when no positional path was given: with one
+  // present the bypass was a silent no-op and the named file was never ADMITTED
+  // to the run rather than withdrawn from it. Unioning admits it in every case,
+  // so the withdrawal is always a withdrawal of something enumerated and is
+  // therefore always caught by the completeness rule. Dedupe is by repo-relative
+  // path, so `X --allow-fixture ./X` is one target, not two.
+  const scanPaths = mode === "paths" ? dedupeByRepoPath([...paths, ...allowFixtures]) : paths;
+
   return { mode, paths: scanPaths, allowFixtures };
+}
+
+/**
+ * Dedupe argument paths by the repo-relative path each one resolves to, keeping
+ * the caller's original spelling for the first occurrence: that spelling is what
+ * `buildTargetsForPaths` resolves and what a diagnostic echoes back.
+ */
+function dedupeByRepoPath(paths: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of paths) {
+    const key = normalizePath(p);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
 }
 
 /**
@@ -1120,11 +1259,41 @@ function buildTargetsForAll(): { targets: Target[]; index: Map<string, IndexEntr
 }
 
 /**
+ * The in-scope tracked paths the union half is entitled to read: every stage-0
+ * REGULAR BLOB that no exclusion names.
+ *
+ * IT IS COMPUTED BEFORE THE FIRST BYTE IS READ, AND THAT IS LOAD-BEARING, not a
+ * refactor. This set is part of what `all` mode ENUMERATES, so both completeness
+ * tiers see it: a bypass naming a tracked-but-absent path subtracts something
+ * real (rather than being refused as naming nothing), and a target that ends up
+ * unread is named by the unread refusal whichever route would have read it.
+ *
+ * IT DELIBERATELY DOES NOT FILTER GITIGNORED PATHS, and that is not an omission
+ * copied from the walk. `git check-ignore` never reports a TRACKED path as
+ * ignored, and a tracked path that is both gitignored and absent from the
+ * working tree is precisely the case the union exists to reach.
+ */
+function unionCandidatePaths(index: Map<string, IndexEntry>): string[] {
+  return (
+    [...index]
+      // Refused already in `buildTargetsForAll`, except where EXCLUDED_PATHS
+      // names it; either way there is nothing here to read. `index` holds
+      // stage-0 records only, so an unmerged path never reaches here at all.
+      .filter(([, e]) => REGULAR_BLOB_MODES.has(e.mode))
+      // The scanner's own test carries adversarial literals by design and is out
+      // of scope for the two sweeping routes. The union is the same route as the
+      // walk, so it inherits the same literal exclusion rather than reopening it.
+      .filter(([p]) => !EXCLUDED_PATHS.has(p))
+      .map(([p]) => p)
+  );
+}
+
+/**
  * The union half of `all` mode: the bytes git carries at every tracked path the
  * walk did not already read verbatim. See the docblock for why this exists, what
  * it costs, and why deduplication is by content rather than by path.
  *
- * `readBytes` maps a path the walk actually READ to the object id of what it
+ * `readOids` maps a path the walk actually READ to the object id of what it
  * read. A path absent from it was never opened, whatever the reason, so its blob
  * is scanned.
  */
@@ -1133,15 +1302,9 @@ function buildTargetsForGitIndex(
   readOids: Map<string, string>,
 ): Target[] {
   const targets: Target[] = [];
-  for (const [path, entry] of index) {
-    // Refused already in `buildTargetsForAll`, except where EXCLUDED_PATHS names
-    // it; either way there is nothing here to read. `index` holds stage-0
-    // records only, so an unmerged path never reaches this loop at all.
-    if (!REGULAR_BLOB_MODES.has(entry.mode)) continue;
-    // The scanner's own test carries adversarial literals by design and is out
-    // of scope for the two sweeping routes. The union is the same route as the
-    // walk, so it inherits the same literal exclusion rather than reopening it.
-    if (EXCLUDED_PATHS.has(path)) continue;
+  for (const path of unionCandidatePaths(index)) {
+    const entry = index.get(path);
+    if (entry === undefined) continue;
     if (readOids.get(path) === entry.oid) continue;
     targets.push({
       path,
@@ -1722,11 +1885,15 @@ function scanTarget(target: Target, allow: AllowList, hits: Hit[]): Buffer | nul
 // Reporting
 // ---------------------------------------------------------------------------
 
-function report(hits: Hit[]): void {
-  if (hits.length === 0) {
-    process.stdout.write("[phi-scan] OK, no hits\n");
-    return;
-  }
+/**
+ * Print the hits. SPLIT FROM THE CLEAN LINE ON PURPOSE: `main` reports hits
+ * BEFORE it can refuse for incompleteness, so a run that is both incomplete and
+ * carrying hits prints both rather than swallowing one. The clean line is
+ * written by `main` only once every refusal tier has passed, so `OK, no hits`
+ * can never appear beside a refusal.
+ */
+function reportHits(hits: Hit[]): void {
+  if (hits.length === 0) return;
   const byPath = new Map<string, Hit[]>();
   for (const h of hits) {
     const arr = byPath.get(h.path);
@@ -1739,10 +1906,18 @@ function report(hits: Hit[]): void {
       process.stderr.write(`  locus=${h.locus} value=${JSON.stringify(h.value)} (${h.reason})\n`);
     }
   }
+  // THE FOOTER NO LONGER ADVERTISES `--allow-fixture`, AND THAT IS A DECISION,
+  // NOT AN OMISSION. A bypass withdraws a file from the read set, and the
+  // completeness rule refuses (exit 2) over a target enumerated and never read,
+  // so a developer following that printed remedy would be walked from exit 1
+  // into exit 2. A printed remedy that cannot reach the state it promises is the
+  // same defect as one that reaches a false green, with the sign flipped.
   process.stderr.write(
     `[phi-scan] ${String(hits.length)} hit(s) across ${String(byPath.size)} file(s). ` +
-      `If a value is genuinely synthetic, declare it in scripts/phi-allow-list.txt OR ` +
-      `run with --allow-fixture <path> AND log it in phi-scan-overrides.md.\n`,
+      `If a value is genuinely synthetic, declare it in scripts/phi-allow-list.txt: a ` +
+      `token-level, reviewed declaration is the only remedy that reaches a clean run. A ` +
+      `whole-file --allow-fixture bypass is recorded and then REFUSED (exit 2), because a scan ` +
+      `that never opened a file has no clean verdict to give about it.\n`,
   );
 }
 
@@ -1792,11 +1967,43 @@ function main(): number {
     throw err;
   }
 
-  targets = targets.filter((t) => !allowed.has(t.path));
+  // ENUMERATED: the set of paths this run DECLARED it would read, captured
+  // BEFORE the bypass subtracts anything and before the first byte is read.
+  // Whatever the filters upstream of it dropped never became a target and is not
+  // in here, which is why the completeness rule below does not fire on it. WHICH
+  // FILTERS THOSE ARE IS PER-ROUTE and the docblock spells it out: only
+  // `EXCLUDED_PATHS` binds BOTH halves of `all` mode, and a TRACKED path under a
+  // `WALK_SKIP_DIRS` name is enumerated by the union half even though the walk
+  // drops it. Do not read the walk's filter list as the sweep's.
+  //
+  // IN `all` MODE IT IS THE WALK'S TARGETS UNION THE IN-SCOPE TRACKED PATHS. The
+  // union half reads that second set minus whatever the walk already read
+  // verbatim, and the dedupe collapses on the SAME path key, so a path the union
+  // skips is a path the walk already put in `read` and the difference below
+  // stays exact either way.
+  const enumerated = new Set<string>(targets.map((t) => t.path));
+  if (index !== null) for (const p of unionCandidatePaths(index)) enumerated.add(p);
+
+  // TIER: A BYPASS MUST NAME A PATH THIS RUN ENUMERATES. Otherwise it subtracts
+  // nothing, and a flag that subtracts nothing lets a developer believe a file
+  // was acknowledged when the run never had it in scope. Compared by DIFFERENCE
+  // against the enumerated set, and every offender is named. It fires before any
+  // target is read, so there is no hit here for it to swallow.
+  const unmatched = [...allowed].filter((p) => !enumerated.has(p));
+  if (unmatched.length > 0) {
+    process.stderr.write(
+      `[phi-scan] --allow-fixture names ${String(unmatched.length)} path(s) this run does not ` +
+        `enumerate, so the flag subtracts nothing:\n${unmatched.map((p) => `  - ${p}`).join("\n")}\n` +
+        `Scan a corpus that contains the path, or drop the flag.\n`,
+    );
+    return 2;
+  }
 
   const hits: Hit[] = [];
   const vanished: Target[] = [];
-  let observed = 0;
+  // READ: filled in only once a target's bytes have actually been through
+  // `scanTarget`. This is evidence of observation, never a plan to observe.
+  const read = new Set<string>();
   // Path -> object id of the bytes the walk actually read, so the union below can
   // skip a path whose content it would otherwise scan a second time.
   const readOids = new Map<string, string>();
@@ -1804,13 +2011,17 @@ function main(): number {
 
   const sweep = (batch: Target[]): number | null => {
     for (const t of batch) {
+      // The bypass is applied HERE rather than by filtering `targets`, so the
+      // withdrawn path is still in `enumerated` above and the completeness rule
+      // below sees it as what it is: a target this run declared and never read.
+      if (allowed.has(t.path)) continue;
       try {
         const bytes = scanTarget(t, allow, hits);
         if (bytes === null) {
           vanished.push(t);
           continue;
         }
-        observed += 1;
+        read.add(t.path);
         if (objectHash !== null && t.origin === undefined) {
           const oid = blobOid(objectHash, bytes);
           if (oid !== null) readOids.set(t.path, oid);
@@ -1832,12 +2043,14 @@ function main(): number {
   // THE UNION. It runs after the walk, not instead of it, and only for the paths
   // the walk did not already read verbatim.
   if (index !== null) {
-    const unionTargets = buildTargetsForGitIndex(index, readOids).filter(
-      (t) => !allowed.has(t.path),
-    );
-    const unionFailure = sweep(unionTargets);
+    const unionFailure = sweep(buildTargetsForGitIndex(index, readOids));
     if (unionFailure !== null) return unionFailure;
   }
+
+  // HITS FIRST, so none of the three refusals below can swallow one. See the
+  // docblock: the guarantee is about the POST-SWEEP refusals, not about the
+  // in-loop read failure, which still discards what it found before it.
+  reportHits(hits);
 
   // A tolerated file is never silent, and the tolerance is only good while the
   // file is still gone: if it is back on disk the sweep skipped something that
@@ -1871,15 +2084,44 @@ function main(): number {
   // literally excluded AND the walk to find nothing else. It is kept because a
   // floor that only fires in a state nobody expects is exactly the floor worth
   // keeping, and deleting it would trade a cheap standing guard for nothing.
-  if (args.mode === "all" && observed === 0) {
+  if (args.mode === "all" && read.size === 0) {
     process.stderr.write(
       "[phi-scan] refusing: the all-mode sweep observed no files, so it proves nothing.\n",
     );
     return 2;
   }
 
-  report(hits);
-  return hits.length === 0 ? 0 : 1;
+  // THE COMPLETENESS RULE. A SET DIFFERENCE, NEVER A SIZE COMPARISON: a count
+  // counts the targets that DID get read, so `n read of n targets` is exactly
+  // the arithmetic that hides which ones did not. Names every offender.
+  //
+  // IT IS LAST AMONG THE REFUSALS BY CHOICE, not by accident of ordering. The
+  // two above name a MORE SPECIFIC cause for the same class of incompleteness (a
+  // file that came back, a sweep that observed nothing at all), and a more
+  // specific diagnosis is the more useful one to print. All three exit 2, so the
+  // order decides only which message a developer reads.
+  //
+  // A VANISHED TARGET IS SUBTRACTED, and the docblock states why that is not a
+  // hole: it is already reported and re-checked by its own branch above, an
+  // `--allow-fixture` path is skipped before `scanTarget` and so can never enter
+  // that set, and the tolerance is bounded to an untracked file the walk
+  // enumerated itself that failed with `ENOENT`.
+  const tolerated = new Set<string>(vanished.map((t) => t.path));
+  const unread = [...enumerated].filter((p) => !read.has(p) && !tolerated.has(p));
+  if (unread.length > 0) {
+    process.stderr.write(
+      `[phi-scan] refusing the scan: ${String(unread.length)} target(s) were enumerated and ` +
+        `never read:\n${unread.map((p) => `  - ${p}`).join("\n")}\n` +
+        `A scan that did not open a file has no clean verdict to give about it. If the file is ` +
+        `genuinely synthetic, declare its identifiers in scripts/phi-allow-list.txt rather than ` +
+        `withdrawing the file from the scan.\n`,
+    );
+    return 2;
+  }
+
+  if (hits.length > 0) return 1;
+  process.stdout.write("[phi-scan] OK, no hits\n");
+  return 0;
 }
 
 /**

@@ -1,11 +1,20 @@
 # phi-scan bypass log
 
 This file logs every `--allow-fixture <path>` bypass invocation of
-`scripts/phi-scan.ts`. The scanner refuses to honor a `--allow-fixture <path>`
-flag UNLESS this file contains an entry referencing the same path. The committed
-log is intentionally annoying: it discourages bypass and creates an audit
-trail. Prefer extending `scripts/phi-allow-list.txt` (a token-level, reviewed
-declaration) over a whole-file bypass.
+`scripts/phi-scan.ts`. The scanner refuses a `--allow-fixture <path>` flag
+UNLESS this file contains an entry referencing the same path. The committed log
+is intentionally annoying: it discourages bypass and creates an audit trail.
+
+**A LOGGED BYPASS IS NOW RECORDED AND THEN REFUSED, NEVER HONORED, so
+`--allow-fixture` CANNOT REACH EXIT 0 IN ANY MODE.** A bypass withdraws a file
+from the read set, and a scan that did not open a file has no clean verdict to
+give about it, so the completeness rule refuses (exit 2) over any target this run
+enumerated and never read. The two tiers are separate and stay separate: this
+log is what admits the flag to the run at all, and the completeness rule is what
+then refuses the run. **`scripts/phi-allow-list.txt` (a token-level, reviewed
+declaration) is the ONLY mechanism that reaches a clean run.** The rule, the four
+argv shapes it closes, and what the vanish tolerance is allowed to subtract from
+it are stated once, in the docblock of `scripts/phi-scan.ts`; read them there.
 
 ## How the scanner detects PHI
 

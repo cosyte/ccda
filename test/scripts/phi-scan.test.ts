@@ -448,22 +448,33 @@ describe("phi-scan: --allow-fixture override gate", () => {
     expect(r2.stderr).toMatch(/phi-scan-overrides\.md/);
   });
 
-  it("honors --allow-fixture WITH an override-log entry (exit 0)", () => {
+  it("a LOGGED --allow-fixture gets past the log gate and is then REFUSED (exit 2)", () => {
+    // The gate and the completeness rule are two different tiers, and this pins
+    // the boundary between them: the log entry is what the previous case is
+    // missing, so this run reaches a DIFFERENT refusal. It must not be read as
+    // "the log no longer matters".
     const path = join(dir, "override-me.xml");
     writeFileSync(path, doc(`<section><family>Anderson</family></section>`));
     const rel = relative(REPO_ROOT, path).split(sep).join("/");
-    // Sanity: scanned on its own it is a genuine violator, so the override, not
-    // an empty target set, is what flips the next run to clean.
+    // Premise: scanned on its own it is a genuine violator, so a later clean
+    // verdict could only ever come from an empty target set.
     expect(runScanner([path]).code).toBe(1);
 
     const original = readFileSync(OVERRIDES_PATH, "utf8");
     try {
       appendFileSync(
         OVERRIDES_PATH,
-        `\n### ${rel}\n\n- **Date:** 2026-07-18\n- **Reason:** unit test\n- **Approved by:** vitest\n- **Expires:** permanent\n`,
+        `\n### ${rel}\n\n- **Date:** 2026-08-11\n- **Reason:** unit test\n- **Approved by:** vitest\n- **Expires:** permanent\n`,
       );
       const r = runScanner(["--allow-fixture", path]);
-      expect(r.code, `stderr: ${r.stderr}`).toBe(0);
+      expect(r.code, `stderr: ${r.stderr}`).toBe(2);
+      // EXACT MESSAGE, not merely a non-zero exit. The temp fixture lives
+      // outside REPO_ROOT, so the lone bypass leaves the run in `all` mode and
+      // the path is not enumerated: this is the unmatched-bypass tier, and
+      // asserting which one fired is what stops a crash from passing as a pass.
+      expect(r.stderr).toMatch(/does not enumerate, so the flag subtracts nothing/);
+      expect(r.stderr).not.toMatch(/phi-scan-overrides\.md/);
+      expect(r.stdout).not.toMatch(/OK, no hits/);
     } finally {
       writeFileSync(OVERRIDES_PATH, original);
     }
@@ -1739,5 +1750,266 @@ describe("phi-scan: positive control over the corpus this repo claims to clear",
     expect(fired.code, `stderr: ${fired.stderr}`).toBe(1);
     expect(fired.stderr).toMatch(/control-record\.xml \(as git carries it\)/);
     expect(fired.stderr).toMatch(/Ashgrove/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE COMPLETENESS RULE (PHI-SCAN, half 2)
+// ---------------------------------------------------------------------------
+
+/**
+ * A target this run ENUMERATED and never READ refuses (exit 2), in every mode.
+ *
+ * THE DEFECT, REPRODUCED HERE RATHER THAN DESCRIBED. `--allow-fixture` withdrew
+ * a path from the target list and the run reported on the remainder, so a
+ * corpus whose only violator was withdrawn came back `OK, no hits` at exit 0.
+ * The withdrawal was invisible in the verdict: a scan that never opened a file
+ * has no clean verdict to give about it.
+ *
+ * 🛑 EVERY ASSERTION HERE IS AN EXACT CODE PLUS THE MESSAGE THAT NAMES THE TIER,
+ * NEVER `not.toBe(0)`. This repo already shipped a premise assertion of that
+ * shape: `expect(merged.status).not.toBe(0)` passed on a `git merge` that died
+ * at exit 128 on "Committer identity unknown", which made a fixture look like it
+ * exercised an unmerged index when it had never touched one (`#111`). An
+ * assertion that accepts any non-zero exit accepts a crash, and this scanner has
+ * three distinct exit-2 tiers, so accepting the code alone would let the wrong
+ * one pass for the right one.
+ *
+ * THE POSITIVE CONTROL IS THE LAST CASE IN THIS BLOCK AND IT IS THE POINT. A
+ * test that has never been seen to red is indistinguishable from one that
+ * cannot: it runs the SAME argv against a copy of the scanner with the
+ * completeness rule mutated out, asserts the mutation actually landed, and
+ * asserts the mutant reproduces both pre-fix results exactly (the HITS code
+ * where the corpus still holds a readable violator, and `OK, no hits` at exit 0
+ * where it does not).
+ */
+describe("phi-scan: the completeness rule", () => {
+  const VIOLATOR = "test/fixtures/completeness-violator.txt";
+  const DECOY = "test/fixtures/completeness-decoy.txt";
+  /** Logged in the override log and deliberately never written to disk. */
+  const ABSENT = "test/fixtures/completeness-absent.txt";
+  /** A dashed SSN: the shape pass finds it at any path, under any extension. */
+  const PAYLOAD = "patient ssn 123-45-6789 on file\n";
+  const MARKER = "123-45-6789";
+  const CLEAN = "nothing to see here\n";
+
+  /**
+   * A throwaway git repo the scanner can treat as REPO_ROOT, carrying exactly
+   * one violator, one clean decoy, and an override log that admits a bypass of
+   * EITHER of them. Committed, so both are tracked and the index-backed half of
+   * `all` mode has something real to enumerate.
+   */
+  function makeCorpus(): string {
+    const d = tempDir("ccda-phi-completeness-");
+    const write = (rel: string, text: string): void => {
+      const abs = join(d, ...rel.split("/"));
+      mkdirSync(join(abs, ".."), { recursive: true });
+      writeFileSync(abs, text);
+    };
+    mkdirSync(join(d, "scripts"), { recursive: true });
+    copyFileSync(
+      join(REPO_ROOT, "scripts", "phi-allow-list.txt"),
+      join(d, "scripts", "phi-allow-list.txt"),
+    );
+    write(VIOLATOR, PAYLOAD);
+    write(DECOY, CLEAN);
+    write(
+      "phi-scan-overrides.md",
+      `# phi-scan bypass log\n\n## Entries\n\n### ${VIOLATOR}\n\n- **Date:** 2026-08-11\n` +
+        `- **Reason:** unit test\n- **Approved by:** vitest\n- **Expires:** permanent\n\n` +
+        `### ${DECOY}\n\n- **Date:** 2026-08-11\n- **Reason:** unit test\n` +
+        `- **Approved by:** vitest\n- **Expires:** permanent\n\n` +
+        `### ${ABSENT}\n\n- **Date:** 2026-08-11\n- **Reason:** unit test\n` +
+        `- **Approved by:** vitest\n- **Expires:** permanent\n`,
+    );
+    gitIn(d, ["init", "-q"]);
+    gitIn(d, ["add", "-A"]);
+    gitIn(d, [
+      "-c",
+      "user.name=vitest",
+      "-c",
+      "user.email=vitest@example.invalid",
+      "commit",
+      "-qm",
+      "corpus",
+      "--no-verify",
+    ]);
+    return d;
+  }
+
+  /** Run an arbitrary scanner file with `cwd` as its REPO_ROOT. */
+  function runIn(cwd: string, scanner: string, args: string[]): RunResult {
+    const r = spawnSync(NODE_BIN, [scanner, ...args], { cwd, encoding: "utf8", shell: false });
+    return { code: r.status ?? -1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+  }
+
+  // ANTI-VACUITY, and it is a premise for every case below rather than a nicety:
+  // if the planted payload is not something this scanner finds at this path, a
+  // clean report over it proves nothing and the whole block is decorative.
+  it("premise: the violator is caught and the decoy is clean, with no flag in play", () => {
+    const corpus = makeCorpus();
+    const hit = runIn(corpus, SCANNER_PATH, [VIOLATOR]);
+    expect(hit.code, `stderr: ${hit.stderr}`).toBe(1);
+    expect(hit.stderr).toContain(MARKER);
+
+    const clean = runIn(corpus, SCANNER_PATH, [DECOY]);
+    expect(clean.code, `stderr: ${clean.stderr}`).toBe(0);
+    expect(clean.stdout).toMatch(/OK, no hits/);
+  });
+
+  it("REFUSES a paths run that withdrew one of two enumerated targets", () => {
+    const corpus = makeCorpus();
+    const r = runIn(corpus, SCANNER_PATH, [VIOLATOR, DECOY, "--allow-fixture", DECOY]);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(2);
+    expect(r.stderr).toMatch(/were enumerated and never read/);
+    expect(r.stderr).toContain(DECOY);
+    // The bypass got PAST the override-log gate and the run DID open the other
+    // target: without this the refusal above could be any earlier failure.
+    expect(r.stderr).toContain(MARKER);
+    // A hit is never swallowed by the refusal that follows it.
+    expect(r.stderr).toMatch(/HIT: /);
+    expect(r.stdout).not.toMatch(/OK, no hits/);
+  });
+
+  it("REFUSES the headline case: the run's ONLY violator is withdrawn", () => {
+    // This exact argv reported `OK, no hits` at exit 0 before the rule: a floor
+    // of one at whole-run scope withdrew the entire target list and the empty
+    // result reported clean.
+    //
+    // THE EXTERNALLY-GRADED SHAPE IS THE CASE ABOVE, NOT THIS ONE. `config`'s
+    // capability probe runs `[violator, decoy, --allow-fixture decoy]` and named
+    // this repo's drift as the HITS code (1), which is that case's pre-rule
+    // result; this case's is exit 0. One run cannot have produced both, so
+    // do not re-attach the probe to this argv.
+    const corpus = makeCorpus();
+    const r = runIn(corpus, SCANNER_PATH, [VIOLATOR, "--allow-fixture", VIOLATOR]);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(2);
+    expect(r.stderr).toMatch(/were enumerated and never read/);
+    expect(r.stderr).toContain(VIOLATOR);
+    expect(r.stdout).not.toMatch(/OK, no hits/);
+  });
+
+  it("REFUSES an all-mode sweep whose bypass withdraws a tracked path", () => {
+    // A LONE bypass no longer selects `paths` mode over exactly the path it
+    // withdraws, which is the shape that read to a caller like a full sweep. The
+    // run is `all` mode, the path is enumerated by the walk AND by the index, and
+    // it is unread either way.
+    const corpus = makeCorpus();
+    const r = runIn(corpus, SCANNER_PATH, ["--allow-fixture", VIOLATOR]);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(2);
+    expect(r.stderr).toMatch(/were enumerated and never read/);
+    expect(r.stderr).toContain(VIOLATOR);
+    expect(r.stdout).not.toMatch(/OK, no hits/);
+  });
+
+  it("REFUSES a --staged run whose bypass withdraws a staged path", () => {
+    // The route a commit is actually blocked on. Same floor, same refusal.
+    const corpus = makeCorpus();
+    writeFileSync(join(corpus, ...VIOLATOR.split("/")), `${PAYLOAD}second line\n`);
+    gitIn(corpus, ["add", VIOLATOR]);
+    const r = runIn(corpus, SCANNER_PATH, ["--staged", "--allow-fixture", VIOLATOR]);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(2);
+    expect(r.stderr).toMatch(/were enumerated and never read/);
+    expect(r.stderr).toContain(VIOLATOR);
+    expect(r.stdout).not.toMatch(/OK, no hits/);
+  });
+
+  it("ADMITS a bypass beside an unrelated positional, then refuses it", () => {
+    // The FIRST of the four pre-fix shapes, and the subtlest: the seed read
+    // `paths.length > 0 ? paths : [...allowFixtures]`, so with a positional
+    // present the bypass was a silent no-op and the violator was never ADMITTED
+    // to the run rather than withdrawn from it. It reported `OK, no hits` at
+    // exit 0 while naming a file it had never opened. The flag is unioned into
+    // the target list now, so the withdrawal is always a withdrawal of something
+    // enumerated and the completeness rule always sees it.
+    const corpus = makeCorpus();
+    const r = runIn(corpus, SCANNER_PATH, [DECOY, "--allow-fixture", VIOLATOR]);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(2);
+    expect(r.stderr).toMatch(/were enumerated and never read/);
+    expect(r.stderr).toContain(VIOLATOR);
+    expect(r.stdout).not.toMatch(/OK, no hits/);
+  });
+
+  it("REFUSES a bypass naming a path this run does not enumerate, under its OWN message", () => {
+    // The other half of the same claim, and a DIFFERENT tier: such a flag
+    // subtracts nothing, so honoring it silently would let a developer believe a
+    // file was acknowledged when the run never had it in scope. Asserting WHICH
+    // message fired is what keeps the two exit-2 tiers apart; the code alone
+    // cannot tell them from each other or from a crash.
+    const corpus = makeCorpus();
+
+    // `--staged` does not union a bypass into its targets (its scope is the
+    // index, not argv), and nothing is staged in a freshly committed corpus.
+    const staged = runIn(corpus, SCANNER_PATH, ["--staged", "--allow-fixture", VIOLATOR]);
+    expect(staged.code, `stderr: ${staged.stderr}`).toBe(2);
+    expect(staged.stderr).toMatch(/does not enumerate, so the flag subtracts nothing/);
+    expect(staged.stderr).toContain(VIOLATOR);
+    expect(staged.stderr).not.toMatch(/were enumerated and never read/);
+    expect(staged.stdout).not.toMatch(/OK, no hits/);
+
+    // And in `all` mode, over a logged path that is in neither the walk nor the
+    // index. Premise first, so this cannot pass because the file simply exists.
+    expect(existsSync(join(corpus, ...ABSENT.split("/")))).toBe(false);
+    const sweep = runIn(corpus, SCANNER_PATH, ["--allow-fixture", ABSENT]);
+    expect(sweep.code, `stderr: ${sweep.stderr}`).toBe(2);
+    expect(sweep.stderr).toMatch(/does not enumerate, so the flag subtracts nothing/);
+    expect(sweep.stderr).toContain(ABSENT);
+    expect(sweep.stdout).not.toMatch(/OK, no hits/);
+  });
+
+  it("leaves an ordinary sweep of the same corpus alone (no false refusal)", () => {
+    // The rule must not fire on the filters UPSTREAM of enumeration. A whole
+    // `all`-mode sweep of this corpus reports the violator it can see, at the
+    // HITS code, not at a refusal.
+    const corpus = makeCorpus();
+    const r = runIn(corpus, SCANNER_PATH, []);
+    expect(r.code, `stderr: ${r.stderr}`).toBe(1);
+    expect(r.stderr).toContain(MARKER);
+    expect(r.stderr).not.toMatch(/were enumerated and never read/);
+  });
+
+  // -------------------------------------------------------------------------
+  // POSITIVE CONTROL: mutate the rule out and prove these assertions RED.
+  // -------------------------------------------------------------------------
+
+  /** The one line whose removal removes the completeness rule, and nothing else. */
+  const RULE_LINE =
+    "const unread = [...enumerated].filter((p) => !read.has(p) && !tolerated.has(p));";
+
+  it("the assertions above RED when the completeness rule is mutated out", () => {
+    const source = readFileSync(SCANNER_PATH, "utf8");
+    // THE MUTATION IS ASSERTED TO HAVE LANDED. Without this the control goes
+    // vacuous the moment the rule is reworded: a "mutant" identical to the
+    // shipped scanner would pass by agreeing with it.
+    expect(source, `the rule line is gone; re-derive this control: ${RULE_LINE}`).toContain(
+      RULE_LINE,
+    );
+    const mutated = source.replace(RULE_LINE, "const unread: string[] = [];");
+    expect(mutated).not.toBe(source);
+
+    const mutantDir = tempDir("ccda-phi-mutant-");
+    const mutant = join(mutantDir, "phi-scan-no-completeness-rule.ts");
+    writeFileSync(mutant, mutated);
+
+    const corpus = makeCorpus();
+
+    // The mutant reports only its HITS code over the withdrawn decoy: exactly
+    // the drift `config`'s probe named on this repo. The shipped scanner exits 2
+    // here, so the assertion two cases up genuinely discriminates.
+    const withdrawnDecoy = runIn(corpus, mutant, [VIOLATOR, DECOY, "--allow-fixture", DECOY]);
+    expect(withdrawnDecoy.code, `stderr: ${withdrawnDecoy.stderr}`).toBe(1);
+    // NODE ALSO EXITS 1 ON AN UNCAUGHT THROW, which is this gate's code for HITS
+    // FOUND, so the code alone cannot tell a mutant that scanned from a mutant
+    // that failed to run. The marker is the evidence it actually opened the
+    // violator. Without this line the control could pass on a broken mutant,
+    // which is the shape (`#111`) that let a crash stand in for a premise here.
+    expect(withdrawnDecoy.stderr).toContain(MARKER);
+    expect(withdrawnDecoy.stderr).not.toMatch(/were enumerated and never read/);
+
+    // And the headline false green, reproduced rather than described: the run's
+    // only violator withdrawn, and a CLEAN verdict over a corpus it never opened.
+    const withdrawnViolator = runIn(corpus, mutant, [VIOLATOR, "--allow-fixture", VIOLATOR]);
+    expect(withdrawnViolator.code, `stderr: ${withdrawnViolator.stderr}`).toBe(0);
+    expect(withdrawnViolator.stdout).toMatch(/OK, no hits/);
   });
 });

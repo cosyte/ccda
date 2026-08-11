@@ -24,9 +24,8 @@ immutability + explicit mutation, and the profile system.
 
 - **Published on npm, public, MIT.** **This line names no version on purpose: it was stale every
   time anyone checked, so `npm view @cosyte/ccda version` is the only source of truth**, and a
-  `@cosyte/ccda` version quoted elsewhere in this file is historical, not
-  current; the `@cosyte/test-utils`, TypeScript and `pnpm` pins below are live
-  and mean what they say. Pre-alpha, `0.0.x` ladder (ADR 0001). A published version never moves
+  `@cosyte/ccda` version quoted elsewhere here is historical; every toolchain pin below is live and
+  means what it says. Pre-alpha, `0.0.x` ladder (ADR 0001). A published version never moves
   backwards.
   Why: `documentation/agent-notes.md#the-published-version-line-names-no-version`
 - **There are no stubs left.** `src/index.ts` exports a working parser (`parseCcda`), serializer
@@ -268,23 +267,22 @@ immutability + explicit mutation, and the profile system.
   exclusions, phase guards and self-test samples are re-derived for C-CDA and must not be inherited
   wholesale.** `CHANGELOG.md` is exempt org-wide (founder, 2026-07-29): do not re-litigate it.
   Why: `documentation/agent-notes.md#the-public-surface-gate`
-- **Em-dash gate present AND BLOCKING.** `U+2014` is banned outright by
-  founder directive, and **when it goes red the fix is never to re-encode the character**: rewrite
-  with a period, colon, comma or parentheses. `no-emdash` is a required status check via the
-  repository-level `emdash-required-check` ruleset; **re-read the rulesets rather than this line.**
-  It scans every tracked file **except the script itself**, **and** the
-  PR title, body and commit messages, so **keep the script free of the literal character.** **It is
-  the text-only variant, and dropping `grep -I` is the load-bearing part**: `src/profiles/merge.ts`
-  carries raw NULs and would otherwise be **silently exempt** from a ban with no exceptions, which
-  is not theoretical. **Do not swap in `website`'s variant**, and do not reach for `pathways`'
+- **Em-dash gate present AND BLOCKING.** `U+2014` is banned outright by founder directive, and
+  **when it goes red the fix is never to re-encode the character**: rewrite with a period, colon,
+  comma or parentheses. `no-emdash` is required via the repository-level `emdash-required-check`
+  ruleset; **re-read the rulesets rather than this line.** It scans every
+  tracked file **except the script itself**, **and** the PR title, body and commit messages, so
+  **keep the script free of the literal character.** **It is the text-only variant, and dropping
+  `grep -I` is the load-bearing part** (`src/profiles/merge.ts` carries raw NULs and would otherwise
+  be **silently exempt**). **Do not swap in `website`'s variant**, and do not reach for `pathways`'
   `git check-attr binary` without first adding a `.gitattributes`. **Do not trust a copy count
   written down anywhere, including here** - enumerate at carry-back time. **The gate covers new
   text only and does not rewrite history.**
   Why: `documentation/agent-notes.md#the-em-dash-gate`
 - **`phi-scan` scans EVERY tracked file now, markdown included; the two exemptions are literal
-  paths, and writing docs is inside the gate.** **THERE ARE THREE ROUTES, not two**
-  (`paths` is the third; miscounting them shipped an `INTRODUCED`, twice). **Never widen
-  `isSourceCode`: it also SUBTRACTS the structured scan in `looksLikeCda`.** A refusal exits **2**.
+  paths, and writing docs is inside the gate.** **THERE ARE THREE ROUTES, not two** (`paths` is the
+  third; miscounting them shipped an `INTRODUCED`, twice). **Never widen `isSourceCode`: it also
+  SUBTRACTS the structured scan in `looksLikeCda`.** A refusal exits **2**.
   **Write no count in this area; three drafts wrote one and were wrong.**
   Why: `documentation/agent-notes.md#the-corpus-every-phi-scan-route-read-past`
 - **`all` mode UNIONS the bytes git carries with the walk, deduped by CONTENT not path (the EOL
@@ -292,13 +290,16 @@ immutability + explicit mutation, and the profile system.
   not decorate `Target.path`. A non-blob index mode or an EMPTY index refuses. `ccda` had NO real
   unscanned corpus: the four states were reproduced, not found.**
   Why: `documentation/agent-notes.md#the-all-mode-sweep-reads-the-bytes-git-carries`
+- **A target ENUMERATED and never READ refuses (exit 2), any mode; `--allow-fixture` cannot reach
+  exit 0 anywhere. Assert an exact code AND the tier's message: `not.toBe(0)` accepts a crash.**
+  Why: `documentation/agent-notes.md#the-completeness-rule`
 - **The `CLAUDE.md` / `agent-notes.md` contract is gated, and unlike the public-surface gate above
   it BLOCKS** (it runs in the test suite, inside `parser-ci-required-checks`). **It asserts what
   THIS repo promises, never a fleet universal**: `config`, `hl7` and `workflow` carry no
   `agent-notes.md` at all. **Do not promote it to an umbrella script.** It scans **EVERY tracked
   file, no exclusion list: do not re-add a binary/NUL skip** - the first cut had one and silently
-  exempted `src/profiles/merge.ts`, the file the em-dash trap above names. The bare `` `#anchor` ``
-  form is confined to `CLAUDE.md` by shape and scope and **must not be widened** (`#id`/`#62` are
+  exempted `src/profiles/merge.ts`. The bare `` `#anchor` `` form is
+  confined to `CLAUDE.md` by shape and scope and **must not be widened** (`#id`/`#62` are
   XML and C-CDA narrative references). **Never delete an imperative or a section to get green.**
   Why: `documentation/agent-notes.md#the-agent-notes-contract-gate`
 
@@ -312,8 +313,7 @@ a summary.
   `@cosyte/tsconfig`. **Target ES2023**, `NodeNext`. TypeScript 5.9.x, exact-pinned.
 - **Build:** dual ESM + CJS + `.d.ts` via `tsup` (`@cosyte/tsup-config`); `attw` is a publish gate
   (per-condition types: `.d.ts` for `import`, `.d.cts` for `require`). The `attw` script is
-  **`node scripts/attw.mjs`, not the bare CLI**: see the guardrail below. The CLI reports a missing
-  `dist/` as "does not contain types" and **exits 0**.
+  **`node scripts/attw.mjs`, not the bare CLI**: see the guardrail below.
 - **Node:** **>= 22** (CI matrix 22 + 24).
 - **Package manager:** `pnpm@10`.
 - **Lint/format:** **ESLint 10** + unified `typescript-eslint` (type-checked) via
@@ -351,11 +351,11 @@ a summary.
   token.** **`.npmignore` versus `files` is about the file's DEPTH, not its existence.**
   `test/scripts/attw-gate.test.ts` pins two of the three, the upstream exit-0 itself, a real failure
   and a negative control; **the printed-nothing backstop is pinned by NO test, a stated gap rather
-  than an oversight. Do not carry the test file's "16 of 21" figure forward, re-measure it.** **This is a
-  per-repo script** and a sibling still invoking the CLI directly still has the defect; do not write
-  a repo count down here, derive it. `scripts/verify.sh` in the meta-repo **must not be touched** for
-  this. **The guard is described in four committed files and three corrections have landed in some
-  copies and not others: prefer CUTTING a copy to adding a more careful one.**
+  than an oversight. Do not carry the test file's "16 of 21" figure forward, re-measure it.**
+  **Per-repo script**; a sibling still on the bare CLI still has the defect. Write no repo count,
+  derive it. The meta-repo's `scripts/verify.sh` **must not be touched** for this. **The guard is
+  described in four committed files and three corrections have landed in some copies and not
+  others: prefer CUTTING a copy to adding a more careful one.**
   Why: `documentation/agent-notes.md#the-attw-wrapper-script`
 
 ## Standing disciplines (every change)
