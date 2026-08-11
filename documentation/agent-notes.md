@@ -2079,14 +2079,23 @@ authoritative sentence true; it is not credited as this route's find.** **This i
 
 **🛑 BUILD AN INDEX STATE WITH `git update-index --index-info`, NEVER BY BRANCHING AND MERGING, AND
 THIS COST A RED CI RUN.** The first version of the unmerged case produced its stages by making two
-branches conflict. It passed locally and **went RED on both CI runners, where `git ls-files -s` came
-back with no records for the path at all** - so the case was grading the fixture's environment rather
-than the scanner, and it would have gone on doing that in whichever direction the runner happened to
-fall. **The state the scanner is about is "an index holding no stage-0 record for a path", so write
-exactly that**: `git hash-object -w --stdin` for each side, then `update-index --index-info`. It is
+branches conflict. It passed locally and **went RED on both CI runners** - so the case was grading
+the fixture's environment rather than the scanner, and it would have gone on doing that in whichever
+direction the runner happened to fall. **The cause is a committer identity**: the draft handed its
+`git merge` none, unlike `repoWithConflict`, which hands its merge one for exactly this reason, and a
+merge with no resolvable identity dies **before it touches the index** - reproduced at exit 128,
+`Committer identity unknown`, the index left holding the ordinary stage-0 record the last commit
+wrote. **A PREMISE ASSERTION THAT ACCEPTS ANY NON-ZERO EXIT ACCEPTS A CRASH** - the draft's
+`.not.toBe(0)`, written to mean "the merge really conflicts", passed on that 128. **The reading that
+`git ls-files -s` came back with no records for the path at all stood here and is FALSE; the red
+run's own output says `expected [ Array(1) ] to have a length of 3 but got 1`. DO NOT RESTORE IT.**
+**The state the scanner is about is "an index holding no stage-0 record for a path", so write exactly
+that**: `git hash-object -w --stdin` for each side, then `update-index --index-info`. It is
 identical everywhere, needs no committer identity, no default-branch name and no merge driver, and it
 is the same index a real `git merge` produces (verified by hand against one). **The premise assertion
-now prints what `ls-files -s` actually said**, so the next failure names its own cause.
+now prints what `ls-files -s` actually said.** It captures `listed.stdout` only; its status and
+stderr are never read, unlike every other call in the same case, so a failing `ls-files` leaves its
+own cause invisible: disclosed, not closed.
 
 **RESIDUALS, DISCLOSED RATHER THAN CLOSED.** `git cat-file blob` inherits `execFileSync`'s 1 MiB
 `maxBuffer`, so a tracked blob larger than that REFUSES (exit 2) rather than reporting a truncated
