@@ -1991,6 +1991,12 @@ describe("phi-scan: the completeness rule", () => {
     // here, so the assertion two cases up genuinely discriminates.
     const withdrawnDecoy = runIn(corpus, mutant, [VIOLATOR, DECOY, "--allow-fixture", DECOY]);
     expect(withdrawnDecoy.code, `stderr: ${withdrawnDecoy.stderr}`).toBe(1);
+    // NODE ALSO EXITS 1 ON AN UNCAUGHT THROW, which is this gate's code for HITS
+    // FOUND, so the code alone cannot tell a mutant that scanned from a mutant
+    // that failed to run. The marker is the evidence it actually opened the
+    // violator. Without this line the control could pass on a broken mutant,
+    // which is the shape (`#111`) that let a crash stand in for a premise here.
+    expect(withdrawnDecoy.stderr).toContain(MARKER);
     expect(withdrawnDecoy.stderr).not.toMatch(/were enumerated and never read/);
 
     // And the headline false green, reproduced rather than described: the run's

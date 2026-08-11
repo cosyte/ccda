@@ -2176,6 +2176,34 @@ exactly: the HITS code where the corpus still holds a readable violator, and `OK
 where it does not. Re-run against the pre-change scanner, seven of the nine new cases red and the two
 that pass are the anti-vacuity premise and the no-false-refusal case, which must hold on both trees.
 
+**🛑 THE GRADE FOUND THREE PROSE DEFECTS AND NO CODE DEFECT, WHICH IS THIS LINEAGE'S SIGNATURE, SO
+THEY ARE RECORDED RATHER THAN QUIETLY FIXED.** All three were `INTRODUCED` by this slice and all three
+are corrected on it:
+
+1. **A draft docblock listed the WALK's filters as if they bounded the whole sweep.** Only
+   `EXCLUDED_PATHS` binds both halves of `all` mode. A **tracked** path under a `WALK_SKIP_DIRS` name
+   IS enumerated, by the union half, and read from the index: a committed `dist/leaked.txt` with a
+   clean working copy reports `HIT: dist/leaked.txt (as git carries it)` at exit 1. Measured twice,
+   independently. The direction is more scanning than the sentence claimed, never less, and it cannot
+   produce a false refusal because the union both enumerates AND reads it. **Do not read the walk's
+   filter list as the sweep's.** The gitignore half of that sentence is only VACUOUSLY true of the
+   union, and `unionCandidatePaths` says so where it declines to apply it.
+2. **The `CLAUDE.md` byte budget forced five compressions and one of them widened a scoped sentence
+   into a false universal:** "a `@cosyte/ccda` version quoted elsewhere is historical" became "any
+   version", which declares the live enforced toolchain baseline historical. **Compressing to fit a
+   budget is an edit like any other and can introduce a claim defect.** No imperative was deleted by
+   any of the five; that was checked one by one.
+3. **The positive control's first mutant assertion accepted a crash.** It pinned exit 1, and node
+   exits 1 on an uncaught throw, so a mutant that failed to RUN satisfied it; only the second mutant
+   run (exit 0 plus `OK, no hits`) was crash-proof. It now asserts the payload marker too. **This is
+   the `#111` shape again, in the very block written to avoid it.**
+
+**A BOUND WORTH KNOWING: the rule is PATH-LEVEL.** "Read" means the bytes went through `scanTarget`,
+not that every detector ran over them, so `CHANGELOG.md` counts as read while
+`STRUCTURED_EXEMPT_PATHS` keeps the five structured detectors off it. That exemption is pre-existing
+and argued where it is declared; this rule does not re-litigate it, and what it adds is that a file
+nothing opened at all can no longer pass.
+
 **THE EXTERNAL DEFINITION OF DONE.** `config`'s `pnpm drift` runs a capability PROBE, not a regex over
 this file's prose, and it named this repo's drift as "reported only its HITS code (1) over a run that
 withdrew `test/fixtures/phi-scan-probe-decoy.txt` after enumerating it". It is `ok` here now. **The

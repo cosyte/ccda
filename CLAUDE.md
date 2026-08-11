@@ -23,10 +23,10 @@ immutability + explicit mutation, and the profile system.
 ## Status
 
 - **Published on npm, public, MIT.** **This line names no version on purpose: it was stale every
-  time anyone checked, so `npm view @cosyte/ccda version` is the only source of truth**, and any
-  version quoted elsewhere here is historical; the `@cosyte/test-utils`, TypeScript and `pnpm` pins
-  below are live and mean what they say. Pre-alpha, `0.0.x` ladder (ADR 0001). A published version
-  never moves backwards.
+  time anyone checked, so `npm view @cosyte/ccda version` is the only source of truth**, and a
+  `@cosyte/ccda` version quoted elsewhere here is historical; every toolchain pin below is live and
+  means what it says. Pre-alpha, `0.0.x` ladder (ADR 0001). A published version never moves
+  backwards.
   Why: `documentation/agent-notes.md#the-published-version-line-names-no-version`
 - **There are no stubs left.** `src/index.ts` exports a working parser (`parseCcda`), serializer
   (`serializeCcda`), document builder (`buildCcda`), and document editor (`editCcda`), plus the

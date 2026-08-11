@@ -178,17 +178,35 @@
  * can.
  *
  * ENUMERATION IS THIS RUN'S OWN DECLARATION OF WHAT IT WILL READ, so the filters
- * UPSTREAM of it do not violate the rule and are not weakened by it: a
- * gitignored entry, an `EXCLUDED_PATHS` path, and a `WALK_SKIP_DIRS` subtree are
- * never enumerated in the first place. What the rule catches is a path that
- * BECAME a target and then did not get opened. In `all` mode the enumerated set
- * is the walk's targets UNION `unionCandidatePaths(index)`, computed before the
- * first byte is read, so the union half's tracked paths are covered too.
+ * UPSTREAM of it do not violate the rule and are not weakened by it. What the
+ * rule catches is a path that BECAME a target and then did not get opened. In
+ * `all` mode the enumerated set is the walk's targets UNION
+ * `unionCandidatePaths(index)`, computed before the first byte is read, so the
+ * union half's tracked paths are covered too.
+ *
+ * 🛑 WHICH FILTERS THOSE ARE IS PER-ROUTE, AND A DRAFT OF THIS PARAGRAPH LISTED
+ * THE WALK'S AS IF THEY BOUNDED THE WHOLE SWEEP. Only `EXCLUDED_PATHS` is
+ * honored by both halves of `all` mode. The walk's other two are NOT:
+ *
+ *   - A TRACKED PATH UNDER A `WALK_SKIP_DIRS` NAME IS ENUMERATED, by the union
+ *     half, and read from the index. Measured, not reasoned about: a committed
+ *     `dist/leaked.txt` whose working copy is clean reports
+ *     `HIT: dist/leaked.txt (as git carries it)` at exit 1. Nothing is tracked
+ *     under such a name here today, so it is latent, and the direction is MORE
+ *     scanning than the walk alone, never less. It cannot produce a false
+ *     refusal either, because the union both enumerates AND reads it.
+ *   - The gitignore filter is only VACUOUSLY true of the union, and saying so is
+ *     the point: `git check-ignore` never reports a TRACKED path as ignored, so
+ *     the union has no gitignored candidate to drop. See `unionCandidatePaths`.
  *
  * A BYPASS NAMING A PATH THIS RUN DOES NOT ENUMERATE ALSO REFUSES. It is the
  * other half of the same claim: such a flag subtracts nothing, so honoring it
  * silently would let a developer believe a file was acknowledged when the run
- * never had it in scope.
+ * never had it in scope. BOUND, so the tier is not read as wider than it is: in
+ * `paths` mode a bypass naming a path that does not exist never reaches this
+ * tier, because the flag is unioned into the target list and
+ * `buildTargetsForPaths` throws `File not found` first. Same exit 2, earlier and
+ * more specific message; the tier is reached in `all` and `staged` mode.
  *
  * WHAT THIS COSTS, STATED RATHER THAN LEFT TO BE DISCOVERED: `--allow-fixture`
  * CAN NO LONGER REACH EXIT 0 IN ANY MODE. The flag, the override log and the
@@ -197,6 +215,15 @@
  * reaches a clean run. THE HIT FOOTER THEREFORE NO LONGER ADVERTISES
  * `--allow-fixture` AS A REMEDY: a printed remedy that leads to exit 2 is the
  * same defect as one that leads to a false green, with the sign flipped.
+ *
+ * THE RULE IS PATH-LEVEL, AND "READ" MEANS THE BYTES WENT THROUGH `scanTarget`,
+ * NOT THAT EVERY DETECTOR RAN OVER THEM. Stated because the headline sentence
+ * ("a scan that did not open a file has no clean verdict to give about it") is
+ * otherwise easy to read as the stronger claim: `STRUCTURED_EXEMPT_PATHS` names
+ * `CHANGELOG.md`, which is read and shape-scanned but never structurally
+ * scanned, and it counts as READ here. That exemption is pre-existing, argued
+ * where it is declared, and deliberately NOT re-litigated by this rule; what
+ * this rule adds is that a file nothing opened at all can no longer pass.
  *
  * THE VANISH TOLERANCE IS THE ONE ACCOUNTED-FOR NON-READ, AND ITS BOUNDS ARE
  * WHY IT IS NOT A HOLE IN THIS RULE. A target skipped under
@@ -1942,10 +1969,12 @@ function main(): number {
 
   // ENUMERATED: the set of paths this run DECLARED it would read, captured
   // BEFORE the bypass subtracts anything and before the first byte is read.
-  // Everything the filters dropped upstream (a gitignored entry, an
-  // `EXCLUDED_PATHS` path, a `WALK_SKIP_DIRS` subtree, a staged deletion) never
-  // became a target and is not in here, which is why the completeness rule below
-  // does not fire on them.
+  // Whatever the filters upstream of it dropped never became a target and is not
+  // in here, which is why the completeness rule below does not fire on it. WHICH
+  // FILTERS THOSE ARE IS PER-ROUTE and the docblock spells it out: only
+  // `EXCLUDED_PATHS` binds BOTH halves of `all` mode, and a TRACKED path under a
+  // `WALK_SKIP_DIRS` name is enumerated by the union half even though the walk
+  // drops it. Do not read the walk's filter list as the sweep's.
   //
   // IN `all` MODE IT IS THE WALK'S TARGETS UNION THE IN-SCOPE TRACKED PATHS. The
   // union half reads that second set minus whatever the walk already read

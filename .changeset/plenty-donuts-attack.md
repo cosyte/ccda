@@ -14,9 +14,10 @@ The scanner now refuses (exit 2), in every mode, over any target this run
 enumerated and never read, naming the paths. The comparison is a set difference
 rather than a count, because a count counts the targets that did get read. A
 bypass naming a path the run does not enumerate refuses too, under its own
-message, since such a flag subtracts nothing. `--allow-fixture` no longer selects
-the mode and is unioned into the target list in `paths` mode, so it means the
-same thing in every argv.
+message, since such a flag subtracts nothing (in `paths` mode a nonexistent path
+is refused earlier still, by `File not found`). `--allow-fixture` no longer
+selects the mode and is unioned into the target list in `paths` mode, so it means
+the same thing in every argv.
 
 What it costs, stated rather than left to be discovered: `--allow-fixture` can no
 longer reach exit 0 in any mode. The flag, `phi-scan-overrides.md` and the log
