@@ -121,3 +121,15 @@ CCD `templateId` carries `@extension="2015-08-01"`. Social History and Vital Sig
 asserted only against an R2.1-stamped document; an R1.1-origin CCD keeps the older four-key reading,
 because there is no R1.1 Schematron in hand and narrowing would be as unsourced as broadening. Pass
 `{ r21Stamped: false }` to `requiredSectionKeys` / `missingRequiredSections` for that reading.
+
+**Five more types were read off the same source, and every type now reports how far it was
+verified.** `requiredSectionStatus(documentType)` returns the asserted `keys` with a `verification`
+of `traced-complete`, `traced-partial`, `untraced` or `not-applicable`, the conformance id and the
+source's own section name behind each traced key, and every SHALL section left unasserted with its
+reason (outside the recognized catalog, or not unconditionally required). Consultation Note asserts
+History of Present Illness (CONF:1198-28907), Allergies (-28911) and Problems (-28929), all scoped to
+the R2.1 stamp their constraints carry; Progress Note, Procedure Note, Operative Note and Diagnostic
+Imaging Report assert nothing, because every SHALL section their templates name is either outside the
+recognized catalog or a choice. Unstructured Document is `not-applicable`: its component SHALL be a
+`nonXMLBody` (-31086), so it has no section to require. The six types that already asserted keys stay
+`untraced`, sets and citations unchanged, because the source was not re-read for them.

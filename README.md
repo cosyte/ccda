@@ -400,14 +400,35 @@ normative R2.1 Schematron, CONF:1198-30925), so the SHALL check does not stay si
 Note omits it. Its Assessment/Plan requirement stays out (a choice constraint), as do its Results and
 Plan of Treatment sections (SHOULD, not SHALL).
 
-**Six of the twelve tables assert nothing**, so this check under-warns by design: Consultation Note,
-Progress Note, Procedure Note, Operative Note, Diagnostic Imaging Report, and Unstructured Document
-carry an empty set pending per-type verification against the IG. A document of one of those types can
-be missing every section its type requires and still parse clean, with no `REQUIRED_SECTION_MISSING`.
-Per-type provenance also varies: some sets are traced to the normative R2.1 Schematron and some are
-not yet reconciled against it, and the asserted sets are deliberately narrower rather than broader
-where that tracing is incomplete. **A quiet parse is not a conformance result.** If your pipeline needs
-IG conformance, validate the document with an external validator.
+### What each document type asserts, and how much of it was verified
+
+**Every one of the twelve types reports a verification state**, so an empty asserted set is never
+ambiguous. `requiredSectionStatus(documentType)` returns the same `keys` as `requiredSectionKeys`
+plus a `verification` of `traced-complete`, `traced-partial`, `untraced` or `not-applicable`, the
+provenance (`traced`) of every key read off the source, and every SHALL section left `unasserted`
+with the reason. `requiredSectionStatuses()` returns all twelve at once, and `DOCUMENT_TYPES`
+enumerates the types themselves.
+
+A state says what was read off the normative C-CDA R2.1 base implementation guide **for that type**,
+not what this package has ever cited: `traced-complete` claims every SHALL section the source names
+is asserted, which is a completeness claim, so a type nobody re-read stays `untraced` even when its
+keys carry conformance ids.
+
+| document type                                                                            | state            | asserted                                                                                                          | named but not asserted                                                                                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Consultation Note                                                                        | `traced-partial` | History of Present Illness (CONF:1198-28907), Allergies (-28911), Problems (-28929), all scoped to the R2.1 stamp | Reason for Referral **or** Reason for Visit (-9504); Assessment and Plan **or** Assessment plus Plan of Treatment (-9501). Neither is unconditional                                                                                                                                          |
+| Progress Note                                                                            | `traced-partial` | nothing: the source names no unconditional SHALL section for it                                                   | the Assessment/Plan choice (-30657)                                                                                                                                                                                                                                                          |
+| Procedure Note                                                                           | `traced-partial` | nothing                                                                                                           | Complications (-30387), Procedure Description (-30356), Procedure Indications (-30358), Postprocedure Diagnosis (-30360), all outside the recognized catalog; the Assessment/Plan choice (-30412)                                                                                            |
+| Operative Note                                                                           | `traced-partial` | nothing                                                                                                           | Anesthesia (-30487), Complications (-30489), Preoperative Diagnosis (-30491), Procedure Estimated Blood Loss (-30493), Procedure Findings (-30495), Procedure Specimens Taken (-30497), Procedure Description (-30499), Postoperative Diagnosis (-30501), all outside the recognized catalog |
+| Diagnostic Imaging Report                                                                | `traced-partial` | nothing                                                                                                           | Findings (DIR) (-30697), outside the recognized catalog                                                                                                                                                                                                                                      |
+| Unstructured Document                                                                    | `not-applicable` | nothing                                                                                                           | nothing: its component SHALL be a `nonXMLBody` (-31086), so it carries no section to require                                                                                                                                                                                                 |
+| CCD, Discharge Summary, Referral Note, History and Physical, Care Plan, Transfer Summary | `untraced`       | their existing sets, unchanged                                                                                    | not re-read against the source here, so no completeness claim is made either way                                                                                                                                                                                                             |
+
+**This check still under-warns, and the state says where.** A `traced-partial` type is not checking
+the sections listed in its right-hand column, and an `untraced` type carries no claim that its set is
+complete: a document of either can be missing a section its type requires and still parse clean.
+**A quiet parse is not a conformance result.** If your pipeline needs IG conformance, validate the
+document with an external validator.
 
 ## Serialize & round-trip
 
@@ -846,11 +867,15 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
   apply to the slot's primary coding; alternate codings in `<translation>` are preserved but not
   slot-checked. A clean run means those five slots passed, **not** that the document was
   terminology-verified.
-- **Required-section (SHALL) validation under-warns, and six of the twelve tables assert nothing**:
-  Consultation Note, Progress Note, Procedure Note, Operative Note, Diagnostic Imaging Report, and
-  Unstructured Document assert no unconditional in-catalog SHALL section yet, so a document of one of
-  those types missing every section its type requires still parses clean. A quiet parse is not a
-  conformance result.
+- **Required-section (SHALL) validation under-warns, and every type says by how much**: five of the
+  twelve report `traced-partial` (Consultation Note, Progress Note, Procedure Note, Operative Note,
+  Diagnostic Imaging Report), naming the SHALL sections they do not assert and why; Unstructured
+  Document reports `not-applicable` because it carries no section; the remaining six report
+  `untraced`, so no claim is made that their sets are complete. Four of the five traced types assert
+  nothing, because every SHALL section their template names is either outside the recognized catalog
+  or a choice. A document of a `traced-partial` or `untraced` type can still be missing a section its
+  type requires and parse clean: read `requiredSectionStatus(documentType)` rather than treating a
+  quiet parse as a conformance result.
 - **Editing is whole-section, across twelve kinds**: Functional Status and Mental Status are buildable
   but **not editable** (each takes three separate content lists), as are the Referral Note's
   narrative-only Assessment and Reason for Referral sections. There is no entry-level append (a

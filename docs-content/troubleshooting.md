@@ -377,16 +377,50 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   provenance, plus `ccdaProfiles.default`, which tolerates nothing and is identical to passing no
   profile at all. There is no named per-vendor profile: one is added only when a real, de-identified
   document from that vendor grounds the quirk, never from an invented one.
-- **The required-section (SHALL) table is conservative, and six of the twelve types are empty.** It
-  asserts only unconditional, in-catalog, high-confidence SHALL constraints; it omits choice
-  constraints (`SHALL contain A OR B`), SHOULD/MAY sections, and SHALL sections outside the
-  recognized catalog. Consultation Note, Progress Note, Procedure Note, Operative Note, Diagnostic
-  Imaging Report, and Unstructured Document currently assert **nothing**, pending per-type
-  verification against the IG. This under-warns rather than over-warns: a document of one of those
-  types that is missing every section its type requires parses clean, with no
-  `REQUIRED_SECTION_MISSING`. Read an empty table as "no unconditional in-catalog SHALL section is
-  asserted yet," never as "this type has no requirements," and do not treat a quiet parse as a
-  conformance result.
+- **The required-section (SHALL) table is conservative, and every type reports how far it was
+  verified.** It asserts only unconditional, in-catalog, high-confidence SHALL constraints; it omits
+  choice constraints (`SHALL contain A OR B`), SHOULD/MAY sections, and SHALL sections outside the
+  recognized catalog. `requiredSectionStatus(documentType)` returns the asserted keys with a
+  `verification` state, so an empty set is never ambiguous:
+
+  - **`traced-partial`** for Consultation Note, Progress Note, Procedure Note, Operative Note and
+    Diagnostic Imaging Report. Their SHALL sections were read off the normative C-CDA R2.1 source.
+    Consultation Note asserts History of Present Illness (CONF:1198-28907), Allergies (-28911) and
+    Problems (-28929), each scoped to the R2.1 stamp its constraint carries. The other four assert
+    **nothing**, and that is now a traced result rather than an unread table: every SHALL section
+    their templates name is either outside this parser's recognized catalog (Complications,
+    Procedure Description, Anesthesia, Findings (DIR) and the rest) or a choice, and each one is
+    listed by name in `status.unasserted` with the reason.
+  - **`not-applicable`** for Unstructured Document: its component SHALL be a `nonXMLBody`
+    (CONF:1198-31086), so it carries no section to require and none can be missing.
+  - **`untraced`** for CCD, Discharge Summary, Referral Note, History and Physical, Care Plan and
+    Transfer Summary. Their asserted sets are unchanged and their existing citations intact, but the
+    source was not re-read for them here, so nothing claims those sets are complete.
+
+  This under-warns rather than over-warns: a document of a `traced-partial` or `untraced` type that
+  is missing a section its type requires can still parse clean, with no `REQUIRED_SECTION_MISSING`.
+  Read an empty asserted set through its state, never as "this type has no requirements," and do not
+  treat a quiet parse as a conformance result.
+
+  ```ts runnable
+  import { requiredSectionStatus, requiredSectionStatuses, DOCUMENT_TYPES } from "@cosyte/ccda";
+
+  DOCUMENT_TYPES.length; // => 12
+  requiredSectionStatuses().length; // => 12
+
+  const consult = requiredSectionStatus("consultationNote");
+  consult.verification; // => "traced-partial"
+  consult.keys.join(","); // => "historyOfPresentIllness,allergies,problems"
+  consult.traced[0]?.conformanceId; // => "CONF:1198-28907"
+  consult.unasserted[0]?.reason; // => "not-unconditionally-required"
+
+  // An empty asserted set, three different readings, three different values.
+  requiredSectionStatus("operativeNote").keys.length; // => 0
+  requiredSectionStatus("operativeNote").verification; // => "traced-partial"
+  requiredSectionStatus("operativeNote").unasserted[0]?.reason; // => "outside-section-catalog"
+  requiredSectionStatus("unstructuredDocument").verification; // => "not-applicable"
+  requiredSectionStatus("ccd").verification; // => "untraced"
+  ```
 
 ### Building a document
 

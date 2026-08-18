@@ -61,6 +61,21 @@ const DOCUMENT_TEMPLATES: ReadonlyMap<string, DocumentType> = new Map([
 ]);
 
 /**
+ * Every recognized {@link DocumentType}, in the recognition table's own order.
+ * The runtime enumeration behind the type union: a consumer can walk all twelve
+ * without hand-writing the list (and without it going stale when a thirteenth
+ * type is recognized).
+ *
+ * @example
+ * ```ts
+ * import { DOCUMENT_TYPES } from "@cosyte/ccda";
+ * DOCUMENT_TYPES.length; // 12
+ * DOCUMENT_TYPES.includes("carePlan"); // true
+ * ```
+ */
+export const DOCUMENT_TYPES: readonly DocumentType[] = [...DOCUMENT_TEMPLATES.values()];
+
+/**
  * Resolve a document-template OID to its {@link DocumentType}, or `undefined`
  * when the OID is not one of the twelve recognized C-CDA R2.1 types.
  *

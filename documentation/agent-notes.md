@@ -1228,17 +1228,40 @@ deleted; the imperative as it stood is reproduced here verbatim.
 
 ## The required-section SHALL tables and their provenance
 
-  - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`
-    assert nothing (Consultation Note, Progress Note, Procedure Note, Operative Note, Diagnostic
-    Imaging Report, Unstructured Document). Empty means "no unconditional in-catalog SHALL section
-    is asserted yet", never "this type has no requirements". Per-type provenance varies: the
-    Referral Note's set is traced to the normative R2.1 Schematron (CONF:1198-30925 and the
-    SHOULD-not-SHALL exclusions beside it, see the comment at `required-sections.ts:44`), while the
-    others are asserted conservatively without that end-to-end tracing. Do not broaden or narrow an
-    untraced set without the Schematron in hand.
-  - **The CCD row is the exception and is now traced end to end (2026-08-10).** See
-    `#the-ccd-shall-set-settled-against-the-normative-schematron` below. "Six of the twelve assert
-    nothing" is unchanged by it: the CCD row was never one of the empty six.
+  - **An empty asserted set is no longer ambiguous, and that is the whole point of the state.**
+    Every one of the twelve types carries a `verification` in `REQUIRED_SECTION_TRACE`
+    (`src/parser/required-sections.ts`), surfaced by `requiredSectionStatus` /
+    `requiredSectionStatuses`: `traced-complete`, `traced-partial`, `untraced`, `not-applicable`.
+    Empty still never means "this type has no requirements"; the state says which emptiness it is.
+    **Do not broaden or narrow an untraced set without the Schematron in hand**, and do not read a
+    recorded conformance id as a traced state.
+  - **A state is a claim about what was READ for that type, never about what the repository has ever
+    cited, and that reading was chosen deliberately.** `traced-complete` asserts that every SHALL
+    section the source names for the type is asserted, which is a completeness claim about the
+    source. So the six rows that already asserted keys (CCD, Discharge Summary, Referral Note,
+    History and Physical, Care Plan, Transfer Summary) report **`untraced`** even though the CCD and
+    Referral Note rows carry genuinely traced CONF ids from 2026-08-10. Inheriting a traced state
+    from an older commit's citation would publish an unchecked completeness claim on the most widely
+    exchanged C-CDA type. **Promoting a row out of `untraced` means re-reading the source for that
+    row, in its own change; it is never a table edit.**
+  - **Five types were read off the normative R2.1 Schematron (2026-08-18) and the result was mostly
+    NOT keys.** Consultation Note gained three (History of Present Illness CONF:1198-28907,
+    Allergies -28911, Problems -28929, **all three stamp-scoped**, because the rule context carries
+    `@extension='2015-08-01'`). Progress Note, Procedure Note, Operative Note and Diagnostic Imaging
+    Report gained **nothing**, and that is the correct traced outcome, not a failed trace: every
+    SHALL section their templates name is either outside this parser's recognized catalog
+    (Complications, Procedure Description, Anesthesia, Findings (DIR), and the rest) or a choice
+    (the Assessment/Plan pair). **Each one is named with its id and its reason in
+    `REQUIRED_SECTION_TRACE`, so "we assert nothing here" is auditable rather than silent.**
+    **A key with no source is never asserted, whatever that costs a milestone.**
+  - **Unstructured Document is `not-applicable`, decided structurally and confirmed both ways.** Its
+    R2.1 template's component SHALL contain exactly one `nonXMLBody` (CONF:1198-31086) and the rule
+    names no section at all, so there is no obligation to trace; `buildDocument` only reaches
+    `validateRequiredSections` through a `structuredBody`, so the parser already agreed. **If a later
+    reader finds a section SHALL for this type, the state is wrong and the fix is a re-trace, not a
+    key.**
+  - **The CCD row's own trace (2026-08-10)** is at
+    `#the-ccd-shall-set-settled-against-the-normative-schematron` below, unchanged by any of this.
 
 ## The published version line names no version
 
