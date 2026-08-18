@@ -211,16 +211,26 @@ export {
   documentTypeForOid,
   sectionForTemplateRoot,
   sectionForLoinc,
+  DOCUMENT_TYPES,
   CDA_DOCUMENT_OID,
   R21_EXTENSION,
 } from "./parser/templates.js";
 export type { DocumentType, SectionInfo } from "./parser/templates.js";
 
-// Per-document-type required-section (SHALL) validation tables.
+// Per-document-type required-section (SHALL) validation tables, and the
+// per-type verification state that says how much of each type's obligation was
+// read off the normative C-CDA R2.1 source.
 export {
   requiredSectionKeys,
   missingRequiredSections,
+  requiredSectionStatus,
+  requiredSectionStatuses,
   type RequiredSectionOptions,
+  type RequiredSectionStatus,
+  type RequiredSectionVerification,
+  type TracedRequiredSection,
+  type UnassertedRequiredSection,
+  type UnassertedSectionReason,
 } from "./parser/required-sections.js";
 
 // HL7 v3 datatype layer (interfaces + parsers + null-flavor / datetime helpers).

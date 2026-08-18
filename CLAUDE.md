@@ -234,14 +234,21 @@ immutability + explicit mutation, and the profile system.
   - `SAFETY_CRITICAL_CODES` is a frozen read-only view, not a `Set` instance: every read operation
     works (including spread), but `instanceof Set` is `false`.
     Why: `documentation/agent-notes.md#the-safety-critical-codes-export-is-a-frozen-view`
-  - **Six of the twelve** required-section (SHALL) tables in `src/parser/required-sections.ts`
-    assert nothing. **Empty means "no unconditional in-catalog SHALL section is asserted yet", never
-    "this type has no requirements".** Provenance varies per type. **Do not broaden or narrow an
-    untraced set without the Schematron in hand. The CCD row IS traced: SIX (Allergies, Medications,
-    Problems, Results, Social History, Vital Signs), the last two ONLY on an R2.1-STAMPED document
-    (their CONFs' rule context). `build-ccda.ts` names the same six; keep its conditional Social
-    History emit guarded or a CCD emits it twice**
-    (`#the-ccd-shall-set-settled-against-the-normative-schematron`)
+  - **Every one of the twelve required-section (SHALL) tables in `src/parser/required-sections.ts`
+    carries a `verification` state** (`traced-complete` / `traced-partial` / `untraced` /
+    `not-applicable`, via `requiredSectionStatus`). **Empty means "no unconditional in-catalog SHALL
+    section is asserted yet", never "this type has no requirements"**, and the state says which
+    emptiness it is. **A state is what was READ for that type, never a recorded id: the six rows
+    that already asserted keys stay `untraced` even where their CONF ids are real, and promoting one
+    means re-reading the source in its own change.** **Do not broaden or narrow an untraced set
+    without the Schematron in hand. The CCD row IS traced: SIX (Allergies, Medications, Problems,
+    Results, Social History, Vital Signs), the last two ONLY on an R2.1-STAMPED document (their
+    CONFs' rule context). `build-ccda.ts` names the same six; keep its conditional Social History
+    emit guarded or a CCD emits it twice**
+    (`#the-ccd-shall-set-settled-against-the-normative-schematron`). **Consultation Note's three
+    (CONF:1198-28907 / -28911 / -28929) are ALL stamp-scoped; the other four traced types assert
+    NOTHING on purpose (out-of-catalog sections or choices, each named with its reason), and
+    Unstructured Document is `not-applicable`, it carries no `structuredBody` at all.**
     Why: `documentation/agent-notes.md#the-required-section-shall-tables-and-their-provenance`
   - **The six CCD SHALL sections do NOT share one stamp: Medications is `2014-06-09`, the rest
     `2015-08-01`.** Read the `@root`+`@extension` PAIR, not the root alone: the `R21` default

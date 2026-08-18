@@ -42,6 +42,15 @@ const V3_ATTRS = `xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSc
 /** A document type whose required-section (SHALL) table is empty: Progress Note. */
 const QUIET_DOC_OID = "2.16.840.1.113883.10.20.22.1.9";
 
+/**
+ * A document type whose SHALL sections ARE asserted: Consultation Note, whose
+ * three keys were read off the normative R2.1 source. The counterpart to
+ * `QUIET_DOC_OID`: a document of this type that omits one draws
+ * `REQUIRED_SECTION_MISSING`, which is what the two slots at the end of the
+ * table need in order to probe that diagnostic at all.
+ */
+const TRACED_DOC_OID = "2.16.840.1.113883.10.20.22.1.4";
+
 const LOINC = "2.16.840.1.113883.6.1";
 const SNOMED = "2.16.840.1.113883.6.96";
 
@@ -610,5 +619,46 @@ export const PHI_SLOTS: readonly DiagnosticSlot<string>[] = [
     name: "ClinicalDocument/templateId/@nullFlavor",
     plant: (m) => doc({ docTemplateNullFlavor: m }),
     expectCode: null,
+  },
+  // ---- the required-section (SHALL) check --------------------------------
+  //
+  // Both slots plant into a document of a type whose SHALL sections were read
+  // off the normative source, and both documents are missing one, so
+  // REQUIRED_SECTION_MISSING is genuinely emitted while consumer-controlled text
+  // sits in the same document. The section key that reaches the message comes
+  // from this package's own closed catalog; nothing the document says may.
+  {
+    name: "section/title (document of a traced type missing a SHALL section)",
+    plant: (m) =>
+      doc({
+        docTemplateRoot: TRACED_DOC_OID,
+        sections: `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.5.1" extension="2015-08-01"/>
+          <code code="11450-4" codeSystem="${LOINC}"/>
+          <title>${m}</title>
+          <text>No active problems.</text>
+        </section>
+      </component>`,
+      }),
+    expectCode: WARNING_CODES.REQUIRED_SECTION_MISSING,
+  },
+  {
+    name: "section/templateId/@root (document of a traced type missing a SHALL section)",
+    plant: (m) =>
+      doc({
+        docTemplateRoot: TRACED_DOC_OID,
+        sections: `
+      <component>
+        <section>
+          <templateId root="${m}"/>
+          <code code="11450-4" codeSystem="${LOINC}"/>
+          <title>Problems</title>
+          <text>No active problems.</text>
+        </section>
+      </component>`,
+      }),
+    expectCode: WARNING_CODES.REQUIRED_SECTION_MISSING,
   },
 ];

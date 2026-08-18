@@ -807,6 +807,22 @@ export const REASON_FOR_REFERRAL_SECTION = `
         </section>
       </component>`;
 
+/**
+ * A History of Present Illness section, an IHE PCC template
+ * (`1.3.6.1.4.1.19376.1.5.3.1.3.4`, no `@extension`), LOINC `10164-2`. A
+ * narrative-only section, so it carries just prose. The R2.1 Consultation Note
+ * document (`…22.1.4`) SHALL contain it (CONF:1198-28907).
+ */
+export const HISTORY_OF_PRESENT_ILLNESS_SECTION = `
+      <component>
+        <section>
+          <templateId root="1.3.6.1.4.1.19376.1.5.3.1.3.4"/>
+          <code code="10164-2" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>History of Present Illness</title>
+          <text>Intermittent headache for two weeks, worse in the morning.</text>
+        </section>
+      </component>`;
+
 /** All three triad sections concatenated, for the end-to-end extraction test. */
 export const TRIAD_SECTIONS = `${PROBLEMS_SECTION}${MEDICATIONS_SECTION}${ALLERGY_ENTRY_SECTION}`;
 
