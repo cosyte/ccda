@@ -19,7 +19,6 @@ import type { ParseCtx } from "../types/_shared.js";
 import { immunizationRefused, missingProductCode } from "../../parser/warnings.js";
 import {
   IMMUNIZATION_ACTIVITY,
-  childEntries,
   consumableProductCode,
   entryAct,
   idsOf,
@@ -28,6 +27,7 @@ import {
   resolveNarrative,
   statusCodeOf,
 } from "./shared.js";
+import { readableEntries } from "./subject.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
@@ -76,7 +76,7 @@ export function extractImmunizations(
   ctx: ParseCtx,
 ): readonly Immunization[] {
   const out: Immunization[] = [];
-  for (const entry of childEntries(sectionEl)) {
+  for (const entry of readableEntries(sectionEl, ctx)) {
     const sbadm = entryAct(entry, IMMUNIZATION_ACTIVITY);
     if (sbadm === undefined) continue;
     out.push(buildImmunization(sbadm, narrativeById, ctx));

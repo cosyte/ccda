@@ -53,6 +53,7 @@ describe("code surface stability", () => {
         "SEMANTIC_CODE_INVALID",
         "SMOKING_STATUS_CODE_UNRECOGNIZED",
         "SMOKING_STATUS_UNKNOWN",
+        "SUBJECT_CONTEXT_OVERRIDE",
         "TEMPLATE_EXTENSION_ABSENT",
         "UCUM_CASE_SUSPECT",
         "UNEXPECTED_CODE_SYSTEM",

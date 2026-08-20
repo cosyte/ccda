@@ -12,8 +12,9 @@
  * in, surfaced via `getPastMedicalHistory`), so there is no separate model.
  */
 
-import { childEntries, entryAct } from "./shared.js";
+import { entryAct } from "./shared.js";
 import { PROBLEM_OBSERVATION } from "./shared.js";
+import { readableEntries } from "./subject.js";
 import { buildProblem, type Problem } from "./problem.js";
 import type { ParseCtx } from "../types/_shared.js";
 import type { Element } from "@xmldom/xmldom";
@@ -35,7 +36,7 @@ export function extractPastMedicalHistory(
   ctx: ParseCtx,
 ): readonly Problem[] {
   const out: Problem[] = [];
-  for (const entry of childEntries(sectionEl)) {
+  for (const entry of readableEntries(sectionEl, ctx)) {
     const obs = entryAct(entry, PROBLEM_OBSERVATION);
     if (obs === undefined) continue;
     out.push(buildProblem(obs, narrativeById, ctx));

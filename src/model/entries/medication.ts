@@ -25,7 +25,6 @@ import {
 } from "../../parser/warnings.js";
 import {
   MEDICATION_ACTIVITY,
-  childEntries,
   consumableProductCode,
   entryAct,
   idsOf,
@@ -35,6 +34,7 @@ import {
   statusCodeOf,
   typeOf,
 } from "./shared.js";
+import { readableEntries } from "./subject.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
@@ -102,7 +102,7 @@ export function extractMedications(
   ctx: ParseCtx,
 ): readonly Medication[] {
   const out: Medication[] = [];
-  for (const entry of childEntries(sectionEl)) {
+  for (const entry of readableEntries(sectionEl, ctx)) {
     const sbadm = entryAct(entry, MEDICATION_ACTIVITY);
     if (sbadm === undefined) continue;
     out.push(buildMedication(sbadm, narrativeById, ctx));

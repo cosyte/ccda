@@ -90,7 +90,6 @@ import {
   PLANNED_PROCEDURE,
   PLANNED_SUPPLY,
   anyEntryAct,
-  childEntries,
   classifyDisposition,
   consumableProductCode,
   entryAct,
@@ -104,6 +103,7 @@ import {
   statusCodeOf,
   type EventDisposition,
 } from "./shared.js";
+import { readableEntries } from "./subject.js";
 import { readObservationValue, type ObservationValue } from "./observation.js";
 import type { Element } from "@xmldom/xmldom";
 
@@ -449,7 +449,7 @@ export function extractPlannedItems(
   const sectionKey = sectionKeyOf(sectionEl);
   const inReportingSection =
     sectionKey !== undefined && PLAN_ENTRY_REPORT_SECTION_KEYS.has(sectionKey);
-  for (const entry of childEntries(sectionEl)) {
+  for (const entry of readableEntries(sectionEl, ctx)) {
     for (const variant of PLANNED_VARIANTS) {
       const el = entryAct(entry, variant.root);
       if (el === undefined) continue;

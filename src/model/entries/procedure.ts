@@ -24,7 +24,6 @@ import {
   PROCEDURE_ACTIVITY_ACT,
   PROCEDURE_ACTIVITY_OBSERVATION,
   PROCEDURE_ACTIVITY_PROCEDURE,
-  childEntries,
   classifyDisposition,
   entryAct,
   idsOf,
@@ -34,6 +33,7 @@ import {
   statusCodeOf,
   type EventDisposition,
 } from "./shared.js";
+import { readableEntries } from "./subject.js";
 import { readObservationValue, type ObservationValue } from "./observation.js";
 import type { Element } from "@xmldom/xmldom";
 
@@ -122,7 +122,7 @@ export function extractProcedures(
   ctx: ParseCtx,
 ): readonly Procedure[] {
   const out: Procedure[] = [];
-  for (const entry of childEntries(sectionEl)) {
+  for (const entry of readableEntries(sectionEl, ctx)) {
     for (const variant of PROCEDURE_VARIANTS) {
       const el = entryAct(entry, variant.root);
       if (el === undefined) continue;

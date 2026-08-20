@@ -17,13 +17,13 @@ import type { ParseCtx } from "../types/_shared.js";
 import {
   VITAL_SIGNS_ORGANIZER,
   VITAL_SIGN_OBSERVATION,
-  childEntries,
   componentObservations,
   entryAct,
   idsOf,
   resolveNarrative,
   statusCodeOf,
 } from "./shared.js";
+import { readableEntries } from "./subject.js";
 import { readObservationValue, type ObservationValue } from "./observation.js";
 import type { Element } from "@xmldom/xmldom";
 
@@ -89,7 +89,7 @@ export function extractVitals(
   ctx: ParseCtx,
 ): readonly VitalSignsOrganizer[] {
   const out: VitalSignsOrganizer[] = [];
-  for (const entry of childEntries(sectionEl)) {
+  for (const entry of readableEntries(sectionEl, ctx)) {
     const organizer = entryAct(entry, VITAL_SIGNS_ORGANIZER);
     if (organizer === undefined) continue;
     out.push(buildOrganizer(organizer, narrativeById, ctx));

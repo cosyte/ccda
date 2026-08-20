@@ -62,9 +62,12 @@ export interface ProfileProvenance {
  * **Read which codes carry which field before keying on one.** A position field
  * a warning does not carry can never equal the value you match on, so the
  * tolerance is inert rather than broad. `sectionCode` is carried by
- * `UNKNOWN_SECTION_CODE` and `SECTION_MATCHED_BY_LOINC_FALLBACK` only;
- * `templateId` is carried by those two plus `TEMPLATE_EXTENSION_ABSENT`. Those
- * three are the deviations a structural identifier can locate today.
+ * `UNKNOWN_SECTION_CODE`, `SECTION_MATCHED_BY_LOINC_FALLBACK` and
+ * `SUBJECT_CONTEXT_OVERRIDE` (the enclosing section's code, on every instance of
+ * it); `templateId` is carried by the first two plus `TEMPLATE_EXTENSION_ABSENT`.
+ * Those four are the deviations a structural identifier can locate today, and
+ * `SUBJECT_CONTEXT_OVERRIDE` is in `SAFETY_CRITICAL_CODES`, so narrowing it is
+ * refused at definition time however precise the `match` is.
  * Entry-level codes (`DEPRECATED_LOINC`, `UNEXPECTED_CODE_SYSTEM`, the
  * medication-product codes) carry neither, and so do `MISSING_TEMPLATE_ID` and
  * `UNKNOWN_DOCUMENT_TEMPLATE`, so narrowing any of those to a section or a
@@ -81,7 +84,8 @@ export interface ProfileProvenance {
 export interface QuirkMatch {
   /**
    * Match only warnings carrying this section LOINC code in their position.
-   * Carried by `UNKNOWN_SECTION_CODE` and `SECTION_MATCHED_BY_LOINC_FALLBACK`.
+   * Carried by `UNKNOWN_SECTION_CODE`, `SECTION_MATCHED_BY_LOINC_FALLBACK` and
+   * `SUBJECT_CONTEXT_OVERRIDE` (which no profile may tolerate).
    */
   readonly sectionCode?: string;
   /**

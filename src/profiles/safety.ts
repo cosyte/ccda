@@ -76,6 +76,22 @@ export const SAFETY_CRITICAL_CODES: ReadonlySet<WarningCode> = immutableSet<Warn
   // Patient identity, wrong patient is catastrophic.
   WARNING_CODES.MISSING_ASSIGNING_AUTHORITY,
   WARNING_CODES.MULTIPLE_RECORD_TARGETS,
+  // Whose data this is. A <subject> declaration on a section or a clinical
+  // statement overrides the document's record target for everything it governs
+  // (CDA R2 "primary target of the entries recorded in a section"), so the
+  // content under one is another person's: a relative's, a donor's, a contact's.
+  // It sits above every other entry on this list, because every other entry
+  // assumes the entry belongs to the patient. It is also the LONE signal: the
+  // governed entry is withheld from every record-target read path, so no other
+  // warning about it can fire (there is no returned value left to be wrong), and
+  // a consumer that quieted this would see an entry vanish with nothing said.
+  // Tolerating it could only ever buy silence about another patient's clinical
+  // data being present, never about a benign structural quirk. Provenance,
+  // stated so it is not mistaken for a traced constraint: no normative SHALL is
+  // cited. That Section.subject is 0..1 and conducts to the entries it governs
+  // is base CDA R2 structure plus C-CDA's context-conduction rule, and the
+  // classification rests on the harm ordering this file encodes.
+  WARNING_CODES.SUBJECT_CONTEXT_OVERRIDE,
   // Allergy safety, the negation/granularity distinctions must never be quieted.
   WARNING_CODES.NEGATION_VS_NULLFLAVOR_AMBIGUOUS,
   WARNING_CODES.ALLERGEN_GRANULARITY_SUSPECT,

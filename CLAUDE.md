@@ -74,6 +74,20 @@ immutability + explicit mutation, and the profile system.
     `contradictsAssertedValue` (the `INT`/`ST` arms of `readObservationValue` are wired by hand) or
     this claim stops being true.** Metadata beside a `nullFlavor` is coherent and stays silent.
     Why: `documentation/agent-notes.md#a-nullflavor-asserted-beside-a-value-is-a-contradiction`
+  - **A `<subject>` declaration decides WHOSE data an entry is, and the whole top-level `<entry>` is
+    withheld from every record-target read path (`SUBJECT_CONTEXT_OVERRIDE`, safety-critical).**
+    **PRESENCE is the trigger: never compare a declared subject with the record target**, whatever it
+    names, and never "improve" it into a match test. **The unit is the top-level entry, for
+    withholding AND for counting; do not surgically remove the governed statement and return the
+    rest.** The choke point is `readableEntries(sectionEl, ctx)` in `model/entries/subject.ts`;
+    governance is resolved from the section's DOM **ancestors**, and the emission is **memoized per
+    (context, section)** because the aggregate walk runs fourteen extractors over every section. **A
+    Family History Organizer's own subject slot is NEVER an override whatever it contains**, and all
+    four family-history faces are unchanged. **`extractFamilyHistory` and `flagMisplacedEntries`
+    deliberately still read every entry: do not route them through the choke point.** The count is per
+    section and sums; a declaring section gets its own single instance only when it governs no entry
+    anywhere beneath it.
+    Why: `documentation/agent-notes.md#a-subject-declaration-withholds-the-whole-entry-and-presence-is-the-trigger`
   - **The withholding rule is "was this reading manufactured beside a surviving verbatim copy", not
     "does this field look dangerous", and it applies at whatever layer manufactures.** `pickMrn`
     returns `undefined` when the **first** `patientRole/id` is null-marked and **must never

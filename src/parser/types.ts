@@ -33,13 +33,15 @@ import type { TerminologyAdapter } from "../model/terminology.js";
  * `column` are the XML locator and are never derived from content.
  *
  * **Which codes carry which field is narrow, and worth reading before you key a
- * profile on one.** `sectionCode` is carried by `UNKNOWN_SECTION_CODE` and
- * `SECTION_MATCHED_BY_LOINC_FALLBACK`. `templateId` is carried by those two
- * (the section's first rooted `<templateId>`) and by `TEMPLATE_EXTENSION_ABSENT`
- * (the matched document-type root). No other code carries either, so a
- * `QuirkMatch` keyed on one narrows those codes and matches nothing on the
- * rest: an entry-level warning such as `DEPRECATED_LOINC` carries neither field
- * today.
+ * profile on one.** `sectionCode` is carried by `UNKNOWN_SECTION_CODE`,
+ * `SECTION_MATCHED_BY_LOINC_FALLBACK` and `SUBJECT_CONTEXT_OVERRIDE`, which
+ * names the enclosing section's code on every instance, entry-level ones
+ * included, because a withheld entry is located by which section it sat in.
+ * `templateId` is carried by the first two (the section's first rooted
+ * `<templateId>`) and by `TEMPLATE_EXTENSION_ABSENT` (the matched document-type
+ * root). No other code carries either, so a `QuirkMatch` keyed on one narrows
+ * those codes and matches nothing on the rest: an entry-level warning such as
+ * `DEPRECATED_LOINC` carries neither field today.
  *
  * Two document-level codes carry no `templateId` **on purpose**, and it is a
  * decision rather than an omission. `MISSING_TEMPLATE_ID` has no template to
