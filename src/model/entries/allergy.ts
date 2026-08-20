@@ -24,7 +24,6 @@ import {
   REACTION_OBSERVATION,
   SEVERITY_OBSERVATION,
   chain,
-  childEntries,
   entryAct,
   idsOf,
   reconcileCode,
@@ -34,6 +33,7 @@ import {
   resolveNarrative,
   type ConcernStatus,
 } from "./shared.js";
+import { readableEntries } from "./subject.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
@@ -120,7 +120,7 @@ export function extractAllergies(
   ctx: ParseCtx,
 ): readonly AllergyConcern[] {
   const out: AllergyConcern[] = [];
-  for (const entry of childEntries(sectionEl)) {
+  for (const entry of readableEntries(sectionEl, ctx)) {
     const act = entryAct(entry, ALLERGY_CONCERN_ACT);
     if (act === undefined) continue;
     out.push(buildConcern(act, narrativeById, ctx));

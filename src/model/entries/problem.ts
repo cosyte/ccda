@@ -16,7 +16,6 @@ import type { ParseCtx } from "../types/_shared.js";
 import {
   PROBLEM_CONCERN_ACT,
   PROBLEM_OBSERVATION,
-  childEntries,
   entryAct,
   idsOf,
   reconcileCode,
@@ -26,6 +25,7 @@ import {
   resolveNarrative,
   type ConcernStatus,
 } from "./shared.js";
+import { readableEntries } from "./subject.js";
 import type { Element } from "@xmldom/xmldom";
 
 /** Resolved active-vs-resolved state of a {@link ProblemConcern}. */
@@ -93,7 +93,7 @@ export function extractProblems(
   ctx: ParseCtx,
 ): readonly ProblemConcern[] {
   const out: ProblemConcern[] = [];
-  for (const entry of childEntries(sectionEl)) {
+  for (const entry of readableEntries(sectionEl, ctx)) {
     const act = entryAct(entry, PROBLEM_CONCERN_ACT);
     if (act === undefined) continue;
     out.push(buildConcern(act, narrativeById, ctx));

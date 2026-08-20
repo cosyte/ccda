@@ -14,13 +14,13 @@ import { parseIvlTs, type IVL_TS } from "../types/ivl-ts.js";
 import type { ParseCtx } from "../types/_shared.js";
 import {
   ENCOUNTER_ACTIVITY,
-  childEntries,
   entryAct,
   idsOf,
   reconcileCode,
   resolveNarrative,
   statusCodeOf,
 } from "./shared.js";
+import { readableEntries } from "./subject.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
@@ -62,7 +62,7 @@ export function extractEncounters(
   ctx: ParseCtx,
 ): readonly Encounter[] {
   const out: Encounter[] = [];
-  for (const entry of childEntries(sectionEl)) {
+  for (const entry of readableEntries(sectionEl, ctx)) {
     const enc = entryAct(entry, ENCOUNTER_ACTIVITY);
     if (enc === undefined) continue;
     out.push(buildEncounter(enc, narrativeById, ctx));

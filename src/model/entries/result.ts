@@ -17,13 +17,13 @@ import type { ParseCtx } from "../types/_shared.js";
 import {
   RESULT_OBSERVATION,
   RESULT_ORGANIZER,
-  childEntries,
   componentObservations,
   entryAct,
   idsOf,
   resolveNarrative,
   statusCodeOf,
 } from "./shared.js";
+import { readableEntries } from "./subject.js";
 import {
   readObservationValue,
   readReferenceRange,
@@ -93,7 +93,7 @@ export function extractResults(
   ctx: ParseCtx,
 ): readonly ResultOrganizer[] {
   const out: ResultOrganizer[] = [];
-  for (const entry of childEntries(sectionEl)) {
+  for (const entry of readableEntries(sectionEl, ctx)) {
     const organizer = entryAct(entry, RESULT_ORGANIZER);
     if (organizer === undefined) continue;
     out.push(buildOrganizer(organizer, narrativeById, ctx));

@@ -32,7 +32,6 @@ import {
   FUNCTIONAL_STATUS_ORGANIZER,
   MENTAL_STATUS_OBSERVATION,
   MENTAL_STATUS_ORGANIZER,
-  childEntries,
   entryAct,
   hasTemplateRoot,
   idsOf,
@@ -42,6 +41,7 @@ import {
   resolveNarrative,
   statusCodeOf,
 } from "./shared.js";
+import { readableEntries } from "./subject.js";
 import { readObservationValue, type ObservationValue } from "./observation.js";
 import type { Element } from "@xmldom/xmldom";
 
@@ -212,7 +212,7 @@ function extractStatus(
   // status sections, so it is only read when THIS section is the matching-domain
   // section, the domain comes from the section, never guessed from the template.
   const readScales = isDomainSection(sectionEl, sectionRoot, sectionLoinc);
-  for (const entry of childEntries(sectionEl)) {
+  for (const entry of readableEntries(sectionEl, ctx)) {
     const organizer = entryAct(entry, organizerRoot);
     if (organizer !== undefined) {
       out.push(...organizerMembers(organizer, domain, observationRoot, narrativeById, ctx));

@@ -246,6 +246,69 @@ export const ENTRY_ROOT_TO_SECTION: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
+ * Every `templateId` root by which a RECORD-TARGET extractor reads a top-level
+ * `<entry>`'s own act. Not a catalog of C-CDA templates and not a placement
+ * table: it is this package's own list of the roots that decide whether a
+ * record-target read path hands an entry back.
+ *
+ * **What it is for.** A Family History Organizer's own `<subject>` slot is never
+ * an override ({@link FAMILY_HISTORY_ORGANIZER}, and see
+ * `./subject.ts`), and the spec's premise for that carve-out is that "no
+ * record-target read path returns that organizer". A `templateId` is one element
+ * and C-CDA entries routinely carry several, so an entry stamped with the Family
+ * History Organizer root **and** a root on this list is one a record-target read
+ * path does return, the premise is false for it, and the carve-out must not
+ * reach it. Membership here is what makes that testable rather than assumed.
+ *
+ * **Traced, not stated**: every root below is the argument of an
+ * `entryAct(entry, ...)` or `hasTemplateRoot(act, ...)` call in an extractor that
+ * reads its entries through `readableEntries`, and
+ * `test/subject-override.test.ts` scans those files and fails if one appears
+ * that is not here. Adding a family means adding its root; the tripwire says so
+ * by name rather than leaving a silent hole. `ENTRY_ROOT_TO_SECTION` above is a
+ * different question (which section an entry belongs in) and is deliberately not
+ * reused: it omits three roots that are read here, and includes the
+ * family-history root that must never be on this list.
+ *
+ * The three unmodelled plan templates are members: `extractPlannedItems` reads
+ * an entry's act by those roots to report it, and being read is the test, not
+ * being returned.
+ *
+ * @internal
+ */
+export const RECORD_TARGET_ENTRY_ROOTS: ReadonlySet<string> = new Set([
+  PROBLEM_CONCERN_ACT,
+  // Past Medical History carries a BARE Problem Observation as its direct entry.
+  PROBLEM_OBSERVATION,
+  MEDICATION_ACTIVITY,
+  ALLERGY_CONCERN_ACT,
+  RESULT_ORGANIZER,
+  VITAL_SIGNS_ORGANIZER,
+  IMMUNIZATION_ACTIVITY,
+  PROCEDURE_ACTIVITY_PROCEDURE,
+  PROCEDURE_ACTIVITY_ACT,
+  PROCEDURE_ACTIVITY_OBSERVATION,
+  ENCOUNTER_ACTIVITY,
+  SMOKING_STATUS_OBSERVATION,
+  PLANNED_ACT,
+  PLANNED_ENCOUNTER,
+  PLANNED_PROCEDURE,
+  PLANNED_MEDICATION_ACTIVITY,
+  PLANNED_SUPPLY,
+  PLANNED_OBSERVATION,
+  PLANNED_IMMUNIZATION_ACTIVITY,
+  PLANNED_INTERVENTION_ACT,
+  INSTRUCTION,
+  HANDOFF_COMMUNICATION_PARTICIPANTS,
+  NUTRITION_RECOMMENDATION,
+  FUNCTIONAL_STATUS_ORGANIZER,
+  FUNCTIONAL_STATUS_OBSERVATION,
+  MENTAL_STATUS_ORGANIZER,
+  MENTAL_STATUS_OBSERVATION,
+  ASSESSMENT_SCALE_OBSERVATION,
+]);
+
+/**
  * The catalog `key` a `<section>` resolves to, `templateId` root first and its
  * LOINC `<code>` as the fallback, or `undefined` when neither is recognized.
  *

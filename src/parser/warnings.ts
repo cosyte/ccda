@@ -80,6 +80,7 @@ export const WARNING_CODES = {
   MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED: "MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED",
   PROBLEM_STATUS_INDETERMINATE: "PROBLEM_STATUS_INDETERMINATE",
   SECTION_PLACEMENT_SUSPECT: "SECTION_PLACEMENT_SUSPECT",
+  SUBJECT_CONTEXT_OVERRIDE: "SUBJECT_CONTEXT_OVERRIDE",
   NON_UCUM_UNIT: "NON_UCUM_UNIT",
   UCUM_CASE_SUSPECT: "UCUM_CASE_SUSPECT",
   MISSING_UNIT_ON_PQ: "MISSING_UNIT_ON_PQ",
@@ -198,6 +199,26 @@ export const NARRATIVE_SLOTS = [
 export type NarrativeSlot = (typeof NARRATIVE_SLOTS)[number];
 
 /**
+ * The two structural loci a `SUBJECT_CONTEXT_OVERRIDE` warning can name: the
+ * top-level `<entry>` that a subject declaration governs, or the `<section>`
+ * that declares one and governs no entry anywhere beneath it.
+ *
+ * A closed set this module owns, exactly like {@link CODE_SLOTS}: no document
+ * text can become one, so naming a member in a message names a parser constant.
+ * The unit is the TOP-LEVEL ENTRY and nothing smaller: a statement nested inside
+ * a governed entry never gets a locus of its own, because the whole entry is
+ * withheld rather than the entry returned one statement short.
+ */
+export const SUBJECT_LOCI = ["entry", "section"] as const;
+
+/**
+ * Which structural locus a `SUBJECT_CONTEXT_OVERRIDE` is about. Closed by
+ * construction. (No `@example` import here, deliberately: this type is not on
+ * the package entry point.)
+ */
+export type SubjectLocus = (typeof SUBJECT_LOCI)[number];
+
+/**
  * The entry templates a `PLAN_ENTRY_NOT_MODELED` warning can be about: the
  * three the Plan of Treatment Section (and the Planned Intervention Act) admit
  * that this package recognizes but does not return as a `PlannedItem`.
@@ -301,6 +322,8 @@ export const WARNING_MESSAGES: Readonly<Record<WarningCode, string>> = Object.fr
     "Problem concern statusCode is missing or unrecognized; active/resolved state is indeterminate.",
   SECTION_PLACEMENT_SUSPECT:
     "An entry template was found in a section it does not belong to; extracted but flagged.",
+  SUBJECT_CONTEXT_OVERRIDE:
+    "A subject declaration governs clinical content here. CDA R2 makes a subject the primary target of the statements it governs, so the content it governs is not the document's record target's own; it is withheld from every read path that promises the record target's data rather than attributed to that patient, and it survives unchanged in the re-serialized document. What the declaration names is never compared with the record target.",
   NON_UCUM_UNIT:
     "The @unit is not a well-formed UCUM unit; unit and value preserved verbatim, never normalized.",
   UCUM_CASE_SUSPECT:
@@ -442,6 +465,22 @@ const PLAN_ENTRY_NOT_MODELED_BY_ENTRY: Readonly<Record<string, string>> = Object
   ),
 );
 
+/**
+ * One wording per {@link SubjectLocus}. Built over the closed key list, so the
+ * message names a parser constant and never a word from the document. The two
+ * say different things on purpose: at an entry something IS withheld, at a
+ * declaring section that governs nothing, nothing is, and a safety-critical
+ * warning that misdescribes the document it is about is its own defect.
+ * @internal
+ */
+const SUBJECT_CONTEXT_OVERRIDE_BY_LOCUS: Readonly<Record<string, string>> = tableOver(
+  SUBJECT_LOCI,
+  (locus) =>
+    locus === "entry"
+      ? "A subject declaration governs this entry: its own, one carried by a statement nested inside it, or one carried by an enclosing section. CDA R2 makes a subject the primary target of the statements it governs, so the WHOLE entry is withheld from every read path that promises the record target's data (its own statement and every statement nested in it) rather than attributed to that patient, and it survives unchanged in the re-serialized document. What the declaration names is never compared with the record target, and presence alone is what withholds."
+      : "This section carries a subject declaration, which CDA R2 makes the primary target of the entries it governs. It governs no entry, here or in any section nested inside it, so nothing is withheld and the declaration is reported rather than left silent; a section that declares somebody else's subject is never quiet merely because it is empty. What the declaration names is never compared with the record target.",
+);
+
 /** The two arm-relative wordings of `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`. @internal */
 const TRANSLATION_ONLY_BY_ARM = Object.freeze({
   selected: `${WARNING_MESSAGES.MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY} The coding is somewhere on the returned CD's translation list rather than on its code (search the list, the first entry need not be the one naming the product).`,
@@ -468,6 +507,7 @@ export const ALL_WARNING_MESSAGES: ReadonlySet<string> = new Set([
   ...Object.values(CONTRADICTORY_NULL_FLAVOR_BY_DATATYPE),
   ...Object.values(TRANSLATION_ONLY_BY_ARM),
   ...Object.values(PLAN_ENTRY_NOT_MODELED_BY_ENTRY),
+  ...Object.values(SUBJECT_CONTEXT_OVERRIDE_BY_LOCUS),
 ]);
 
 /**
@@ -1523,6 +1563,62 @@ export function sectionPlacementSuspect(
       SECTION_PLACEMENT_SUSPECT_BY_SECTION,
       entryExpectedSection,
       WARNING_MESSAGES.SECTION_PLACEMENT_SUSPECT,
+    ),
+    position,
+  };
+}
+
+/**
+ * Build a `SUBJECT_CONTEXT_OVERRIDE` warning, the safety-critical report that a
+ * `<subject>` declaration governs clinical content. CDA R2 gives `Section.subject`
+ * cardinality `0..1` and defines it as the "Primary target of the entries
+ * recorded in a section"; C-CDA admits the same override on a clinical
+ * statement. So a document may legitimately carry a relative's, a donor's or a
+ * contact's statement inside the patient's document, and every read path this
+ * package documents as the record target's own data must not hand it back.
+ *
+ * **Presence is the trigger, and that is the whole rule.** The declaration is an
+ * override whatever it names: no identifier, name or other content is ever
+ * compared with the record target. Comparing would make the outcome depend on
+ * vendor identifier hygiene and would be exactly the guess this library's
+ * fail-safe rule forbids, so a document that redundantly restates the patient as
+ * an entry subject loses those entries from the record-target read paths and
+ * gains this warning. That is the safe direction of the error, and it is the
+ * accepted cost.
+ *
+ * **The unit is the top-level `<entry>`, for withholding and for counting.** A
+ * declaration anywhere inside an entry withholds that whole entry: a Problem
+ * Concern Act handed back one observation short, silently, is the confidently
+ * wrong clinical answer this exists to prevent. `locus` is a member of the closed
+ * {@link SUBJECT_LOCI} list, so the variant wording names a parser constant and
+ * never document text.
+ *
+ * **The one declaration that is not an override** is the subject slot a Family
+ * History Organizer carries itself: that is the template's own mechanism for
+ * naming the relative, whatever the slot contains (a readable related subject, an
+ * empty element, a null flavor), so it draws no warning and re-overrides an
+ * enclosing section declaration. The family-history read path is unaffected in
+ * every document shape. **The carve-out is read-side and reaches only the
+ * organizer that path reads**: an entry stamped with the family-history root
+ * beside a template a record-target read path returns (a Result Organizer, a
+ * Problem Concern Act) is governed, withheld and reported like any other, because
+ * the carve-out rests on nothing being attributed to the record target either
+ * way. A `templateId` is one element and C-CDA entries carry several.
+ *
+ * (No `@example` import: this factory is not on the package entry point.)
+ *
+ * @example
+ * ```ts
+ * const w = subjectContextOverride({ path: "entry", sectionCode: "11450-4" }, "entry");
+ * ```
+ */
+export function subjectContextOverride(position: CcdaPosition, locus: SubjectLocus): CcdaWarning {
+  return {
+    code: WARNING_CODES.SUBJECT_CONTEXT_OVERRIDE,
+    message: variant(
+      SUBJECT_CONTEXT_OVERRIDE_BY_LOCUS,
+      locus,
+      WARNING_MESSAGES.SUBJECT_CONTEXT_OVERRIDE,
     ),
     position,
   };

@@ -36,6 +36,7 @@ import {
   relatedObservations,
   resolveNarrative,
 } from "./shared.js";
+import { reportSubjectOverrides } from "./subject.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
@@ -108,6 +109,16 @@ export interface FamilyHistory {
  * template becomes a {@link FamilyHistory}; its `component/observation` members
  * become {@link FamilyHistoryObservation}s. Never throws.
  *
+ * **This family's CONTENTS are carved out of the subject-override rule and read
+ * every entry the section carries** (`childEntries`, not `readableEntries`): its
+ * contract is a relative's data, so withholding never removes anything from it,
+ * in any document shape. **The report is not carved out.** A section that
+ * declares a subject still declares it, and a consumer whose only call is this
+ * one would otherwise hear nothing about it, so the section's overrides are
+ * reported on the caller's `ctx` under the same arithmetic every other extractor
+ * uses. Memoized per (context, section), so a whole-document parse counts exactly
+ * what it counted before: the record-target extractors reach the section first.
+ *
  * @example
  * ```ts
  * import { extractFamilyHistory } from "@cosyte/ccda";
@@ -120,6 +131,7 @@ export function extractFamilyHistory(
   ctx: ParseCtx,
 ): readonly FamilyHistory[] {
   const out: FamilyHistory[] = [];
+  reportSubjectOverrides(sectionEl, ctx);
   for (const entry of childEntries(sectionEl)) {
     const organizer = entryAct(entry, FAMILY_HISTORY_ORGANIZER);
     if (organizer === undefined) continue;

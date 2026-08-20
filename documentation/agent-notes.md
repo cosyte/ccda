@@ -179,6 +179,83 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     `<translation>`) is coherent and stays silent. **If you add a datatype or an inline value arm,
     route it through `contradictsAssertedValue` or this claim stops being true.**
 
+## A subject declaration withholds the whole entry, and presence is the trigger
+
+  - **`<subject>` decides whose data an entry is, and before `SUBJECT_CONTEXT_OVERRIDE` this parser
+    read it in exactly one place** (`model/entries/family-history.ts`, for a Family History
+    Organizer's `relatedSubject`), so every other extractor handed a relative's, a donor's or a
+    contact's clinical statement back as the patient's, silently. CDA R2 gives `Section.subject`
+    cardinality `0..1` as the "primary target of the entries recorded in a section" and C-CDA admits
+    the same override on a clinical statement, so that document is conformant and the defect was
+    ours. `src/model/entries/subject.ts` now answers it, and four decisions are load-bearing.
+  - **Presence is the trigger, and it must stay that way.** A declaration is an override whatever it
+    names: empty, `nullFlavor`-only, repeated, or restating the patient's own name and MRN. **Do not
+    "improve" this by comparing the declared subject against the record target and staying quiet on a
+    match**: that makes a clinical answer depend on vendor identifier hygiene, and it is the guess
+    this repo's fail-safe rule forbids. The cost is real and accepted: a vendor that repeats the
+    patient as an entry subject loses those entries from the record-target read paths and gains a
+    warning each. Say that as the accepted cost, never as a bug to be tuned away.
+  - **The unit is the TOP-LEVEL `<entry>`, for withholding and for counting, and nothing smaller.** A
+    declaration on the second Problem Observation of a Problem Concern Act withholds the WHOLE concern
+    act and emits ONE warning at the act's locus. **Do not "finish the job" by surgically removing the
+    governed statement and returning the rest**: a concern act handed back one observation short, in
+    silence, is the confidently wrong clinical answer the whole feature exists to prevent.
+  - **The choke point is `readableEntries(sectionEl, ctx)`, and it is what keeps the read paths in
+    step.** Thirteen extractors read their entries through it instead of `childEntries`; the parsed
+    document's fields and accessors, the aggregate's slots, `buildDocument` and a directly invoked
+    per-family extraction therefore all withhold identically, so no public path is a bypass around
+    another. **The family-history extractor deliberately does NOT go through it**, and
+    `flagMisplacedEntries` deliberately still sees every entry (a withheld entry's placement is still
+    worth reporting, and that warning returns nothing). Governance is resolved from the section
+    element's DOM **ancestors**, which is what makes a nested subsection handed straight to an
+    extractor withhold under its parent's declaration.
+  - **A Family History Organizer's own subject slot is never an override, whatever it contains**, and
+    it re-overrides an enclosing section declaration. All four faces of the family-history family (the
+    field, `getFamilyHistory()`, `extractFamilyHistory` and the aggregate's slot) return the same
+    contents they returned before this existed, in every document shape. A declaring Family History
+    section still warns and still withholds that section's other entries, which is observable because
+    the aggregate walk runs every family's extractor over every section.
+  - **The carve-out is READ-SIDE, and the first cut put it in the wrong layer.** `isOverridingDeclaration`
+    shipped as `!hasTemplateRoot(el, FAMILY_HISTORY_ORGANIZER)`, so ANY element carrying
+    `2.16.840.1.113883.10.20.22.4.45` was exempt, whatever element it was and whichever read path
+    returned it. One extra `<templateId>` on a Result Organizer that carried its own `<subject>` left
+    the entry readable: `results`, `getResults()`, the aggregate slot and a direct `extractResults`
+    all handed a relative's lab panel back as the patient's with **no warning at all**, and the same
+    one-line edit worked on a Problem Concern Act and on every other family, because the guard sat
+    ABOVE the choke point. Multi-`templateId` entries are ordinary C-CDA, not spoofing to shrug at.
+    **The carve-out is now the element the family-history read path itself reads**,
+    `entryAct(entry, FAMILY_HISTORY_ORGANIZER)`, compared by IDENTITY (so a declaration nested deeper
+    inside the entry can never claim it, and neither can the `<entry>` wrapper), **and only while that
+    element carries no `RECORD_TARGET_ENTRY_ROOTS` root** (`model/entries/shared.ts`), which is the
+    spec's own premise for the exemption: "nothing is attributed to the record target either way
+    because no record-target read path returns that organizer". Where that premise is false the
+    entry is governed, withheld and reported like any other. **Do not re-widen the test to the
+    templateId alone, and do not narrow it to "carries no OTHER templateId"** either: a real organizer
+    with a vendor stamp is still a Family History Organizer and must keep its slot. The root list is
+    **traced, not stated**: `test/subject-override.test.ts` scans every extractor that reads through
+    the choke point and asserts the set equals the roots those files match on, so adding a family
+    without adding its root reds a test instead of re-opening the hole.
+  - **`extractFamilyHistory` reports what it does not withhold.** Its CONTENTS are carved out (it
+    reads `childEntries`), but a per-family extraction invoked directly on a declaring section owes
+    the caller the warning, and it was the one public read path that said nothing at all. It now
+    calls `reportSubjectOverrides(sectionEl, ctx)`, the warning half of the choke point with no
+    filtering. Memoized per (context, section) like every other emission, so a whole-document parse
+    counts exactly what it counted before: the record-target extractors reach the section first.
+  - **"It is the LONE signal, no other warning about it can fire" was published in `profiles/safety.ts`
+    and was false the day it shipped.** `flagMisplacedEntries` reads every entry, so
+    `SECTION_PLACEMENT_SUSPECT` fires about a withheld one, and the family-history extractor can raise
+    its own warnings about an entry withheld from the record-target families. What is true, and what
+    that file now says, is narrower: it is the only code that says WHOSE data an entry is, and the
+    warnings that ride the withheld reading (its codes, units, narrative, `PLAN_ENTRY_NOT_MODELED`) do
+    go quiet with it because the entry is never built. Both halves have tests.
+  - **The count is per section and sums: N governed entries produce exactly N instances, and a
+    declaring section that governs no entry ANYWHERE beneath it produces exactly one at its own
+    locus.** A declaring section whose entries all sit one subsection down is therefore N, not N plus
+    one: the section-level instance is owed only where nothing is withheld. **The emission is memoized
+    per (parse context, section)**, and that is not an optimization: the aggregate walk runs fourteen
+    extractors over every section, so an emit that rode the extractor would produce fourteen instances
+    per governed entry. De-duplicate on the element, never on the message or the locus text.
+
 ## The withholding rule, pickMrn, and the templateId exception
 
   - **The withholding rule is "was this reading manufactured beside a surviving verbatim copy",

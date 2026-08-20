@@ -53,6 +53,7 @@ non-UCUM unit) is a warning you triage, not an exception you catch.
 | A `CODE_NARRATIVE_MISMATCH` warning             | A coded value and its referenced narrative disagree                                 | Both are preserved and no winner is chosen; route the record to human review.                                             |
 | A `NON_UCUM_UNIT` / `UCUM_CASE_SUSPECT` warning | The `PQ` `@unit` is not well-formed UCUM (or a case slip)                           | The raw unit is preserved, never normalized; a case slip is usually a single-character fix.                               |
 | `doc.toString()` throws                         | The document was hand-constructed, not produced by `parseCcda` or `buildCcda`       | Only parsed/built documents retain source XML to serialize; construct from scratch with `buildCcda`.                      |
+| An entry you can see in the XML is not returned | A `<subject>` on that entry, on a statement inside it, or on its section            | `SUBJECT_CONTEXT_OVERRIDE` was raised, one per withheld entry: it is somebody else's clinical statement and is withheld from every record-target read path. It still round-trips through `toString()`. |
 
 ## Keeping PHI out of logs
 
@@ -99,6 +100,19 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   `UNKNOWN_SECTION_CODE`, or, if it carries no section `code` to match on, silently. None of the
   three drops anything: the narrative and the raw structure are preserved, and the document still
   re-serializes faithfully.
+- **An entry another subject governs is withheld, not attributed.** CDA R2 makes `Section.subject` the
+  "primary target of the entries recorded in a section" and C-CDA admits the same override on a
+  clinical statement, so a document can carry a relative's or a donor's statement inside the patient's
+  document. Wherever a `<subject>` governs a top-level `<entry>` (its own, one on a statement nested
+  inside it, or one on an enclosing section) that WHOLE entry is withheld from every read path
+  documented as the record target's own data, and `SUBJECT_CONTEXT_OVERRIDE` is raised once for it,
+  naming the entry's bounded locus. The warning is safety-critical, so no profile can quiet it, and in
+  strict mode it throws like any other. **Presence is the trigger**: nothing the declaration names is
+  compared with the patient, so a document that redundantly restates the patient as an entry subject
+  loses those entries too, which is the safe direction of that error. Two things are deliberately
+  unaffected: the entry re-serializes byte for byte through `toString()` (the only way to reach it),
+  and `getFamilyHistory()` returns what it always did, because a Family History Organizer's own
+  `<subject>` slot is that template's mechanism for naming the relative rather than a context override.
 - **Code checks are recognition, not membership, unless you supply an adapter.** `checkCodeSlot` /
   `checkLoincDeprecation` verify that a code's _system_ is the one expected for its slot (and flag
   deprecated or unexpected systems); on their own they do **not** verify that a code is a real,

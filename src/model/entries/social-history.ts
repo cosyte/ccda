@@ -20,12 +20,12 @@ import type { ParseCtx } from "../types/_shared.js";
 import { smokingStatusCodeUnrecognized, smokingStatusUnknown } from "../../parser/warnings.js";
 import {
   SMOKING_STATUS_OBSERVATION,
-  childEntries,
   entryAct,
   idsOf,
   resolveNarrative,
   statusCodeOf,
 } from "./shared.js";
+import { readableEntries } from "./subject.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
@@ -93,7 +93,7 @@ export function extractSmokingStatus(
   ctx: ParseCtx,
 ): readonly SmokingStatus[] {
   const out: SmokingStatus[] = [];
-  for (const entry of childEntries(sectionEl)) {
+  for (const entry of readableEntries(sectionEl, ctx)) {
     const obs = entryAct(entry, SMOKING_STATUS_OBSERVATION);
     if (obs === undefined) continue;
     out.push(buildSmokingStatus(obs, narrativeById, ctx));

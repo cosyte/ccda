@@ -76,6 +76,29 @@ export const SAFETY_CRITICAL_CODES: ReadonlySet<WarningCode> = immutableSet<Warn
   // Patient identity, wrong patient is catastrophic.
   WARNING_CODES.MISSING_ASSIGNING_AUTHORITY,
   WARNING_CODES.MULTIPLE_RECORD_TARGETS,
+  // Whose data this is. A <subject> declaration on a section or a clinical
+  // statement overrides the document's record target for everything it governs
+  // (CDA R2 "primary target of the entries recorded in a section"), so the
+  // content under one is another person's: a relative's, a donor's, a contact's.
+  // It sits above every other entry on this list, because every other entry
+  // assumes the entry belongs to the patient. It is also the ONLY code that says
+  // WHOSE data it is, and stating that precisely matters: the governed entry is
+  // withheld from every record-target read path, so every warning that rides the
+  // reading of that entry (its codes, units, narrative reconciliation,
+  // PLAN_ENTRY_NOT_MODELED) goes quiet with it, since it is never built. The
+  // diagnostics that read a section's entries REGARDLESS of withholding do still
+  // fire about it, by design: SECTION_PLACEMENT_SUSPECT walks every entry
+  // (`flagMisplacedEntries`), and the family-history extractor reads every entry
+  // too. Neither says anything about whose data it is, and neither is
+  // safety-critical, so a consumer that quieted this one would see an entry
+  // vanish with nothing said about why.
+  // Tolerating it could only ever buy silence about another patient's clinical
+  // data being present, never about a benign structural quirk. Provenance,
+  // stated so it is not mistaken for a traced constraint: no normative SHALL is
+  // cited. That Section.subject is 0..1 and conducts to the entries it governs
+  // is base CDA R2 structure plus C-CDA's context-conduction rule, and the
+  // classification rests on the harm ordering this file encodes.
+  WARNING_CODES.SUBJECT_CONTEXT_OVERRIDE,
   // Allergy safety, the negation/granularity distinctions must never be quieted.
   WARNING_CODES.NEGATION_VS_NULLFLAVOR_AMBIGUOUS,
   WARNING_CODES.ALLERGEN_GRANULARITY_SUSPECT,

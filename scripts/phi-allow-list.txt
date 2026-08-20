@@ -38,6 +38,11 @@ NAME DOE
 # Sentinel person-name token seeded into PHI-discipline guard tests
 # (test/phi-guard.test.ts) to prove diagnostics never echo the patient name.
 NAME ZZSECRETPATIENTZZ
+# Sentinel person-name token for the hostile subject-declaration fixture in
+# test/subject-override.test.ts, repeated so the name is oversized as well as
+# adversarial. It proves SUBJECT_CONTEXT_OVERRIDE's message and locus carry
+# nothing a hostile <subject> said.
+NAME ZZHOSTILESUBJECTZZ
 
 # --- Synthetic dates of birth (`birthTime@value`), normalized YYYYMMDD / YYYY ---
 # The default synthetic patient DOB and the Family-History relative's birthTime.
