@@ -83,8 +83,17 @@ immutability + explicit mutation, and the profile system.
     governance is resolved from the section's DOM **ancestors**, and the emission is **memoized per
     (context, section)** because the aggregate walk runs fourteen extractors over every section. **A
     Family History Organizer's own subject slot is NEVER an override whatever it contains**, and all
-    four family-history faces are unchanged. **`extractFamilyHistory` and `flagMisplacedEntries`
-    deliberately still read every entry: do not route them through the choke point.** The count is per
+    four family-history faces are unchanged. **That carve-out is READ-SIDE and reaches ONE element:
+    the organizer `entryAct(entry, FAMILY_HISTORY_ORGANIZER)` returns, matched by IDENTITY so nothing
+    nested deeper claims it, and only while it carries no `RECORD_TARGET_ENTRY_ROOTS` root. Never
+    re-widen it to `hasTemplateRoot(el, FAMILY_HISTORY_ORGANIZER)`**: that shipped, and one extra
+    `<templateId>` on a Result Organizer or a Problem Concern Act switched all thirteen families off
+    at once. **`extractFamilyHistory` and `flagMisplacedEntries`
+    deliberately still read every entry: do not route them through the choke point**, and
+    `extractFamilyHistory` reports the section's overrides on the caller's channel while returning its
+    contents whole. **The code is the only one that says WHOSE data an entry is, which is NOT the same
+    as the only one that can fire about a withheld entry** (`SECTION_PLACEMENT_SUSPECT` and the
+    family-history reads still do); the stronger claim was published once and was false. The count is per
     section and sums; a declaring section gets its own single instance only when it governs no entry
     anywhere beneath it.
     Why: `documentation/agent-notes.md#a-subject-declaration-withholds-the-whole-entry-and-presence-is-the-trigger`

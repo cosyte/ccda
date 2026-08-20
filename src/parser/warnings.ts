@@ -1598,7 +1598,12 @@ export function sectionPlacementSuspect(
  * naming the relative, whatever the slot contains (a readable related subject, an
  * empty element, a null flavor), so it draws no warning and re-overrides an
  * enclosing section declaration. The family-history read path is unaffected in
- * every document shape.
+ * every document shape. **The carve-out is read-side and reaches only the
+ * organizer that path reads**: an entry stamped with the family-history root
+ * beside a template a record-target read path returns (a Result Organizer, a
+ * Problem Concern Act) is governed, withheld and reported like any other, because
+ * the carve-out rests on nothing being attributed to the record target either
+ * way. A `templateId` is one element and C-CDA entries carry several.
  *
  * (No `@example` import: this factory is not on the package entry point.)
  *

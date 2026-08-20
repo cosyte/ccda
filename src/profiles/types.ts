@@ -63,8 +63,11 @@ export interface ProfileProvenance {
  * a warning does not carry can never equal the value you match on, so the
  * tolerance is inert rather than broad. `sectionCode` is carried by
  * `UNKNOWN_SECTION_CODE`, `SECTION_MATCHED_BY_LOINC_FALLBACK` and
- * `SUBJECT_CONTEXT_OVERRIDE` (the enclosing section's code, on every instance of
- * it); `templateId` is carried by the first two plus `TEMPLATE_EXTENSION_ABSENT`.
+ * `SUBJECT_CONTEXT_OVERRIDE` (the enclosing section's own `<code>`, bounded
+ * on the LOINC shape or replaced by the withheld placeholder, and absent from the
+ * position when that section carries no `<code>` at all, as an unrecognized
+ * section routinely does); `templateId` is carried by the first two plus
+ * `TEMPLATE_EXTENSION_ABSENT`.
  * Those four are the deviations a structural identifier can locate today, and
  * `SUBJECT_CONTEXT_OVERRIDE` is in `SAFETY_CRITICAL_CODES`, so narrowing it is
  * refused at definition time however precise the `match` is.

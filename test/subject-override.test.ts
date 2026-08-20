@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -14,6 +16,7 @@ import {
   extractFamilyHistory,
   extractMedications,
   extractProblems,
+  extractResults,
   parseCcda,
   parseSecureXml,
   resolveLimits,
@@ -21,6 +24,7 @@ import {
   type CcdaDocument,
   type CcdaWarning,
 } from "../src/index.js";
+import * as ENTRY_SHARED from "../src/model/entries/shared.js";
 import { ALL_WARNING_MESSAGES } from "../src/parser/warnings.js";
 import * as FIXTURES from "./__fixtures__/ccda.js";
 import { buildCcda, NO_REQUIRED_SECTIONS_DOC_OID } from "./__fixtures__/ccda.js";
@@ -68,6 +72,12 @@ const SELF_SUBJECT = `<subject>
 /** An empty, null-flavoured declaration with no related subject inside it (A10, A7). */
 const NULL_SUBJECT = `<subject nullFlavor="UNK"/>`;
 
+/** A `templateId` element for a bare root, the one-line stamp of the F1 shape. */
+const stamp = (root: string): string => `<templateId root="${root}"/>`;
+
+/** The Family History Organizer root, stamped onto entries that are not one (F1). */
+const FAMILY_HISTORY_ORGANIZER_ROOT = "2.16.840.1.113883.10.20.22.4.45";
+
 interface ProblemEntryOptions {
   /** A `<subject>` on the Problem Concern Act itself. */
   readonly actSubject?: string;
@@ -77,14 +87,18 @@ interface ProblemEntryOptions {
   readonly second?: boolean;
   /** A `<subject>` on the second nested Problem Observation. */
   readonly secondSubject?: string;
+  /** An extra `<templateId>` on the Problem Concern Act itself. */
+  readonly actStamp?: string;
+  /** An extra `<templateId>` on the first nested Problem Observation. */
+  readonly obsStamp?: string;
 }
 
 /** One Problem Concern Act entry (`…22.4.3`) wrapping one or two Problem Observations. */
 function problemEntry(n: number, o: ProblemEntryOptions = {}): string {
-  const observation = (suffix: string, code: string, subject: string): string => `
+  const observation = (suffix: string, code: string, subject: string, extra = ""): string => `
               <entryRelationship typeCode="SUBJ">
                 <observation classCode="OBS" moodCode="EVN">
-                  <templateId root="2.16.840.1.113883.10.20.22.4.4" extension="2015-08-01"/>
+                  <templateId root="2.16.840.1.113883.10.20.22.4.4" extension="2015-08-01"/>${extra}
                   <id root="2.16.840.1.113883.19.5.99999.2" extension="prob-obs-${suffix}"/>
                   <code code="55607006" codeSystem="${SNOMED}"/>
                   <statusCode code="completed"/>
@@ -94,10 +108,10 @@ function problemEntry(n: number, o: ProblemEntryOptions = {}): string {
   return `
           <entry>
             <act classCode="ACT" moodCode="EVN">
-              <templateId root="2.16.840.1.113883.10.20.22.4.3" extension="2015-08-01"/>
+              <templateId root="2.16.840.1.113883.10.20.22.4.3" extension="2015-08-01"/>${o.actStamp ?? ""}
               <id root="2.16.840.1.113883.19.5.99999.2" extension="prob-act-${String(n)}"/>
               <statusCode code="active"/>
-              <effectiveTime><low value="20210101"/></effectiveTime>${o.actSubject ?? ""}${observation(`${String(n)}a`, "59621000", o.obsSubject ?? "")}${
+              <effectiveTime><low value="20210101"/></effectiveTime>${o.actSubject ?? ""}${observation(`${String(n)}a`, "59621000", o.obsSubject ?? "", o.obsStamp ?? "")}${
                 o.second === true
                   ? observation(`${String(n)}b`, "38341003", o.secondSubject ?? "")
                   : ""
@@ -150,12 +164,13 @@ function allergyEntry(n: number, subject = ""): string {
 /**
  * One Family History Organizer entry (`…22.4.45`). `subject` is the organizer's
  * OWN slot: the template's mechanism for naming the relative, never an override.
+ * `extraStamp` is any further `<templateId>` the organizer carries.
  */
-function familyHistoryEntry(n: number, subject: string): string {
+function familyHistoryEntry(n: number, subject: string, extraStamp = ""): string {
   return `
           <entry>
             <organizer classCode="CLUSTER" moodCode="EVN">
-              <templateId root="2.16.840.1.113883.10.20.22.4.45" extension="2015-08-01"/>
+              <templateId root="2.16.840.1.113883.10.20.22.4.45" extension="2015-08-01"/>${extraStamp}
               <id root="2.16.840.1.113883.19.5.99999.23" extension="fhx-org-${String(n)}"/>
               <statusCode code="completed"/>${subject}
               <component>
@@ -165,6 +180,34 @@ function familyHistoryEntry(n: number, subject: string): string {
                   <code code="64572001" codeSystem="${SNOMED}"/>
                   <statusCode code="completed"/>
                   <value xsi:type="CD" code="22298006" codeSystem="${SNOMED}"/>
+                </observation>
+              </component>
+            </organizer>
+          </entry>`;
+}
+
+/**
+ * One Result Organizer entry (`…22.4.1`) holding one Result Observation, with an
+ * optional `<subject>` of its own and an optional extra `<templateId>`. The
+ * vehicle for F1: stamping it with the Family History Organizer root must not
+ * hand a relative's lab panel back as the patient's.
+ */
+function resultEntry(o: { readonly subject?: string; readonly extraStamp?: string } = {}): string {
+  return `
+          <entry>
+            <organizer classCode="BATTERY" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.1" extension="2015-08-01"/>${o.extraStamp ?? ""}
+              <id root="2.16.840.1.113883.19.5.99999.9" extension="res-org-1"/>
+              <code code="24356-8" codeSystem="${LOINC}"/>
+              <statusCode code="completed"/>${o.subject ?? ""}
+              <component>
+                <observation classCode="OBS" moodCode="EVN">
+                  <templateId root="2.16.840.1.113883.10.20.22.4.2" extension="2015-08-01"/>
+                  <id root="2.16.840.1.113883.19.5.99999.9" extension="res-obs-1"/>
+                  <code code="2951-2" codeSystem="${LOINC}"/>
+                  <statusCode code="completed"/>
+                  <effectiveTime value="20210101"/>
+                  <value xsi:type="PQ" value="140" unit="mmol/L"/>
                 </observation>
               </component>
             </organizer>
@@ -231,6 +274,31 @@ const familyHistorySection = (
     title: "Family History",
     ...o,
   });
+
+const resultsSection = (
+  o: Omit<Parameters<typeof section>[0], "templateRoot" | "code" | "title">,
+) =>
+  section({
+    templateRoot: "2.16.840.1.113883.10.20.22.2.3.1",
+    code: "30954-2",
+    title: "Results",
+    ...o,
+  });
+
+/**
+ * A section this parser does not recognize: no catalog `templateId` and no
+ * `<code>` to fall back to. The every-family walk still reaches its entries, so
+ * withholding has to happen here too, and the locus carries no `sectionCode`.
+ */
+function unrecognizedSection(entries: string): string {
+  return `
+      <component>
+        <section>
+          <title>Laboratory</title>
+          <text><paragraph>Section narrative.</paragraph></text>${entries}
+        </section>
+      </component>`;
+}
 
 /**
  * Assemble a Progress Note (empty SHALL table) around `sections`, with the MRN's
@@ -573,6 +641,209 @@ describe("family history is carved out in whole, on all four faces", () => {
     expect(parsed.problems).toHaveLength(0);
     expect(parsed.getProblems()).toHaveLength(0);
     expect(extractClinical(body, recorder().ctx).problems).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F1: the carve-out reaches the organizer the family-history read path reads,
+// and nothing else that happens to carry its templateId
+// ---------------------------------------------------------------------------
+
+describe("a stray family-history templateId cannot switch the rule off", () => {
+  const FHX = stamp(FAMILY_HISTORY_ORGANIZER_ROOT);
+
+  it("F1: a Result Organizer stamped with the family-history root is withheld from every face", () => {
+    const xml = doc(
+      resultsSection({ entries: resultEntry({ subject: RELATIVE_SUBJECT, extraStamp: FHX }) }),
+    );
+    const parsed = parse(xml);
+    const { body } = bodyElement(xml);
+    const { ctx, seen } = recorder();
+
+    expect(parsed.results).toHaveLength(0);
+    expect(parsed.getResults()).toHaveLength(0);
+    expect(extractClinical(body, recorder().ctx).results).toHaveLength(0);
+    expect(extractResults(sectionAt(xml, 0), new Map(), ctx)).toHaveLength(0);
+    expect(seen.filter((w) => w.code === NEW_CODE)).toHaveLength(1);
+    expect(overrides(parsed)).toHaveLength(1);
+    expect(overrides(parsed)[0]?.position.path).toBe("organizer");
+    expect(overrides(parsed)[0]?.position.sectionCode).toBe("30954-2");
+    // The control is the same document minus that one `<templateId>`: it
+    // withholds and reports identically, so the stamp is the whole difference.
+    const control = parse(
+      doc(resultsSection({ entries: resultEntry({ subject: RELATIVE_SUBJECT }) })),
+    );
+    expect(control.results).toHaveLength(0);
+    expect(overrides(control)).toHaveLength(1);
+  });
+
+  it("F1/A21: the stamped entry still reaches the family-history face, unchanged", () => {
+    // The carve-out is READ-SIDE: what the family-history path returns for this
+    // document is what it returned before the rule existed (it matches on the
+    // root through `childEntries`), and that is exactly why withholding it from
+    // `results` costs nothing and attributes nothing to the record target.
+    const xml = doc(
+      resultsSection({ entries: resultEntry({ subject: RELATIVE_SUBJECT, extraStamp: FHX }) }),
+    );
+    const parsed = parse(xml);
+
+    expect(parsed.familyHistory).toHaveLength(1);
+    expect(parsed.getFamilyHistory()).toStrictEqual(parsed.familyHistory);
+    expect(parsed.familyHistory[0]?.relative.relationship?.code).toBe("MTH");
+  });
+
+  it("F1: the same entry in a section this parser does not recognize is withheld too", () => {
+    // The every-family walk reaches an unrecognized section's entries, and there
+    // the document would otherwise be completely silent, strict mode included.
+    const xml = doc(
+      unrecognizedSection(resultEntry({ subject: RELATIVE_SUBJECT, extraStamp: FHX })),
+    );
+    const parsed = parse(xml);
+
+    expect(parsed.results).toHaveLength(0);
+    expect(overrides(parsed)).toHaveLength(1);
+    // The section carries no `<code>`, so the locus carries no section code:
+    // bounded values only, never a manufactured one.
+    expect(overrides(parsed)[0]?.position.sectionCode).toBeUndefined();
+    expect(() => parseCcda(xml, { profile: null, strict: true })).toThrow(CcdaParseError);
+  });
+
+  it("F1: a Problem Concern Act stamped with the family-history root is still governed", () => {
+    const xml = doc(
+      problemsSection({
+        entries: problemEntry(1, { actSubject: RELATIVE_SUBJECT, actStamp: FHX }),
+      }),
+    );
+    const parsed = parse(xml);
+
+    expect(parsed.problems).toHaveLength(0);
+    expect(parsed.getProblems()).toHaveLength(0);
+    expect(overrides(parsed)).toHaveLength(1);
+    expect(overrides(parsed)[0]?.position.path).toBe("act");
+  });
+
+  it("F1: a declaration deeper than the entry's own act never gets the carve-out", () => {
+    // The stamp sits on the nested Problem Observation that carries the
+    // declaration. The carve-out is the organizer the family-history read path
+    // reads, matched by identity, so a nested element can never claim it.
+    const xml = doc(
+      problemsSection({
+        entries: problemEntry(1, { obsSubject: RELATIVE_SUBJECT, obsStamp: FHX }),
+      }),
+    );
+    const parsed = parse(xml);
+
+    expect(parsed.problems).toHaveLength(0);
+    expect(overrides(parsed)).toHaveLength(1);
+    expect(overrides(parsed)[0]?.position.path).toBe("act");
+  });
+
+  it("F1: a stamped SECTION still declares an override for everything beneath it", () => {
+    const xml = doc(
+      section({
+        templateRoot: "2.16.840.1.113883.10.20.22.2.5.1",
+        code: "11450-4",
+        title: "Problems",
+        subject: RELATIVE_SUBJECT,
+        entries: problemEntry(1) + problemEntry(2),
+      }).replace("<title>Problems</title>", `${FHX}<title>Problems</title>`),
+    );
+    const parsed = parse(xml);
+
+    expect(parsed.problems).toHaveLength(0);
+    expect(overrides(parsed)).toHaveLength(2);
+  });
+
+  it("A7: an organizer carrying an extra vendor templateId still owns its subject slot", () => {
+    // The other direction, and the reason the test is on what a RECORD-TARGET
+    // read path claims rather than on carrying any second template at all: a real
+    // Family History Organizer with a vendor stamp is still one, so its slot is
+    // still not an override and it still draws no warning.
+    const vendor = stamp("2.16.840.1.113883.3.9999.77");
+    const xml = doc(familyHistorySection({ entries: familyHistoryEntry(1, NULL_SUBJECT, vendor) }));
+    const parsed = parse(xml);
+    const control = parse(doc(familyHistorySection({ entries: familyHistoryEntry(1, "") })));
+
+    expect(overrides(parsed)).toHaveLength(0);
+    expect(parsed.familyHistory).toStrictEqual(control.familyHistory);
+    expect(recordTargetEntryCount(parsed)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F1: and the root list the carve-out turns on stays traced
+// ---------------------------------------------------------------------------
+
+describe("the record-target root list stays in step with the extractors", () => {
+  const ENTRIES_DIR = new URL("../src/model/entries/", import.meta.url);
+
+  /** A template-root constant looked up BY NAME on the module the extractors import. */
+  function rootNamed(name: string): string | undefined {
+    const table: Record<string, unknown> = { ...ENTRY_SHARED };
+    const value = table[name];
+    return typeof value === "string" ? value : undefined;
+  }
+
+  /**
+   * The roots an extractor reaches through a local name rather than a constant:
+   * the two variant tables and the two status-domain parameters. Listed by
+   * constant NAME, so nothing here restates an OID.
+   */
+  const INDIRECT: Readonly<Record<string, readonly string[]>> = {
+    "variant.root": [
+      "PROCEDURE_ACTIVITY_PROCEDURE",
+      "PROCEDURE_ACTIVITY_ACT",
+      "PROCEDURE_ACTIVITY_OBSERVATION",
+      "PLANNED_ACT",
+      "PLANNED_ENCOUNTER",
+      "PLANNED_PROCEDURE",
+      "PLANNED_MEDICATION_ACTIVITY",
+      "PLANNED_SUPPLY",
+      "PLANNED_OBSERVATION",
+      "PLANNED_IMMUNIZATION_ACTIVITY",
+    ],
+    organizerRoot: ["FUNCTIONAL_STATUS_ORGANIZER", "MENTAL_STATUS_ORGANIZER"],
+    observationRoot: ["FUNCTIONAL_STATUS_OBSERVATION", "MENTAL_STATUS_OBSERVATION"],
+    root: ["INSTRUCTION", "HANDOFF_COMMUNICATION_PARTICIPANTS", "NUTRITION_RECOMMENDATION"],
+  };
+
+  it("F1: every root an extractor reads a top-level entry by is in the list, and nothing else is", () => {
+    const found = new Set<string>();
+    let scanned = 0;
+
+    for (const file of readdirSync(ENTRIES_DIR)) {
+      if (!file.endsWith(".ts")) continue;
+      const source = readFileSync(new URL(file, ENTRIES_DIR), "utf8");
+      // The extractors that read their entries through the choke point are the
+      // record-target ones, by definition: family history reads `childEntries`.
+      // The choke point's own module is not one of them (it only shows the call).
+      if (source.includes("export function readableEntries")) continue;
+      if (!source.includes("of readableEntries(sectionEl, ctx)")) continue;
+      scanned += 1;
+      const names = [
+        ...source.matchAll(/entryAct\(\s*entry\s*,\s*([\w$.]+)\s*\)/g),
+        ...source.matchAll(/hasTemplateRoot\(\s*act\s*,\s*([\w$.]+)\s*\)/g),
+      ].map((match) => match[1] ?? "");
+      expect(names.length, `${file} reads entries but names no entry template`).toBeGreaterThan(0);
+
+      for (const name of names) {
+        const direct = rootNamed(name);
+        const roots =
+          direct === undefined
+            ? (INDIRECT[name] ?? []).map((constant) => rootNamed(constant) ?? constant)
+            : [direct];
+        expect(
+          roots.length,
+          `${file}: the template named ${name} resolves to nothing. Resolve it, add its root to RECORD_TARGET_ENTRY_ROOTS, or the family-history carve-out will exempt an entry this extractor returns.`,
+        ).toBeGreaterThan(0);
+        for (const root of roots) found.add(root);
+      }
+    }
+
+    expect(scanned).toBe(12);
+    expect([...found].sort()).toStrictEqual([...ENTRY_SHARED.RECORD_TARGET_ENTRY_ROOTS].sort());
+    // And the one root that must never be on it, whatever else is.
+    expect(ENTRY_SHARED.RECORD_TARGET_ENTRY_ROOTS.has(FAMILY_HISTORY_ORGANIZER_ROOT)).toBe(false);
   });
 });
 
@@ -1035,5 +1306,82 @@ describe("a directly invoked extraction withholds identically and reports on the
     expect(extractProblems(sectionEl, new Map(), ctx)).toHaveLength(1);
     expect(seen.filter((w) => w.code === NEW_CODE)).toHaveLength(0);
     expect(extractMedications(sectionEl, new Map(), ctx)).toHaveLength(0);
+  });
+
+  it("F2: a direct extractFamilyHistory on a declaring section reports on the caller's channel", () => {
+    // A19's antecedent is true of this function (it is a per-family extraction
+    // invoked directly on a declaring section), and the carve-out is about its
+    // CONTENTS. So the organizers come back whole and the caller is told.
+    const entries =
+      familyHistoryEntry(1, RELATIVE_SUBJECT) + familyHistoryEntry(2, "") + problemEntry(9);
+    const xml = doc(familyHistorySection({ subject: RELATIVE_SUBJECT, entries }));
+    const control = doc(familyHistorySection({ entries }));
+    const sectionEl = sectionAt(xml, 0);
+    const { ctx, seen } = recorder();
+
+    const returned = extractFamilyHistory(sectionEl, new Map(), ctx);
+    expect(returned).toHaveLength(2);
+    expect(returned).toStrictEqual(
+      extractFamilyHistory(sectionAt(control, 0), new Map(), recorder().ctx),
+    );
+    // The same N every other per-family extraction reports for this section:
+    // organizer 2 and the problem concern act, never organizer 1 (A7).
+    expect(seen.filter((w) => w.code === NEW_CODE)).toHaveLength(2);
+    expect(extractProblems(sectionAt(xml, 0), new Map(), recorder().ctx)).toHaveLength(0);
+    // And the document's own total is exactly what it was: the report is
+    // memoized per (context, section), so the walk still counts each entry once.
+    expect(overrides(parse(xml))).toHaveLength(2);
+  });
+
+  it("F2/A7: the same call on a section that declares nothing stays at zero", () => {
+    const xml = doc(familyHistorySection({ entries: familyHistoryEntry(1, NULL_SUBJECT) }));
+    const { ctx, seen } = recorder();
+
+    expect(extractFamilyHistory(sectionAt(xml, 0), new Map(), ctx)).toHaveLength(1);
+    expect(seen.filter((w) => w.code === NEW_CODE)).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F3: what else can still be said about a withheld entry
+// ---------------------------------------------------------------------------
+
+describe("the override warning is the only code that says whose data it is", () => {
+  it("F3: a withheld entry still draws the diagnostics that read every entry", () => {
+    // `flagMisplacedEntries` and the family-history extractor deliberately read
+    // every entry, withheld or not, so both can still speak about one. Neither
+    // says anything about whose data it is, and neither is safety-critical.
+    // `src/profiles/safety.ts` says exactly this; the test is what keeps it true.
+    const xml = doc(familyHistorySection({ subject: RELATIVE_SUBJECT, entries: problemEntry(1) }));
+    const parsed = parse(xml);
+    const codes = parsed.warnings.map((w) => w.code);
+
+    expect(parsed.problems).toHaveLength(0);
+    expect(codes).toContain(WARNING_CODES.SUBJECT_CONTEXT_OVERRIDE);
+    expect(codes).toContain(WARNING_CODES.SECTION_PLACEMENT_SUSPECT);
+    expect(SAFETY_CRITICAL_CODES.has(WARNING_CODES.SECTION_PLACEMENT_SUSPECT)).toBe(false);
+  });
+
+  it("F3: and the warnings that ride the withheld reading go quiet with it", () => {
+    // The other half of the same claim: an entry a record-target extractor never
+    // builds cannot draw that extractor's warnings, which is why this code is the
+    // lone signal about the entry rather than one of several.
+    const broken = `<reference value="#nowhere"/>`;
+    const entries = problemEntry(1, { actSubject: RELATIVE_SUBJECT }).replace(
+      '<statusCode code="completed"/>',
+      `<statusCode code="completed"/><text>${broken}</text>`,
+    );
+    const withheld = parse(doc(problemsSection({ entries })));
+    const returned = parse(
+      doc(problemsSection({ entries: entries.replace(RELATIVE_SUBJECT, "") })),
+    );
+
+    expect(withheld.problems).toHaveLength(0);
+    expect(withheld.warnings.map((w) => w.code)).not.toContain(
+      WARNING_CODES.NARRATIVE_REFERENCE_BROKEN,
+    );
+    expect(returned.warnings.map((w) => w.code)).toContain(
+      WARNING_CODES.NARRATIVE_REFERENCE_BROKEN,
+    );
   });
 });

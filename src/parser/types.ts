@@ -35,8 +35,11 @@ import type { TerminologyAdapter } from "../model/terminology.js";
  * **Which codes carry which field is narrow, and worth reading before you key a
  * profile on one.** `sectionCode` is carried by `UNKNOWN_SECTION_CODE`,
  * `SECTION_MATCHED_BY_LOINC_FALLBACK` and `SUBJECT_CONTEXT_OVERRIDE`, which
- * names the enclosing section's code on every instance, entry-level ones
- * included, because a withheld entry is located by which section it sat in.
+ * names the enclosing section's own `<code>` on its entry-level instances as
+ * well as its section-level one, because a withheld entry is located by which
+ * section it sat in. It is the bounded token or `<withheld>` like any other, and
+ * a section that carries no `<code>` at all contributes none, so a warning about
+ * an entry in an unrecognized section may carry no `sectionCode`.
  * `templateId` is carried by the first two (the section's first rooted
  * `<templateId>`) and by `TEMPLATE_EXTENSION_ABSENT` (the matched document-type
  * root). No other code carries either, so a `QuirkMatch` keyed on one narrows

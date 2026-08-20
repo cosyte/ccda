@@ -215,6 +215,39 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     contents they returned before this existed, in every document shape. A declaring Family History
     section still warns and still withholds that section's other entries, which is observable because
     the aggregate walk runs every family's extractor over every section.
+  - **The carve-out is READ-SIDE, and the first cut put it in the wrong layer.** `isOverridingDeclaration`
+    shipped as `!hasTemplateRoot(el, FAMILY_HISTORY_ORGANIZER)`, so ANY element carrying
+    `2.16.840.1.113883.10.20.22.4.45` was exempt, whatever element it was and whichever read path
+    returned it. One extra `<templateId>` on a Result Organizer that carried its own `<subject>` left
+    the entry readable: `results`, `getResults()`, the aggregate slot and a direct `extractResults`
+    all handed a relative's lab panel back as the patient's with **no warning at all**, and the same
+    one-line edit worked on a Problem Concern Act and on every other family, because the guard sat
+    ABOVE the choke point. Multi-`templateId` entries are ordinary C-CDA, not spoofing to shrug at.
+    **The carve-out is now the element the family-history read path itself reads**,
+    `entryAct(entry, FAMILY_HISTORY_ORGANIZER)`, compared by IDENTITY (so a declaration nested deeper
+    inside the entry can never claim it, and neither can the `<entry>` wrapper), **and only while that
+    element carries no `RECORD_TARGET_ENTRY_ROOTS` root** (`model/entries/shared.ts`), which is the
+    spec's own premise for the exemption: "nothing is attributed to the record target either way
+    because no record-target read path returns that organizer". Where that premise is false the
+    entry is governed, withheld and reported like any other. **Do not re-widen the test to the
+    templateId alone, and do not narrow it to "carries no OTHER templateId"** either: a real organizer
+    with a vendor stamp is still a Family History Organizer and must keep its slot. The root list is
+    **traced, not stated**: `test/subject-override.test.ts` scans every extractor that reads through
+    the choke point and asserts the set equals the roots those files match on, so adding a family
+    without adding its root reds a test instead of re-opening the hole.
+  - **`extractFamilyHistory` reports what it does not withhold.** Its CONTENTS are carved out (it
+    reads `childEntries`), but a per-family extraction invoked directly on a declaring section owes
+    the caller the warning, and it was the one public read path that said nothing at all. It now
+    calls `reportSubjectOverrides(sectionEl, ctx)`, the warning half of the choke point with no
+    filtering. Memoized per (context, section) like every other emission, so a whole-document parse
+    counts exactly what it counted before: the record-target extractors reach the section first.
+  - **"It is the LONE signal, no other warning about it can fire" was published in `profiles/safety.ts`
+    and was false the day it shipped.** `flagMisplacedEntries` reads every entry, so
+    `SECTION_PLACEMENT_SUSPECT` fires about a withheld one, and the family-history extractor can raise
+    its own warnings about an entry withheld from the record-target families. What is true, and what
+    that file now says, is narrower: it is the only code that says WHOSE data an entry is, and the
+    warnings that ride the withheld reading (its codes, units, narrative, `PLAN_ENTRY_NOT_MODELED`) do
+    go quiet with it because the entry is never built. Both halves have tests.
   - **The count is per section and sums: N governed entries produce exactly N instances, and a
     declaring section that governs no entry ANYWHERE beneath it produces exactly one at its own
     locus.** A declaring section whose entries all sit one subsection down is therefore N, not N plus

@@ -38,7 +38,12 @@ Four things are decisions rather than details:
   it is never an override, draws no warning, and re-overrides an enclosing section
   declaration. `getFamilyHistory()`, the `familyHistory` field,
   `extractFamilyHistory` and the aggregate's family-history slot return exactly
-  what they returned before, in every document shape.
+  what they returned before, in every document shape. That carve-out is read-side
+  and reaches only the organizer the family-history path itself reads: an entry
+  that carries the Family History Organizer template beside one a record-target
+  read path returns (a Result Organizer, a Problem Concern Act) is withheld and
+  reported like any other, because a `templateId` is one element and C-CDA entries
+  carry several. A declaration nested deeper inside an entry is never that slot.
 - **Withholding is read-side only.** The withheld entry is not dropped: the
   byte-faithful round trip through `toString()` / `serializeCcda` reproduces it
   unchanged, and section narrative is returned unredacted, unreordered and
@@ -53,7 +58,8 @@ produces exactly one instance at its own locus instead. The same withholding
 applies to a per-family or aggregate extraction invoked directly on a section,
 including a nested subsection governed by an ancestor's declaration, with the
 warnings delivered on the parse context those functions already accept: no
-signature, parameter or return type changes.
+signature, parameter or return type changes. `extractFamilyHistory` delivers them
+too, while returning its own contents whole.
 
 Two behaviour changes to expect. A document carrying an override loses those
 entries from `getProblems()` / `getMedications()` / `getAllergies()` and the other

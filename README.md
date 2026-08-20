@@ -389,7 +389,12 @@ each is a decision rather than an implementation detail:
 - **A Family History Organizer's own `<subject>` slot is never an override.** It is that template's
   mechanism for naming the relative, whatever the slot contains, so it draws no warning and it
   re-overrides an enclosing section declaration. `getFamilyHistory()` returns what it always returned,
-  in every document shape; withholding never removes anything from it.
+  in every document shape; withholding never removes anything from it. **The carve-out is read-side
+  and reaches only the organizer that read path reads**: an entry carrying the Family History
+  Organizer template beside one a record-target read path returns (a Result Organizer, say) is
+  withheld and flagged like any other, and so is an entry whose declaration sits deeper inside it. A
+  `templateId` is one element and C-CDA entries carry several, so a stray one cannot switch the rule
+  off.
 
 The count is **per section and sums over the document**: N governed top-level entries in a section
 produce exactly N instances in document order, each naming that entry's own bounded locus (element

@@ -81,10 +81,17 @@ export const SAFETY_CRITICAL_CODES: ReadonlySet<WarningCode> = immutableSet<Warn
   // (CDA R2 "primary target of the entries recorded in a section"), so the
   // content under one is another person's: a relative's, a donor's, a contact's.
   // It sits above every other entry on this list, because every other entry
-  // assumes the entry belongs to the patient. It is also the LONE signal: the
-  // governed entry is withheld from every record-target read path, so no other
-  // warning about it can fire (there is no returned value left to be wrong), and
-  // a consumer that quieted this would see an entry vanish with nothing said.
+  // assumes the entry belongs to the patient. It is also the ONLY code that says
+  // WHOSE data it is, and stating that precisely matters: the governed entry is
+  // withheld from every record-target read path, so every warning that rides the
+  // reading of that entry (its codes, units, narrative reconciliation,
+  // PLAN_ENTRY_NOT_MODELED) goes quiet with it, since it is never built. The
+  // diagnostics that read a section's entries REGARDLESS of withholding do still
+  // fire about it, by design: SECTION_PLACEMENT_SUSPECT walks every entry
+  // (`flagMisplacedEntries`), and the family-history extractor reads every entry
+  // too. Neither says anything about whose data it is, and neither is
+  // safety-critical, so a consumer that quieted this one would see an entry
+  // vanish with nothing said about why.
   // Tolerating it could only ever buy silence about another patient's clinical
   // data being present, never about a benign structural quirk. Provenance,
   // stated so it is not mistaken for a traced constraint: no normative SHALL is

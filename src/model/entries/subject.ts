@@ -34,7 +34,18 @@
  *    is that template's defined mechanism for naming the relative, WHATEVER the
  *    slot contains, so it draws no warning and it re-overrides an enclosing
  *    section declaration for the statements beneath it. The family-history read
- *    path never withholds and is not routed through this module at all.
+ *    path never withholds its CONTENT and is not routed through the entry filter
+ *    at all. **The carve-out is read-side, so it reaches exactly the element the
+ *    family-history read path reads and nothing else**: the organizer
+ *    {@link entryAct} selects for `FAMILY_HISTORY_ORGANIZER` on that top-level
+ *    entry, and only while no record-target read path returns that same element
+ *    ({@link RECORD_TARGET_ENTRY_ROOTS}). A `templateId` is one element and C-CDA
+ *    entries carry several, so a Result Organizer or a Problem Concern Act
+ *    stamped with the family-history root is still returned by `results` /
+ *    `getProblems()` and friends: it is governed, withheld and reported like any
+ *    other, because the carve-out's whole premise is that nothing is attributed
+ *    to the record target either way. A declaration nested deeper inside the
+ *    entry is never the organizer's own slot and is never carved out.
  *
  * **Withholding is read-side only.** The parsed document keeps its source
  * snapshot, so `serializeCcda` / `doc.toString()` reproduce a withheld entry
@@ -50,7 +61,13 @@ import { safeDerivedToken } from "../../parser/tokens.js";
 import type { CcdaPosition } from "../../parser/types.js";
 import { subjectContextOverride } from "../../parser/warnings.js";
 import type { ParseCtx } from "../types/_shared.js";
-import { FAMILY_HISTORY_ORGANIZER, childEntries, hasTemplateRoot } from "./shared.js";
+import {
+  FAMILY_HISTORY_ORGANIZER,
+  RECORD_TARGET_ENTRY_ROOTS,
+  childEntries,
+  entryAct,
+  templateRoots,
+} from "./shared.js";
 import type { Element, Node } from "@xmldom/xmldom";
 
 /** Element node type per the DOM spec (`Node.ELEMENT_NODE`). @internal */
@@ -101,13 +118,34 @@ function declaresSubject(el: Element): boolean {
 }
 
 /**
- * True when a declaration carried by `el` is an OVERRIDING subject. Every
- * declaration is, except the slot a Family History Organizer carries itself.
+ * The one element inside a top-level `<entry>` whose own `<subject>` slot is NOT
+ * an overriding declaration: the Family History Organizer, as the family-history
+ * read path itself reads it. `undefined` when the entry has none, which is the
+ * ordinary case, and then every declaration inside the entry is an override.
+ *
+ * **Two conditions, and both are the carve-out's own premise rather than extra
+ * caution.** It is {@link entryAct}`(entry, FAMILY_HISTORY_ORGANIZER)`, the exact
+ * call `extractFamilyHistory` makes, so the exemption reaches the element that
+ * path returns and, by identity, nothing nested deeper inside the entry. And the
+ * element must carry no {@link RECORD_TARGET_ENTRY_ROOTS} root: the contract
+ * exempts the slot because "no record-target read path returns that organizer",
+ * and an entry stamped with the family-history root beside a Result Organizer's
+ * or a Problem Concern Act's is one they do return. A `templateId` is one element
+ * and C-CDA entries carry several, so this shape is ordinary markup rather than a
+ * curiosity, and a single stamp must not be able to switch the rule off for an
+ * entry a record-target read path hands back as the patient's own.
+ *
+ * The family-history read path is unaffected either way: it never consults this
+ * module for its contents, so a stamped entry is still returned there exactly as
+ * it was before this rule existed.
  *
  * @internal
  */
-function isOverridingDeclaration(el: Element): boolean {
-  return !hasTemplateRoot(el, FAMILY_HISTORY_ORGANIZER);
+function carveOutOrganizer(entry: Element): Element | undefined {
+  const organizer = entryAct(entry, FAMILY_HISTORY_ORGANIZER);
+  if (organizer === undefined) return undefined;
+  const claimed = templateRoots(organizer).some((root) => RECORD_TARGET_ENTRY_ROOTS.has(root));
+  return claimed ? undefined : organizer;
 }
 
 /** True when an element is a CDA R2 clinical statement. @internal */
@@ -121,6 +159,9 @@ function isClinicalStatement(el: Element): boolean {
 /**
  * True when any clinical statement inside `el` is governed by an overriding
  * subject, given the governance `inherited` from its enclosing context.
+ * `carveOut` is the one element of this entry whose own declaration is not an
+ * override (see {@link carveOutOrganizer}), matched by IDENTITY, so no stamp on
+ * any other element can claim the exemption.
  *
  * The `<subject>` participation itself is never descended into: what is inside
  * it (a `relatedSubject`, and the `<subject>` naming the person within THAT) is
@@ -128,12 +169,16 @@ function isClinicalStatement(el: Element): boolean {
  *
  * @internal
  */
-function governedStatementInside(el: Element, inherited: boolean): boolean {
+function governedStatementInside(
+  el: Element,
+  inherited: boolean,
+  carveOut: Element | undefined,
+): boolean {
   for (const kid of childElements(el)) {
     if (kid.namespaceURI === V3_NS && kid.localName === "subject") continue;
-    const scope = declaresSubject(kid) ? isOverridingDeclaration(kid) : inherited;
+    const scope = declaresSubject(kid) ? kid !== carveOut : inherited;
     if (scope && isClinicalStatement(kid)) return true;
-    if (governedStatementInside(kid, scope)) return true;
+    if (governedStatementInside(kid, scope, carveOut)) return true;
   }
   return false;
 }
@@ -143,11 +188,16 @@ function governedStatementInside(el: Element, inherited: boolean): boolean {
  * any statement nested inside it is. `sectionGoverned` is the governance the
  * enclosing section conducts to it.
  *
+ * A declaration on the `<entry>` wrapper itself is always an override: the
+ * carve-out belongs to the organizer the family-history read path reads, which is
+ * a child of the wrapper and never the wrapper.
+ *
  * @internal
  */
 export function entryGoverned(entry: Element, sectionGoverned: boolean): boolean {
-  const scope = declaresSubject(entry) ? isOverridingDeclaration(entry) : sectionGoverned;
-  return governedStatementInside(entry, scope);
+  const carveOut = carveOutOrganizer(entry);
+  const scope = declaresSubject(entry) ? true : sectionGoverned;
+  return governedStatementInside(entry, scope, carveOut);
 }
 
 /**
@@ -297,14 +347,54 @@ function reportOnce(sectionEl: Element, governed: readonly Element[], ctx: Parse
  * @internal
  */
 export function readableEntries(sectionEl: Element, ctx: ParseCtx): readonly Element[] {
-  const entries = childEntries(sectionEl);
+  const { readable, governed } = partitionEntries(sectionEl);
+  reportOnce(sectionEl, governed, ctx);
+  return readable;
+}
+
+/**
+ * Report a section's subject-context overrides WITHOUT withholding anything: the
+ * warning half of {@link readableEntries} on its own, under the identical
+ * arithmetic and the identical per-(context, section) memoization.
+ *
+ * The family-history read path calls this. Its contents are carved out (it
+ * returns what it returned before this rule existed, in every document shape),
+ * but the report is not part of that carve-out: a Family History section that
+ * declares somebody else's subject still declares it, and a consumer whose only
+ * call is `extractFamilyHistory(sectionEl, ..., ctx)` would otherwise be the one
+ * caller in the package told nothing at all. On a whole-document parse the
+ * memoization makes this a no-op, because the record-target extractors reached
+ * the section first, so a document's totals are exactly what they were.
+ *
+ * (No `@example` import: this helper is not on the package entry point.)
+ *
+ * @example
+ * ```ts
+ * reportSubjectOverrides(sectionEl, ctx);
+ * ```
+ *
+ * @internal
+ */
+export function reportSubjectOverrides(sectionEl: Element, ctx: ParseCtx): void {
+  reportOnce(sectionEl, partitionEntries(sectionEl).governed, ctx);
+}
+
+/**
+ * Split a section's top-level entries into the ones a record-target read path may
+ * read and the ones an overriding subject declaration governs, in document order.
+ *
+ * @internal
+ */
+function partitionEntries(sectionEl: Element): {
+  readonly readable: readonly Element[];
+  readonly governed: readonly Element[];
+} {
   const sectionGoverned = sectionUnderSubjectDeclaration(sectionEl);
   const readable: Element[] = [];
   const governed: Element[] = [];
-  for (const entry of entries) {
+  for (const entry of childEntries(sectionEl)) {
     if (entryGoverned(entry, sectionGoverned)) governed.push(entry);
     else readable.push(entry);
   }
-  reportOnce(sectionEl, governed, ctx);
-  return readable;
+  return { readable, governed };
 }
