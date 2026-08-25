@@ -823,6 +823,68 @@ export const HISTORY_OF_PRESENT_ILLNESS_SECTION = `
         </section>
       </component>`;
 
+/**
+ * A Discharge Diagnosis Section (V3) (`…22.2.24`, `@extension` `2015-08-01`,
+ * LOINC `11535-2`), narrative only. The R2.1 Discharge Summary document
+ * (`…22.1.8`) SHALL contain it (CONF:1198-30524); this parser's catalog key for
+ * it is `hospitalDischargeDiagnosis`.
+ */
+export const HOSPITAL_DISCHARGE_DIAGNOSIS_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.24" extension="2015-08-01"/>
+          <code code="11535-2" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Discharge Diagnosis</title>
+          <text>Essential hypertension, stable at discharge.</text>
+        </section>
+      </component>`;
+
+/**
+ * A Discharge Medications Section (entries optional) (V3) (`…22.2.11`,
+ * `@extension` `2015-08-01`, LOINC `10183-2`), narrative only. The R2.1
+ * Discharge Summary states this section as a **SHOULD**, in the document's
+ * warnings rule (CONF:1198-30525), so its absence is conformant and its presence
+ * changes no required-section verdict.
+ */
+export const DISCHARGE_MEDICATIONS_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.11" extension="2015-08-01"/>
+          <code code="10183-2" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Discharge Medications</title>
+          <text>Continue the antihypertensive at the same dose.</text>
+        </section>
+      </component>`;
+
+/**
+ * A Health Concerns Section (V2) (`…22.2.58`, `@extension` `2015-08-01`, LOINC
+ * `75310-3`), narrative only. The R2.1 Care Plan document (`…22.1.15`) SHALL
+ * contain it (CONF:1198-28756).
+ */
+export const HEALTH_CONCERNS_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.58" extension="2015-08-01"/>
+          <code code="75310-3" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Health Concerns</title>
+          <text>Blood pressure control.</text>
+        </section>
+      </component>`;
+
+/**
+ * A Goals Section (`…22.2.60`, no `@extension`, LOINC `61146-7`), narrative
+ * only. The R2.1 Care Plan document SHALL contain it (CONF:1198-28762).
+ */
+export const GOALS_SECTION = `
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.60"/>
+          <code code="61146-7" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Goals</title>
+          <text>Reach a systolic reading below 130 within six months.</text>
+        </section>
+      </component>`;
+
 /** All three triad sections concatenated, for the end-to-end extraction test. */
 export const TRIAD_SECTIONS = `${PROBLEMS_SECTION}${MEDICATIONS_SECTION}${ALLERGY_ENTRY_SECTION}`;
 
