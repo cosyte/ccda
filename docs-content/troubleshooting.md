@@ -397,30 +397,42 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   recognized catalog. `requiredSectionStatus(documentType)` returns the asserted keys with a
   `verification` state, so an empty set is never ambiguous:
 
-  - **`traced-partial`** for Consultation Note, Progress Note, Procedure Note, Operative Note and
-    Diagnostic Imaging Report. Their SHALL sections were read off the normative C-CDA R2.1 source.
-    Consultation Note asserts History of Present Illness (CONF:1198-28907), Allergies (-28911) and
-    Problems (-28929), each scoped to the R2.1 stamp its constraint carries. The other four assert
-    **nothing**, and that is now a traced result rather than an unread table: every SHALL section
-    their templates name is either outside this parser's recognized catalog (Complications,
-    Procedure Description, Anesthesia, Findings (DIR) and the rest) or a choice, and each one is
-    listed by name in `status.unasserted` with the reason.
+  - **`traced-complete`** for CCD and Care Plan: every SHALL section the source names for those two
+    is in this parser's catalog and is asserted, so `status.unasserted` is empty because there is
+    nothing left over.
+  - **`traced-partial`** for the other nine structured types. Their SHALL sections were read off the
+    normative C-CDA R2.1 source, and one or more of them cannot be asserted. Consultation Note
+    asserts History of Present Illness (CONF:1198-28907), Allergies (-28911) and Problems (-28929),
+    each scoped to the R2.1 stamp its constraint carries. Progress Note, Procedure Note, Operative
+    Note and Diagnostic Imaging Report assert **nothing**, and that is a traced result rather than
+    an unread table: every SHALL section their templates name is either outside this parser's
+    recognized catalog (Complications, Procedure Description, Anesthesia, Findings (DIR) and the
+    rest) or a choice. Each one is listed by name in `status.unasserted` with the reason.
   - **`not-applicable`** for Unstructured Document: its component SHALL be a `nonXMLBody`
     (CONF:1198-31086), so it carries no section to require and none can be missing.
-  - **`untraced`** for CCD, Discharge Summary, Referral Note, History and Physical, Care Plan and
-    Transfer Summary. Their asserted sets are unchanged and their existing citations intact, but the
-    source was not re-read for them here, so nothing claims those sets are complete.
+  - **`untraced`** is reported by no recognized type. It stays in the vocabulary as the honest state
+    for a type whose obligation has not been read.
 
-  This under-warns rather than over-warns: a document of a `traced-partial` or `untraced` type that
-  is missing a section its type requires can still parse clean, with no `REQUIRED_SECTION_MISSING`.
-  Read an empty asserted set through its state, never as "this type has no requirements," and do not
-  treat a quiet parse as a conformance result.
+  Every status also names the artifact its obligation was read from and that artifact's own revision
+  date (`status.source`), so a reader holding a later revision can tell the table is stale without
+  re-deriving it.
+
+  This under-warns rather than over-warns: a document of a `traced-partial` type that is missing a
+  section its type requires can still parse clean, with no `REQUIRED_SECTION_MISSING`. Read an empty
+  asserted set through its state, never as "this type has no requirements," and do not treat a quiet
+  parse as a conformance result.
 
   ```ts runnable
-  import { requiredSectionStatus, requiredSectionStatuses, DOCUMENT_TYPES } from "@cosyte/ccda";
+  import {
+    requiredSectionKeys,
+    requiredSectionStatus,
+    requiredSectionStatuses,
+    DOCUMENT_TYPES,
+  } from "@cosyte/ccda";
 
   DOCUMENT_TYPES.length; // => 12
   requiredSectionStatuses().length; // => 12
+  requiredSectionStatuses().filter((s) => s.verification === "untraced").length; // => 0
 
   const consult = requiredSectionStatus("consultationNote");
   consult.verification; // => "traced-partial"
@@ -428,12 +440,18 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   consult.traced[0]?.conformanceId; // => "CONF:1198-28907"
   consult.unasserted[0]?.reason; // => "not-unconditionally-required"
 
-  // An empty asserted set, three different readings, three different values.
+  // An empty asserted set, two different readings, two different values.
   requiredSectionStatus("operativeNote").keys.length; // => 0
   requiredSectionStatus("operativeNote").verification; // => "traced-partial"
   requiredSectionStatus("operativeNote").unasserted[0]?.reason; // => "outside-section-catalog"
   requiredSectionStatus("unstructuredDocument").verification; // => "not-applicable"
-  requiredSectionStatus("ccd").verification; // => "untraced"
+  requiredSectionStatus("ccd").verification; // => "traced-complete"
+
+  // A Discharge Summary requires a Plan of Treatment section and does NOT require
+  // a Discharge Medications section: the source states that one as a SHOULD.
+  requiredSectionKeys("dischargeSummary").includes("planOfTreatment"); // => true
+  requiredSectionKeys("dischargeSummary").includes("dischargeMedications"); // => false
+  requiredSectionStatus("dischargeSummary").source?.revision; // => "2025-09-08"
   ```
 
 ### Building a document

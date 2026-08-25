@@ -451,35 +451,73 @@ normative R2.1 Schematron, CONF:1198-30925), so the SHALL check does not stay si
 Note omits it. Its Assessment/Plan requirement stays out (a choice constraint), as do its Results and
 Plan of Treatment sections (SHOULD, not SHALL).
 
+A **Discharge Summary** asserts **Allergies** (CONF:1198-30520), **Discharge Diagnosis** (-30524)
+and **Plan of Treatment** (-30528), the three sections its errors rule requires unconditionally that
+this parser recognizes. It does **not** assert **Discharge Medications**: the normative source puts
+that section in the document's _warnings_ rule as a SHOULD (-30525), so a conformant Discharge
+Summary that omits it draws no warning. **Hospital Course** (-30522) is an unconditional SHALL that
+this parser's catalog does not recognize, so it is reported as unasserted rather than silently
+dropped.
+
+A **History and Physical** asserts seven of the ten sections its errors rule names: Allergies
+(-30572), Family History (-30584), Past Medical History (-30588), Medications (-30596), Results
+(-30606), Social History (-30610) and Vital Signs (-30612). General Status (-30586), Physical Exam
+(-30598) and Review of Systems (-30608) are outside the recognized catalog, and its two choices
+(-30613, -30614) assert neither half. A **Transfer Summary** asserts all six of its named SHALL
+sections: Allergies (-28256), Medications (-28278), Problems (-28284), Results (-28288), Vital Signs
+(-28292) and Reason for Referral (-31343); its Assessment/Plan choice (-31582) stays out. A **Care
+Plan** asserts both of its named SHALL sections, Health Concerns (-28756) and Goals (-28762).
+
+**Every key added by one of those re-reads is scoped to the R2.1 stamp**, exactly as the CCD's two
+newest keys are, because every one of those document-level rules matches only a `ClinicalDocument`
+whose `templateId` carries `@extension="2015-08-01"`. So an unstamped, R1.1-origin document is
+asserted exactly as it was before, with one exception in the safe direction: a key **withdrawn**
+because the source states it as a SHOULD or as a choice is withdrawn from the unstamped reading too,
+because "no sentence made this unconditional" does not depend on the stamp. That is why an unstamped
+Discharge Summary no longer asserts Discharge Medications either.
+
 ### What each document type asserts, and how much of it was verified
 
 **Every one of the twelve types reports a verification state**, so an empty asserted set is never
 ambiguous. `requiredSectionStatus(documentType)` returns the same `keys` as `requiredSectionKeys`
 plus a `verification` of `traced-complete`, `traced-partial`, `untraced` or `not-applicable`, the
-provenance (`traced`) of every key read off the source, and every SHALL section left `unasserted`
-with the reason. `requiredSectionStatuses()` returns all twelve at once, and `DOCUMENT_TYPES`
-enumerates the types themselves.
+provenance (`traced`) of every key read off the source, every SHALL section left `unasserted` with
+the reason, and the `source` the reading was taken from. `requiredSectionStatuses()` returns all
+twelve at once, and `DOCUMENT_TYPES` enumerates the types themselves.
 
 A state says what was read off the normative C-CDA R2.1 base implementation guide **for that type**,
 not what this package has ever cited: `traced-complete` claims every SHALL section the source names
 is asserted, which is a completeness claim, so a type nobody re-read stays `untraced` even when its
-keys carry conformance ids.
+keys carry conformance ids. **No recognized type reports `untraced` today**: every one of the twelve
+has had its document-level rules read.
 
-| document type                                                                            | state            | asserted                                                                                                          | named but not asserted                                                                                                                                                                                                                                                                       |
-| ---------------------------------------------------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Consultation Note                                                                        | `traced-partial` | History of Present Illness (CONF:1198-28907), Allergies (-28911), Problems (-28929), all scoped to the R2.1 stamp | Reason for Referral **or** Reason for Visit (-9504); Assessment and Plan **or** Assessment plus Plan of Treatment (-9501). Neither is unconditional                                                                                                                                          |
-| Progress Note                                                                            | `traced-partial` | nothing: the source names no unconditional SHALL section for it                                                   | the Assessment/Plan choice (-30657)                                                                                                                                                                                                                                                          |
-| Procedure Note                                                                           | `traced-partial` | nothing                                                                                                           | Complications (-30387), Procedure Description (-30356), Procedure Indications (-30358), Postprocedure Diagnosis (-30360), all outside the recognized catalog; the Assessment/Plan choice (-30412)                                                                                            |
-| Operative Note                                                                           | `traced-partial` | nothing                                                                                                           | Anesthesia (-30487), Complications (-30489), Preoperative Diagnosis (-30491), Procedure Estimated Blood Loss (-30493), Procedure Findings (-30495), Procedure Specimens Taken (-30497), Procedure Description (-30499), Postoperative Diagnosis (-30501), all outside the recognized catalog |
-| Diagnostic Imaging Report                                                                | `traced-partial` | nothing                                                                                                           | Findings (DIR) (-30697), outside the recognized catalog                                                                                                                                                                                                                                      |
-| Unstructured Document                                                                    | `not-applicable` | nothing                                                                                                           | nothing: its component SHALL be a `nonXMLBody` (-31086), so it carries no section to require                                                                                                                                                                                                 |
-| CCD, Discharge Summary, Referral Note, History and Physical, Care Plan, Transfer Summary | `untraced`       | their existing sets, unchanged                                                                                    | not re-read against the source here, so no completeness claim is made either way                                                                                                                                                                                                             |
+**Each status names the artifact it was read from and that artifact's own revision.**
+`status.source` carries `{ artifact, revision }`, where `revision` is the artifact's self-reported
+revision date rather than the date this package looked at it. A reader holding a newer revision of
+the same artifact can therefore tell a table is stale without re-deriving it, and a re-read that
+changes nothing does not move the date.
+
+| document type             | state             | asserted                                                                                                                                                                                                      | named but not asserted                                                                                                                                                                                                                                                                       |
+| ------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Consultation Note         | `traced-partial`  | History of Present Illness (CONF:1198-28907), Allergies (-28911), Problems (-28929), all scoped to the R2.1 stamp                                                                                             | Reason for Referral **or** Reason for Visit (-9504); Assessment and Plan **or** Assessment plus Plan of Treatment (-9501). Neither is unconditional                                                                                                                                          |
+| Progress Note             | `traced-partial`  | nothing: the source names no unconditional SHALL section for it                                                                                                                                               | the Assessment/Plan choice (-30657)                                                                                                                                                                                                                                                          |
+| Procedure Note            | `traced-partial`  | nothing                                                                                                                                                                                                       | Complications (-30387), Procedure Description (-30356), Procedure Indications (-30358), Postprocedure Diagnosis (-30360), all outside the recognized catalog; the Assessment/Plan choice (-30412)                                                                                            |
+| Operative Note            | `traced-partial`  | nothing                                                                                                                                                                                                       | Anesthesia (-30487), Complications (-30489), Preoperative Diagnosis (-30491), Procedure Estimated Blood Loss (-30493), Procedure Findings (-30495), Procedure Specimens Taken (-30497), Procedure Description (-30499), Postoperative Diagnosis (-30501), all outside the recognized catalog |
+| Diagnostic Imaging Report | `traced-partial`  | nothing                                                                                                                                                                                                       | Findings (DIR) (-30697), outside the recognized catalog                                                                                                                                                                                                                                      |
+| Unstructured Document     | `not-applicable`  | nothing                                                                                                                                                                                                       | nothing: its component SHALL be a `nonXMLBody` (-31086), so it carries no section to require                                                                                                                                                                                                 |
+| CCD                       | `traced-complete` | Allergies (-30662), Medications (-30664), Problems (-30666), Results (-30670), Social History (-30688), Vital Signs (-30690); the last two scoped to the R2.1 stamp                                           | nothing: all six of its SHALL sections are asserted. Procedures (-30668) and Plan of Treatment (-30686) are SHOULD, so they are not part of the obligation                                                                                                                                   |
+| Care Plan                 | `traced-complete` | Health Concerns (-28756), Goals (-28762)                                                                                                                                                                      | nothing: both of its SHALL sections are asserted                                                                                                                                                                                                                                             |
+| Discharge Summary         | `traced-partial`  | Allergies (-30520), Discharge Diagnosis (-30524), Plan of Treatment (-30528, scoped to the R2.1 stamp)                                                                                                        | Hospital Course (-30522), outside the recognized catalog. Discharge Medications is a SHOULD (-30525) and is therefore not required at all                                                                                                                                                    |
+| Referral Note             | `traced-partial`  | Allergies (-30912), Medications (-30923), Problems (-29087), Reason for Referral (-30925)                                                                                                                     | the Assessment/Plan choice (-29102)                                                                                                                                                                                                                                                          |
+| History and Physical      | `traced-partial`  | Allergies (-30572), Family History (-30584), Past Medical History (-30588), Medications (-30596), Results (-30606), Social History (-30610), Vital Signs (-30612); all but Allergies scoped to the R2.1 stamp | General Status (-30586), Physical Exam (-30598), Review of Systems (-30608), all outside the recognized catalog; the chief-complaint/reason-for-visit choice (-30613) and the Assessment/Plan choice (-30614)                                                                                |
+| Transfer Summary          | `traced-partial`  | Allergies (-28256), Medications (-28278), Problems (-28284), Results (-28288), Vital Signs (-28292), Reason for Referral (-31343); the last three scoped to the R2.1 stamp                                    | the Assessment/Plan choice (-31582)                                                                                                                                                                                                                                                          |
 
 **This check still under-warns, and the state says where.** A `traced-partial` type is not checking
-the sections listed in its right-hand column, and an `untraced` type carries no claim that its set is
-complete: a document of either can be missing a section its type requires and still parse clean.
-**A quiet parse is not a conformance result.** If your pipeline needs IG conformance, validate the
-document with an external validator.
+the sections listed in its right-hand column: a document of one can be missing a section its type
+requires and still parse clean. A `traced-complete` type is checking every section its type's
+document-level rule names, which is still not the whole of conformance: nothing here validates what a
+section or an entry contains. **A quiet parse is not a conformance result.** If your pipeline needs
+IG conformance, validate the document with an external validator.
 
 ## Serialize & round-trip
 

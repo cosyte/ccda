@@ -1315,14 +1315,62 @@ deleted; the imperative as it stood is reproduced here verbatim.
   - **A state is a claim about what was READ for that type, never about what the repository has ever
     cited, and that reading was chosen deliberately.** `traced-complete` asserts that every SHALL
     section the source names for the type is asserted, which is a completeness claim about the
-    source. So the six rows that already asserted keys (CCD, Discharge Summary, Referral Note,
-    History and Physical, Care Plan, Transfer Summary) report **`untraced`** even though the CCD and
-    Referral Note rows carry genuinely traced CONF ids from 2026-08-10. Inheriting a traced state
-    from an older commit's citation would publish an unchecked completeness claim on the most widely
-    exchanged C-CDA type. **Promoting a row out of `untraced` means re-reading the source for that
-    row, in its own change; it is never a table edit.**
-  - **Five types were read off the normative R2.1 Schematron (2026-08-18) and the result was mostly
-    NOT keys.** Consultation Note gained three (History of Present Illness CONF:1198-28907,
+    source. That is why the six rows which already asserted keys (CCD, Discharge Summary, Referral
+    Note, History and Physical, Care Plan, Transfer Summary) reported **`untraced`** for a while even
+    though the CCD and Referral Note rows carried genuinely traced CONF ids from 2026-08-10:
+    inheriting a traced state from an older commit's citation would have published an unchecked
+    completeness claim on the most widely exchanged C-CDA type. **Promoting a row out of `untraced`
+    means re-reading the source for that row, in its own change; it is never a table edit.** Those
+    six were re-read on 2026-08-25 and the section below records what that cost.
+  - **THE SIX RE-READ ROWS, AND THE TWO DEFECTS THE RE-READ CLOSED.** Read off the document-level
+    `errors` and `warnings` rules of the normative C-CDA R2.1 Schematron, revision 2025-09-08 (the
+    artifact's own last manual-update entry, not the date it was fetched). **`untraced` is now
+    reported by NOTHING**, and the state is kept in the union only because it is the honest value
+    for a type nobody has read.
+    - **Discharge Summary was wrong in BOTH directions, and one of them mis-flagged a conformant
+      document.** It asserted `dischargeMedications`, which the source states as a **SHOULD** in
+      that document's **warnings** rule (CONF:1198-30525), so a conformant Discharge Summary with no
+      Discharge Medications section drew a false `REQUIRED_SECTION_MISSING`. And it omitted Plan of
+      Treatment (-30528), which the **errors** rule requires unconditionally and this catalog
+      recognizes. **Withdrawing the SHOULD and adding the SHALL are the same fix with the sign
+      flipped, and neither half is optional.** Hospital Course (-30522) is a third unconditional
+      SHALL, outside this catalog, so it is enumerated in `unasserted` rather than asserted or
+      dropped. **Do not re-add `dischargeMedications` as a key.**
+    - **History and Physical asserted ONE of the ten SHALL sections its errors rule names.** Six more
+      are catalog keys and are asserted now (Family History -30584, Past Medical History -30588,
+      Medications -30596, Results -30606, Social History -30610, Vital Signs -30612, beside the
+      pre-existing Allergies -30572). Three are outside the catalog (General Status -30586, Physical
+      Exam -30598, Review of Systems -30608). **Transfer Summary asserted three of six**; Results
+      -28288, Vital Signs -28292 and Reason for Referral -31343 joined them, all six in catalog.
+    - **CCD, Referral Note and Care Plan were confirmed unchanged**, which is a result rather than a
+      non-event: CCD (six of six) and Care Plan (two of two) are `traced-complete`, Referral Note is
+      `traced-partial` on its Assessment/Plan choice (-29102) alone. **Nothing on the published
+      surface moved for those three, in either the stamped or the unstamped reading.**
+    - **THE STAMP RULE IS THE SAME ASYMMETRY THE CCD ROW ESTABLISHED, applied uniformly.** Every one
+      of those six document-level rules carries `@extension='2015-08-01'` in its context predicate.
+      A key **first asserted** from such a rule is added to `R21_SCOPED_SECTIONS` (Plan of Treatment
+      for Discharge Summary, six of the seven for History and Physical, three of the six for
+      Transfer Summary); a key that predates the trace keeps its unstamped reading, because
+      narrowing it would be as unsourced as broadening it and there is still no R1.1 Schematron in
+      hand. **A WITHDRAWAL is not scoped**: `dischargeMedications` leaves the unstamped reading too,
+      because "no sentence made this unconditional" does not depend on a stamp. So an unstamped
+      document is asserted exactly as it was at `0.0.15` **except** where a key was withdrawn, which
+      is the one deliberate exception and is in the safe direction.
+    - **A CHOICE IS ONE ROW, NOT A ROW PER ALTERNATIVE.** `unasserted` records one entry per
+      conformance statement, whose `sourceName` enumerates the alternatives the source names
+      ("Chief Complaint and Reason for Visit Section, or a Chief Complaint Section, or a Reason for
+      Visit Section"). Splitting a choice into a row per alternative would record ONE id against
+      SEVERAL sections, which `test/required-sections.test.ts` forbids by invariant. **A SHOULD is
+      not recorded in `unasserted` at all**: that list is SHALL sections left unasserted, and
+      listing a SHOULD there would restate the exact error the Discharge Summary row was carrying.
+    - **`status.source` is the artifact and the ARTIFACT'S revision, never the read date.** The
+      C-CDA R2.1 Schematron's head comment records a base generation date (9/2/2022) followed by a
+      dated manual-update log; the revision is the last entry in that log. **A re-read that changes
+      nothing must not move it, and a newer publication must move it even if nobody has looked
+      yet**: that is the only shape in which a consumer can detect staleness without re-deriving
+      the tables.
+  - **An earlier pass read five types off the normative R2.1 Schematron (2026-08-18) and the result
+    was mostly NOT keys.** Consultation Note gained three (History of Present Illness CONF:1198-28907,
     Allergies -28911, Problems -28929, **all three stamp-scoped**, because the rule context carries
     `@extension='2015-08-01'`). Progress Note, Procedure Note, Operative Note and Diagnostic Imaging
     Report gained **nothing**, and that is the correct traced outcome, not a failed trace: every

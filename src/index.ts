@@ -226,6 +226,7 @@ export {
   requiredSectionStatus,
   requiredSectionStatuses,
   type RequiredSectionOptions,
+  type RequiredSectionSource,
   type RequiredSectionStatus,
   type RequiredSectionVerification,
   type TracedRequiredSection,
