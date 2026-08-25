@@ -89,15 +89,22 @@ const TRACED_HERE: readonly DocumentType[] = [
  * The six rows that already asserted keys before anyone read the source for
  * them, and whose document-level `errors` / `warnings` rules were re-read
  * against the normative artifact here.
+ *
+ * `as const satisfies` rather than a `readonly DocumentType[]` annotation on
+ * purpose: the annotation would widen these six literals to the whole
+ * twelve-member union, and `COMPATIBILITY` below is keyed by
+ * `(typeof RETRACED_HERE)[number]` precisely so that a row added to one and not
+ * the other is a type error. `satisfies` keeps both halves: the six stay six,
+ * and a name that is not a `DocumentType` still fails to compile.
  */
-const RETRACED_HERE: readonly DocumentType[] = [
+const RETRACED_HERE = [
   "ccd",
   "dischargeSummary",
   "referralNote",
   "historyAndPhysical",
   "carePlan",
   "transferSummary",
-];
+] as const satisfies readonly DocumentType[];
 
 /** How one key moved off the `0.0.15` surface, and the sentence that moved it. */
 interface KeyMovement {
