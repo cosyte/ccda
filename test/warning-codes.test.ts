@@ -7,6 +7,14 @@ import { WARNING_CODES, FATAL_CODES } from "../src/index.js";
  * The warning + fatal code surface is part of the public contract, consumers
  * branch on `w.code`, so adding/removing/renaming a code is a reviewable event.
  * These inline snapshots turn any such change into a failing diff.
+ *
+ * **Two codes were ADDED at CCDA-5 and none was renamed or removed**, which is
+ * the shape an addition to a published surface has to have:
+ * `TEMPLATE_EXTENSION_UNMODELED_RELEASE` (the resolving `templateId` carries a
+ * stamp this library does not model, split out of `TEMPLATE_EXTENSION_ABSENT`,
+ * which keeps its narrower meaning and its message) and
+ * `REQUIRED_SECTIONS_NOT_EVALUATED` (that document's SHALL obligation was not
+ * computed, rather than computed smaller in silence).
  */
 describe("code surface stability", () => {
   it("warning codes are stable", () => {
@@ -46,6 +54,7 @@ describe("code surface stability", () => {
         "PROBLEM_STATUS_INDETERMINATE",
         "PROCEDURE_MOOD_UNEXPECTED",
         "PROFILE_QUIRK_APPLIED",
+        "REQUIRED_SECTIONS_NOT_EVALUATED",
         "REQUIRED_SECTION_MISSING",
         "RESULT_VALUE_TYPE_UNHANDLED",
         "SECTION_MATCHED_BY_LOINC_FALLBACK",
@@ -55,6 +64,7 @@ describe("code surface stability", () => {
         "SMOKING_STATUS_UNKNOWN",
         "SUBJECT_CONTEXT_OVERRIDE",
         "TEMPLATE_EXTENSION_ABSENT",
+        "TEMPLATE_EXTENSION_UNMODELED_RELEASE",
         "UCUM_CASE_SUSPECT",
         "UNEXPECTED_CODE_SYSTEM",
         "UNKNOWN_DOCUMENT_TEMPLATE",

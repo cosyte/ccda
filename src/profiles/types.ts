@@ -66,9 +66,10 @@ export interface ProfileProvenance {
  * `SUBJECT_CONTEXT_OVERRIDE` (the enclosing section's own `<code>`, bounded
  * on the LOINC shape or replaced by the withheld placeholder, and absent from the
  * position when that section carries no `<code>` at all, as an unrecognized
- * section routinely does); `templateId` is carried by the first two plus
- * `TEMPLATE_EXTENSION_ABSENT`.
- * Those four are the deviations a structural identifier can locate today, and
+ * section routinely does); `templateId` is carried by the first two plus the two
+ * document-level stamp codes, `TEMPLATE_EXTENSION_ABSENT` and
+ * `TEMPLATE_EXTENSION_UNMODELED_RELEASE`.
+ * Those five are the deviations a structural identifier can locate today, and
  * `SUBJECT_CONTEXT_OVERRIDE` is in `SAFETY_CRITICAL_CODES`, so narrowing it is
  * refused at definition time however precise the `match` is.
  * Entry-level codes (`DEPRECATED_LOINC`, `UNEXPECTED_CODE_SYSTEM`, the
@@ -93,8 +94,8 @@ export interface QuirkMatch {
   readonly sectionCode?: string;
   /**
    * Match only warnings carrying this template OID in their position. Carried
-   * by `UNKNOWN_SECTION_CODE`, `SECTION_MATCHED_BY_LOINC_FALLBACK` and
-   * `TEMPLATE_EXTENSION_ABSENT`.
+   * by `UNKNOWN_SECTION_CODE`, `SECTION_MATCHED_BY_LOINC_FALLBACK`,
+   * `TEMPLATE_EXTENSION_ABSENT` and `TEMPLATE_EXTENSION_UNMODELED_RELEASE`.
    */
   readonly templateId?: string;
 }

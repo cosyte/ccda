@@ -41,10 +41,13 @@ import type { TerminologyAdapter } from "../model/terminology.js";
  * a section that carries no `<code>` at all contributes none, so a warning about
  * an entry in an unrecognized section may carry no `sectionCode`.
  * `templateId` is carried by the first two (the section's first rooted
- * `<templateId>`) and by `TEMPLATE_EXTENSION_ABSENT` (the matched document-type
- * root). No other code carries either, so a `QuirkMatch` keyed on one narrows
- * those codes and matches nothing on the rest: an entry-level warning such as
- * `DEPRECATED_LOINC` carries neither field today.
+ * `<templateId>`) and by the two stamp codes, `TEMPLATE_EXTENSION_ABSENT` and
+ * `TEMPLATE_EXTENSION_UNMODELED_RELEASE` (the matched document-type root, which
+ * is the one templateId either warning is about). No other code carries either,
+ * so a `QuirkMatch` keyed on one narrows those codes and matches nothing on the
+ * rest: an entry-level warning such as `DEPRECATED_LOINC` carries neither field
+ * today, and neither does `REQUIRED_SECTIONS_NOT_EVALUATED`, whose subject is
+ * the document's whole obligation rather than one template.
  *
  * Two document-level codes carry no `templateId` **on purpose**, and it is a
  * decision rather than an omission. `MISSING_TEMPLATE_ID` has no template to

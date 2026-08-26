@@ -9,7 +9,16 @@ import {
   sectionForTemplateRoot,
   type CcdaWarning,
 } from "../src/index.js";
-import { buildCcda, DOC_TYPES, LOINC_ONLY_SECTION, UNKNOWN_SECTION } from "./__fixtures__/ccda.js";
+import { ALL_WARNING_MESSAGES } from "../src/parser/warnings.js";
+import {
+  buildCcda,
+  DOC_TYPES,
+  LOINC_ONLY_SECTION,
+  POST_R21_STAMP,
+  stampFixtures,
+  TRIAD_SECTIONS,
+  UNKNOWN_SECTION,
+} from "./__fixtures__/ccda.js";
 
 function codes(warnings: readonly CcdaWarning[]): string[] {
   return warnings.map((w) => w.code);
@@ -38,6 +47,118 @@ describe("parseCcda, document recognition", () => {
     const doc = parseCcda(buildCcda({ extension: undefined }));
     expect(doc.documentType).toBe("ccd");
     expect(codes(doc.warnings)).toContain(WARNING_CODES.TEMPLATE_EXTENSION_ABSENT);
+  });
+});
+
+/**
+ * CCDA-5. A stamp naming a release later than R2.1 is a different fact from no
+ * stamp at all, and through `0.0.15` both drew `TEMPLATE_EXTENSION_ABSENT`,
+ * whose frozen message says the templateId carries no stamp and may pre-date
+ * R2.1: false in both halves for a `2024-05-01` document.
+ */
+describe("parseCcda, the release stamp on the resolving templateId", () => {
+  /** AC1: absent and unmodelled never share a code. */
+  it("emits a code distinct from TEMPLATE_EXTENSION_ABSENT for a non-R2.1 stamp", () => {
+    const { r11Origin, postR21 } = stampFixtures();
+    expect(codes(parseCcda(r11Origin).warnings)).toContain(WARNING_CODES.TEMPLATE_EXTENSION_ABSENT);
+
+    const later = codes(parseCcda(postR21).warnings);
+    expect(later).toContain(WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE);
+    expect(later).not.toContain(WARNING_CODES.TEMPLATE_EXTENSION_ABSENT);
+    expect(WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE).not.toBe(
+      WARNING_CODES.TEMPLATE_EXTENSION_ABSENT,
+    );
+  });
+
+  /** AC6: exactly once, for that templateId, on a default parse. */
+  it("emits the unmodelled-release warning exactly once for a 2024-05-01 CCD", () => {
+    const doc = parseCcda(stampFixtures().postR21);
+    expect(doc.documentType).toBe("ccd");
+    const stampWarnings = doc.warnings.filter(
+      (w) => w.code === WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE,
+    );
+    expect(stampWarnings).toHaveLength(1);
+    // It names the matched document-type root, exactly as its sibling does.
+    expect(stampWarnings[0]?.position.templateId).toBe("2.16.840.1.113883.10.20.22.1.2");
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.TEMPLATE_EXTENSION_ABSENT);
+  });
+
+  /** AC2: the reported stamp is a package literal, never the document's bytes. */
+  it("names the stamp from the package's own closed table, and names none otherwise", () => {
+    const known = parseCcda(stampFixtures().postR21).warnings.find(
+      (w) => w.code === WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE,
+    );
+    expect(known?.message).toContain(POST_R21_STAMP);
+    expect(known?.message).toContain("R3.0 or later");
+    expect(ALL_WARNING_MESSAGES.has(known?.message ?? "")).toBe(true);
+
+    // A stamp-shaped value this package does not own: the message names no
+    // stamp at all rather than echoing the document's.
+    const foreign = parseCcda(buildCcda({ extension: "1999-12-31" })).warnings.find(
+      (w) => w.code === WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE,
+    );
+    expect(foreign?.message).toBeDefined();
+    expect(foreign?.message).not.toContain("1999-12-31");
+    expect(ALL_WARNING_MESSAGES.has(foreign?.message ?? "")).toBe(true);
+  });
+
+  /** AC5: still lenient. A stamp is a warning, never a refusal or a fatal. */
+  it("parses a post-R2.1 document leniently, refusing nothing", () => {
+    const xml = buildCcda({ extension: POST_R21_STAMP, sections: TRIAD_SECTIONS });
+    expect(() => parseCcda(xml)).not.toThrow();
+    const doc = parseCcda(xml);
+    expect(doc.documentType).toBe("ccd");
+    expect(doc.getPatient()?.name?.family).toBe("Doe");
+    expect(doc.getProblems().length).toBeGreaterThan(0);
+    expect(doc.getMedications().length).toBeGreaterThan(0);
+    expect(doc.getAllergies().length).toBeGreaterThan(0);
+    // Every diagnostic it draws is a Tier-2 warning; none is a fatal code.
+    for (const w of doc.warnings) {
+      expect(Object.values(FATAL_CODES)).not.toContain(w.code);
+    }
+    // The open-template rule: an element the IG does not prohibit is still
+    // carried, on a post-R2.1 stamp exactly as on an R2.1 one.
+    const withExtra = parseCcda(
+      buildCcda({
+        extension: POST_R21_STAMP,
+        sections: `${TRIAD_SECTIONS}${LOINC_ONLY_SECTION}${UNKNOWN_SECTION}`,
+      }),
+    );
+    expect(withExtra.allSections().length).toBeGreaterThan(3);
+  });
+
+  /** AC12: the clinical reading does not move with the stamp. */
+  it("reads a 2024-05-01 document exactly as it reads the 2015-08-01 one", () => {
+    const { r21, postR21 } = stampFixtures(TRIAD_SECTIONS);
+    const a = parseCcda(r21);
+    const b = parseCcda(postR21);
+
+    // Same patient, same framing, same entries, same values.
+    expect(JSON.stringify(b.getPatient())).toBe(JSON.stringify(a.getPatient()));
+    expect(b.getMrn()).toBe(a.getMrn());
+    expect(b.allSections().map((s) => s.key)).toEqual(a.allSections().map((s) => s.key));
+    expect(JSON.stringify(b.getProblems())).toBe(JSON.stringify(a.getProblems()));
+    expect(JSON.stringify(b.getMedications())).toBe(JSON.stringify(a.getMedications()));
+    expect(JSON.stringify(b.getAllergies())).toBe(JSON.stringify(a.getAllergies()));
+    expect(JSON.stringify(b.header)).toBe(JSON.stringify(a.header));
+
+    // Same re-serialized output. The serializer is byte-faithful, so the one
+    // difference it MUST carry through is the stamp the two documents differ by;
+    // normalize exactly that and nothing else may remain.
+    expect(b.toString()).toBe(postR21);
+    expect(b.toString().split(POST_R21_STAMP).join("2015-08-01")).toBe(a.toString());
+
+    // The two differ in the stamp diagnostic and the required-section verdict,
+    // and in nothing else.
+    const stampAndVerdict = new Set<string>([
+      WARNING_CODES.TEMPLATE_EXTENSION_ABSENT,
+      WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE,
+      WARNING_CODES.REQUIRED_SECTION_MISSING,
+      WARNING_CODES.REQUIRED_SECTIONS_NOT_EVALUATED,
+    ]);
+    const other = (doc: typeof a): string[] =>
+      codes(doc.warnings).filter((c) => !stampAndVerdict.has(c));
+    expect(other(b)).toEqual(other(a));
   });
 });
 

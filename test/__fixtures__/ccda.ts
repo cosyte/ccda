@@ -6,10 +6,24 @@
  * `buildCcda` assembles a minimal-but-valid US Realm `ClinicalDocument` from
  * options so individual tests can flip one signal (document templateId, R2.1
  * stamp, record-target count, section shape) without hand-writing XML.
+ *
+ * {@link stampFixtures} is the release-stamp trio built on it: the same document
+ * in its R1.1-origin (no `@extension`), R2.1 (`2015-08-01`) and post-R2.1
+ * (`2024-05-01`) shapes.
  */
 
 const V3 = "urn:hl7-org:v3";
 const R21 = "2015-08-01";
+
+/**
+ * The document-template `@extension` C-CDA introduced at Release 3.0.0 and kept
+ * through 4.0.0 and 5.0.0. Written out here rather than imported from `src/` on
+ * purpose: a fixture that reads its expectation out of the module under test
+ * agrees with whatever that module says. The value is the one the published
+ * guide's CCD StructureDefinition patterns on root
+ * `2.16.840.1.113883.10.20.22.1.2`.
+ */
+export const POST_R21_STAMP = "2024-05-01";
 
 /** Document-template OID prefix shared by every C-CDA R2.1 document type. */
 const DOC_OID = "2.16.840.1.113883.10.20.22.1";
@@ -1024,4 +1038,32 @@ export function buildCcda(opts: BuildOptions = {}): string {
   <confidentialityCode code="N" codeSystem="2.16.840.1.113883.5.25"/>
   <languageCode code="en-US"/>${targets}${body}
 </ClinicalDocument>`;
+}
+
+/**
+ * The three release-stamp shapes CCDA-5 is about, as parseable documents. Each
+ * is a CCD (root `…22.1.2`, the root the published C-CDA 5.0.0 guide patterns
+ * `@extension="2024-05-01"` on) so the three differ in exactly **one
+ * attribute**:
+ *
+ * - `r11Origin`: the resolving `templateId` carries **no** `@extension` at all.
+ * - `r21`: it carries `2015-08-01`, the stamp these tables target.
+ * - `postR21`: it carries `2024-05-01`, a release this package does not model.
+ *
+ * Synthetic like everything else here: the invented patient Jane Doe and fake
+ * OIDs, no realistic PHI. `sections` holds the body constant across the three,
+ * which is what makes "the clinical reading is identical" checkable at all: any
+ * difference between two of these parses has exactly one possible cause.
+ */
+export function stampFixtures(sections?: string): {
+  readonly r11Origin: string;
+  readonly r21: string;
+  readonly postR21: string;
+} {
+  const body = sections === undefined ? {} : { sections };
+  return {
+    r11Origin: buildCcda({ ...body, extension: undefined }),
+    r21: buildCcda({ ...body, extension: R21 }),
+    postR21: buildCcda({ ...body, extension: POST_R21_STAMP }),
+  };
 }

@@ -369,8 +369,30 @@ export const PHI_SLOTS: readonly DiagnosticSlot<string>[] = [
   },
   {
     name: "ClinicalDocument/templateId/@extension",
+    // A planted marker is an `@extension` that is PRESENT and is not the R2.1
+    // stamp, so since CCDA-5 it reaches TEMPLATE_EXTENSION_UNMODELED_RELEASE
+    // rather than TEMPLATE_EXTENSION_ABSENT (which now means only "no
+    // @extension at all", and an absent attribute carries no marker to leak).
+    // That code is the one whose message may NAME a version stamp, so this is
+    // the slot that proves the stamp comes from the package's closed table:
+    // a marker is not a member, so the message names no stamp at all.
     plant: (m) => doc({ docTemplateExtension: m }),
-    expectCode: WARNING_CODES.TEMPLATE_EXTENSION_ABSENT,
+    expectCode: WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE,
+  },
+  {
+    name: "ClinicalDocument/templateId/@extension (laid out like a version stamp)",
+    // The slot above plants the marker bare. This one lays it out the way a
+    // C-CDA version stamp is laid out, `xxxx-xx-xx`, so the same branch is
+    // probed with a longer legible fragment and with the separators a naive
+    // "looks like a date, echo it" rule would be fooled by. It is NOT a claim
+    // that the value survives `boundTemplateId`: the shape test there is on
+    // DIGITS, so it withholds this too, which is the first of the two layers.
+    // The second is the closed stamp table the message is selected from, and
+    // `test/phi-diagnostic-surface.test.ts` probes that one with a genuinely
+    // stamp-shaped non-member the model bound lets through unchanged.
+    plant: (m) =>
+      doc({ docTemplateExtension: `${m.slice(0, 4)}-${m.slice(4, 6)}-${m.slice(0, 2)}` }),
+    expectCode: WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE,
   },
   {
     name: "ClinicalDocument (root element local name)",

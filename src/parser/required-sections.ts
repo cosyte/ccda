@@ -41,13 +41,22 @@
  * package README "Required-section validation" for the full provenance +
  * known-limitations note.
  *
+ * **A third emptiness exists and is reported as its own state.** These rules are
+ * scoped to the C-CDA R2.1 version stamp, so a document stamped for a release
+ * this package has not read is outside all of them. It is reported
+ * `not-evaluated` ({@link RequiredSectionEvaluation}) and draws no
+ * `REQUIRED_SECTION_MISSING` at all; it emphatically does **not** fall back to
+ * the R1.1-origin reduction, which is a reading of a document that carries no
+ * stamp and which silently dropped Social History and Vital Signs from a
+ * `2024-05-01` CCD through `0.0.15`.
+ *
  * **Keep the builder in lockstep.** This table and the builder's
  * `DOC_TYPE_SPECS.*.shallSections` name the same sections for the two document
  * types the builder emits (CCD, Referral Note). If they drift, `buildCcda` emits
  * a set the parser will not validate, or vice versa.
  */
 
-import { DOCUMENT_TYPES, type DocumentType } from "./templates.js";
+import { DOCUMENT_TYPES, type DocumentType, type TemplateStampReading } from "./templates.js";
 
 /**
  * Document type → the catalog section keys it SHALL contain (unconditional,
@@ -216,6 +225,15 @@ const R21_SCOPED_SECTIONS: Partial<Readonly<Record<DocumentType, ReadonlySet<str
 
 /**
  * How a required-section lookup should treat version-scoped SHALL constraints.
+ *
+ * **Two routes, and the newer one is a superset.** `r21Stamped` is the published
+ * two-state option and its behaviour is a compatibility contract: it is
+ * unchanged, and `requiredSectionKeys("ccd", { r21Stamped: false })` returns
+ * exactly what it always returned. `stamp` is the three-state route, added
+ * because a boolean cannot express the third state at all (see
+ * {@link TemplateStampReading}) and repurposing it would have moved a published
+ * behaviour rather than adding one. When both are supplied, `stamp` wins: it is
+ * strictly more specific.
  */
 export interface RequiredSectionOptions {
   /**
@@ -224,8 +242,32 @@ export interface RequiredSectionOptions {
    * written against C-CDA R2.1. Pass `false` for an R1.1-origin document (the
    * condition that raises `TEMPLATE_EXTENSION_ABSENT`) to drop the SHALL keys
    * whose normative constraint is scoped to the R2.1 stamp.
+   *
+   * **It cannot describe a document from a later release**, which is what
+   * {@link RequiredSectionOptions.stamp} is for: `false` there means "no stamp
+   * at all", and answering `false` for a `2024-05-01` document takes the
+   * R1.1-origin reduction on a document that release never wrote.
    */
   readonly r21Stamped?: boolean;
+  /**
+   * The three-state reading of the document-level `templateId`'s version stamp.
+   * Supersedes {@link RequiredSectionOptions.r21Stamped} when both are given.
+   *
+   * `unmodeled-release` is the state the boolean cannot hold: the obligation is
+   * **not evaluated**, so the key set is empty and
+   * {@link RequiredSectionStatus.evaluation} says which emptiness that is.
+   */
+  readonly stamp?: TemplateStampReading;
+}
+
+/**
+ * Resolve the two option routes to one reading. `stamp` wins when present;
+ * otherwise the published boolean maps onto the two states it can express.
+ * @internal
+ */
+function stampReading(options?: RequiredSectionOptions): TemplateStampReading {
+  if (options?.stamp !== undefined) return options.stamp;
+  return options?.r21Stamped === false ? "unstamped" : "r21-stamped";
 }
 
 /** The SHALL keys asserted for `documentType` under `options`. @internal */
@@ -233,8 +275,15 @@ function assertedKeys(
   documentType: DocumentType,
   options?: RequiredSectionOptions,
 ): readonly string[] {
+  const reading = stampReading(options);
+  // A release this package has not read has no asserted set here, and the
+  // R1.1-origin reduction is emphatically NOT the fallback: the reduction is a
+  // statement about a document that carries no stamp, and applying it to one
+  // stamped for a later release is how a post-R2.1 CCD came to lose Social
+  // History and Vital Signs in silence.
+  if (reading === "unmodeled-release") return [];
   const all = REQUIRED_SECTIONS[documentType];
-  if (options?.r21Stamped !== false) return all;
+  if (reading !== "unstamped") return all;
   const scoped = R21_SCOPED_SECTIONS[documentType];
   if (scoped === undefined) return all;
   return all.filter((key) => !scoped.has(key));
@@ -255,6 +304,10 @@ function assertedKeys(
  * // An R1.1-origin CCD (no R2.1 stamp) drops the R2.1-scoped keys:
  * requiredSectionKeys("ccd", { r21Stamped: false });
  * // ["allergies", "medications", "problems", "results"]
+ *
+ * // A CCD stamped for a release this package does not model asserts NOTHING,
+ * // and it is not the R1.1-origin reduction:
+ * requiredSectionKeys("ccd", { stamp: "unmodeled-release" }); // []
  * ```
  */
 export function requiredSectionKeys(
@@ -280,6 +333,13 @@ export function requiredSectionKeys(
  * // The same document without the R2.1 stamp:
  * missingRequiredSections("ccd", new Set(["allergies", "problems"]), { r21Stamped: false });
  * // ["medications", "results"]
+ *
+ * // The same document stamped for an unmodelled release: nothing is reported
+ * // missing, because nothing was evaluated. See requiredSectionStatus().
+ * missingRequiredSections("ccd", new Set(["allergies", "problems"]), {
+ *   stamp: "unmodeled-release",
+ * });
+ * // []
  * ```
  */
 export function missingRequiredSections(
@@ -298,6 +358,13 @@ export function missingRequiredSections(
  *
  * The four states are exhaustive and mutually exclusive, so an **empty** key set
  * is never ambiguous: the value says which emptiness it is.
+ *
+ * **A state is about the TYPE, and no option moves it.** The orthogonal question,
+ * whether an obligation was computed for the document in front of you at all, is
+ * {@link RequiredSectionEvaluation}, which is where a stamp naming an unmodelled
+ * release shows up. Reading `traced-complete` beside an empty key set is not a
+ * contradiction; it means the type's obligation is fully read and this lookup
+ * did not evaluate it.
  *
  * - `traced-complete`: traced, and every SHALL section the source names for the
  *   type is asserted.
@@ -370,6 +437,37 @@ export interface TracedRequiredSection {
  * ```
  */
 export type UnassertedSectionReason = "outside-section-catalog" | "not-unconditionally-required";
+
+/**
+ * Whether a {@link RequiredSectionStatus}'s key set was **computed for this
+ * document at all**, as opposed to computed and found empty.
+ *
+ * This is the axis {@link RequiredSectionVerification} deliberately does not
+ * carry. `verification` is a claim about the *type*: how much of that document
+ * type's obligation this package has read off the normative source, which no
+ * option moves. `evaluation` is a claim about the *lookup*: whether the version
+ * stamp supplied put the document inside the tables at all.
+ *
+ * - `evaluated`: the keys below are this type's obligation under the supplied
+ *   stamp reading. An empty set means the type asserts none, and `verification`
+ *   says which emptiness that is.
+ * - `not-evaluated`: **no obligation was computed.** The only route to it today
+ *   is `{ stamp: "unmodeled-release" }`: the document names a C-CDA release this
+ *   package has not read, so `keys` is empty because nothing was asked, not
+ *   because nothing is required. Reducing the set instead would be a confident
+ *   wrong statement about conformance, which is the failure this state exists to
+ *   prevent.
+ *
+ * @example
+ * ```ts
+ * import { requiredSectionStatus, type RequiredSectionEvaluation } from "@cosyte/ccda";
+ * const e: RequiredSectionEvaluation = requiredSectionStatus("ccd", {
+ *   stamp: "unmodeled-release",
+ * }).evaluation;
+ * // "not-evaluated"
+ * ```
+ */
+export type RequiredSectionEvaluation = "evaluated" | "not-evaluated";
 
 /**
  * A SHALL section the normative source names for a document type that this
@@ -454,6 +552,12 @@ export interface RequiredSectionStatus {
   readonly documentType: DocumentType;
   /** How much of this type's obligation was read off the normative source. */
   readonly verification: RequiredSectionVerification;
+  /**
+   * Whether an obligation was computed for the supplied stamp reading at all.
+   * `not-evaluated` says the empty `keys` below mean "nothing was asked",
+   * never "nothing is required".
+   */
+  readonly evaluation: RequiredSectionEvaluation;
   /** The asserted SHALL keys, identical to {@link requiredSectionKeys}. */
   readonly keys: readonly string[];
   /** Provenance for each asserted key that was traced, in `keys` order. */
@@ -914,9 +1018,9 @@ const REQUIRED_SECTION_TRACE: Readonly<Record<DocumentType, DocumentTypeTrace>> 
  * normative source and what is deliberately left unasserted.
  *
  * `options` narrows `keys` (and the `traced` rows beside them) exactly as
- * {@link requiredSectionKeys} does. It does **not** move `verification`, nor
- * `unasserted`, nor `source`: those record what was read about the type, not
- * what a particular document is asserted against.
+ * {@link requiredSectionKeys} does, and sets `evaluation`. It does **not** move
+ * `verification`, nor `unasserted`, nor `source`: those record what was read
+ * about the type, not what a particular document is asserted against.
  *
  * @example
  * ```ts
@@ -925,6 +1029,8 @@ const REQUIRED_SECTION_TRACE: Readonly<Record<DocumentType, DocumentTypeTrace>> 
  * requiredSectionStatus("ccd").verification; // "traced-complete"
  * requiredSectionStatus("ccd").source?.revision; // "2025-09-08"
  * requiredSectionStatus("consultationNote", { r21Stamped: false }).keys; // []
+ * requiredSectionStatus("ccd", { stamp: "unmodeled-release" }).evaluation;
+ * // "not-evaluated"
  * ```
  */
 export function requiredSectionStatus(
@@ -937,6 +1043,7 @@ export function requiredSectionStatus(
   return {
     documentType,
     verification: trace.verification,
+    evaluation: stampReading(options) === "unmodeled-release" ? "not-evaluated" : "evaluated",
     keys,
     traced: trace.traced.filter((row) => asserted.has(row.key)),
     unasserted: trace.unasserted,

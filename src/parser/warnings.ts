@@ -10,8 +10,9 @@
  * registry below, so the complete set of strings this module can ever produce
  * is finite, enumerable and visible in one place. A handful of codes carry a
  * variant per closed-set key (a {@link CodeSlot}, a catalog section key, a
- * boolean); those variants are generated from the parser's own catalogs at
- * module load and are registry entries in exactly the same sense.
+ * release version stamp, a boolean); those variants are generated from the
+ * parser's own catalogs at module load and are registry entries in exactly the
+ * same sense.
  *
  * This replaces the claim that stood here through `0.0.4`, that messages were
  * PHI-free "by construction" because factories interpolated only structural
@@ -28,7 +29,7 @@
  * part number or `<withheld>`.
  */
 
-import { SECTION_KEYS } from "./templates.js";
+import { CCDA_CONFORMANCE_RELEASE, CCDA_RELEASE_STAMPS, SECTION_KEYS } from "./templates.js";
 import type { CcdaPosition } from "./types.js";
 
 /**
@@ -52,6 +53,8 @@ export const WARNING_CODES = {
   UNKNOWN_DOCUMENT_TEMPLATE: "UNKNOWN_DOCUMENT_TEMPLATE",
   MISSING_TEMPLATE_ID: "MISSING_TEMPLATE_ID",
   TEMPLATE_EXTENSION_ABSENT: "TEMPLATE_EXTENSION_ABSENT",
+  TEMPLATE_EXTENSION_UNMODELED_RELEASE: "TEMPLATE_EXTENSION_UNMODELED_RELEASE",
+  REQUIRED_SECTIONS_NOT_EVALUATED: "REQUIRED_SECTIONS_NOT_EVALUATED",
   UNKNOWN_SECTION_CODE: "UNKNOWN_SECTION_CODE",
   SECTION_MATCHED_BY_LOINC_FALLBACK: "SECTION_MATCHED_BY_LOINC_FALLBACK",
   INVALID_NULL_FLAVOR: "INVALID_NULL_FLAVOR",
@@ -255,11 +258,11 @@ export type UnmodeledPlanEntry = (typeof UNMODELED_PLAN_ENTRIES)[number];
  * `CcdaWarning.message`, one entry per {@link WarningCode}.
  *
  * Six codes additionally carry a per-{@link CodeSlot} variant, two a
- * per-section-key variant, one a per-datatype variant and one a two-way
- * variant; each variant table is generated below from a closed list the parser
- * owns, and the entry here is the generic wording those tables fall back to.
- * Nothing outside this file, and in particular nothing out of the document,
- * ever contributes a character.
+ * per-section-key variant, one a per-datatype variant, one a per-release-stamp
+ * variant and one a two-way variant; each variant table is generated below from
+ * a closed list the parser owns, and the entry here is the generic wording those
+ * tables fall back to. Nothing outside this file, and in particular nothing out
+ * of the document, ever contributes a character.
  *
  * @internal
  */
@@ -269,6 +272,10 @@ export const WARNING_MESSAGES: Readonly<Record<WarningCode, string>> = Object.fr
   MISSING_TEMPLATE_ID: "The element carries no templateId; recognition fell back to other signals.",
   TEMPLATE_EXTENSION_ABSENT:
     "The recognized templateId carries no @extension version stamp; matched by root alone (may pre-date R2.1).",
+  TEMPLATE_EXTENSION_UNMODELED_RELEASE:
+    "The recognized templateId carries an @extension version stamp this library does not model; these conformance tables target C-CDA R2.1, so the document is parsed leniently, nothing is refused, and no R2.1-scoped required-section claim is made about it.",
+  REQUIRED_SECTIONS_NOT_EVALUATED:
+    "The document type's required-section (SHALL) obligations were not evaluated: the templateId that resolved the type names a C-CDA release this library does not model, and the R2.1-scoped tables here do not reach it. No REQUIRED_SECTION_MISSING is reported for this document, and the absence of one says nothing about which sections it carries.",
   UNKNOWN_SECTION_CODE:
     "The section's LOINC code is not a recognized C-CDA section; retained as narrative-only.",
   SECTION_MATCHED_BY_LOINC_FALLBACK:
@@ -426,6 +433,33 @@ const REQUIRED_SECTION_MISSING_BY_SECTION = tableOver(
 );
 
 /**
+ * One wording per version stamp a `TEMPLATE_EXTENSION_UNMODELED_RELEASE` may
+ * *name*: the members of this package's closed release table other than the one
+ * it targets. Naming the stamp is what makes the diagnostic useful, and taking
+ * it from this table rather than from the document is what keeps it PHI-free. A
+ * document carrying a stamp outside the table (a forged value, a release nobody
+ * has read yet) falls back to the generic registry entry, which names no stamp
+ * at all.
+ *
+ * Built from the table's own entries rather than by looking each release back up
+ * from its stamp, so there is no unreachable "stamp with no release" arm here
+ * for a coverage report to be right about.
+ *
+ * @internal
+ */
+const TEMPLATE_EXTENSION_UNMODELED_RELEASE_BY_STAMP: Readonly<Record<string, string>> =
+  Object.freeze(
+    Object.fromEntries(
+      CCDA_RELEASE_STAMPS.filter((entry) => entry.release !== CCDA_CONFORMANCE_RELEASE).map(
+        (entry) => [
+          entry.stamp,
+          `The recognized templateId carries the C-CDA document-template version stamp ${entry.stamp}, which names release ${entry.release} and which this library does not model; these conformance tables target C-CDA ${CCDA_CONFORMANCE_RELEASE}, so the document is parsed leniently, nothing is refused, and no ${CCDA_CONFORMANCE_RELEASE}-scoped required-section claim is made about it.`,
+        ],
+      ),
+    ),
+  );
+
+/**
  * The HL7 v3 datatypes this parser implements. Closed, and owned here rather
  * than derived from the datatype modules so that `../model/types/` can keep
  * importing this module without a cycle.
@@ -508,6 +542,7 @@ export const ALL_WARNING_MESSAGES: ReadonlySet<string> = new Set([
   ...Object.values(TRANSLATION_ONLY_BY_ARM),
   ...Object.values(PLAN_ENTRY_NOT_MODELED_BY_ENTRY),
   ...Object.values(SUBJECT_CONTEXT_OVERRIDE_BY_LOCUS),
+  ...Object.values(TEMPLATE_EXTENSION_UNMODELED_RELEASE_BY_STAMP),
 ]);
 
 /**
@@ -565,6 +600,83 @@ export function templateExtensionAbsent(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.TEMPLATE_EXTENSION_ABSENT,
     message: WARNING_MESSAGES.TEMPLATE_EXTENSION_ABSENT,
+    position,
+  };
+}
+
+/**
+ * Build a `TEMPLATE_EXTENSION_UNMODELED_RELEASE` warning. Emitted when the
+ * `templateId` that resolved the document type carries an `@extension` that is
+ * present but is **not** the R2.1 stamp: the document was written for some other
+ * release, and this package's conformance tables are C-CDA
+ * {@link CCDA_CONFORMANCE_RELEASE}.
+ *
+ * **This is a distinct code from `TEMPLATE_EXTENSION_ABSENT`, and that is the
+ * whole point of it.** Through `0.0.15` this case drew `TEMPLATE_EXTENSION_ABSENT`,
+ * whose frozen message says the templateId "carries no @extension version stamp"
+ * and "may pre-date R2.1"; for a document stamped `2024-05-01` both halves are
+ * false. `TEMPLATE_EXTENSION_ABSENT` keeps that narrower meaning unchanged.
+ *
+ * `stamp` is compared against {@link CCDA_RELEASE_STAMPS} and is **never
+ * echoed**: a member selects a wording this module owns that names the stamp and
+ * its release, and anything else falls back to the generic registry entry, which
+ * names neither. The parameter is a lookup key, not a value the message
+ * interpolates, which is what keeps the module rule ("no factory takes a value
+ * parameter") intact in substance as well as in form.
+ *
+ * (No `@cosyte/ccda` import in the example, deliberately: this factory is not on
+ * the package entry point, and citing an import that does not resolve is the
+ * open `@example` defect this repo already has filed.)
+ *
+ * @example
+ * ```ts
+ * const w = templateExtensionUnmodeledRelease({ path: "/ClinicalDocument" }, "2024-05-01");
+ * w.code; // "TEMPLATE_EXTENSION_UNMODELED_RELEASE"
+ * ```
+ */
+export function templateExtensionUnmodeledRelease(
+  position: CcdaPosition,
+  stamp: string,
+): CcdaWarning {
+  return {
+    code: WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE,
+    message: variant(
+      TEMPLATE_EXTENSION_UNMODELED_RELEASE_BY_STAMP,
+      stamp,
+      WARNING_MESSAGES.TEMPLATE_EXTENSION_UNMODELED_RELEASE,
+    ),
+    position,
+  };
+}
+
+/**
+ * Build a `REQUIRED_SECTIONS_NOT_EVALUATED` warning. Emitted once for a document
+ * whose type is recognized and whose resolving `templateId` names a C-CDA release
+ * this package does not model: the required-section (SHALL) obligation is
+ * **reported unevaluated** rather than computed under a reading that does not
+ * reach the document.
+ *
+ * The alternative it replaces was silent and worse. The R2.1-scoped keys are
+ * scoped by a Schematron context predicate carrying `@extension="2015-08-01"`,
+ * so a document stamped for a later release used to take the R1.1-origin
+ * *reduction*: a `2024-05-01` CCD missing Social History and Vital Signs drew no
+ * `REQUIRED_SECTION_MISSING` at all, because the library had classified a
+ * document from the future as one from the past.
+ *
+ * (No `@cosyte/ccda` import in the example, deliberately: this factory is not on
+ * the package entry point, and citing an import that does not resolve is the
+ * open `@example` defect this repo already has filed.)
+ *
+ * @example
+ * ```ts
+ * const w = requiredSectionsNotEvaluated({ path: "/ClinicalDocument" });
+ * w.code; // "REQUIRED_SECTIONS_NOT_EVALUATED"
+ * ```
+ */
+export function requiredSectionsNotEvaluated(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.REQUIRED_SECTIONS_NOT_EVALUATED,
+    message: WARNING_MESSAGES.REQUIRED_SECTIONS_NOT_EVALUATED,
     position,
   };
 }

@@ -22,6 +22,16 @@
  * safety-critical deviation (enforced by the `defineCcdaProfile` safety gate);
  * an R1.1 document with a wrong dose still surfaces that warning in full.
  *
+ * **It does NOT tolerate `TEMPLATE_EXTENSION_UNMODELED_RELEASE`, and that
+ * omission is the point of the profile's name.** This is receive-tolerance for
+ * documents from the PAST: the grounding above is the receive-both-R2.1-and-R1.1
+ * requirement, and an R1.1-origin document is one whose `templateId` carries no
+ * `@extension` at all. A document stamped for a release LATER than R2.1 is a
+ * different fact about a different document, nothing in §170.315(b)(1) says a
+ * receiver expects it, and quieting it here would make an R1.1 profile silence a
+ * future-release stamp. Adding the code to `tolerate` below would do exactly
+ * that; do not.
+ *
  * Honesty: a *conformance-tolerance* profile grounded in the receive-both
  * requirement and a CC0 corpus, not a per-vendor behaviour claim.
  */
@@ -56,6 +66,9 @@ export const legacyR11: CcdaProfile = defineCcdaProfile({
   },
   tolerate: [
     {
+      // Deliberately the ABSENT code alone. TEMPLATE_EXTENSION_UNMODELED_RELEASE
+      // is a statement about a document written for a LATER release, which this
+      // profile's grounding says nothing about; see the module docblock.
       code: "TEMPLATE_EXTENSION_ABSENT",
       rationale:
         "R1.1-origin documents carry document/section templateIds without the R2.1 2015-08-01 " +

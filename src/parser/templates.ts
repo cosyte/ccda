@@ -9,6 +9,12 @@
  * - **Section**, keyed by section `templateId` root (primary) with a LOINC
  *   `code` fallback (secondary).
  *
+ * A third, smaller table sits beside them: {@link CCDA_RELEASE_STAMPS}, the
+ * closed set of document-template version stamps this package can *name*, and
+ * {@link CCDA_CONFORMANCE_RELEASE}, the release its conformance tables target.
+ * Naming a later release is not targeting it, and nothing here retargets the
+ * package.
+ *
  * These tables are pure data; the matching logic that consumes them lives in
  * `model/section.ts` and `model/document.ts`.
  */
@@ -18,6 +24,181 @@ export const CDA_DOCUMENT_OID = "2.16.840.1.113883.10.20.22.1.1";
 
 /** The C-CDA R2.1 version stamp carried in a recognized `templateId/@extension`. */
 export const R21_EXTENSION = "2015-08-01";
+
+/**
+ * The document-template version stamp C-CDA introduced at Release 3.0.0, when
+ * "all document template ids received a new extension", and which Releases
+ * 4.0.0 and 5.0.0 kept: the published guide's own US Realm Header and CCD
+ * StructureDefinitions both pattern `@extension` to this value on the roots this
+ * package recognizes.
+ *
+ * **Recognized, not targeted.** This package's conformance tables are C-CDA
+ * R2.1 ({@link CCDA_CONFORMANCE_RELEASE}) and this constant does not move them.
+ * It exists so a document written for a later release is *named* accurately
+ * rather than mistaken for one that pre-dates R2.1.
+ *
+ * @example
+ * ```ts
+ * import { R30_EXTENSION } from "@cosyte/ccda";
+ * R30_EXTENSION; // "2024-05-01"
+ * ```
+ */
+export const R30_EXTENSION = "2024-05-01";
+
+/**
+ * The C-CDA releases this package can name from a document-template version
+ * stamp. **A closed set of literals this package owns**, exactly like
+ * {@link DOCUMENT_TYPES}: a diagnostic naming a release names a member of this
+ * list, never a value copied out of the document being parsed.
+ *
+ * `"R3.0 or later"` is one member rather than three because the stamp cannot
+ * tell those releases apart: 3.0.0 restamped every document template and 4.0.0
+ * and 5.0.0 left that stamp alone, so a document carrying it may have been
+ * written for any of them. Splitting the member would be a claim the stamp does
+ * not support.
+ *
+ * @example
+ * ```ts
+ * import { CCDA_RELEASES } from "@cosyte/ccda";
+ * CCDA_RELEASES.includes("R2.1"); // true
+ * ```
+ */
+export const CCDA_RELEASES = ["R2.1", "R3.0 or later"] as const;
+
+/**
+ * A C-CDA release this package can name. Closed by construction, so putting one
+ * in a warning message names a parser constant rather than document content.
+ *
+ * @example
+ * ```ts
+ * import type { CcdaRelease } from "@cosyte/ccda";
+ * const release: CcdaRelease = "R2.1";
+ * ```
+ */
+export type CcdaRelease = (typeof CCDA_RELEASES)[number];
+
+/**
+ * The C-CDA release this package's conformance tables target: the
+ * required-section (SHALL) tables, the recognition catalogs and the version
+ * stamp every one of them is written against.
+ *
+ * **This is the answer to "which release does `@cosyte/ccda` validate
+ * against", as a value rather than a sentence in a README.** It does not move
+ * when a later release is *recognized*: recognizing a stamp is knowing which
+ * guide a document was written for, which is not the same as reading it
+ * correctly against that guide.
+ *
+ * @example
+ * ```ts
+ * import { CCDA_CONFORMANCE_RELEASE } from "@cosyte/ccda";
+ * CCDA_CONFORMANCE_RELEASE; // "R2.1"
+ * ```
+ */
+export const CCDA_CONFORMANCE_RELEASE: CcdaRelease = "R2.1";
+
+/**
+ * One entry of this package's closed release-stamp table: a document-template
+ * `@extension` version stamp and the C-CDA release it names.
+ *
+ * @example
+ * ```ts
+ * import type { CcdaReleaseStamp } from "@cosyte/ccda";
+ * const r21: CcdaReleaseStamp = { stamp: "2015-08-01", release: "R2.1" };
+ * ```
+ */
+export interface CcdaReleaseStamp {
+  /** The `templateId/@extension` value, e.g. `2015-08-01`. */
+  readonly stamp: string;
+  /** The release that stamp names. */
+  readonly release: CcdaRelease;
+}
+
+/**
+ * **The closed, package-owned table of C-CDA document-template version stamps.**
+ * Two entries today: R2.1's `2015-08-01` and the `2024-05-01` stamp C-CDA
+ * introduced at Release 3.0.0 and carried through 4.0.0 and 5.0.0.
+ *
+ * Every stamp a diagnostic here can report comes from this table. The document's
+ * own `@extension` is compared against it and is never echoed: a value that is
+ * not a member yields a message that names no stamp at all, which is the same
+ * membership discipline `NULL_FLAVORS` and the section catalog use.
+ *
+ * @example
+ * ```ts
+ * import { CCDA_RELEASE_STAMPS } from "@cosyte/ccda";
+ * CCDA_RELEASE_STAMPS.map((e) => e.stamp); // ["2015-08-01", "2024-05-01"]
+ * ```
+ */
+export const CCDA_RELEASE_STAMPS: readonly CcdaReleaseStamp[] = Object.freeze([
+  Object.freeze({ stamp: R21_EXTENSION, release: "R2.1" as const }),
+  Object.freeze({ stamp: R30_EXTENSION, release: "R3.0 or later" as const }),
+]);
+
+/** Version stamp → the release it names. @internal */
+const RELEASE_BY_STAMP: ReadonlyMap<string, CcdaRelease> = new Map(
+  CCDA_RELEASE_STAMPS.map((entry) => [entry.stamp, entry.release] as const),
+);
+
+/**
+ * The C-CDA release a document-template `@extension` names, or `undefined` when
+ * the value is not a member of {@link CCDA_RELEASE_STAMPS}. A **membership
+ * test**, never a shape test: the argument may be any string a sender wrote, and
+ * only a member is ever returned.
+ *
+ * @example
+ * ```ts
+ * import { releaseForTemplateExtension } from "@cosyte/ccda";
+ * releaseForTemplateExtension("2024-05-01"); // "R3.0 or later"
+ * releaseForTemplateExtension("1999-01-01"); // undefined
+ * ```
+ */
+export function releaseForTemplateExtension(extension: string): CcdaRelease | undefined {
+  return RELEASE_BY_STAMP.get(extension);
+}
+
+/**
+ * The three readings a document-level `templateId`'s version stamp can take,
+ * and the reason a boolean cannot carry them. A `boolean` says "R2.1-stamped or
+ * not", which reads a document from the future as one from the past: it is the
+ * distinction between *no stamp at all* (an R1.1-origin document, whose SHALL
+ * obligations this package deliberately does not narrow) and *a stamp this
+ * package does not model* (a later release, whose obligations this package has
+ * not read and therefore must not compute).
+ *
+ * - `r21-stamped`: the R2.1 stamp is present, so the R2.1-scoped tables apply.
+ * - `unstamped`: no `@extension` at all; the pre-R2.1 reading, unchanged.
+ * - `unmodeled-release`: an `@extension` that is not the R2.1 stamp, whether or
+ *   not it is a member of {@link CCDA_RELEASE_STAMPS}. This package has not read
+ *   that release's obligations and reports them unevaluated rather than reducing
+ *   them.
+ *
+ * @example
+ * ```ts
+ * import type { TemplateStampReading } from "@cosyte/ccda";
+ * const reading: TemplateStampReading = "unmodeled-release";
+ * ```
+ */
+export type TemplateStampReading = "r21-stamped" | "unstamped" | "unmodeled-release";
+
+/**
+ * Read a document-level `templateId/@extension` into a
+ * {@link TemplateStampReading}. `undefined` (the attribute absent, which is how
+ * `attr` reports an empty one too) reads `unstamped`; the R2.1 stamp reads
+ * `r21-stamped`; anything else reads `unmodeled-release`. Total and
+ * deterministic: every input lands in exactly one of the three.
+ *
+ * @example
+ * ```ts
+ * import { readTemplateStamp } from "@cosyte/ccda";
+ * readTemplateStamp(undefined);      // "unstamped"
+ * readTemplateStamp("2015-08-01");   // "r21-stamped"
+ * readTemplateStamp("2024-05-01");   // "unmodeled-release"
+ * ```
+ */
+export function readTemplateStamp(extension: string | undefined): TemplateStampReading {
+  if (extension === undefined) return "unstamped";
+  return extension === R21_EXTENSION ? "r21-stamped" : "unmodeled-release";
+}
 
 /**
  * Machine keys for the twelve recognized C-CDA R2.1 document types. Stable

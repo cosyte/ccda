@@ -21,11 +21,57 @@ Summary). Recognition is fail-safe:
 - No `templateId` at all → `MISSING_TEMPLATE_ID`, `documentType` is `undefined`.
 - `templateId`s present but none map to a known type → `UNKNOWN_DOCUMENT_TEMPLATE`, still parsed as a
   generic `ClinicalDocument`.
-- A matched type whose `templateId` lacks the R2.1 `@extension` version stamp (`2015-08-01`) →
+- A matched type whose `templateId` carries **no** `@extension` version stamp at all →
   `TEMPLATE_EXTENSION_ABSENT`, matched by root alone (it may pre-date R2.1).
+- A matched type whose `templateId` carries an `@extension` that is **not** the R2.1 stamp
+  (`2015-08-01`) → `TEMPLATE_EXTENSION_UNMODELED_RELEASE`. A different code, because it is a
+  different document: one written for a release later than the one these tables target.
 
 The generic US Realm Header / CDA-base templates are deliberately **not** in the type table, so they
 are passed over: only a specific document-type `templateId` resolves a `documentType`.
+
+## Which release a document was written for
+
+The stamp on the resolving `templateId` reads into exactly three states, and the third is why a
+boolean was not enough: `r21-stamped`, `unstamped` (no `@extension`, the R1.1-origin shape) and
+`unmodeled-release` (a stamp these tables do not model). C-CDA 3.0.0 restamped every document
+template `2024-05-01` and 4.0.0 and 5.0.0 kept it, so a post-R2.1 document is detectable.
+
+**Recognizing a release is not targeting it.** `CCDA_CONFORMANCE_RELEASE` names the release this
+package's conformance tables are written against, and it does not move because a later stamp is
+recognized:
+
+```ts runnable
+import {
+  CCDA_CONFORMANCE_RELEASE,
+  CCDA_RELEASE_STAMPS,
+  R21_EXTENSION,
+  R30_EXTENSION,
+  readTemplateStamp,
+  releaseForTemplateExtension,
+} from "@cosyte/ccda";
+
+// The targeted release, as a value rather than a sentence in a README.
+CCDA_CONFORMANCE_RELEASE; // => "R2.1"
+
+// The closed table of stamps this package can NAME. Both are recognized; only
+// one is targeted, and a diagnostic may never report anything outside it.
+CCDA_RELEASE_STAMPS.map((entry) => entry.stamp).join(","); // => "2015-08-01,2024-05-01"
+releaseForTemplateExtension(R21_EXTENSION); // => "R2.1"
+releaseForTemplateExtension(R30_EXTENSION); // => "R3.0 or later"
+releaseForTemplateExtension("1999-12-31"); // => undefined
+
+// The three-state reading a required-section lookup is carried out under.
+readTemplateStamp(undefined); // => "unstamped"
+readTemplateStamp(R21_EXTENSION); // => "r21-stamped"
+readTemplateStamp(R30_EXTENSION); // => "unmodeled-release"
+```
+
+A document in the third state is still parsed leniently, and its clinical reading is identical to the
+same document stamped `2015-08-01`. What changes is the conformance claim: its required-section
+obligation is reported **unevaluated** (`REQUIRED_SECTIONS_NOT_EVALUATED`, and
+`evaluation: "not-evaluated"` on `requiredSectionStatus`) rather than computed under a reading that
+does not reach it.
 
 ## The US Realm header
 

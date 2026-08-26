@@ -410,6 +410,49 @@ a withheld entry is reachable only through the re-serialized document. Under `{ 
 warning escalates like every other safety-critical Tier-2 code, so a document carrying an override now
 throws where it previously parsed.
 
+## Which C-CDA release this validates against
+
+**C-CDA R2.1**, and that is an exported value rather than only this sentence:
+
+```ts
+import { CCDA_CONFORMANCE_RELEASE } from "@cosyte/ccda";
+
+CCDA_CONFORMANCE_RELEASE; // "R2.1"
+```
+
+Every conformance table here (the required-section SHALL sets, the recognition catalogs) is written
+against that release, and nothing below moves it.
+
+**A document written for a later release is recognized and named, which is not the same as being
+read against it.** C-CDA 3.0.0 gave every document template a new `@extension`, `2024-05-01`, and
+4.0.0 and 5.0.0 kept it, so a post-R2.1 document is detectable from the `templateId` that resolves
+its type. Recognition reads that stamp into one of **three** states, and a boolean cannot hold them:
+
+| the resolving `templateId` | reading             | diagnostic                                                                 | required-section verdict         |
+| -------------------------- | ------------------- | -------------------------------------------------------------------------- | -------------------------------- |
+| `@extension="2015-08-01"`  | `r21-stamped`       | none                                                                       | the full R2.1 obligation         |
+| no `@extension` at all     | `unstamped`         | `TEMPLATE_EXTENSION_ABSENT`                                                | the R1.1-origin reading          |
+| any other `@extension`     | `unmodeled-release` | `TEMPLATE_EXTENSION_UNMODELED_RELEASE` + `REQUIRED_SECTIONS_NOT_EVALUATED` | **not evaluated**, never reduced |
+
+The third row is the one worth reading twice. A stamp this package does not model means the
+obligation is **reported unevaluated**, not computed smaller: a `2024-05-01` CCD carrying neither
+Social History nor Vital Signs draws no `REQUIRED_SECTION_MISSING`, and says so out loud rather than
+by omission. Parsing is otherwise unchanged: the document is read leniently, nothing is refused, and
+the clinical reading is identical to the same document stamped `2015-08-01`.
+
+**A reported stamp never comes from the document.** `CCDA_RELEASE_STAMPS` is the closed table this
+package owns (`2015-08-01` → `R2.1`, `2024-05-01` → `R3.0 or later`), and a message names a member of
+it or names no stamp at all, so a sender-controlled `@extension` cannot reach a `CcdaWarning.message`.
+`releaseForTemplateExtension` exposes that lookup, and `readTemplateStamp` the three-state reading.
+
+The existential R2.1 rule is unchanged: a document carrying the resolving root **twice**, once
+stamped `2015-08-01` and once for a later release, is inside the Schematron rule's context and is
+evaluated under the full R2.1 obligation.
+
+**What this does not do:** it does not read a document against C-CDA 3.0.0, 4.0.0 or 5.0.0. 4.0.0
+relaxed the US Realm Header and 5.0.0 added a Pregnancy Section, and neither is modelled here.
+Knowing which guide a document was written for is the whole of what is claimed.
+
 ## Required-section validation
 
 For a recognized `DocumentType`, a required (SHALL) catalog section that is absent surfaces a
@@ -444,6 +487,13 @@ exactly as it was before this table was traced: Allergies, Medications, Problems
 not a claim that R1.1 omitted the other two; it is the absence of a source, recorded rather than
 guessed. Both `requiredSectionKeys` and `missingRequiredSections` take an optional
 `{ r21Stamped: false }` to ask for the unstamped reading.
+
+**A document stamped for a release later than R2.1 gets neither reading.** It is outside those rules
+just as an unstamped document is, but it is a different document and the unstamped reduction is a
+statement about the past. Such a document draws a `REQUIRED_SECTIONS_NOT_EVALUATED` warning and **no
+`REQUIRED_SECTION_MISSING` at all**, and `requiredSectionStatus(type, { stamp: "unmodeled-release" })`
+reports `evaluation: "not-evaluated"` so an empty key set still says which emptiness it is. See
+[Which C-CDA release this validates against](#which-c-cda-release-this-validates-against).
 
 The **Referral Note**
 asserts **Reason for Referral** alongside Problems, Allergies, and Medications (traced to the
@@ -480,10 +530,18 @@ Discharge Summary no longer asserts Discharge Medications either.
 
 **Every one of the twelve types reports a verification state**, so an empty asserted set is never
 ambiguous. `requiredSectionStatus(documentType)` returns the same `keys` as `requiredSectionKeys`
-plus a `verification` of `traced-complete`, `traced-partial`, `untraced` or `not-applicable`, the
-provenance (`traced`) of every key read off the source, every SHALL section left `unasserted` with
-the reason, and the `source` the reading was taken from. `requiredSectionStatuses()` returns all
-twelve at once, and `DOCUMENT_TYPES` enumerates the types themselves.
+plus a `verification` of `traced-complete`, `traced-partial`, `untraced` or `not-applicable`, an
+`evaluation` of `evaluated` or `not-evaluated`, the provenance (`traced`) of every key read off the
+source, every SHALL section left `unasserted` with the reason, and the `source` the reading was taken
+from. `requiredSectionStatuses()` returns all twelve at once, and `DOCUMENT_TYPES` enumerates the
+types themselves.
+
+The two states answer different questions and neither substitutes for the other. `verification` is
+about the **type**: how much of its obligation has been read off the normative source, which no
+option moves. `evaluation` is about the **lookup**: whether the stamp you supplied put the document
+inside those tables at all. `traced-complete` beside an empty key set and `not-evaluated` is not a
+contradiction; it means the obligation is fully read and this document's release is not one it
+reaches.
 
 A state says what was read off the normative C-CDA R2.1 base implementation guide **for that type**,
 not what this package has ever cited: `traced-complete` claims every SHALL section the source names

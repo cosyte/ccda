@@ -23,6 +23,7 @@ import { WARNING_MESSAGES } from "../src/parser/warnings.js";
 import {
   buildCcda,
   NO_REQUIRED_SECTIONS_DOC_OID,
+  POST_R21_STAMP,
   PROBLEMS_SECTION,
   RESULTS_SECTION,
   VITALS_SECTION,
@@ -567,6 +568,70 @@ describe("end-to-end parse with a profile", () => {
     const doc = parseCcda(xml, { profile: ccdaProfiles.legacyR11 });
     expect(codes(doc.warnings)).not.toContain(WARNING_CODES.TEMPLATE_EXTENSION_ABSENT);
     expect(codes(doc.warnings)).toContain(WARNING_CODES.PROFILE_QUIRK_APPLIED);
+  });
+
+  /**
+   * AC11. `legacyR11` is receive-tolerance for documents from the PAST. A stamp
+   * naming a LATER release is a different fact about a different document, and
+   * an R1.1 profile that silenced it would restore the exact silence CCDA-5
+   * removed, on the exact document the SVAP date makes lawful to send.
+   */
+  it("legacyR11 does NOT tolerate an unmodelled-release stamp", () => {
+    const xml = buildCcda({ extension: POST_R21_STAMP, sections: VITALS_SECTION });
+    const doc = parseCcda(xml, { profile: ccdaProfiles.legacyR11 });
+    const stamp = doc.warnings.filter(
+      (w) => w.code === WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE,
+    );
+    expect(stamp).toHaveLength(1);
+    expect(stamp[0]?.expected).toBeUndefined();
+    // Not merely un-quieted: it was never re-badged, so nothing on the document
+    // reports it as an expected quirk either.
+    const rebadged = doc.warnings.filter(
+      (w) =>
+        w.code === WARNING_CODES.PROFILE_QUIRK_APPLIED &&
+        w.toleratedCode === WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE,
+    );
+    expect(rebadged).toEqual([]);
+    // And the profile's declared tolerance set says so directly, so the check
+    // survives a future document shape that stops reaching this branch.
+    expect(ccdaProfiles.legacyR11.tolerate.map((t) => t.code)).not.toContain(
+      WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE,
+    );
+    expect(ccdaProfiles.legacyR11.tolerate.map((t) => t.code)).toContain(
+      WARNING_CODES.TEMPLATE_EXTENSION_ABSENT,
+    );
+  });
+
+  it("no built-in profile tolerates the unmodelled-release stamp", () => {
+    // Discovered from the registry, so a profile added later is covered the day
+    // it is added rather than the day someone remembers to list it here.
+    const names = listCcdaProfiles();
+    expect(names.length).toBeGreaterThan(1);
+    for (const name of names) {
+      const tolerated = (getCcdaProfile(name)?.tolerate ?? []).map((t) => t.code);
+      expect(tolerated, name).not.toContain(WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE);
+      expect(tolerated, name).not.toContain(WARNING_CODES.REQUIRED_SECTIONS_NOT_EVALUATED);
+    }
+  });
+
+  it("still lets a consumer write their own profile for the new codes", () => {
+    // No new refusal: neither code is safety-critical, so `defineCcdaProfile`
+    // accepts a grounded tolerance for it exactly as it does for any Tier-2
+    // deviation. What CCDA-5 forbids is the SHIPPED R1.1 profile quieting it,
+    // not a consumer making an informed choice with their own provenance.
+    expect(isSafetyCriticalCode(WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE)).toBe(false);
+    expect(isSafetyCriticalCode(WARNING_CODES.REQUIRED_SECTIONS_NOT_EVALUATED)).toBe(false);
+    expect(() =>
+      defineCcdaProfile({
+        name: "svapReceiver",
+        tolerate: [
+          {
+            code: WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE,
+            rationale: "this receiver has read C-CDA 5.0.0 itself",
+          },
+        ],
+      }),
+    ).not.toThrow();
   });
 
   it("a profile NEVER changes extracted clinical values, only warning behaviour", () => {
