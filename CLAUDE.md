@@ -241,12 +241,32 @@ immutability + explicit mutation, and the profile system.
     "finish the job" by adding them.** **If you add a diagnostic about a node this parser does not
     navigate, that walk is where it goes.**
     Why: `documentation/agent-notes.md#where-the-unknown-namespace-prefix-warning-is-raised`
-  - **`CcdaPosition.templateId` is populated by THREE codes, and by nothing else.**
+  - **`CcdaPosition.templateId` is populated by FOUR codes, and by nothing else** (it was three;
+    `TEMPLATE_EXTENSION_UNMODELED_RELEASE` joined its sibling at CCDA-5, naming the same matched
+    document-type root). **Enumerate the set, never carry this numeral forward.**
     `MISSING_TEMPLATE_ID` and `UNKNOWN_DOCUMENT_TEMPLATE` carry none **on purpose**; **filling a
     field because it can be filled is not the same as populating it, and do not "finish the job" by
-    restoring it.** **A `match` on a field the warning does not carry is inert, not broad.** Still
+    restoring it.** `REQUIRED_SECTIONS_NOT_EVALUATED` carries none either, and for the same reason
+    `UNKNOWN_DOCUMENT_TEMPLATE` does not: its subject is the document's whole obligation, not one
+    template. **A `match` on a field the warning does not carry is inert, not broad.** Still
     open, filed: `defineCcdaProfile` accepts such an inert tolerance rather than refusing it.
     Why: `documentation/agent-notes.md#what-populates-ccdaposition-templateid`
+  - **The version stamp on the resolving `templateId` has THREE readings and the two stamp codes are
+    NOT interchangeable.** `TEMPLATE_EXTENSION_ABSENT` means "no `@extension` at all" and its message
+    is frozen and byte-identical to the one that shipped; **do not widen it** to cover a stamp that is
+    merely not R2.1, which is what `TEMPLATE_EXTENSION_UNMODELED_RELEASE` is for. **A stamp a message
+    NAMES comes from `CCDA_RELEASE_STAMPS`, this package's closed table, never from the document**
+    (the `@extension` is a lookup key, not a value any message interpolates), and a non-member selects
+    the generic wording that names no stamp. An unmodelled stamp means the required-section obligation
+    is **reported unevaluated**, never reduced: **the R1.1-origin reduction is a reading of a document
+    that carries NO stamp and must never be the fallback for one from the future**, which is how a
+    `2024-05-01` CCD silently lost Social History and Vital Signs through `0.0.15`. The R2.1 test stays
+    **EXISTENTIAL** and beats a later stamp on the same root. **`legacyR11` deliberately does not
+    tolerate the unmodelled-release code**; an R1.1 receive-tolerance profile never silences a
+    future-release stamp. `CCDA_CONFORMANCE_RELEASE` is the exported answer to "which release does this
+    validate against" and **recognizing `2024-05-01` did not retarget anything**: only a change moving
+    that value does.
+    Why: `documentation/agent-notes.md#the-three-readings-of-a-document-level-version-stamp`
   - **`NULL_FLAVORS` is the WHOLE v3 NullFlavor code system, seventeen concepts** (it was eight).
     **Transcribe from the published code system, never from memory.** Widening did not weaken the
     PHI bound it carries: membership in a closed set of literals this package owns, never a shape

@@ -1190,12 +1190,18 @@ deleted; the imperative as it stood is reproduced here verbatim.
 
 ## What populates CcdaPosition templateId
 
-  - **`CcdaPosition.templateId` is populated by THREE codes, and by nothing else**
-    (`CCDA-DEAD-DIAGNOSTICS`). It was declared and set by nothing, so `toleranceApplies` could never
-    satisfy a `QuirkTolerance` keyed on `templateId` and such a profile entry silently tolerated
-    nothing. The three are `TEMPLATE_EXTENSION_ABSENT` (the matched document-type root) and
+  - **`CcdaPosition.templateId` is populated by FOUR codes, and by nothing else**
+    (`CCDA-DEAD-DIAGNOSTICS`, widened by one at `CCDA-5`). It was declared and set by nothing, so
+    `toleranceApplies` could never satisfy a `QuirkTolerance` keyed on `templateId` and such a profile
+    entry silently tolerated nothing. The four are the two document-level stamp codes,
+    `TEMPLATE_EXTENSION_ABSENT` and `TEMPLATE_EXTENSION_UNMODELED_RELEASE` (both naming the matched
+    document-type root, which is the single templateId either warning is about), and
     `UNKNOWN_SECTION_CODE` / `SECTION_MATCHED_BY_LOINC_FALLBACK` (the section's first rooted
-    `templateId`).
+    `templateId`). **The count moved once already, so enumerate the set rather than trusting the
+    numeral**; the entry that added the fourth is one section below.
+    **`REQUIRED_SECTIONS_NOT_EVALUATED`, added in the same change, carries none**, for exactly the
+    reason `UNKNOWN_DOCUMENT_TEMPLATE` does not: its subject is the document's whole required-section
+    obligation, not any one template, and the obvious pick would again be a near-constant.
     **Two document-level codes carry none ON PURPOSE, and the second is the one to understand.**
     `MISSING_TEMPLATE_ID` has no template to name. `UNKNOWN_DOCUMENT_TEMPLATE` has too many: its
     subject is the templateId **set** naming no type, and the obvious pick, the first root in
@@ -1214,12 +1220,77 @@ deleted; the imperative as it stood is reproduced here verbatim.
     `DEPRECATED_LOINC` carries no `sectionCode` either, so that narrowing matched **nothing** rather
     than narrowing anything. A `match` on a field the warning does not carry is **inert, not broad**.
     `sectionCode` comes with the two section-recognition codes; `templateId` with those two plus the
-    two document-type codes. No profile in `ccdaProfiles` uses `match` at all, so nothing shipped
-    moved.
+    two document-level stamp codes. No profile in `ccdaProfiles` uses `match` at all, so nothing
+    shipped moved.
     **Still open, filed rather than smuggled in:** `defineCcdaProfile` accepts a `match` on a code
     that cannot carry the field, so an inert tolerance is documented rather than refused. Refusing it
     needs a code-to-position-field registry, which is exactly the kind of stated claim that outlives
     the code it describes.
+
+## The three readings of a document level version stamp
+
+  - **A document-level `templateId/@extension` has THREE readings, not two, and the third is the one
+    that was getting a confident wrong answer** (`CCDA-5`). At `0.0.15` `recognizeDocumentType` emitted
+    `TEMPLATE_EXTENSION_ABSENT` whenever the resolving tid's extension was not `2015-08-01`, and that
+    code's frozen message reads "carries no @extension version stamp ... (may pre-date R2.1)".
+    For a document stamped `2024-05-01` **both halves are false**: it carries a stamp, and it
+    post-dates R2.1 rather than pre-dating it. That is the same defect class as a safety-critical
+    warning that misdescribes the document it is about, one tier down.
+    **The silent half was worse.** The same path returned `r21Stamped=false`, and `assertedKeys` reads
+    that as the R1.1-origin reduction, which drops every `R21_SCOPED_SECTIONS` key. A post-R2.1 CCD
+    missing Social History and Vital Signs therefore drew **no `REQUIRED_SECTION_MISSING` at all**,
+    because the library had classified a document from the future as one from the past. The trigger
+    stopped being hypothetical on 2026-08-29, when a certified sender may lawfully put a C-CDA 5.0.0
+    document on the wire under the criteria that carry R2.1 documents today.
+    **The two stamp codes are NOT interchangeable and `TEMPLATE_EXTENSION_ABSENT` was not widened.**
+    It means "no `@extension` at all", its registry message is byte-identical to the one that shipped,
+    and it is what an R1.1-origin document draws. `TEMPLATE_EXTENSION_UNMODELED_RELEASE` means "an
+    `@extension` that is present and is not the R2.1 one", whether or not this package owns that stamp:
+    not modelling a release and not recognizing a stamp at all are the same fact from here. **Renaming
+    or repurposing a published code is a breaking change; adding one is the sanctioned move.**
+    **The empty and the whitespace-only cases are decided, not discovered.** `attr` returns `undefined`
+    for `""`, so an empty `@extension` is the ABSENT reading; a whitespace-only one is present and is
+    not R2.1, so it is the UNMODELED reading. Exactly one of the two fires, deterministically, and
+    neither throws with default options. `test/edge-cases.test.ts` pins the split by name.
+    **A stamp a message NAMES comes from `CCDA_RELEASE_STAMPS`, this package's own closed table**
+    (`2015-08-01` → R2.1, `2024-05-01` → R3.0 or later, read off the published guide's US Realm Header
+    and CCD StructureDefinitions and its change log's "all document template ids received a new
+    extension" at 3.0.0). The factory's `stamp` parameter is a **lookup key, not a value any message
+    interpolates**: a member selects a wording this package owns, and anything else falls back to the
+    generic entry, which names no stamp. That keeps the module rule intact in substance as well as in
+    form. **Do not "improve" this into interpolation to get a better message**, and note the layering:
+    `boundTemplateId` already withholds an extension that is not `YYYY-MM-DD`-shaped, so the closed
+    table is the SECOND line and `test/phi-diagnostic-surface.test.ts` probes it with a stamp-shaped
+    non-member the model bound lets through, because the shared marker cannot reach it.
+    **The R2.1 test stays EXISTENTIAL and it beats a later stamp.** A document carrying the resolving
+    root twice, once `2015-08-01` and once for a later release, is inside the Schematron rule's context
+    and is evaluated under the full R2.1 obligation, in either sibling order. Only the per-templateId
+    diagnostic reads this tid's own extension.
+    **An unmodelled stamp REPORTS rather than reduces.** `REQUIRED_SECTIONS_NOT_EVALUATED` fires once,
+    no `REQUIRED_SECTION_MISSING` fires at all, and `requiredSectionStatus` reports
+    `evaluation: "not-evaluated"`. **The R1.1-origin reduction must never be the fallback for a
+    document from the future.** It is emitted for **every** recognized type, including the ones whose
+    SHALL table is empty: "not evaluated" is a statement about the parse, and making it conditional on
+    the table's size would go quiet exactly where a reader cannot tell the two emptinesses apart.
+    **`evaluation` is a separate axis from `verification`, deliberately.** `verification` is a claim
+    about the TYPE (how much of its obligation was read off the source) and **no option moves it**;
+    that invariant is load-bearing and was not repurposed to carry a document-scoped fact.
+    **`{ r21Stamped }` is a compatibility contract and was not repurposed either.** A boolean cannot
+    hold three states, so `{ stamp }` was added beside it; `requiredSectionKeys("ccd", {
+    r21Stamped: false })` returns the same four keys in the same order as at the pin, and `stamp` wins
+    when both are supplied.
+    **`legacyR11` deliberately does NOT tolerate the unmodelled-release code.** Its grounding is the
+    §170.315(b)(1) receive-both requirement, which is about documents from the past; an R1.1
+    receive-tolerance profile that silenced a future-release stamp would restore the exact silence this
+    change removed. Neither new code is safety-critical, so a consumer who has read the later guide can
+    still write their own profile: **no new refusal was added anywhere**, and `{ strict: true }`
+    escalates both exactly as it escalates every Tier-2 warning, which is pre-existing opted-in
+    behaviour rather than new strictness.
+    **Recognizing a release is not targeting one.** `CCDA_CONFORMANCE_RELEASE` is `"R2.1"` and is the
+    exported answer to "which release does this validate against". Regulation still adopts R2.1 and
+    SVAP is voluntary, so **recognizing `2024-05-01` retargeted nothing**; only a change that moves
+    that value does. 4.0.0 also relaxed the US Realm Header and 5.0.0 added a Pregnancy Section, and
+    **neither is modelled**: knowing which guide a document was written for is the whole of the claim.
 
 ## The v3 NullFlavor code system has seventeen concepts
 

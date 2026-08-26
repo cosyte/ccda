@@ -36,11 +36,37 @@ whole `.warnings` array without leaking PHI.
 `sectionCode` and `templateId` are carried by a **short list** of codes and no others, which is what
 you need to know before narrowing a profile tolerance with `match`. `sectionCode` comes with
 `UNKNOWN_SECTION_CODE` and `SECTION_MATCHED_BY_LOINC_FALLBACK`; `templateId` comes with those two
-(the section's first `<templateId>` root) and with `TEMPLATE_EXTENSION_ABSENT` (the matched
-document-type root). Everything else carries neither, so a `match` keyed on one of them elsewhere
-applies to nothing rather than to everything. That includes `MISSING_TEMPLATE_ID`, which has no
-template to name, and `UNKNOWN_DOCUMENT_TEMPLATE`, whose subject is the whole `templateId` set rather
-than any one root.
+(the section's first `<templateId>` root) and with the two document-level stamp codes,
+`TEMPLATE_EXTENSION_ABSENT` and `TEMPLATE_EXTENSION_UNMODELED_RELEASE` (the matched document-type
+root, which is the one template either warning is about). Everything else carries neither, so a
+`match` keyed on one of them elsewhere applies to nothing rather than to everything. That includes
+`MISSING_TEMPLATE_ID`, which has no template to name, `UNKNOWN_DOCUMENT_TEMPLATE`, whose subject is
+the whole `templateId` set rather than any one root, and `REQUIRED_SECTIONS_NOT_EVALUATED`, whose
+subject is the document's whole obligation.
+
+## The version stamp, and what a profile may quiet about it
+
+The two stamp codes are deliberately separate, and which one you may tolerate is a decision about
+your own pipeline rather than a formality:
+
+- `TEMPLATE_EXTENSION_ABSENT` means the resolving `templateId` carried **no** `@extension` at all.
+  That is the R1.1-origin shape, which a certified receiver must accept, and the built-in
+  `legacyR11` profile tolerates it on exactly that grounding.
+- `TEMPLATE_EXTENSION_UNMODELED_RELEASE` means it carried a stamp that is **not** the R2.1 one, so
+  the document was written for a release these tables do not model. **`legacyR11` does not tolerate
+  it**, and that omission is deliberate: a receive-tolerance profile for documents from the past has
+  no business silencing a stamp from the future. Neither code is safety-critical, so a consumer who
+  has actually read the later guide can still write their own profile for it, with their own
+  provenance, which is what `defineCcdaProfile` is for.
+
+Neither code is a refusal. A stamp this package does not model is a warning, the document is parsed
+leniently, and its clinical reading is unchanged; what stops is the R2.1-scoped conformance claim
+(`REQUIRED_SECTIONS_NOT_EVALUATED`). Under `{ strict: true }` both escalate to a throw exactly as
+every other Tier-2 warning does, which is the caller's own opt-in and not a new behaviour here.
+
+A stamp a message **names** always comes from this package's own closed table (`CCDA_RELEASE_STAMPS`),
+never from the document: a sender-controlled `@extension` selects the generic wording, which names no
+stamp at all.
 
 Most of the specifics a message used to name are still on the model: a section's `<code>` is on
 `section.code`, a unit on `PQ.unit`, an unmodelled datatype's raw text on the observation value. Two

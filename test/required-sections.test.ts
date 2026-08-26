@@ -42,6 +42,7 @@ import {
   MEDICATIONS_SECTION,
   PAST_MEDICAL_HISTORY_SECTION,
   PLAN_OF_TREATMENT_SECTION,
+  POST_R21_STAMP,
   PROBLEMS_SECTION,
   PROCEDURES_SECTION,
   REASON_FOR_REFERRAL_SECTION,
@@ -1098,5 +1099,165 @@ describe("emit and validate stay in lockstep", () => {
     }
     // Guard against the loop going quiet: the builder emits two types today.
     expect(emittable).toEqual(["ccd", "referralNote"]);
+  });
+});
+
+/**
+ * CCDA-5. The R2.1-scoped keys are scoped by a Schematron context predicate
+ * carrying `@extension="2015-08-01"`, so a document stamped for a LATER release
+ * is outside those rules just as an unstamped one is. Through `0.0.15` it took
+ * the unstamped **reduction** instead, which is a reading of a document that
+ * pre-dates R2.1: a `2024-05-01` CCD carrying neither Social History nor Vital
+ * Signs drew no `REQUIRED_SECTION_MISSING` at all, in silence.
+ */
+describe("a stamp naming an unmodelled release is reported, never reduced", () => {
+  /** The message the pin froze for TEMPLATE_EXTENSION_ABSENT, byte for byte. */
+  const ABSENT_MESSAGE_AT_PIN =
+    "The recognized templateId carries no @extension version stamp; matched by root alone (may pre-date R2.1).";
+
+  /** AC7: neither the six-key R2.1 reading nor the four-key unstamped reduction. */
+  it("reports no missing section for a 2024-05-01 CCD carrying none of the six", () => {
+    const doc = parseCcda(buildCcda({ extension: POST_R21_STAMP, sections: "" }));
+    expect(doc.documentType).toBe("ccd");
+    expect(missingKeys(doc.warnings)).toEqual([]);
+    for (const key of ["allergies", "medications", "problems", "results"]) {
+      expect(missingKeys(doc.warnings).some((m) => m.includes(`"${key}"`))).toBe(false);
+    }
+    // AC3 / AC7: and the non-evaluation is observable in the returned warnings,
+    // so the silence above is a reported state rather than an absence.
+    const notEvaluated = doc.warnings.filter(
+      (w) => w.code === WARNING_CODES.REQUIRED_SECTIONS_NOT_EVALUATED,
+    );
+    expect(notEvaluated).toHaveLength(1);
+    expect(notEvaluated[0]?.message).toContain("were not evaluated");
+  });
+
+  /** AC3: the API surface says which emptiness an empty key set is. */
+  it("says on the status surface that nothing was evaluated", () => {
+    const status = requiredSectionStatus("ccd", { stamp: "unmodeled-release" });
+    expect(status.evaluation).toBe("not-evaluated");
+    expect(status.keys).toEqual([]);
+    expect(status.traced).toEqual([]);
+    // `verification` is a claim about the TYPE and no option moves it, so the
+    // provenance of the obligation is still readable beside the non-evaluation.
+    expect(status.verification).toBe("traced-complete");
+    expect(status.source?.revision).toBe("2025-09-08");
+
+    // Every other reading is `evaluated`, including the two that legitimately
+    // return an empty set.
+    expect(requiredSectionStatus("ccd").evaluation).toBe("evaluated");
+    expect(requiredSectionStatus("ccd", { r21Stamped: false }).evaluation).toBe("evaluated");
+    expect(requiredSectionStatus("progressNote").evaluation).toBe("evaluated");
+    expect(requiredSectionStatus("consultationNote", { r21Stamped: false }).keys).toEqual([]);
+    expect(requiredSectionStatus("consultationNote", { r21Stamped: false }).evaluation).toBe(
+      "evaluated",
+    );
+  });
+
+  it("asserts nothing, and reduces nothing, for every recognized type", () => {
+    for (const documentType of DOCUMENT_TYPES) {
+      expect(requiredSectionKeys(documentType, { stamp: "unmodeled-release" })).toEqual([]);
+      expect(
+        missingRequiredSections(documentType, new Set<string>(), {
+          stamp: "unmodeled-release",
+        }),
+      ).toEqual([]);
+    }
+  });
+
+  /** AC15: the published two-state option's behaviour is a compatibility contract. */
+  it("leaves requiredSectionKeys('ccd', { r21Stamped: false }) exactly as it was at the pin", () => {
+    expect(requiredSectionKeys("ccd", { r21Stamped: false })).toEqual([
+      "allergies",
+      "medications",
+      "problems",
+      "results",
+    ]);
+    // Order included: the published example documents this list in this order.
+    expect(requiredSectionKeys("ccd", { r21Stamped: false }).join(",")).toBe(
+      "allergies,medications,problems,results",
+    );
+    // And the boolean still cannot express the third state, which is why the
+    // three-state route was added beside it rather than replacing it.
+    expect(requiredSectionKeys("ccd", { r21Stamped: true })).toEqual(requiredSectionKeys("ccd"));
+    expect(requiredSectionKeys("ccd", { stamp: "unstamped" })).toEqual(
+      requiredSectionKeys("ccd", { r21Stamped: false }),
+    );
+    // `stamp` wins when both are supplied: it is strictly more specific.
+    expect(requiredSectionKeys("ccd", { r21Stamped: false, stamp: "unmodeled-release" })).toEqual(
+      [],
+    );
+  });
+
+  /** AC8: the narrow code keeps its message and its verdict, byte for byte. */
+  it("leaves the unstamped reading and TEMPLATE_EXTENSION_ABSENT untouched", () => {
+    const doc = parseCcda(buildCcda({ extension: undefined, sections: "" }));
+    const absent = doc.warnings.find((w) => w.code === WARNING_CODES.TEMPLATE_EXTENSION_ABSENT);
+    expect(absent?.message).toBe(ABSENT_MESSAGE_AT_PIN);
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.REQUIRED_SECTIONS_NOT_EVALUATED);
+
+    const missing = missingKeys(doc.warnings);
+    expect(missing).toHaveLength(4);
+    for (const key of ["allergies", "medications", "problems", "results"]) {
+      expect(missing.some((m) => m.includes(`"${key}"`))).toBe(true);
+    }
+    for (const scoped of ["socialHistory", "vitalSigns"]) {
+      expect(missing.some((m) => m.includes(scoped))).toBe(false);
+    }
+  });
+
+  /** AC9: the existential R2.1 test survives, and it beats a later stamp. */
+  it("stays R2.1-scoped when the resolving root appears twice, once stamped 2015-08-01", () => {
+    const ccd = DOC_OID.ccd;
+    for (const raw of [
+      `<templateId root="${ccd}" extension="2015-08-01"/><templateId root="${ccd}" extension="${POST_R21_STAMP}"/>`,
+      `<templateId root="${ccd}" extension="${POST_R21_STAMP}"/><templateId root="${ccd}" extension="2015-08-01"/>`,
+    ]) {
+      const doc = parseCcda(buildCcda({ rawTemplateIds: raw, sections: "" }));
+      expect(doc.documentType).toBe("ccd");
+      // Evaluated under the R2.1 reading: all six keys, not four and not none.
+      expect(codes(doc.warnings)).not.toContain(WARNING_CODES.REQUIRED_SECTIONS_NOT_EVALUATED);
+      expect(missingKeys(doc.warnings)).toHaveLength(6);
+      for (const key of requiredSectionKeys("ccd")) {
+        expect(missingKeys(doc.warnings).some((m) => m.includes(`"${key}"`))).toBe(true);
+      }
+    }
+  });
+
+  /** Fail-safety: a warning, never a fatal, and everything present is still read. */
+  it("parses a post-R2.1 document short of every SHALL section, warning only", () => {
+    const xml = buildCcda({ extension: POST_R21_STAMP, sections: PROCEDURES_SECTION });
+    expect(() => parseCcda(xml)).not.toThrow();
+    const doc = parseCcda(xml);
+    expect(doc.findSection("procedures")).toBeDefined();
+    expect(doc.getProcedures().length).toBeGreaterThan(0);
+    expect(doc.getMrn()).toBe("MRN001");
+    expect(missingKeys(doc.warnings)).toEqual([]);
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.REQUIRED_SECTIONS_NOT_EVALUATED);
+  });
+
+  it("reports the non-evaluation for a type whose SHALL table is empty too", () => {
+    // "Not evaluated" is a statement about this parse, equally true where the
+    // table asserts nothing. Reporting it only for the types with a non-empty
+    // table would go quiet exactly where the two emptinesses look alike.
+    const doc = parseCcda(
+      buildCcda({
+        docTypeOid: DOC_OID.progressNote,
+        extension: POST_R21_STAMP,
+        sections: PROCEDURES_SECTION,
+      }),
+    );
+    expect(doc.documentType).toBe("progressNote");
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.REQUIRED_SECTIONS_NOT_EVALUATED);
+  });
+
+  it("makes no non-evaluation claim about an unrecognized document type", () => {
+    const doc = parseCcda(
+      buildCcda({ docTypeOid: "1.2.3.4.5.6.7.8.9", extension: POST_R21_STAMP, sections: "" }),
+    );
+    expect(doc.documentType).toBeUndefined();
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.UNKNOWN_DOCUMENT_TEMPLATE);
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.REQUIRED_SECTIONS_NOT_EVALUATED);
+    expect(codes(doc.warnings)).not.toContain(WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE);
   });
 });

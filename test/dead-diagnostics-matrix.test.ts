@@ -112,6 +112,15 @@ const NULL_FLAVOR_TOKENS = [
 const ROWS: readonly { readonly name: string; readonly xml: string }[] = [
   { name: "clean CCD", xml: doc() },
   { name: "no R2.1 version stamp", xml: doc({ ext: null }) },
+  // CCDA-5 added a fourth code carrying `position.templateId`, so these rows are
+  // here for the same reason the row above is: the codes that name a template
+  // root are the ones a profile `match` can be keyed on, and the matrix is where
+  // that set is measured rather than asserted from memory. Both are on the QUIET
+  // document type, so the only other diagnostic either draws is the
+  // non-evaluation the stamp itself causes.
+  { name: "post-R2.1 version stamp", xml: doc({ ext: "2024-05-01" }) },
+  { name: "unrecognized version stamp", xml: doc({ ext: "1999-12-31" }) },
+  { name: "version stamp not shaped like one", xml: doc({ ext: "Doe^Jane^1980" }) },
   { name: "unknown document template", xml: doc({ docRoot: "2.16.840.1.113883.3.9999.9" }) },
   { name: "no templateId at all", xml: doc({ docRoot: "", headerTemplate: false }) },
   { name: "vendor-stamped section", xml: doc({ sectionRoot: "2.16.840.1.113883.3.9999.1.1" }) },
@@ -177,6 +186,9 @@ describe("dead-diagnostics behaviour matrix", () => {
     expect(table.join("\n")).toMatchInlineSnapshot(`
       "clean CCD                            | no throw                 | silent
       no R2.1 version stamp                | TEMPLATE_EXTENSION_ABSENT | TEMPLATE_EXTENSION_ABSENT@tid=2.16.840.1.113883.10.20.22.1.9
+      post-R2.1 version stamp              | TEMPLATE_EXTENSION_UNMODELED_RELEASE | TEMPLATE_EXTENSION_UNMODELED_RELEASE@tid=2.16.840.1.113883.10.20.22.1.9, REQUIRED_SECTIONS_NOT_EVALUATED
+      unrecognized version stamp           | TEMPLATE_EXTENSION_UNMODELED_RELEASE | TEMPLATE_EXTENSION_UNMODELED_RELEASE@tid=2.16.840.1.113883.10.20.22.1.9, REQUIRED_SECTIONS_NOT_EVALUATED
+      version stamp not shaped like one    | TEMPLATE_EXTENSION_UNMODELED_RELEASE | TEMPLATE_EXTENSION_UNMODELED_RELEASE@tid=2.16.840.1.113883.10.20.22.1.9, REQUIRED_SECTIONS_NOT_EVALUATED
       unknown document template            | UNKNOWN_DOCUMENT_TEMPLATE | UNKNOWN_DOCUMENT_TEMPLATE
       no templateId at all                 | MISSING_TEMPLATE_ID      | MISSING_TEMPLATE_ID
       vendor-stamped section               | SECTION_MATCHED_BY_LOINC_FALLBACK | SECTION_MATCHED_BY_LOINC_FALLBACK@tid=2.16.840.1.113883.3.9999.1.1@sec=11450-4
@@ -217,5 +229,24 @@ describe("dead-diagnostics behaviour matrix", () => {
     const withSafetyCritical = ROWS.find((r) => r.name === "foreign block + safety-critical code");
     expect(strict(withFatal?.xml ?? "")).toBe("NOT_A_CLINICAL_DOCUMENT");
     expect(strict(withSafetyCritical?.xml ?? "")).toBe(WARNING_CODES.MISSING_CODE_SYSTEM);
+  });
+
+  it("never lets the two stamp codes fire for the same templateId", () => {
+    // CCDA-5 split one code into two, so the failure mode it introduces is
+    // BOTH, or neither, rather than the wrong one. Stated as an assertion
+    // instead of left to be read out of the snapshot, which a later edit could
+    // simply re-record.
+    const stampCodes: readonly string[] = [
+      WARNING_CODES.TEMPLATE_EXTENSION_ABSENT,
+      WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE,
+    ];
+    for (const ext of [null, "2015-08-01", "2024-05-01", "1999-12-31", "Doe^Jane^1980"]) {
+      const emitted = parseCcda(doc({ ext }), { profile: null }).warnings.filter((w) =>
+        stampCodes.includes(w.code),
+      );
+      expect(emitted.length, String(ext)).toBeLessThanOrEqual(1);
+      // And the R2.1 stamp is the only value that draws neither.
+      expect(emitted.length, String(ext)).toBe(ext === "2015-08-01" ? 0 : 1);
+    }
   });
 });

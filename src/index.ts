@@ -217,6 +217,20 @@ export {
 } from "./parser/templates.js";
 export type { DocumentType, SectionInfo } from "./parser/templates.js";
 
+// Which C-CDA release this package targets, as a value, plus the closed table of
+// document-template version stamps it can NAME and the three-state reading of
+// one. Naming a later release is not targeting it: CCDA_CONFORMANCE_RELEASE does
+// not move because R30_EXTENSION is recognized.
+export {
+  CCDA_CONFORMANCE_RELEASE,
+  CCDA_RELEASES,
+  CCDA_RELEASE_STAMPS,
+  R30_EXTENSION,
+  readTemplateStamp,
+  releaseForTemplateExtension,
+} from "./parser/templates.js";
+export type { CcdaRelease, CcdaReleaseStamp, TemplateStampReading } from "./parser/templates.js";
+
 // Per-document-type required-section (SHALL) validation tables, and the
 // per-type verification state that says how much of each type's obligation was
 // read off the normative C-CDA R2.1 source.
@@ -225,6 +239,7 @@ export {
   missingRequiredSections,
   requiredSectionStatus,
   requiredSectionStatuses,
+  type RequiredSectionEvaluation,
   type RequiredSectionOptions,
   type RequiredSectionSource,
   type RequiredSectionStatus,

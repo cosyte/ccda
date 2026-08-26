@@ -28,7 +28,7 @@ import {
   WARNING_CODES,
   type CcdaWarning,
 } from "../src/index.js";
-import { unknownNamespacePrefix } from "../src/parser/warnings.js";
+import { ALL_WARNING_MESSAGES, unknownNamespacePrefix } from "../src/parser/warnings.js";
 import { buildCcda, NO_REQUIRED_SECTIONS_DOC_OID, PROBLEMS_SECTION } from "./__fixtures__/ccda.js";
 
 function el(fragment: string): Element {
@@ -517,5 +517,77 @@ describe("identifiers, a nullFlavor asserted on a patientRole/id", () => {
     expect(doc.header.documentId?.extension).toBe("DOC123");
     expect(doc.header.documentId?.nullFlavor).toBe("UNK");
     expect(doc.warnings.map((w) => w.code)).toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+  });
+});
+
+/**
+ * AC10. CCDA-5 split one stamp diagnostic into two, so the degenerate
+ * `@extension` values need an answer that is stated rather than discovered:
+ * exactly one of the two fires, the same one every time, and neither shape
+ * throws with default options.
+ */
+describe("a degenerate @extension on the resolving templateId", () => {
+  const CCD = "2.16.840.1.113883.10.20.22.1.2";
+
+  /** Plant a raw `@extension` on the CCD root, bypassing the builder's escaping. */
+  function withRawExtension(rawAttrs: string): string {
+    return buildCcda({
+      rawTemplateIds: `<templateId root="${CCD}"${rawAttrs}/>`,
+      sections: "",
+    });
+  }
+
+  const STAMP_CODES: readonly string[] = [
+    WARNING_CODES.TEMPLATE_EXTENSION_ABSENT,
+    WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE,
+  ];
+
+  const ROWS: readonly { readonly name: string; readonly attrs: string }[] = [
+    { name: "empty", attrs: ` extension=""` },
+    { name: "one space", attrs: ` extension=" "` },
+    { name: "whitespace only", attrs: `  extension="   "` },
+    { name: "tab and newline", attrs: ` extension="&#9;&#10;"` },
+    { name: "absent", attrs: `` },
+  ];
+
+  it.each(ROWS)("emits exactly one stamp diagnostic for an $name extension", ({ attrs }) => {
+    const xml = withRawExtension(attrs);
+    expect(() => parseCcda(xml)).not.toThrow();
+    const doc = parseCcda(xml);
+    expect(doc.documentType).toBe("ccd");
+    const stamps = doc.warnings.filter((w) => STAMP_CODES.includes(w.code));
+    expect(stamps).toHaveLength(1);
+    // Deterministic: the same input reads the same way every time.
+    expect(parseCcda(xml).warnings.filter((w) => STAMP_CODES.includes(w.code))[0]?.code).toBe(
+      stamps[0]?.code,
+    );
+  });
+
+  it("reads each degenerate shape the same way every run", () => {
+    // The exact split, pinned rather than left to be inferred. An empty
+    // `@extension` is `attr`'s "absent" (it returns undefined for `""`), so it
+    // is the R1.1-origin reading; a whitespace-only one is a stamp that is
+    // present and is not the R2.1 one, so it is the unmodelled-release reading.
+    const seen = ROWS.map(({ name, attrs }) => {
+      const stamp = parseCcda(withRawExtension(attrs)).warnings.find((w) =>
+        STAMP_CODES.includes(w.code),
+      );
+      return `${name}: ${stamp?.code ?? "silent"}`;
+    });
+    expect(seen).toEqual([
+      "empty: TEMPLATE_EXTENSION_ABSENT",
+      "one space: TEMPLATE_EXTENSION_UNMODELED_RELEASE",
+      "whitespace only: TEMPLATE_EXTENSION_UNMODELED_RELEASE",
+      "tab and newline: TEMPLATE_EXTENSION_UNMODELED_RELEASE",
+      "absent: TEMPLATE_EXTENSION_ABSENT",
+    ]);
+  });
+
+  it("never puts the degenerate value in the message", () => {
+    for (const { attrs } of ROWS) {
+      for (const w of parseCcda(withRawExtension(attrs)).warnings) {
+        expect(ALL_WARNING_MESSAGES.has(w.message)).toBe(true);
+      }
+    }
   });
 });
