@@ -3,6 +3,13 @@ name: Release
 # Thin caller of the shared release pipeline: Changesets -> npm publish (provenance auto-enables when
 # this repo is public) -> docs artifacts -> GitHub release -> repository_dispatch to cosyte/docs.
 # Requires the NPM_TOKEN and DOCS_REPO_DISPATCH_TOKEN secrets (passed via `secrets: inherit`).
+#
+# The shared pipeline runs its release job in this repository's `release` environment, and that
+# environment carries a required reviewer, so a run parks in `waiting` until a human approves it and
+# nothing reaches npm unattended. A `Release` run sitting in `waiting` between releases is the
+# designed steady state, not a broken workflow: read it as waiting for that reviewer, never as a
+# failure to chase. The caller-side permission contract this file has to satisfy is asserted by
+# `test/release-workflow-contract.test.ts`, which runs in this repository's own test suite.
 
 on:
   push:
