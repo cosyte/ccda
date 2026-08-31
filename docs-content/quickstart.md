@@ -1,7 +1,8 @@
 ---
 id: quickstart
 title: Quickstart
-sidebar_position: 1
+sidebar_label: Quickstart
+sidebar_position: 3
 ---
 
 # Quickstart

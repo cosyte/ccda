@@ -1,7 +1,8 @@
 ---
 id: cookbook
 title: Cookbook
-sidebar_position: 2
+sidebar_label: Cookbook
+sidebar_position: 8
 ---
 
 # Cookbook

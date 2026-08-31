@@ -1,6 +1,7 @@
 ---
 id: intro
 title: Getting started
+sidebar_label: Getting started
 sidebar_position: 1
 ---
 
@@ -13,8 +14,10 @@ spec-clean, round-trip serializer. It mirrors the API shape of the reference par
 Its single runtime dependency is the hardened W3C-DOM substrate `@xmldom/xmldom` (exact-pinned),
 configured XXE-safe.
 
-> **Status:** **published on npm at `0.0.3`** and **public**, still pre-alpha on the cosyte `0.0.x`
-> version ladder (`0.0.x` until first alpha). The parser ships
+> **Status:** **published on npm** and **public**, still pre-alpha on the cosyte `0.0.x`
+> version ladder (`0.0.x` until first alpha). This page names no version number: run
+> `npm view @cosyte/ccda version` for the current one, which is the only answer that cannot go
+> stale between releases. The parser ships
 > document recognition (all 12 US Realm types), the US Realm header + patient demographics, section
 > framing, the reconciliation triad (Problems / Medications / Allergies), the discrete-data families
 > (Results / Vital Signs / Immunizations) with a computable UCUM unit check, Procedures / Encounters /

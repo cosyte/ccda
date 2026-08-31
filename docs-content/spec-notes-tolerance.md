@@ -2,7 +2,7 @@
 id: spec-notes-tolerance
 title: Tolerance & the warning model
 sidebar_label: Tolerance & warnings
-sidebar_position: 2
+sidebar_position: 5
 ---
 
 # Tolerance tiers & the warning-code model
