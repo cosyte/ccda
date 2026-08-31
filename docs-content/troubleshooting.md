@@ -2,7 +2,7 @@
 id: troubleshooting
 title: Troubleshooting & known limitations
 sidebar_label: Troubleshooting
-sidebar_position: 1
+sidebar_position: 10
 ---
 
 # Troubleshooting & known limitations
@@ -44,15 +44,15 @@ non-UCUM unit) is a warning you triage, not an exception you catch.
 
 ## Common symptoms
 
-| Symptom                                         | Likely cause                                                                        | What to do                                                                                                                |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `documentType` is `undefined`                   | The root `templateId` set contains no recognized document-type OID (or none at all) | Check for `UNKNOWN_DOCUMENT_TEMPLATE` / `MISSING_TEMPLATE_ID`; the document still parsed as a generic `ClinicalDocument`. |
-| A section has `key: undefined`                  | Its `templateId` and LOINC `code` matched nothing in the catalog                    | `UNKNOWN_SECTION_CODE` was raised; the section is retained as narrative-only: read `section.narrativeText`.               |
-| `getMedications()[0].dose` is `undefined`       | The Medication Activity carried no `doseQuantity`                                   | `MISSING_DOSE_QUANTITY` was raised; the value is preserved-as-absent, never defaulted.                                    |
-| A procedure's `disposition` is `undefined`      | The entry had no `moodCode`, or an unrecognized one                                 | `PLANNED_VS_PERFORMED_AMBIGUOUS` / `PROCEDURE_MOOD_UNEXPECTED` was raised; performed and planned are never conflated.     |
-| A `CODE_NARRATIVE_MISMATCH` warning             | A coded value and its referenced narrative disagree                                 | Both are preserved and no winner is chosen; route the record to human review.                                             |
-| A `NON_UCUM_UNIT` / `UCUM_CASE_SUSPECT` warning | The `PQ` `@unit` is not well-formed UCUM (or a case slip)                           | The raw unit is preserved, never normalized; a case slip is usually a single-character fix.                               |
-| `doc.toString()` throws                         | The document was hand-constructed, not produced by `parseCcda` or `buildCcda`       | Only parsed/built documents retain source XML to serialize; construct from scratch with `buildCcda`.                      |
+| Symptom                                         | Likely cause                                                                        | What to do                                                                                                                                                                                             |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `documentType` is `undefined`                   | The root `templateId` set contains no recognized document-type OID (or none at all) | Check for `UNKNOWN_DOCUMENT_TEMPLATE` / `MISSING_TEMPLATE_ID`; the document still parsed as a generic `ClinicalDocument`.                                                                              |
+| A section has `key: undefined`                  | Its `templateId` and LOINC `code` matched nothing in the catalog                    | `UNKNOWN_SECTION_CODE` was raised; the section is retained as narrative-only: read `section.narrativeText`.                                                                                            |
+| `getMedications()[0].dose` is `undefined`       | The Medication Activity carried no `doseQuantity`                                   | `MISSING_DOSE_QUANTITY` was raised; the value is preserved-as-absent, never defaulted.                                                                                                                 |
+| A procedure's `disposition` is `undefined`      | The entry had no `moodCode`, or an unrecognized one                                 | `PLANNED_VS_PERFORMED_AMBIGUOUS` / `PROCEDURE_MOOD_UNEXPECTED` was raised; performed and planned are never conflated.                                                                                  |
+| A `CODE_NARRATIVE_MISMATCH` warning             | A coded value and its referenced narrative disagree                                 | Both are preserved and no winner is chosen; route the record to human review.                                                                                                                          |
+| A `NON_UCUM_UNIT` / `UCUM_CASE_SUSPECT` warning | The `PQ` `@unit` is not well-formed UCUM (or a case slip)                           | The raw unit is preserved, never normalized; a case slip is usually a single-character fix.                                                                                                            |
+| `doc.toString()` throws                         | The document was hand-constructed, not produced by `parseCcda` or `buildCcda`       | Only parsed/built documents retain source XML to serialize; construct from scratch with `buildCcda`.                                                                                                   |
 | An entry you can see in the XML is not returned | A `<subject>` on that entry, on a statement inside it, or on its section            | `SUBJECT_CONTEXT_OVERRIDE` was raised, one per withheld entry: it is somebody else's clinical statement and is withheld from every record-target read path. It still round-trips through `toString()`. |
 
 ## Keeping PHI out of logs
@@ -396,7 +396,6 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   choice constraints (`SHALL contain A OR B`), SHOULD/MAY sections, and SHALL sections outside the
   recognized catalog. `requiredSectionStatus(documentType)` returns the asserted keys with a
   `verification` state, so an empty set is never ambiguous:
-
   - **`traced-complete`** for CCD and Care Plan: every SHALL section the source names for those two
     is in this parser's catalog and is asserted, so `status.unasserted` is empty because there is
     nothing left over.
@@ -536,8 +535,10 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
 - **C-CDA R2.1, US Realm.** Other CDA templates and realms are out of the current scope.
 - **A parser + serializer, not a transport or a validator suite.** No MLLP/XDS delivery, no Schematron
   conformance report: this reads and re-emits documents.
-- **Pre-alpha on the `0.0.x` ladder.** `@cosyte/ccda` is **published on npm at `0.0.3`** and **public**,
-  but still pre-alpha: on the `0.0.x`-until-first-alpha ladder, the API can still change.
+- **Pre-alpha on the `0.0.x` ladder.** `@cosyte/ccda` is **published on npm** and **public**, but
+  still pre-alpha: on the `0.0.x`-until-first-alpha ladder, the API can still change. Run
+  `npm view @cosyte/ccda version` for the published version; no page here names it, because a
+  version written into prose is stale by the next release.
 
 For the exact fields each accessor decodes, see [Core Concepts](./spec-notes-clinical); for every
 export and its signature, see the API reference, which is generated from the source rather than

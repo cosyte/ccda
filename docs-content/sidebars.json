@@ -25,7 +25,7 @@
     {
       "type": "category",
       "label": "Guides",
-      "items": ["cookbook"]
+      "items": ["cookbook", "conformance"]
     },
     {
       "type": "category",

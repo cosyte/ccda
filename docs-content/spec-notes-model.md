@@ -2,7 +2,7 @@
 id: spec-notes-model
 title: The document model
 sidebar_label: The document model
-sidebar_position: 1
+sidebar_position: 4
 ---
 
 # The document model: recognition, header, sections

@@ -2573,11 +2573,77 @@ place it did, and the gate caught it rather than a reviewer. The em-dash gate ne
 self-exemption, and that exemption has already cost this repo an escape.
 
 **`documentation/agent-notes.md` is NOT under this repo's Prettier globs and must not be run through
-it.** `format` and `format:check` cover `src/**/*.{ts,md}`, `test/**/*.ts`, `scripts/**/*.ts` and root
-`*.{json,md,yml}`, and `documentation/` is in none of them. Running
+it.** `format` and `format:check` cover `src/**/*.{ts,md}`, `test/**/*.ts`, `scripts/**/*.ts`,
+`docs-content/**/*.md` and root `*.{json,md,yml}`, and `documentation/` is in none of them. Running
 Prettier over this file by hand reflows all of it: measured here, 1,385 lines changed for a
 three-paragraph append, which buries the real edit and churns a file whose whole premise is that the
-relocation was verbatim. Append by hand at the existing wrap.
+relocation was verbatim. Append by hand at the existing wrap. **Enumerate that glob list from
+`package.json` rather than from this sentence**, which was stale for exactly as long as it took
+`docs-content/**/*.md` to be added to both scripts and not here.
+
+## The docs-content bundle is gated for coverage and shape
+
+`docs-content/` is a RELEASE ARTIFACT, not a folder of notes: `pnpm pack:docs` tars it into
+`docs-content.tar.gz`, the `docs` repo ingests that and publishes it at docs.cosyte.com, and
+`scripts/build-docs-artifacts.sh` refuses to write a partial bundle if `intro.md` or `sidebars.json`
+is missing. **Two test files gate it and they ask different questions; do not merge them.**
+`test/docs-content.test.ts` asks "do the examples still RUN", by compiling every
+` ```ts runnable ` block against the BUILT ESM artifact, which is why it spawns `pnpm build` in a
+`beforeAll`. `test/docs-content-coverage.test.ts` asks "is the surface still COVERED and do the pages
+still AGREE", and it **must never spawn a build**: Vitest runs test files in parallel and two `tsup`
+runs race on one `dist/`, which is the same reason the README suite lives inside the first file
+instead of a third one.
+
+**THE EXPORT INVENTORY IS COMPUTED, NEVER SNAPSHOTTED, AND IT COVERS TYPES.** The guard resolves
+`src/index.ts` through the TypeScript compiler API, so `export * from "./model/types/index.js"` is
+followed exactly rather than by regex, and the result was verified to equal the `dist/index.d.ts`
+rollup's own export list symbol for symbol. **Reading the built ESM namespace instead is the trap**:
+it sees the value exports and is silent about every type, and a type is public surface here.
+`TerminologyAdapter` is the contract a caller implements and has no runtime existence at all. Write
+no total here; the guard derives it on every run, and the base measurement is the one worth keeping:
+when the guard was written the bundle named 62 of the exported symbols and said nothing about the
+other 164, which is what "coverage was unmeasured" meant in practice.
+
+**`test/docs-content-exemptions.ts` IS THE PRESSURE VALVE AND IT IS THE THING TO WATCH.** An entry
+says "this symbol needs no NARRATIVE page", which is legitimate for a builder input type or a DOM
+escape hatch: the docs site generates a per-symbol TypeDoc reference from `source.tar.gz`, so an
+exempt symbol is still documented, just not in prose. **It is NOT legitimate for a symbol carrying a
+behaviour a reader can get backwards**, and moving one into the record rather than writing the page
+is the failure this whole gate exists to make visible. The vendor-profile system, the bring-your-own
+`TerminologyAdapter` and the required-section conformance status were all in that state until
+`docs-content/conformance.md` was written for them: each was mentioned only in passing inside the
+limitations page, and none had an example anyone could run. **An exemption cannot outlive its
+reason** (a name the entry point no longer exports reds), and an EMPTY record is the healthy end
+state, never a missing input.
+
+**THE VERSION RULE IS NARROW ON PURPOSE AND HAS TWO HALVES.** No page may assert the CURRENTLY
+published version as a literal, because that is the fact that was stale every time anyone checked:
+three pages said "published on npm at `0.0.3`" while `package.json` was at `0.0.15`. They point at
+`npm view @cosyte/ccda version` now. **But a note dating a behaviour change to a PAST version is the
+change record, not staleness**, and deleting one is a coverage regression for every reader pinned to
+an old version. So the guard also holds a retention FLOOR on those notes. A sweep that satisfies only
+the first half by deleting the second passes the letter of the rule and breaks it.
+
+**`sidebar_position` AGREES WITH `sidebars.json`, IT IS NOT MERELY UNIQUE.** Five pages claimed
+position 1 before this. Requiring only uniqueness would leave two orderings free to disagree, which
+is the same defect slowed down: the bundle would carry two answers to what comes after a page.
+`sidebars.json` is the authority because it is what the site renders.
+
+**A page added with no `sidebars.json` entry ships UNREACHABLE**, which nothing caught before: the
+tarball carries it, the site never links it. The bijection is checked in both directions, and an
+`sidebars.json` node shape the walker does not recognize is REPORTED rather than skipped, because a
+node it cannot read is a node it cannot prove reachable.
+
+**Every check is a pure function over its inputs, and every failure mode has a negative control.**
+The live assertions all pass on a healthy tree, so on their own they cannot tell a working guard from
+one that cannot fail. Do not "simplify" a check by inlining it into its assertion; the controls drive
+the same function with a broken bundle the real tree never contains.
+
+**WRITING A DOCS PAGE IS INSIDE THE PHI GATE.** `docs-content/conformance.md` carries C-CDA markers,
+so it is STRUCTURALLY scanned, unlike `troubleshooting.md`, which mentions `ClinicalDocument` only in
+prose and gets the shape pass alone. Reuse the declared synthetic tokens (`Jane` / `Doe`, `MRN-00042`,
+a `DOC-` prefixed document id) rather than inventing a name, and prove the gate reaches a new page by
+seeding a violation and watching it red. A probe that cannot fail proves nothing.
 
 ## The pre-scaffold planning notes
 

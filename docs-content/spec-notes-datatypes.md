@@ -2,7 +2,7 @@
 id: spec-notes-datatypes
 title: Datatypes, codes & serialize
 sidebar_label: Datatypes & serialize
-sidebar_position: 4
+sidebar_position: 7
 ---
 
 # HL7 v3 datatypes, code systems & the serializer
