@@ -1,5 +1,5 @@
 ---
-"@cosyte/ccda": patch
+"@cosyte/ccda": minor
 ---
 
 version stamps: a document says which C-CDA release it was written for

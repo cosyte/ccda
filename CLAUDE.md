@@ -25,8 +25,10 @@ immutability + explicit mutation, and the profile system.
 - **Published on npm, public, MIT.** **This line names no version on purpose: it was stale every
   time anyone checked, so `npm view @cosyte/ccda version` is the only source of truth**, and a
   `@cosyte/ccda` version quoted elsewhere here is historical; every toolchain pin below is live and
-  means what it says. Pre-alpha, `0.0.x` ladder (ADR 0001). A published version never moves
-  backwards.
+  means what it says. **No version ladder is asserted here and none may be**: no ADR in this repo
+  fixes this package to a `0.0.x` or any other prefix, the released number is whatever the pending
+  changesets compute, and a line claiming a ladder goes stale exactly the way the version line did.
+  A published version never moves backwards.
   Why: `documentation/agent-notes.md#the-published-version-line-names-no-version`
 - **There are no stubs left.** `src/index.ts` exports a working parser (`parseCcda`), serializer
   (`serializeCcda`), document builder (`buildCcda`), and document editor (`editCcda`), plus the
@@ -426,7 +428,11 @@ Mirrors the three disciplines in the meta-repo's `documentation/conventions.md`.
    docs are: this repo's docs content (`README.md`, `docs-content/`), the meta-repo
    `documentation/repos/ccda.md` (bump its "last verified" date), and the `ecosystem-map.md`
    status table.
-2. **Version + changelog**: a Changeset (`patch` on the `0.0.x` ladder) per meaningful change.
+2. **Version + changelog**: a Changeset per meaningful change, and **the bump is classified from
+   what the change does, never defaulted**: `minor` when it adds a symbol to the package entry
+   point or adds a warning or fatal code, `patch` when it moves no published surface. Writing
+   `patch` on a changeset that names a new export is how a release computes a number its own
+   release notes contradict.
    **The changeset summary IS the changelog entry** and `CHANGELOG.md` is generated output above
    `## Released before this file was generated`: `.changeset/config.json` sets a `changelog`
    generator, so the release writes the version heading and the entry itself. **Do not hand-edit

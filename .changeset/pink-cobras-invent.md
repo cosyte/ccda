@@ -1,5 +1,5 @@
 ---
-"@cosyte/ccda": patch
+"@cosyte/ccda": minor
 ---
 
 required sections: a SHALL warning fires exactly where the normative source says it should

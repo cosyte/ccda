@@ -1,5 +1,5 @@
 ---
-"@cosyte/ccda": patch
+"@cosyte/ccda": minor
 ---
 
 subject override: an entry is never read as the patient's unless it is
