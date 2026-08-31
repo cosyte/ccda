@@ -1,5 +1,5 @@
 ---
-"@cosyte/ccda": patch
+"@cosyte/ccda": minor
 ---
 
 required sections: every document type now reports how far it was verified
