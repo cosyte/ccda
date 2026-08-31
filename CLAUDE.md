@@ -353,6 +353,17 @@ immutability + explicit mutation, and the profile system.
 - **A target ENUMERATED and never READ refuses (exit 2), any mode; `--allow-fixture` cannot reach
   exit 0 anywhere. Assert an exact code AND the tier's message: `not.toBe(0)` accepts a crash.**
   Why: `documentation/agent-notes.md#the-completeness-rule`
+- **`docs-content/` is a RELEASE ARTIFACT and is gated by TWO test files that ask different
+  questions.** `test/docs-content.test.ts` runs every ` ```ts runnable ` block against the BUILT
+  artifact; `test/docs-content-coverage.test.ts` checks export coverage, page shape and the version
+  rule, and **must never spawn a build** (parallel test files race on one `dist/`). **The export
+  inventory is COMPUTED through the TypeScript compiler API and covers TYPES**; reading the built ESM
+  namespace instead is silent about all of them. `test/docs-content-exemptions.ts` is the pressure
+  valve: exempting a symbol whose behaviour a reader can get backwards, rather than writing the page,
+  is the failure the gate exists to expose. **No page names the CURRENT version; a note dating a
+  change to a PAST version is the change record and is held by a retention floor.** **Writing a docs
+  page is inside the PHI gate**: reuse the declared synthetic tokens.
+  Why: `documentation/agent-notes.md#the-docs-content-bundle-is-gated-for-coverage-and-shape`
 - **The `CLAUDE.md` / `agent-notes.md` contract is gated, and unlike the public-surface gate above
   it BLOCKS** (it runs in the test suite, inside `parser-ci-required-checks`). **It asserts what
   THIS repo promises, never a fleet universal**: `config`, `hl7` and `workflow` carry no
