@@ -1,7 +1,8 @@
 /**
  * Barrel for the HL7 v3 datatype layer. Re-exports every datatype interface and
- * parser plus the shared `NullFlavor` / `ParseCtx` surface, so consumers and
- * the package root import from one place.
+ * parser plus the shared `NullFlavor` / `ParseCtx` surface and the sibling-wide
+ * `toObject` / `toISO` / `toDate` conversions, so consumers and the package root
+ * import from one place.
  */
 
 export {
@@ -20,3 +21,4 @@ export { parseIvlPq, type IVL_PQ } from "./ivl-pq.js";
 export { parseTs, type TS } from "./ts.js";
 export { parseIvlTs, type IVL_TS } from "./ivl-ts.js";
 export { parseEd, type ED } from "./ed.js";
+export { toObject, toISO, toDate, type DateParts, type ToDateOptions } from "./date-conversion.js";
