@@ -93,6 +93,101 @@ schema-invalid or clinically-misread timestamp. Legitimate variable precision (`
 wrong shape. It fails loud. Everything it does accept round-trips back through `parseCcda` without a
 `MALFORMED_DATETIME` warning.
 
+### Converting a `TS`: `toObject`, `toISO`, `toDate`
+
+`TS.date` answers a question most C-CDA documents never asked. It is eager and total: a value stated
+to the day is resolved to the first instant of that day, and a value carrying no `±ZZZZ` offset is
+resolved **as if it had said UTC**. That is convenient, and on an offset-less date of birth read in
+any negative-offset zone it is a day out.
+
+`toObject`, `toISO` and `toDate` are the honest reading of the same bytes, and they are the same three
+names, with the same return shapes and the same timezone rule, that every sibling `@cosyte/*` parser
+exports. They read `TS.raw`, the document's own `@value`, and never `TS.date`.
+
+```ts runnable
+import { toDate, toISO, toObject } from "@cosyte/ccda";
+
+// The `effectiveTime` of a problem observation, as this parser read it: the document
+// stated a day and no timezone, which is what a C-CDA onset date usually looks like.
+const onset = { raw: "20260628" };
+
+toObject(onset); // => { year: 2026, month: 6, day: 28 }
+toISO(onset); // => "2026-06-28"
+toDate(onset); // => undefined
+
+// The zone is the caller's to supply, and 0 is a real answer meaning "read it as UTC".
+toDate(onset, { assumeOffsetMinutes: -300 }); // => new Date("2026-06-28T05:00:00.000Z")
+toDate(onset, { assumeOffsetMinutes: 0 }); // => new Date("2026-06-28T00:00:00.000Z")
+
+// A value that states its own offset needs no help, and ignores an assumed one.
+const collected = { raw: "20260628153045.5-0500" };
+toISO(collected); // => "2026-06-28T15:30:45.5-05:00"
+toObject(collected)?.offsetMinutes; // => -300
+toObject(collected)?.millisecond; // => 500
+toDate(collected, { assumeOffsetMinutes: 600 }); // => new Date("2026-06-28T20:30:45.500Z")
+```
+
+Three rules are worth stating outright, because each is a place a conversion could have invented
+something and does not:
+
+- **`toObject` reports only what the value stated.** The result is a frozen `DateParts` whose keys are
+  exactly the components present in the document, so the precision survives the conversion:
+  `Object.keys()` on a year-precision value is `["year"]` and nothing else. Nothing is zero-filled,
+  `month` is the spec-native 1 to 12, the names are singular (`hour`, `minute`, `second`), and there is
+  no `raw`, `precision` or `valid` key. `millisecond` comes from the first three digits of the stated
+  fraction, taken verbatim and right-padded, so `.5` is 500 and `.0500` is 50. `offsetMinutes` is
+  present **if and only if** the document wrote an offset, and a stated zero offset is present as `0`.
+  Delete `offsetMinutes` and what is left is accepted, unchanged and unrenamed, by
+  `Temporal.PlainDateTime.from` and by luxon's `DateTime.fromObject`. Neither library is a dependency
+  here and neither is imported; the shape is chosen so that handing the parts to one costs nothing.
+- **`toISO` truncates and appends nothing.** A month-precision value renders `"2026-06"`, not
+  `"2026-06-01T00:00:00Z"`, and fractional digits are rendered exactly as written rather than padded to
+  three. An offset is appended when the value stated one, `Z` for a stated zero and `+HH:MM` / `-HH:MM`
+  otherwise. **When the value stated no offset, no `Z` is fabricated**: the string is deliberately
+  zone-less. Because a stated zero renders `Z` rather than `+0000`, this is not a byte round-trip of
+  the wire value; `serializeCcda` is still the round-tripping route.
+- **`toDate` returns a `Date` only when the zone is determinate.** The value carried an offset, or the
+  caller passed `assumeOffsetMinutes` (a `ToDateOptions`, signed minutes east of UTC, and an explicit
+  `0` means "treat this naive value as UTC"). With neither, the answer is `undefined`. **The host
+  machine's timezone is never read and UTC is never assumed**, so the same document converts to the
+  same instant on a laptop in Denver and a container in Frankfurt. A value's own offset always wins
+  over an assumed one.
+
+So there are values where `ts.date` is a populated `Date` and `toDate(ts)` is `undefined`, on the same
+object, and that divergence is deliberate. `TS.date` is unchanged and stays unchanged: code reading it
+today reads exactly what it read before. Reach for `TS.date` when you want the existing eager
+behaviour and know it assumes UTC. Reach for `toObject` when the precision matters (a birth date
+stated to the month is not a birth date at midnight on the first), for `toISO` when you are writing
+the value out or comparing it as text, and for `toDate` when you need an instant and are willing to
+say which zone an offset-less value was written in.
+
+Because all six `@cosyte/*` parsers export these three names, a file consuming two of them has to
+alias the imports or namespace them:
+
+```ts
+import { parseCcda, toISO as ccdaToISO } from "@cosyte/ccda";
+import { parseDtm, toISO as hl7ToISO } from "@cosyte/hl7";
+
+const document = parseCcda(xml);
+
+// A C-CDA encounter period: `effectiveTime` is an `IVL_TS`, so each bound is a `TS`.
+const admitted = ccdaToISO(document.getEncounters()[0]?.effectiveTime?.low);
+
+// The same conversion, over the value the v2 parser read out of an OBX-14.
+const observedAt = hl7ToISO(parseDtm("20260628153045-0500"));
+```
+
+The namespace form is the alternative, and reads better when a file uses several of the conversions
+from each package:
+
+```ts
+import * as ccda from "@cosyte/ccda";
+import * as hl7 from "@cosyte/hl7";
+
+ccda.toObject(effectiveTime);
+hl7.toObject(dtm);
+```
+
 ## Code systems: recognition, not membership
 
 Coded slots are validated **structurally**: `checkCodeSlot` checks that a value's `@codeSystem` OID is
