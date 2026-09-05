@@ -22,25 +22,12 @@ immutability + explicit mutation, and the profile system.
 
 ## Status
 
-- **Published on npm, public, MIT.** **This line names no version on purpose: it was stale every
-  time anyone checked, so `npm view @cosyte/ccda version` is the only source of truth**, and a
-  `@cosyte/ccda` version quoted elsewhere here is historical; every toolchain pin below is live and
-  means what it says. **No version ladder is asserted here and none may be**: no ADR in this repo
-  fixes this package to a `0.0.x` or any other prefix, the released number is whatever the pending
-  changesets compute, and a line claiming a ladder goes stale exactly the way the version line did.
-  A published version never moves backwards.
+- **Published on npm, public, MIT. This line names no version and asserts no version ladder
+  on purpose**: `npm view @cosyte/ccda version` is the only source of truth, and a published version never moves backwards.
   Why: `documentation/agent-notes.md#the-published-version-line-names-no-version`
-- **There are no stubs left.** `src/index.ts` exports a working parser (`parseCcda`), serializer
-  (`serializeCcda`), document builder (`buildCcda`), and document editor (`editCcda`), plus the
-  `CcdaDocument` model, the HL7 v3 datatype layer, the entry extractors for fourteen families
-  (Problems / Medications / Allergies / Results / Vital Signs / Immunizations / Procedures /
-  Encounters / Social-History smoking status / Plan of Treatment / Functional Status / Mental Status
-  / Family History / Past Medical History), the recognition tables (`documentTypeForOid`,
-  `sectionForTemplateRoot`, `sectionForLoinc`), the required-section SHALL tables
-  (`requiredSectionKeys`, `missingRequiredSections`), the code-system OIDs + `checkCodeSlot`, the
-  computable UCUM grammar, the bring-your-own `TerminologyAdapter` contract, the vendor-profile
-  system (`defineCcdaProfile`, `ccdaProfiles`, `SAFETY_CRITICAL_CODES`), and
-  `WARNING_CODES` / `FATAL_CODES`.
+- **There are no stubs left.** `src/index.ts` exports a working parser, serializer, builder and
+  editor, the model, the datatype layer, fourteen entry-extractor families and the profile system.
+  Why: `documentation/agent-notes.md#there-are-no-stubs-left`
 - **Boundaries that are real, and stated under-warning. They are FILED, NOT FIXED.** Relocating the
   reasoning closed none of them, and the 64 unresolvable `@example` imports below are still an open
   defect. Do not describe the package as more complete than these:
@@ -48,332 +35,118 @@ immutability + explicit mutation, and the profile system.
     **recognizes** all twelve, only building is limited.
     Why: `documentation/agent-notes.md#what-buildccda-emits-and-what-it-does-not`
   - **A narrative label is REFUSED, never fabricated: `narrativeLabel()` THROWS when a PRESENT coded
-    object carries no `displayName`. Never render a confident sentence the entry does not support,
-    and never substitute a different one** - `?? "No known allergies"` emitted a positively-asserted
-    allergy as its own negation, byte-identical to the negated form, warnings `[]`, in `0.0.11`.
-    **An ABSENT optional object keeps whatever fallback it has**, where it has one; a PRESENT
-    unlabelled one is refused, empty and whitespace-only included, and **only NARRATIVE labels are
-    guarded**. `editCcda` inherits it via `buildSectionComponent`.
+    object carries no `displayName`. Never render a confident sentence the entry does not support.**
     Why: `documentation/agent-notes.md#a-narrative-label-is-refused-never-fabricated`
   - **OPEN DEFECT, filed rather than fixed: 64 `@example` blocks cite an import that does not
-    resolve**, across four modules; **four reach consumers** in the published `.d.ts`. **The
-    predicate is "reaches `dist`", NOT "is on the entry point".** If you pick it up, parse the TSDoc
-    properly; do not grow the refused specifier regex. The per-symbol fix does not need the gate.
+    resolve**, across four modules; **four reach consumers** in the published `.d.ts`.
     Why: `documentation/agent-notes.md#the-64-unresolvable-example-imports`
   - **Recognition resolves a disagreeing section silently, in BOTH of its two shapes, with no
-    warning**: `templateId` vs LOINC resolves on the root, and root vs root resolves on document
-    order. Scope any eventual warning code to **both** halves.
+    warning.** Scope any eventual warning code to **both** halves.
     Why: `documentation/agent-notes.md#section-recognition-resolves-a-disagreement-silently`
-  - A `TerminologyAdapter` is consulted at the **five `CodeSlot`s only** (`problem`, `medication`,
-    `allergen`, `route`, `vaccine`), on the slot's primary coding; `<translation>` alternates are
-    preserved but never slot-checked. **A clean run means those five slots passed, NOT that the
-    document was terminology-verified.** `MISSING_CODE_SYSTEM` and `MISSING_CODE_VALUE` are
-    safety-critical and no profile may tolerate them.
+  - A `TerminologyAdapter` is consulted at the **five `CodeSlot`s only**. **A clean run means those
+    five slots passed, NOT that the document was terminology-verified.**
     Why: `documentation/agent-notes.md#the-terminologyadapter-is-consulted-at-five-codeslots-only`
   - **A `nullFlavor` asserted beside a value is a contradiction, not a refinement**
-    (`CONTRADICTORY_NULL_FLAVOR`, safety-critical), and the derived reading is **withheld** wherever
-    a verbatim copy survives. **Route every new datatype and every inline value arm through
-    `contradictsAssertedValue` (the `INT`/`ST` arms of `readObservationValue` are wired by hand) or
-    this claim stops being true.** Metadata beside a `nullFlavor` is coherent and stays silent.
+    (`CONTRADICTORY_NULL_FLAVOR`, safety-critical), and the derived reading is **withheld**.
     Why: `documentation/agent-notes.md#a-nullflavor-asserted-beside-a-value-is-a-contradiction`
   - **A `<subject>` declaration decides WHOSE data an entry is, and the whole top-level `<entry>` is
     withheld from every record-target read path (`SUBJECT_CONTEXT_OVERRIDE`, safety-critical).**
-    **PRESENCE is the trigger: never compare a declared subject with the record target**, whatever it
-    names, and never "improve" it into a match test. **The unit is the top-level entry, for
-    withholding AND for counting; do not surgically remove the governed statement and return the
-    rest.** The choke point is `readableEntries(sectionEl, ctx)` in `model/entries/subject.ts`;
-    governance is resolved from the section's DOM **ancestors**, and the emission is **memoized per
-    (context, section)** because the aggregate walk runs fourteen extractors over every section. **A
-    Family History Organizer's own subject slot is NEVER an override whatever it contains**, and all
-    four family-history faces are unchanged. **That carve-out is READ-SIDE and reaches ONE element:
-    the organizer `entryAct(entry, FAMILY_HISTORY_ORGANIZER)` returns, matched by IDENTITY so nothing
-    nested deeper claims it, and only while it carries no `RECORD_TARGET_ENTRY_ROOTS` root. Never
-    re-widen it to `hasTemplateRoot(el, FAMILY_HISTORY_ORGANIZER)`**: that shipped, and one extra
-    `<templateId>` on a Result Organizer or a Problem Concern Act switched all thirteen families off
-    at once. **`extractFamilyHistory` and `flagMisplacedEntries`
-    deliberately still read every entry: do not route them through the choke point**, and
-    `extractFamilyHistory` reports the section's overrides on the caller's channel while returning its
-    contents whole. **The code is the only one that says WHOSE data an entry is, which is NOT the same
-    as the only one that can fire about a withheld entry** (`SECTION_PLACEMENT_SUSPECT` and the
-    family-history reads still do); the stronger claim was published once and was false. The count is per
-    section and sums; a declaring section gets its own single instance only when it governs no entry
-    anywhere beneath it.
     Why: `documentation/agent-notes.md#a-subject-declaration-withholds-the-whole-entry-and-presence-is-the-trigger`
   - **The withholding rule is "was this reading manufactured beside a surviving verbatim copy", not
-    "does this field look dangerous", and it applies at whatever layer manufactures.** `pickMrn`
-    returns `undefined` when the **first** `patientRole/id` is null-marked and **must never
-    substitute the next `<id>`**. `templateId` is the stated exception, not a member of that list.
-    The other identity slots (`ClinicalDocument.id`, `setId`, `parentDocument/id`, entry-level
-    `<id>`s) are only ever reported whole beside the warning, have no naked-string accessor, and are
-    **deliberately left alone**; adding an accessor or extending read-side withholding to them
-    undoes a decision. `editCcda` refuses an `RPLC` from a null-marked `ClinicalDocument.id` rather than
-    laundering the marking away.
+    "does this field look dangerous", and it applies at whatever layer manufactures.**
     Why: `documentation/agent-notes.md#the-withholding-rule-pickmrn-and-the-templateid-exception`
   - A medication/vaccine product is read from **either** arm of the CDA R2 `ManufacturedProduct`
-    choice, at every consumable call site. `MEDICATION_PRODUCT_ARM_UNEXPECTED` is tolerable only
-    **conditionally**, and that argument names **three** unquietable companions, not two. **Do not
-    restore the older claim that the alternate arm's code "is read, not refused" and that every
-    check "applies to it unchanged" full stop**; it is false once the conflict state exists. Arms
-    naming **different** products is `MEDICATION_PRODUCT_ARM_CONFLICT` (safety-critical) and **no
-    code is selected**. No arm yielding a code is `MISSING_PRODUCT_CODE`, **safety-critical**, never
-    a silent `undefined`.
+    choice, at every consumable call site; arms naming **different** products select **no code**.
     Why: `documentation/agent-notes.md#the-manufacturedproduct-choice-and-its-two-arms`
   - **Disagreement is read across every arm and every coding; SELECTION IS NOT, and that asymmetry
-    is load-bearing.** Translations are a **fallback, never an addition**. **Never "improve" this
-    into a set-intersection rule where a shared translation withdraws a conflict.** **Where BOTH
-    arms fall back to translations, an arm merely offering an extra alternate the other stayed quiet
-    about is elaborating its own concept, which is what v3 says a `<translation>` does, and is
-    deliberately NOT a conflict: a shorter list is not a denial.** Requiring the sets to cover each
-    other drew an unquietable safety-critical code on a coherent document. Every branch may
-    only ever make the conflict fire **more than the base rule would, never less**, and firing more
-    means **withholding**
-    more, so **"no product code stops being reported" is a FALSE way to state the invariant; do not
-    restore it.** **That monotonicity is the safety property of this whole area and any change here
-    must preserve it**; a matrix in `test/entries.test.ts` pins it.
+    is load-bearing.** Translations are a **fallback, never an addition**.
     Why: `documentation/agent-notes.md#disagreement-is-read-across-every-arm-and-coding-selection-is-not`
   - `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY` (**safety-critical**) and
-    `MEDICATION_PRODUCT_ARM_REPEATED` (not) report two formerly silent states without changing what
-    is read. **Where the coding is reachable depends on which arm holds it: on the arm that was NOT
-    selected it is not on the model at all and only `doc.toString()` has it**; on the selected arm
-    it is somewhere on `drug.translation`, which must be **searched**, never read at `[0]`. The
-    unquietable companions number **four**, not three.
+    `MEDICATION_PRODUCT_ARM_REPEATED` (not) report two formerly silent states without changing what is read.
     Why: `documentation/agent-notes.md#the-translation-only-and-repeated-arm-states`
   - **A repeated `<code>` on ONE arm is `MEDICATION_PRODUCT_CODE_REPEATED` (safety-critical),
-    emitted per arm** and positioned on the arm that carries the repeat. **The comparison was
-    widened to every `<code>`; SELECTION WAS NOT. Do not "finish the job" by widening it**, and do
-    not rank candidates on completeness. Two matrix rows exist solely to fail loudly if anyone does.
+    emitted per arm.** **The comparison was widened to every `<code>`; SELECTION WAS NOT.**
     Why: `documentation/agent-notes.md#a-repeated-code-element-on-one-arm`
   - **State the monotonicity invariant precisely: "no row goes from warned to silent, and no row
-    trades a safety-critical code for a weaker one" - NOT "no row loses a warning", which is
-    false.** One slice broke even that form, once, measured and deliberately; **do not generalize
-    that exception.**
+    trades a safety-critical code for a weaker one" - NOT "no row loses a warning", which is false.**
     Why: `documentation/agent-notes.md#the-precise-form-of-the-monotonicity-claim`
   - **A Planned Medication Activity's `code` is the DRUG, and the consumable is read whether or not
-    the act carries its own `<code>`.** `plannedCodeElement` must **never** return before calling
-    `consumableProductCode` for this variant; it did, and made every product warning unreachable
-    there. The act `<code>` is deliberately not on the model and round-trips through `serializeCcda`.
+    the act carries its own `<code>`.**
     Why: `documentation/agent-notes.md#a-planned-medication-activity-code-is-the-drug`
   - **A planned medication's drug is slot-checked at the `medication` binding; the other five
-    planned kinds are not slot-checked at all. Do not "finish the job" by wiring them.** Leaving
-    them unchecked is a **choice, not a necessity** (`checkCodeSlot` raises `MISSING_CODE_VALUE` and
-    `MISSING_CODE_SYSTEM` before it reads `SLOT_BINDINGS`). **Four** codes became newly reachable,
-    not five: `DEPRECATED_CODE_SYSTEM` cannot fire at the `medication` slot in either place.
+    planned kinds are not slot-checked at all. Do not "finish the job" by wiring them.**
     Why: `documentation/agent-notes.md#slot-checking-a-planned-medication-drug`
   - **`getPlannedItems()` returns SEVEN templates and the Plan of Treatment section admits ELEVEN.
-    Keep those two numbers apart.** A Planned Immunization Activity (`…22.4.120`) takes its `code`
-    from the `consumable`, never the act's own `<code>`, and is slot-checked at **`vaccine`, CVX
-    only**: **parity is with each variant's own performed twin, never between the two planned
-    variants.** **`PLANNED_VARIANTS` is ORDERED and the immunization row is deliberately LAST.**
-    Goal Observation is `moodCode="GOL"`, which `classifyDisposition` calls neither performed nor
-    planned, so returning it would contradict this repo's mood model. Whether the other three
-    admitted-but-dropped templates are now **REPORTED** (`PLAN_ENTRY_NOT_MODELED`, 2026-08-06)
-    and still not returned; **Goal Observation deliberately is NOT reported** (it is to be modelled).
-    `BuildCcdaPlannedOrder` still lets `buildCcda` emit a Planned Medication Activity short its SHALL
-    `effectiveTime` and the field **stays optional**, but the omission is now **REPORTED**
-    (`MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, build-time only) rather than silent; requiring the
-    field breaks a published input type. `[1..1]` is
-    **not** unique to `…22.4.120`: `…22.4.42` SHALL carry one too (CONF:1098-30468), so it is the
-    other **five** that are `[0..1]`. **Do not re-derive "the other six are `[0..1]`" from anything.**
+    Keep those two numbers apart.**
     Why: `documentation/agent-notes.md#seven-planned-templates-returned-eleven-admitted-by-the-section`
-  - **A planned entry NESTED in a Planned Intervention Act (`…22.4.146`) is returned, for all seven
-    kinds; nothing else nested is. Nesting is NOT solved in general** (`…22.4.130` and `…22.4.131`
-    stay unreached, pinned by test). **An `entryRelationship` is read for what it CONTAINS and never
-    followed for what it REFERENCES.** Matching is on the `templateId` root alone, which is what
-    keeps the performed acts out. **A Goal Observation is not a second container, and do not write
-    that it is** (its `plannedComponent` targets an Entry Reference, so it _references_ a planned
-    entry rather than nesting one; written up one section earlier, under
-    `#seven-planned-templates-returned-eleven-admitted-by-the-section`) - that error came from a
-    refuter, was adopted without re-checking, and shipped to five sites. **Re-check a refuter's spec
-    claim exactly as hard as your own.**
+  - **A planned entry NESTED in a Planned Intervention Act is returned, for all seven kinds;
+    nothing else nested is. Nesting is NOT solved in general.**
     Why: `documentation/agent-notes.md#planned-entries-nested-in-a-planned-intervention-act`
   - **Three plan-surface decisions were settled 2026-08-06, all toward REPORTING rather than toward
     changing what is returned or accepted, and each has a "do not finish the job" edge.**
-    (1) `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`: the field stays optional, the **emitted XML is
-    byte-identical**, **`parseCcda` raises nothing**, and the immunization variant is **not**
-    checked. The `editCcda` half is **CLOSED (2026-08-07)**; read
-    `#closing-the-two-silent-plan-drops-2026-08-07` before touching it, because an **INPUT-reading
-    check was tried and REVERTED**.
-    (2) `PLAN_ENTRY_NOT_MODELED` reports Instruction / Handoff / Nutrition Recommendation, **not**
-    Goal Observation (that one is to be MODELLED, and a code is stable forever once shipped).
-    **Where it fires is a CHOSEN BOUND, not a containment catalog**: a direct entry in **two**
-    sections, `planOfTreatment` and `interventions`, the nested half wherever the container sits.
-    **They appear in more places than the report covers and an occurrence outside it is still
-    dropped in silence - say that, and never justify the scope with an untraced containment claim**
-    (one shipped, retracted). **Reporting is not modelling: nothing about
-    `getPlannedItems()` changed.** (3) `editCcda` **keeps minting** a `setId` and labels the minted
-    one only. **State the residual: nothing forces a receiver to read the label, and a `false` never
-    certifies an id is real.**
     Why: `documentation/agent-notes.md#the-three-plan-surface-decisions-of-2026-08-06`
   - **The Interventions Section (`…21.2.3`, LOINC `62387-6`) lives in the `…10.20.21.2.*` arc, not
-    the `…10.20.22.2.*` arc every other catalog section uses, and `…10.20.22.2.3` is RESULTS. Do not
-    "normalize" the arc.** **Do not re-add a CONF id or a LOINC release number here**: both were
-    invented precision, removed rather than re-guessed. Every other spec claim on this entry is
-    **stated, not traced**, which licenses nothing about `required-sections.ts`.
-    **`UNKNOWN_SECTION_CODE` is NOT withdrawn on "every document carrying `62387-6`"** - that
-    universal was published once and is false.
+    the `…10.20.22.2.*` arc every other catalog section uses. Do not "normalize" the arc.**
     Why: `documentation/agent-notes.md#the-interventions-section-and-its-oid-arc`
   - **`MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`'s precondition is each arm's LEAD `<code>`, and the
-    message must keep saying so.** A safety-critical warning that misdescribes the document it is
-    about is the same defect as one that points at a coding that is not there.
+    message must keep saying so.**
     Why: `documentation/agent-notes.md#the-translation-only-precondition-is-each-arms-lead-code`
   - **No warning or fatal factory takes a value parameter, and no message interpolates one**
-    (`PHI-WARNING-MESSAGE-LEAK`). **Do not add a parameter carrying document text back to any
-    factory, and do not add a `snippet`-style raw field, not even opt-in.** A sender controls a
-    "structural" attribute exactly as it controls a clinical one, so **the bound is the absence of
-    the parameter, not the good behaviour of the caller.** `@cosyte/test-utils` is pinned `^0.0.2`:
-    **a caret on a `0.0.x` resolves EXACTLY**, so `^0.0.1` silently tests against a kit with no
-    runner.
+    (`PHI-WARNING-MESSAGE-LEAK`). **The bound is the absence of the parameter.**
     Why: `documentation/agent-notes.md#no-warning-or-fatal-factory-takes-a-value-parameter`
-  - **The bound is applied at the MODEL as well, and that is the load-bearing half** (`hl7` bounded
-    its messages, verified green, and `deid` still leaked through an unbounded model field). **Bound
-    EVERY field of a `templateId`, not the two that look like locators, and extend `modelIdentifiers`'
-    sweep in the same edit** - a swept set disjoint from the leaking set is the exact defect the
-    deleted `phi-guard.test.ts` had. **A shape test is not automatically a bound, and you must probe
-    the ACCEPT branch of every shape test or the slot proves nothing.** The membership lists are
-    **stated, not traced**: adding a name is cheap and safe, inventing one is the failure this repo
-    has been burned by. **"A conforming document is untouched" is FALSE as an absolute and must not
-    be restored.** `II.extension` outside a `templateId` and `CcdaSection.narrativeById`'s keys are
-    deliberately **NOT** bounded and must stay that way.
+  - **The bound is applied at the MODEL as well, and that is the load-bearing half.** **Bound EVERY
+    field of a `templateId`, and extend `modelIdentifiers`' sweep in the same edit.**
     Why: `documentation/agent-notes.md#the-phi-bound-is-applied-at-the-model-as-well`
   - **`UNKNOWN_NAMESPACE_PREFIX` is raised from `enforceStructureLimits`, the package's only
     exhaustive traversal, and REPLAYED after the model is built, never emitted where it is found.**
-    **A namespace deviation must never take a fatal's or a safety-critical code's place.** **A probe
-    that cannot fail proves nothing.** Once per distinct namespace bounds only the **benign** case;
-    **do not write it up as a hostile-input bound.** **Attributes are deliberately NOT swept; do not
-    "finish the job" by adding them.** **If you add a diagnostic about a node this parser does not
-    navigate, that walk is where it goes.**
     Why: `documentation/agent-notes.md#where-the-unknown-namespace-prefix-warning-is-raised`
-  - **`CcdaPosition.templateId` is populated by FOUR codes, and by nothing else** (it was three;
-    `TEMPLATE_EXTENSION_UNMODELED_RELEASE` joined its sibling at CCDA-5, naming the same matched
-    document-type root). **Enumerate the set, never carry this numeral forward.**
-    `MISSING_TEMPLATE_ID` and `UNKNOWN_DOCUMENT_TEMPLATE` carry none **on purpose**; **filling a
-    field because it can be filled is not the same as populating it, and do not "finish the job" by
-    restoring it.** `REQUIRED_SECTIONS_NOT_EVALUATED` carries none either, and for the same reason
-    `UNKNOWN_DOCUMENT_TEMPLATE` does not: its subject is the document's whole obligation, not one
-    template. **A `match` on a field the warning does not carry is inert, not broad.** Still
-    open, filed: `defineCcdaProfile` accepts such an inert tolerance rather than refusing it.
+  - **`CcdaPosition.templateId` is populated by FOUR codes, and by nothing else.** **Enumerate the
+    set, never carry this numeral forward.**
     Why: `documentation/agent-notes.md#what-populates-ccdaposition-templateid`
   - **The version stamp on the resolving `templateId` has THREE readings and the two stamp codes are
-    NOT interchangeable.** `TEMPLATE_EXTENSION_ABSENT` means "no `@extension` at all" and its message
-    is frozen and byte-identical to the one that shipped; **do not widen it** to cover a stamp that is
-    merely not R2.1, which is what `TEMPLATE_EXTENSION_UNMODELED_RELEASE` is for. **A stamp a message
-    NAMES comes from `CCDA_RELEASE_STAMPS`, this package's closed table, never from the document**
-    (the `@extension` is a lookup key, not a value any message interpolates), and a non-member selects
-    the generic wording that names no stamp. An unmodelled stamp means the required-section obligation
-    is **reported unevaluated**, never reduced: **the R1.1-origin reduction is a reading of a document
-    that carries NO stamp and must never be the fallback for one from the future**, which is how a
-    `2024-05-01` CCD silently lost Social History and Vital Signs through `0.0.15`. The R2.1 test stays
-    **EXISTENTIAL** and beats a later stamp on the same root. **`legacyR11` deliberately does not
-    tolerate the unmodelled-release code**; an R1.1 receive-tolerance profile never silences a
-    future-release stamp. `CCDA_CONFORMANCE_RELEASE` is the exported answer to "which release does this
-    validate against" and **recognizing `2024-05-01` did not retarget anything**: only a change moving
-    that value does.
+    NOT interchangeable.** An unmodelled stamp reports the obligation unevaluated, never reduced.
     Why: `documentation/agent-notes.md#the-three-readings-of-a-document-level-version-stamp`
   - **`NULL_FLAVORS` is the WHOLE v3 NullFlavor code system, seventeen concepts** (it was eight).
-    **Transcribe from the published code system, never from memory.** Widening did not weaken the
-    PHI bound it carries: membership in a closed set of literals this package owns, never a shape
-    test. **If you touch `NULL_FLAVORS`, the namespace sweep or `position.templateId`, re-run
-    `test/dead-diagnostics-matrix.test.ts` against the previous tree and diff before you update its
-    snapshot; the list is public surface and a published version never moves backwards.**
+    **Transcribe from the published code system, never from memory.**
     Why: `documentation/agent-notes.md#the-v3-nullflavor-code-system-has-seventeen-concepts`
   - `SAFETY_CRITICAL_CODES` is a frozen read-only view, not a `Set` instance: every read operation
     works (including spread), but `instanceof Set` is `false`.
     Why: `documentation/agent-notes.md#the-safety-critical-codes-export-is-a-frozen-view`
   - **Every one of the twelve required-section (SHALL) tables in `src/parser/required-sections.ts`
-    carries a `verification` state** (`traced-complete` / `traced-partial` / `untraced` /
-    `not-applicable`, via `requiredSectionStatus`) **and names the artifact + artifact revision it
-    was read from** (`status.source`; the revision is the ARTIFACT's own, never the date anyone read
-    it). **Empty means "no unconditional in-catalog SHALL section is asserted yet", never "this type
-    has no requirements"**, and the state says which emptiness it is. **A state is what was READ for
-    that type, never a recorded id.** **ALL TWELVE ARE READ NOW and `untraced` is reported by
-    nothing; it stays in the union because it is the honest state for an unread type. Do not broaden
-    or narrow a set without the Schematron in hand.** **A SHALL asserted must be one the source
-    states UNCONDITIONALLY: asserting a SHOULD or one half of a choice mis-flags a conformant
-    document, which is the same defect as missing a SHALL with the sign flipped. Discharge
-    Medications was asserted as a Discharge Summary SHALL and is a SHOULD in that document's
-    WARNINGS rule (CONF:1198-30525); do not re-add it. Read the rule's CONTEXT PREDICATE too**: a
-    key first asserted from a rule whose context carries `@extension='2015-08-01'` is stamp-scoped,
-    a key that predates the trace keeps its unstamped reading, and a key WITHDRAWN as SHOULD or
-    choice is withdrawn from BOTH readings. **The CCD row is `traced-complete`: SIX (Allergies,
-    Medications, Problems, Results, Social History, Vital Signs), the last two ONLY on an
-    R2.1-STAMPED document. `build-ccda.ts` names the same six; keep its conditional Social History
-    emit guarded or a CCD emits it twice**
-    (`#the-ccd-shall-set-settled-against-the-normative-schematron`). **Consultation Note's three
-    (CONF:1198-28907 / -28911 / -28929) are ALL stamp-scoped; Progress / Procedure / Operative /
-    Diagnostic Imaging assert NOTHING on purpose (out-of-catalog sections or choices, each named
-    with its reason), and Unstructured Document is `not-applicable`, it carries no `structuredBody`
-    at all.** **A choice is ONE row whose `sourceName` enumerates its alternatives, never a row per
-    alternative**: one id against two sections breaks the provenance invariant.
+    carries a `verification` state and names the artifact + artifact revision it was read from.**
     Why: `documentation/agent-notes.md#the-required-section-shall-tables-and-their-provenance`
   - **The six CCD SHALL sections do NOT share one stamp: Medications is `2014-06-09`, the rest
-    `2015-08-01`.** Read the `@root`+`@extension` PAIR, not the root alone: the `R21` default
-    failed CONF:1198-30664 on every CCD emitted.
+    `2015-08-01`.** Read the `@root`+`@extension` PAIR, not the root alone.
     Why: `documentation/agent-notes.md#the-medications-section-stamp-is-2014-06-09`
   - `editCcda` covers **twelve single-list section kinds**; Functional Status, Mental Status and the
-    Referral Note's two narrative-only sections are **buildable but not editable**. There is no
-    entry-level append and no section removal.
+    Referral Note's two narrative-only sections are **buildable but not editable**.
     Why: `documentation/agent-notes.md#what-editccda-covers`
   - A built document round-trips through `parseCcda` with zero warnings, but its conformance is
     **expected, not proven**: grounded against the raw C-CDA R2.1 IG text, not a validator run.
     Why: `documentation/agent-notes.md#a-built-documents-conformance-is-expected-not-proven`
 - **XML-parser dependency: ratified (one-way door).** `@xmldom/xmldom`, exact-pinned, **1 of the
-  ≤ 3** runtime-dep cap, per `docs/adr/0001-xml-parser.md` (**Accepted**). Do **not** add a _second_
-  XML library; reuse this one, and coordinate `@cosyte/ncpdp` onto the same substrate.
+  ≤ 3** runtime-dep cap, per `docs/adr/0001-xml-parser.md` (**Accepted**).
   Why: `documentation/agent-notes.md#the-xml-parser-dependency-ratified`
-- **Public-surface gate present and reporting, but NOT yet blocking** (`PUBLIC-SURFACE-HYGIENE`).
-  `pnpm check:no-internal-refs` is on the meta-repo's `verify.sh` ladder, but its context is not in
-  `parser-ci-required-checks`, so it blocks nothing; **closing that is a ruleset change, not a file
-  change.** **Ported from `ncpdp`'s copy, NOT `hl7`'s** - a "resync with hl7" that restores
-  `RULE_COUNT=6` deletes rule 7, and the script refuses to run if it does. **Measure the doc
-  comments first, and quote a count with the tree it was taken on. The prefix list, designation
-  exclusions, phase guards and self-test samples are re-derived for C-CDA and must not be inherited
-  wholesale.** `CHANGELOG.md` is exempt org-wide (founder, 2026-07-29): do not re-litigate it.
+- **Public-surface gate present and reporting, but NOT yet blocking** (`PUBLIC-SURFACE-HYGIENE`);
+  **closing that is a ruleset change, not a file change.**
   Why: `documentation/agent-notes.md#the-public-surface-gate`
 - **Em-dash gate present AND BLOCKING.** `U+2014` is banned outright by founder directive, and
-  **when it goes red the fix is never to re-encode the character**: rewrite with a period, colon,
-  comma or parentheses. `no-emdash` is required via the repository-level `emdash-required-check`
-  ruleset; **re-read the rulesets rather than this line.** It scans every
-  tracked file **except the script itself**, **and** the PR title, body and commit messages, so
-  **keep the script free of the literal character.** **It is the text-only variant, and dropping
-  `grep -I` is the load-bearing part** (`src/profiles/merge.ts` carries raw NULs and would otherwise
-  be **silently exempt**). **Do not swap in `website`'s variant**, and do not reach for `pathways`'
-  `git check-attr binary` without first adding a `.gitattributes`. **Do not trust a copy count
-  written down anywhere, including here** - enumerate at carry-back time. **The gate covers new
-  text only and does not rewrite history.**
+  **when it goes red the fix is never to re-encode the character**: rewrite with punctuation.
   Why: `documentation/agent-notes.md#the-em-dash-gate`
 - **`phi-scan` scans EVERY tracked file now, markdown included; the two exemptions are literal
-  paths, and writing docs is inside the gate.** **THERE ARE THREE ROUTES, not two** (`paths` is the
-  third; miscounting them shipped an `INTRODUCED`, twice). **Never widen `isSourceCode`: it also
-  SUBTRACTS the structured scan in `looksLikeCda`.** A refusal exits **2**.
-  **Write no count in this area; three drafts wrote one and were wrong.**
+  paths, and writing docs is inside the gate.** **THERE ARE THREE ROUTES, not two.**
   Why: `documentation/agent-notes.md#the-corpus-every-phi-scan-route-read-past`
 - **`all` mode UNIONS the bytes git carries with the walk, deduped by CONTENT not path (the EOL
-  axis). Keep every `git` call in `buildTargetsForAll` AFTER the walk and BEFORE the first read; do
-  not decorate `Target.path`. A non-blob index mode or an EMPTY index refuses. `ccda` had NO real
-  unscanned corpus: the four states were reproduced, not found.**
+  axis).** A non-blob index mode or an EMPTY index refuses.
   Why: `documentation/agent-notes.md#the-all-mode-sweep-reads-the-bytes-git-carries`
 - **A target ENUMERATED and never READ refuses (exit 2), any mode; `--allow-fixture` cannot reach
   exit 0 anywhere. Assert an exact code AND the tier's message: `not.toBe(0)` accepts a crash.**
   Why: `documentation/agent-notes.md#the-completeness-rule`
 - **`docs-content/` is a RELEASE ARTIFACT and is gated by TWO test files that ask different
-  questions.** `test/docs-content.test.ts` runs every ` ```ts runnable ` block against the BUILT
-  artifact; `test/docs-content-coverage.test.ts` checks export coverage, page shape and the version
-  rule, and **must never spawn a build** (parallel test files race on one `dist/`). **The export
-  inventory is COMPUTED through the TypeScript compiler API and covers TYPES**; reading the built ESM
-  namespace instead is silent about all of them. `test/docs-content-exemptions.ts` is the pressure
-  valve: exempting a symbol whose behaviour a reader can get backwards, rather than writing the page,
-  is the failure the gate exists to expose. **No page names the CURRENT version; a note dating a
-  change to a PAST version is the change record and is held by a retention floor.** **Writing a docs
-  page is inside the PHI gate**: reuse the declared synthetic tokens.
+  questions.** **Writing a docs page is inside the PHI gate**: reuse the declared synthetic tokens.
   Why: `documentation/agent-notes.md#the-docs-content-bundle-is-gated-for-coverage-and-shape`
 - **The `CLAUDE.md` / `agent-notes.md` contract is gated, and unlike the public-surface gate above
-  it BLOCKS** (it runs in the test suite, inside `parser-ci-required-checks`). **It asserts what
-  THIS repo promises, never a fleet universal**: `config`, `hl7` and `workflow` carry no
-  `agent-notes.md` at all. **Do not promote it to an umbrella script.** It scans **EVERY tracked
-  file, no exclusion list: do not re-add a binary/NUL skip** - the first cut had one and silently
-  exempted `src/profiles/merge.ts`. The bare `` `#anchor` `` form is
-  confined to `CLAUDE.md` by shape and scope and **must not be widened** (`#id`/`#62` are
-  XML and C-CDA narrative references). **Never delete an imperative or a section to get green.**
+  it BLOCKS.** **Never delete an imperative or a section to get green.**
   Why: `documentation/agent-notes.md#the-agent-notes-contract-gate`
 
 ## Tech Stack (the shared `@cosyte/*` standard)
