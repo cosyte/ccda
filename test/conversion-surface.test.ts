@@ -325,6 +325,10 @@ describe("toObject", () => {
     expect(toObject(parsed("2026062815-05"))?.offsetMinutes).toBe(-300);
     expect(toObject(parsed("2026062815+0530"))?.offsetMinutes).toBe(330);
     expect(toObject(parsed("2026062815-0930"))?.offsetMinutes).toBe(-570);
+    // Rendered and used, not merely decoded.
+    expect(toISO(parsed("2026062815+05"))).toBe("2026-06-28T15+05:00");
+    expect(toDate(parsed("2026062815+05"))).toStrictEqual(instant("2026-06-28T10:00:00.000Z"));
+    expect(toDate(parsed("2026062815-05"))).toStrictEqual(instant("2026-06-28T20:00:00.000Z"));
   });
 
   it("reads the millisecond from the digits, never from a floating-point fraction", () => {
