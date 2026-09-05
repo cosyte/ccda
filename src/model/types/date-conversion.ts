@@ -310,6 +310,14 @@ export function toISO(value: TS | null | undefined): string | undefined {
  *   assumed, and no `Date` is returned. This is where the surface parts company with
  *   `TS.date`, which resolves the same value to UTC.
  *
+ * An `assumeOffsetMinutes` that names no usable zone is refused the same way, with `undefined`:
+ * `NaN` and the two infinities are not a number of minutes, and a finite offset large enough to
+ * push the result outside the range a JS `Date` holds does not denote an instant either. **What
+ * never comes back is an `Invalid Date`**, which satisfies the `Date | undefined` return type
+ * and defeats its point: a caller cannot tell one from a real `Date` without testing
+ * `getTime()` for `NaN`, and `toISOString()` on it throws. Every sibling `@cosyte/*` parser
+ * answers `undefined` on exactly these inputs.
+ *
  * Components below the stated precision fill to their lowest legal value (month to 1, day to
  * 1, time to 0) **for instant construction only**: the value's own precision is untouched, and
  * {@link toObject} / {@link toISO} answer exactly as they did before the call. A four-digit
@@ -329,7 +337,12 @@ export function toDate(value: TS | null | undefined, options?: ToDateOptions): D
   if (stated === undefined) return undefined;
 
   const offsetMinutes = stated.offsetMinutes ?? options?.assumeOffsetMinutes;
-  if (offsetMinutes === undefined) return undefined;
+  // A zone is a finite number of minutes east of UTC or it is not a zone at all: `NaN` and both
+  // infinities name none, and every instant computed from one is an `Invalid Date`. Refused
+  // BEFORE it is used, rather than after it has contaminated the arithmetic. A stated offset is
+  // always finite (it comes from the literal's own two- or four-digit token), so this reaches
+  // only what the caller assumed.
+  if (offsetMinutes === undefined || !Number.isFinite(offsetMinutes)) return undefined;
 
   // Built from the epoch with the UTC setters rather than `Date.UTC` or `new Date(y, m, d)`,
   // both of which remap a year in 0 to 99 into the 1900s. The only zone input is the offset
@@ -342,5 +355,11 @@ export function toDate(value: TS | null | undefined, options?: ToDateOptions): D
     stated.second ?? 0,
     stated.fraction === undefined ? 0 : millisecondOf(stated.fraction),
   );
-  return new Date(wall.getTime() - offsetMinutes * 60_000);
+
+  // A finite offset can still be large enough to push a representable wall time outside the
+  // range a JS `Date` holds. The net is on the value actually RETURNED, after the offset has
+  // been applied, because a net taken before it cannot see the arm that produces the overflow.
+  // Report the absence rather than handing back a `Date` that fails every comparison.
+  const instant = new Date(wall.getTime() - offsetMinutes * 60_000);
+  return Number.isNaN(instant.getTime()) ? undefined : instant;
 }

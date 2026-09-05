@@ -30,7 +30,11 @@ them costs nothing to relearn. Five names are added to the package entry point:
   `undefined`. The host machine's timezone is never read and UTC is never assumed. A value's
   own offset always beats an assumed one, a year below 100 stays that year rather than being
   remapped into the 1900s, and components below the stated precision fill to their lowest
-  legal value for the instant only.
+  legal value for the instant only. An `assumeOffsetMinutes` that names no usable zone is
+  refused the same way: `NaN` and the two infinities are not a number of minutes, and a finite
+  offset large enough to push the result outside the range a JS `Date` holds denotes no
+  instant. Both answer `undefined`. What never comes back is an `Invalid Date`, which
+  satisfies the declared return type and defeats its point.
 
 None of the three ever throws, for any input: an absent value, a `TS` with no `@value`, a
 `TS` whose `@nullFlavor` contradicts a populated `@value` (the grounds on which `parseTs`

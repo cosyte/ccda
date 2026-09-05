@@ -228,6 +228,17 @@ toDate(onset, { assumeOffsetMinutes: -300 }); // 2026-06-28T05:00:00.000Z
   instant on a laptop in Denver and a container in Frankfurt. A value's own offset always beats an
   assumed one, and a value below day precision fills to the lowest legal component for the instant
   only, leaving what `toObject` and `toISO` report untouched.
+- **An `assumeOffsetMinutes` that names no usable zone is refused the same way.** `NaN` and the two
+  infinities are not a number of minutes, and a finite offset large enough to push the result outside
+  the range a JS `Date` holds does not denote an instant either. Both answer `undefined`. **What never
+  comes back is an `Invalid Date`**: it satisfies the `Date | undefined` return type and defeats its
+  point, because a caller cannot tell one from a real `Date` without testing `getTime()` for `NaN`,
+  and calling `toISOString()` on it throws.
+
+  ```ts
+  toDate(onset, { assumeOffsetMinutes: Number.NaN }); // undefined, not an Invalid Date
+  toDate(onset, { assumeOffsetMinutes: 1e15 }); // undefined: finite, but off the end of time
+  ```
 
 So there are values where `ts.date` is a populated `Date` and `toDate(ts)` is `undefined`, on the same
 object. That divergence is deliberate, and `TS.date` is unchanged: code reading it today reads exactly

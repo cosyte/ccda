@@ -125,9 +125,13 @@ toISO(collected); // => "2026-06-28T15:30:45.5-05:00"
 toObject(collected)?.offsetMinutes; // => -300
 toObject(collected)?.millisecond; // => 500
 toDate(collected, { assumeOffsetMinutes: 600 }); // => new Date("2026-06-28T20:30:45.500Z")
+
+// An offset that names no usable zone is refused, rather than answered with an Invalid Date.
+toDate(onset, { assumeOffsetMinutes: Number.NaN }); // => undefined
+toDate(onset, { assumeOffsetMinutes: 1e15 }); // => undefined
 ```
 
-Three rules are worth stating outright, because each is a place a conversion could have invented
+Four rules are worth stating outright, because each is a place a conversion could have invented
 something and does not:
 
 - **`toObject` reports only what the value stated.** The result is a frozen `DateParts` whose keys are
@@ -152,6 +156,13 @@ something and does not:
   machine's timezone is never read and UTC is never assumed**, so the same document converts to the
   same instant on a laptop in Denver and a container in Frankfurt. A value's own offset always wins
   over an assumed one.
+- **`toDate` never answers with an `Invalid Date`.** An `assumeOffsetMinutes` of `NaN` or either
+  infinity names no zone, and a finite offset large enough to push the result outside the range a JS
+  `Date` holds denotes no instant; both are refused with `undefined`, exactly as an offset-less value
+  with no assumption is. An `Invalid Date` would satisfy the declared `Date | undefined` return and
+  defeat its point, because a caller cannot tell one from a real `Date` without testing `getTime()`
+  for `NaN`, and `toISOString()` on it throws. Every sibling `@cosyte/*` parser refuses the same
+  inputs the same way.
 
 So there are values where `ts.date` is a populated `Date` and `toDate(ts)` is `undefined`, on the same
 object, and that divergence is deliberate. `TS.date` is unchanged and stays unchanged: code reading it

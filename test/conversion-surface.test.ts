@@ -434,6 +434,76 @@ describe("toDate is honest about the timezone", () => {
     }
   });
 
+  it("refuses an assumeOffsetMinutes that is not a real number of minutes", () => {
+    // `NaN` and the two infinities name no zone, so there is no instant to report. The refusal
+    // happens before the offset touches the arithmetic, which is the only place it can happen
+    // without an `Invalid Date` being constructed on the way.
+    for (const assumeOffsetMinutes of [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+    ]) {
+      expect(
+        toDate(parsed("20240229"), { assumeOffsetMinutes }),
+        String(assumeOffsetMinutes),
+      ).toBeUndefined();
+    }
+  });
+
+  it("refuses a FINITE offset that pushes the instant out of the representable range", () => {
+    // A `Number.isFinite` guard does not reach these: the offset is a real number and the wall
+    // time is representable, and only their SUM leaves the range a JS `Date` holds. The net is
+    // therefore on the value actually returned, after the offset has been applied.
+    for (const assumeOffsetMinutes of [1e15, -1e15, Number.MAX_VALUE, -Number.MAX_VALUE]) {
+      expect(
+        toDate(parsed("20240229"), { assumeOffsetMinutes }),
+        String(assumeOffsetMinutes),
+      ).toBeUndefined();
+    }
+  });
+
+  it("never returns an Invalid Date, whatever offset it is handed", () => {
+    // The shape both refusals exist to prevent: an object wearing a `Date`'s type while carrying
+    // no instant, which a caller cannot tell from a real one without probing `getTime()` for NaN
+    // and whose `toISOString()` throws. Every sibling parser answers `undefined` here.
+    for (const assumeOffsetMinutes of [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      1e15,
+      -1e15,
+      Number.MAX_VALUE,
+    ]) {
+      const out = toDate(parsed("20240229"), { assumeOffsetMinutes });
+      expect(out, String(assumeOffsetMinutes)).toBeUndefined();
+      expect(
+        out instanceof Date && Number.isNaN(out.getTime()),
+        `an Invalid Date came back for ${String(assumeOffsetMinutes)}`,
+      ).toBe(false);
+    }
+  });
+
+  it("does not over-refuse: a large offset that still lands in range converts", () => {
+    // About 1.9 years' worth of minutes: absurd as a timezone, still an instant, still returned.
+    expect(toDate(parsed("20260628"), { assumeOffsetMinutes: 1e6 })).toStrictEqual(
+      instant("2024-08-02T13:20:00.000Z"),
+    );
+    expect(toDate(parsed("20260628"), { assumeOffsetMinutes: -1e6 })).toStrictEqual(
+      instant("2028-05-22T10:40:00.000Z"),
+    );
+  });
+
+  it("ignores an unusable assumed offset when the value states its own", () => {
+    // The stated offset wins outright, so an unusable assumption never reaches the arithmetic
+    // and never turns a determinate value into a refusal.
+    const ts = parsed("20260628153045-0500");
+    for (const assumeOffsetMinutes of [Number.NaN, Number.POSITIVE_INFINITY, 1e15]) {
+      expect(toDate(ts, { assumeOffsetMinutes }), String(assumeOffsetMinutes)).toStrictEqual(
+        instant("2026-06-28T20:30:45.000Z"),
+      );
+    }
+  });
+
   it("fills components below the stated precision to their lowest legal value", () => {
     expect(toDate(parsed("2026"), { assumeOffsetMinutes: 0 })).toStrictEqual(
       instant("2026-01-01T00:00:00.000Z"),
