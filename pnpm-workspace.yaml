@@ -1,0 +1,36 @@
+# ---------------------------------------------------------------------------
+# INSTALL HARDENING. These two settings are the only defence this repository has
+# against a compromised release during the window between its publication and
+# its removal from the registry. pnpm 10.34.5 ships both switched off
+# (minimumReleaseAge defaults to 0 before v11, trustPolicy to off), so every
+# value below is load-bearing and none of it is a default.
+#
+# THE PINNED PACKAGE MANAGER HAS TO KNOW THESE KEYS OR THE FILE ONLY DECORATES.
+# package.json pins packageManager at pnpm@10.34.5. The meta-repo's
+# config/drift-manifest.json records minimumReleaseAge as added in pnpm 10.16.0
+# and trustPolicy in 10.21.0; an older pnpm ignores the key entirely, and a
+# settings file it ignores defends nothing while still reporting green.
+#
+# THE VALUES ARE THE STANDARD'S, NOT THIS FILE'S. config/drift-manifest.json
+# declares the floor every @cosyte/* package repo owes and
+# config/scripts/drift-check.js grades this file against it, so nothing here is
+# transcribed from memory.
+#
+# EVERY EXEMPTION NEEDS A REASON, ON THE LINE ABOVE IT, STARTING `# reason:`.
+# An exemption with no recorded reason fails config's install-hardening gate by
+# name. The exemption lists are ABSENT rather than empty: an empty list is a
+# place for an entry to appear unremarked. `pnpm install --frozen-lockfile` was
+# run against this file on pnpm 10.34.5 and completed with no
+# ERR_PNPM_TRUST_DOWNGRADE, so this repository owes no exemption today.
+# ---------------------------------------------------------------------------
+
+# 1440 minutes = 24 hours, the floor drift-manifest.json requires of every
+# package repo. pnpm's own rationale for the number: "Since malware is usually
+# detected quickly, delaying updates by 24 hours will most likely prevent you
+# from installing a bad version" (https://pnpm.io/supply-chain-security).
+minimumReleaseAge: 1440
+
+# Fail the install when a package's trust evidence is weaker than that of an
+# earlier-published version of the same package (a trusted publisher that
+# becomes provenance-only, or provenance that becomes nothing at all).
+trustPolicy: no-downgrade
