@@ -35,6 +35,14 @@ them costs nothing to relearn. Five names are added to the package entry point:
   offset large enough to push the result outside the range a JS `Date` holds denotes no
   instant. Both answer `undefined`. What never comes back is an `Invalid Date`, which
   satisfies the declared return type and defeats its point.
+- An offset the **document** states is bounded as well, at 23 hours 59 minutes, and past that
+  bound the value is refused whole by all three functions. The v3 `±ZZZZ` token is four digits
+  wide and constrains neither field, so `+2400`, `+9999` and `-9999` are legal literals stating
+  1440, 6039 and -6039 minutes: finite numbers, none of them a zone, and none of them
+  expressible in the shared `+HH:MM` / `-HH:MM` slot, whose `HH` is a two-digit hour of the
+  day. Refusing them together is what keeps `toObject` from reporting a hundred-hour zone that
+  `toISO` renders as `+100:39`, a string no ISO-8601 reader accepts. `@cosyte/hl7` bounds at
+  the same 23:59; `@cosyte/dicom` bounds tighter, at 14:59.
 
 None of the three ever throws, for any input: an absent value, a `TS` with no `@value`, a
 `TS` whose `@nullFlavor` contradicts a populated `@value` (the grounds on which `parseTs`
@@ -42,8 +50,10 @@ already withholds `date`), and a `@value` this package parses as malformed all a
 `undefined`.
 
 **`TS.date` is unchanged and stays unchanged.** It remains eager: it zero-fills a truncated
-value and resolves an offset-less one as if it had said UTC, so there are values where
-`ts.date` is a populated `Date` and `toDate(ts)` is `undefined`, on the same object. That
+value, resolves an offset-less one as if it had said UTC, and resolves an unstatable stated
+offset too, so there are values where `ts.date` is a populated `Date` and `toDate(ts)` is
+`undefined`, on the same object. `parseTs`, `parseV3DateTime` and the warning codes are
+untouched, and an out-of-range offset raises no new warning. That
 divergence is deliberate rather than an oversight, it is documented in `README.md` and in the
 docs bundle, and the old answer stays reachable by asking for it with
 `{ assumeOffsetMinutes: 0 }`. Nothing reading `TS.date` today reads anything different.

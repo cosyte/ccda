@@ -97,6 +97,28 @@ const TS_LITERAL =
   /^(\d{4})(?:(\d{2})(?:(\d{2})(?:(\d{2})(\d{2})?(\d{2})?(?:\.(\d+))?([+-]\d{2}(?:\d{2})?)?)?)?)?$/u;
 
 /**
+ * The widest offset this surface will report or render, in signed minutes east of UTC: 23
+ * hours 59 minutes.
+ *
+ * The number is the `+HH:MM` / `-HH:MM` slot's own capacity, not a taste. `HH` is a two-digit
+ * hour of the day, so 23:59 is the last offset the shared rendering can express at all, and it
+ * is also exactly the range a JS `Date` reads back: `"2024-02-29T12:00:00+23:59"` parses to an
+ * instant and `"...+24:00"` is an `Invalid Date`. The v3 `TS` literal's offset token is four
+ * digits wide and constrains neither field, so a document may legally WRITE `+9999`, which is
+ * a finite 6039 minutes and renders `+100:39`: a string no ISO-8601 reader accepts, describing
+ * a zone a hundred hours from UTC.
+ *
+ * `@cosyte/hl7` bounds its stated offset at this same `23 * 60 + 59`; `@cosyte/dicom` bounds
+ * tighter, at `14 * 60 + 59`, because a DICOM offset cannot be written past the zones the world
+ * keeps. This package matches `hl7`: the C-CDA wire, like the HL7 v2 wire, admits the whole
+ * four-digit token, so the honest boundary here is the one the rendering can state rather than
+ * the one a narrower wire happens to enforce upstream.
+ *
+ * @internal
+ */
+const MAX_OFFSET_MINUTES = 23 * 60 + 59;
+
+/**
  * The components a `TS` stated, read off its `raw` bytes. Distinct from {@link DateParts} in
  * two ways that matter internally: `year` is mandatory (the literal opens with one, so every
  * accepted value has it, and no downstream function needs a guard for its absence), and the
@@ -130,6 +152,10 @@ interface StatedTs {
  * the value is absent; it carries no `@value` at all (a pure `nullFlavor` element); it carries
  * a `@nullFlavor` **beside** a populated `@value`, which is a contradiction rather than a
  * refinement and is why `parseTs` withholds `date` there; or its `@value` is not a `TS` at all.
+ *
+ * A fifth way is this surface's own, and does NOT mirror `parseTs`: a value stating an offset
+ * past {@link MAX_OFFSET_MINUTES} is refused here while `TS.date` still resolves it. See that
+ * constant, and the divergence note on {@link toDate}.
  *
  * @internal
  */
@@ -170,7 +196,17 @@ function statedTs(value: TS | null | undefined): StatedTs | undefined {
   if (m[5] !== undefined) stated.minute = Number(m[5]);
   if (m[6] !== undefined) stated.second = Number(m[6]);
   if (m[7] !== undefined && m[6] !== undefined) stated.fraction = m[7];
-  if (m[8] !== undefined) stated.offsetMinutes = offsetMinutesOf(m[8]);
+
+  if (m[8] !== undefined) {
+    const offsetMinutes = offsetMinutesOf(m[8]);
+    // The value is refused WHOLE, here, rather than at the point of rendering, so that all
+    // three functions reach the same verdict about it: reporting an offsetMinutes the
+    // `+HH:MM` slot cannot state would leave `toObject` describing a zone `toISO` can only
+    // misspell. `parseV3DateTime` accepts these values and `TS.date` still resolves them;
+    // this surface does not, on the same grounds it refuses every other invention.
+    if (Math.abs(offsetMinutes) > MAX_OFFSET_MINUTES) return undefined;
+    stated.offsetMinutes = offsetMinutes;
+  }
 
   return stated;
 }
@@ -224,7 +260,10 @@ function renderOffset(offsetMinutes: number): string {
  *
  * Returns `undefined` for an absent value, a `TS` carrying no `@value`, a `TS` whose
  * `@nullFlavor` contradicts a populated `@value`, and a `@value` this package parses as
- * malformed. Never throws, for any input.
+ * malformed. It also returns `undefined` for a value stating an offset wider than 23 hours 59
+ * minutes, the widest the `+HH:MM` slot can state: `offsetMinutes` is signed minutes east of
+ * UTC, and a count of minutes a whole day or more from UTC names no zone. Never throws, for
+ * any input.
  *
  * @example
  * ```ts
@@ -271,7 +310,10 @@ export function toObject(value: TS | null | undefined): DateParts | undefined {
  * round-trip of the wire value and is not meant to be; `serializeCcda` remains the
  * round-tripping route.
  *
- * Returns `undefined` on exactly the inputs {@link toObject} does, and never throws.
+ * Returns `undefined` on exactly the inputs {@link toObject} does, and never throws. That
+ * includes a value stating an offset wider than 23 hours 59 minutes: the string this function
+ * hands back is always one an ISO-8601 reader accepts, so a value whose offset would render
+ * `+24:00` or `+100:39` gets no string at all rather than one that denotes nothing.
  *
  * @example
  * ```ts
@@ -317,6 +359,11 @@ export function toISO(value: TS | null | undefined): string | undefined {
  * and defeats its point: a caller cannot tell one from a real `Date` without testing
  * `getTime()` for `NaN`, and `toISOString()` on it throws. Every sibling `@cosyte/*` parser
  * answers `undefined` on exactly these inputs.
+ *
+ * A **stated** offset is bounded too, and more tightly: a value writing an offset wider than 23
+ * hours 59 minutes is refused whole, by all three functions, because the shared `+HH:MM` slot
+ * cannot state it. `TS.date` resolves such a value anyway, so this is a second place the two
+ * deliberately part company.
  *
  * Components below the stated precision fill to their lowest legal value (month to 1, day to
  * 1, time to 0) **for instant construction only**: the value's own precision is untouched, and

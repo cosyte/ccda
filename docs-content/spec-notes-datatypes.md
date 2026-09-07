@@ -129,9 +129,16 @@ toDate(collected, { assumeOffsetMinutes: 600 }); // => new Date("2026-06-28T20:3
 // An offset that names no usable zone is refused, rather than answered with an Invalid Date.
 toDate(onset, { assumeOffsetMinutes: Number.NaN }); // => undefined
 toDate(onset, { assumeOffsetMinutes: 1e15 }); // => undefined
+
+// The same rule reaches an offset the DOCUMENT states. The v3 offset token is four digits
+// wide and constrains neither field, so `+9999` is a legal literal stating 6039 minutes:
+// not a zone, and one `+HH:MM` can only misspell. The value is refused whole, while
+// 23 hours 59 minutes, the widest the slot can state, still converts.
+toObject({ raw: "20260628153045+2359" })?.offsetMinutes; // => 1439
+toISO({ raw: "20260628153045+9999" }); // => undefined
 ```
 
-Four rules are worth stating outright, because each is a place a conversion could have invented
+Five rules are worth stating outright, because each is a place a conversion could have invented
 something and does not:
 
 - **`toObject` reports only what the value stated.** The result is a frozen `DateParts` whose keys are
@@ -163,6 +170,16 @@ something and does not:
   defeat its point, because a caller cannot tell one from a real `Date` without testing `getTime()`
   for `NaN`, and `toISOString()` on it throws. Every sibling `@cosyte/*` parser refuses the same
   inputs the same way.
+- **An offset the document itself states is bounded, at 23 hours 59 minutes.** `±ZZZZ` is four digits
+  wide in the v3 literal and constrains neither field, so a document may legally write `+2400`, `+9999`
+  or `-9999`. Those state 1440, 6039 and -6039 minutes: finite numbers, and none of them a zone. The
+  shared rendering has one slot for an offset, `+HH:MM` or `-HH:MM` with a two-digit hour of the day,
+  so 23:59 is the widest offset it can state at all and `new Date` reads back nothing beyond it. Past
+  that bound the value is refused **whole**, by all three functions together, rather than `toObject`
+  reporting a hundred-hour zone that `toISO` renders as `+100:39`. `@cosyte/hl7` bounds at the same
+  23:59; `@cosyte/dicom` bounds tighter, at 14:59, because a DICOM offset cannot be written wider.
+  This is the one place the three functions refuse a value `parseV3DateTime` accepts: `TS.date` still
+  resolves such a literal, and no warning changes.
 
 So there are values where `ts.date` is a populated `Date` and `toDate(ts)` is `undefined`, on the same
 object, and that divergence is deliberate. `TS.date` is unchanged and stays unchanged: code reading it

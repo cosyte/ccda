@@ -240,6 +240,20 @@ toDate(onset, { assumeOffsetMinutes: -300 }); // 2026-06-28T05:00:00.000Z
   toDate(onset, { assumeOffsetMinutes: 1e15 }); // undefined: finite, but off the end of time
   ```
 
+- **An offset the DOCUMENT states is bounded too, at 23 hours 59 minutes, and past it the value is
+  refused whole.** The v3 `TS` literal's `±ZZZZ` token is four digits wide and constrains neither
+  field, so `<effectiveTime value="20240229120000+9999"/>` is a legal literal stating 6039 minutes:
+  not a zone, and one the shared `+HH:MM` rendering can only misspell as `+100:39`, a string no
+  ISO-8601 reader accepts. All three functions answer `undefined` for such a value rather than one of
+  them reporting a hundred-hour zone. 23:59 is the widest the `+HH:MM` slot can state at all, and is
+  the same bound `@cosyte/hl7` applies; `@cosyte/dicom` bounds tighter, at 14:59, because its own wire
+  cannot write a wider one.
+
+  ```ts
+  toObject({ raw: "20240229120000+2359" }); // { ..., offsetMinutes: 1439 }: the widest statable zone
+  toISO({ raw: "20240229120000+9999" }); // undefined, never "2024-02-29T12:00:00+100:39"
+  ```
+
 So there are values where `ts.date` is a populated `Date` and `toDate(ts)` is `undefined`, on the same
 object. That divergence is deliberate, and `TS.date` is unchanged: code reading it today reads exactly
 what it read before. Reach for `TS.date` when you want the eager behaviour and know it assumes UTC;

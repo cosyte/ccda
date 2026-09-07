@@ -568,6 +568,141 @@ describe("toDate is honest about the timezone", () => {
   });
 });
 
+describe("an offset the value itself STATES is bounded, not only one the caller assumes", () => {
+  // The offset token of the v3 `TS` literal is four digits wide and constrains neither field,
+  // so a document may legally write `<effectiveTime value="20240229120000+9999"/>`: a finite
+  // 6039 minutes, which is not a zone, and which the shared `+HH:MM` slot can only misspell as
+  // `+100:39`. Nothing here is hand-built past what the document carries, which is why this
+  // block exists on the value side rather than beside the options-bag cases above.
+  //
+  // The bound is 23 hours 59 minutes, matching `@cosyte/hl7`. It is the `+HH:MM` slot's own
+  // capacity, not a taste: `HH` is a two-digit hour of the day.
+  const RENDERABLE = 23 * 60 + 59;
+
+  /** Offsets the slot cannot state, in both wire widths and both signs. */
+  const unstatable = [
+    "20240229120000+2400",
+    "20240229120000-2400",
+    "20240229120000+2500",
+    "20240229120000+9999",
+    "20240229120000-9999",
+    "2024022912+24",
+    "2024022912+99",
+  ];
+
+  /** Offsets at or inside the bound, including both edges of it. */
+  const statable = [
+    "20240229120000-0500",
+    "20240229120000+2359",
+    "20240229120000-2359",
+    "20240229120000+0000",
+    "2024022912+23",
+  ];
+
+  it("refuses the value WHOLE, from all three functions, when the offset cannot be stated", () => {
+    for (const raw of unstatable) {
+      expect(toObject(parsed(raw)), raw).toBeUndefined();
+      expect(toISO(parsed(raw)), raw).toBeUndefined();
+      expect(toDate(parsed(raw)), raw).toBeUndefined();
+      // Refused as a VALUE, so supplying an assumption does not buy the caller a way past it.
+      expect(toDate(parsed(raw), { assumeOffsetMinutes: 0 }), raw).toBeUndefined();
+    }
+  });
+
+  it("does not over-refuse: the widest offset the slot CAN state still converts", () => {
+    for (const raw of statable) {
+      expect(toObject(parsed(raw)), raw).toBeDefined();
+      expect(toISO(parsed(raw)), raw).toBeDefined();
+      expect(toDate(parsed(raw)), raw).toBeInstanceOf(Date);
+    }
+    // The two edges of the bound, named rather than left implicit: 1439 in, 1440 out.
+    expect(toObject(parsed("20240229120000+2359"))?.offsetMinutes).toBe(RENDERABLE);
+    expect(toObject(parsed("20240229120000-2359"))?.offsetMinutes).toBe(-RENDERABLE);
+    expect(toISO(parsed("20240229120000+2359"))).toBe("2024-02-29T12:00:00+23:59");
+    expect(toDate(parsed("20240229120000+2359"))).toStrictEqual(
+      instant("2024-02-28T12:01:00.000Z"),
+    );
+    expect(toObject(parsed("20240229120000+2400"))).toBeUndefined();
+  });
+
+  it("appends Z or +HH:MM / -HH:MM and never a third shape", () => {
+    // The Contract's own rendering rule, swept over both lists: a hundred-hour zone renders no
+    // string at all now, rather than one shaped like `+100:39`.
+    for (const raw of [...statable, ...unstatable]) {
+      const iso = toISO(parsed(raw));
+      if (iso === undefined) continue;
+      expect(iso, raw).toMatch(/(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/u);
+    }
+  });
+
+  it("returns only strings an ISO-8601 reader reads back", () => {
+    // The property the rendering exists for. `new Date("...+24:00")` is an Invalid Date, so a
+    // string this function hands back must never be one: the caller would hold something shaped
+    // like a timestamp that denotes nothing.
+    //
+    // Read back only where the reader can read the TIME at all. An hour-precision value renders
+    // `2024-02-29T12+23:00`, which `new Date` rejects for want of a minute field, and that is
+    // the Contract's truncation rule ("stated precision hour -> `1970-07-05T09`") meeting an
+    // appended offset, not this bound. Widening or padding that rendering is a different
+    // question from the one asked here, and is deliberately not touched.
+    for (const raw of [...statable, ...unstatable]) {
+      const iso = toISO(parsed(raw));
+      if (iso === undefined || !/T\d{2}:\d{2}/u.test(iso)) continue;
+      expect(Number.isNaN(new Date(iso).getTime()), `${raw} -> ${iso}`).toBe(false);
+    }
+  });
+
+  it("never reports an offsetMinutes that is not a zone, in either direction", () => {
+    for (const raw of [...statable, ...unstatable]) {
+      const off = toObject(parsed(raw))?.offsetMinutes;
+      if (off === undefined) continue;
+      expect(Number.isInteger(off), raw).toBe(true);
+      expect(Math.abs(off) <= RENDERABLE, `${raw} reported ${String(off)}`).toBe(true);
+    }
+  });
+
+  it("keeps the three in agreement about the value, refusing it together", () => {
+    // All three read one predicate, so none of them may reach a different verdict about whether
+    // a value converts. The one legitimate asymmetry is the timezone rule (an offset-less value
+    // with no assumption), and no row here is offset-less.
+    for (const raw of [...statable, ...unstatable]) {
+      const converts = toObject(parsed(raw)) !== undefined;
+      expect(toISO(parsed(raw)) !== undefined, raw).toBe(converts);
+      expect(toDate(parsed(raw)) !== undefined, raw).toBe(converts);
+    }
+  });
+
+  it("leaves parseTs, parseV3DateTime and TS.date exactly as they were", () => {
+    // The refusal is this surface's, and it is added to it alone. The pinned exports still
+    // accept the value, still emit no warning for it, and `TS.date` is still the instant they
+    // always derived: a THIRD place the honest surface and the old field deliberately part
+    // company, after the zero-fill and the assumed zone.
+    const c = ctx();
+    const ts = parseTs(el(`<effectiveTime value="20240229120000+9999"/>`), c);
+    expect(c.warnings).toStrictEqual([]);
+    expect(ts?.raw).toBe("20240229120000+9999");
+    expect(ts?.date).toStrictEqual(instant("2024-02-25T07:21:00.000Z"));
+    expect(parseV3DateTime("20240229120000+9999")).toStrictEqual(
+      instant("2024-02-25T07:21:00.000Z"),
+    );
+    expect(toObject(ts)).toBeUndefined();
+    expect(toISO(ts)).toBeUndefined();
+    expect(toDate(ts)).toBeUndefined();
+  });
+
+  it("bounds the offset's SIZE, not its tidiness: a stated 99 minutes is a real offset", () => {
+    // `+0099` is 99 minutes east, which renders `+01:39` and reads back. It is inside the slot's
+    // capacity, so it is not refused: the rule added here is about what the rendering can state,
+    // and widening it into "is this a zone some country keeps" would be a bound `@cosyte/hl7`
+    // does not have and a divergence in the opposite direction.
+    expect(toObject(parsed("20240229120000+0099"))?.offsetMinutes).toBe(99);
+    expect(toISO(parsed("20240229120000+0099"))).toBe("2024-02-29T12:00:00+01:39");
+    expect(toDate(parsed("20240229120000+0099"))).toStrictEqual(
+      instant("2024-02-29T10:21:00.000Z"),
+    );
+  });
+});
+
 describe("the deliberate TS.date divergence", () => {
   it("answers undefined where TS.date is a populated instant", () => {
     const ts = parsed("20260628");
@@ -647,7 +782,11 @@ describe("withholding follows parseTs", () => {
     expect(toDate(ts, { assumeOffsetMinutes: 0 })).toBeUndefined();
   });
 
-  it("accepts exactly what parseV3DateTime accepts, and rejects exactly what it rejects", () => {
+  it("delegates validity to parseV3DateTime, refusing only the offsets it cannot state", () => {
+    // Validity is `parseV3DateTime`'s call and stays its call: every row below is expected to
+    // agree with it in both directions. The ONE class where this surface refuses more is a
+    // stated offset wider than the `+HH:MM` slot, which has its own block above and appears in
+    // no row here; that is a rendering bound, not a second opinion about what a `TS` is.
     const corpus = [
       "2026",
       "202606",
