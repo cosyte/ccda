@@ -1,5 +1,437 @@
 # Changelog
 
+## 0.1.0
+
+### Minor Changes
+
+- 2f90283: required sections: every document type now reports how far it was verified
+
+  Six of the twelve required-section (SHALL) tables asserted nothing, and nothing
+  in the API said whether that meant "no requirement", "not checked yet" or "the
+  requirement is unassertable". A consumer could not tell a verified all-clear from
+  an unverified silence, and only the prose warned them not to.
+
+  Five of those six were read off the normative C-CDA R2.1 base implementation
+  guide's document-level conformance statements. Consultation Note now asserts
+  History of Present Illness (CONF:1198-28907), Allergies and Intolerances
+  (-28911) and Problems (-28929); each is scoped to the R2.1 `@extension` stamp its
+  constraint's rule context carries, so an R1.1-origin document is asserted exactly
+  as before. Progress Note, Procedure Note, Operative Note and Diagnostic Imaging
+  Report assert nothing still, and that is now a traced result rather than an
+  unread table: every SHALL section their templates name is either outside this
+  parser's recognized catalog or a choice, and each is reported by name with the
+  reason. Unstructured Document carries no `structuredBody` at all (its component
+  SHALL be a `nonXMLBody`, CONF:1198-31086), so it has no section obligation.
+
+  The addition is **additive**: nothing is removed, narrowed or renamed.
+  `requiredSectionKeys` and `missingRequiredSections` keep their signatures and
+  their shape, and the six document types that already asserted keys (CCD,
+  Discharge Summary, Referral Note, History and Physical, Care Plan, Transfer
+  Summary) return exactly the same values as before, including under the unstamped
+  reading, with every conformance id they already carried left in place.
+
+  New exports:
+  - `requiredSectionStatus(documentType, options?)`: the asserted `keys` plus a
+    `verification` of `traced-complete`, `traced-partial`, `untraced` or
+    `not-applicable`, the `traced` provenance (conformance id and the source's own
+    section name) behind each traced key, and every SHALL section left
+    `unasserted` with the reason it is unassertable.
+  - `requiredSectionStatuses(options?)`: all twelve, so the whole picture is
+    enumerable by a consumer.
+  - `DOCUMENT_TYPES`: the runtime enumeration behind the `DocumentType` union.
+  - The types `RequiredSectionStatus`, `RequiredSectionVerification`,
+    `TracedRequiredSection`, `UnassertedRequiredSection` and
+    `UnassertedSectionReason`.
+
+  The only behaviour change is the one the trace bought: a Consultation Note that
+  carries the R2.1 stamp and omits History of Present Illness, Allergies or
+  Problems now draws `REQUIRED_SECTION_MISSING` (a warning, never a fatal) where it
+  previously parsed silent. A traced state is a claim about what was read for that
+  type, so the six types nobody re-read report `untraced` whether or not their keys
+  already cite a conformance id.
+
+- 0ec5734: required sections: a SHALL warning fires exactly where the normative source says it should
+
+  The per-document-type required-section (SHALL) tables now cover all twelve
+  recognized types. Six of them (CCD, Discharge Summary, Referral Note, History and
+  Physical, Care Plan, Transfer Summary) had asserted sets that predated anyone
+  reading the normative source for them, and reported `verification: "untraced"` to
+  say so. Their document-level `errors` and `warnings` rules have been read off the
+  HL7 C-CDA R2.1 normative Schematron and the tables corrected. **No recognized
+  document type reports `untraced` any more.**
+
+  Two defects went in opposite directions and both are closed.
+  - **A conformant Discharge Summary drew a false warning.** The table asserted a
+    Discharge Medications section as a SHALL. The normative source states it as a
+    **SHOULD**, in that document's warnings rule (CONF:1198-30525), so a conformant
+    Discharge Summary that omits the section was drawing a
+    `REQUIRED_SECTION_MISSING` it had not earned. It is withdrawn, in the stamped
+    and the unstamped reading alike.
+  - **A non-conformant document passed quietly.** The same Discharge Summary table
+    omitted Plan of Treatment (CONF:1198-30528), which the errors rule requires
+    unconditionally; a History and Physical asserted one of the ten SHALL sections
+    its errors rule names; a Transfer Summary asserted three of six. Every one of
+    those sections that this parser's catalog recognizes is asserted now.
+
+  **What changed on the published surface**, for `requiredSectionKeys`,
+  `missingRequiredSections`, `requiredSectionStatus` and the parser warnings that
+  follow from them:
+  - **Discharge Summary**: `dischargeMedications` withdrawn, `planOfTreatment`
+    added.
+  - **History and Physical**: `familyHistory`, `pastMedicalHistory`, `medications`,
+    `results`, `socialHistory` and `vitalSigns` added beside `allergies`.
+  - **Transfer Summary**: `results`, `vitalSigns` and `reasonForReferral` added.
+  - **CCD, Referral Note and Care Plan**: confirmed unchanged.
+
+  Expect a document of the three changed types to draw warnings it did not draw
+  before, and a conformant Discharge Summary with no Discharge Medications section
+  to fall silent. `REQUIRED_SECTION_MISSING` remains a Tier-2 warning, never a
+  fatal, and remains safety-critical, so no vendor profile can quiet it.
+
+  **Every key an added rule contributed is scoped to the R2.1 stamp**, because each
+  of those document-level rules matches only a `ClinicalDocument` whose
+  `templateId` carries `@extension="2015-08-01"`. An unstamped, R1.1-origin document
+  is therefore asserted exactly as it was before, with one exception in the safe
+  direction: a key withdrawn because the source states it as a SHOULD or as a choice
+  is withdrawn from the unstamped reading too, since "no sentence made this
+  unconditional" does not depend on a version stamp.
+
+  **Provenance is on the surface, not in a commit message.** Every asserted key now
+  carries the conformance statement it was read from and the source's own name for
+  the section; every SHALL section the source names that this package cannot assert
+  is enumerated with its reason (`outside-section-catalog` for Hospital Course,
+  General Status, Physical Exam and Review of Systems; `not-unconditionally-required`
+  for each choice); and `requiredSectionStatus(type).source` names the normative
+  artifact and **that artifact's own revision date**, so a reader holding a later
+  revision can tell a table is stale without re-deriving it. The new
+  `RequiredSectionSource` type is exported alongside it.
+
+  This is document-level validation only: which sections a document type SHALL
+  contain, never what a section or an entry SHALL contain. A quiet parse is still
+  not a conformance result.
+
+- ca77a09: version stamps: a document says which C-CDA release it was written for
+
+  C-CDA 3.0.0 gave every document template a new `@extension`, `2024-05-01`, and
+  4.0.0 and 5.0.0 kept it, so a document written for a release later than R2.1 is
+  detectable from the `templateId` that resolves its type. Through `0.0.15` this
+  parser got that case wrong twice, once loudly and once in silence.
+
+  Loudly: any `@extension` that was not `2015-08-01` drew
+  `TEMPLATE_EXTENSION_ABSENT`, whose frozen message reads "carries no @extension
+  version stamp ... (may pre-date R2.1)". For a `2024-05-01` document both halves
+  are false, because it carries a stamp and it post-dates R2.1.
+
+  Silently, and worse: the same path reported the document as unstamped, and the
+  required-section tables read that as the R1.1-origin **reduction**, which drops
+  every R2.1-stamp-scoped SHALL key. A post-R2.1 CCD carrying neither Social
+  History nor Vital Signs therefore drew no `REQUIRED_SECTION_MISSING` at all. The
+  library had classified a document from the future as one from the past.
+
+  **Two warning codes are added and none is renamed or removed.**
+  `TEMPLATE_EXTENSION_UNMODELED_RELEASE` fires when the resolving `templateId`
+  carries an `@extension` that is present and is not the R2.1 stamp;
+  `REQUIRED_SECTIONS_NOT_EVALUATED` fires once for such a document to say its SHALL
+  obligation was not computed. `TEMPLATE_EXTENSION_ABSENT` keeps its narrower
+  meaning ("no `@extension` at all", the R1.1-origin shape) and its registry message
+  byte for byte.
+
+  **An unmodelled stamp is reported, never reduced.** Such a document draws no
+  `REQUIRED_SECTION_MISSING` in either reading, and
+  `requiredSectionStatus(type, { stamp: "unmodeled-release" })` reports
+  `evaluation: "not-evaluated"` so an empty key set still says which emptiness it
+  is. `evaluation` is a new field on `RequiredSectionStatus` and a separate axis
+  from `verification`, which remains a claim about the document type that no option
+  moves.
+
+  **The release this package validates against is an exported value now.**
+  `CCDA_CONFORMANCE_RELEASE` is `"R2.1"`, beside the closed table of stamps this
+  package can name (`CCDA_RELEASE_STAMPS`, plus `R30_EXTENSION`,
+  `releaseForTemplateExtension` and the three-state `readTemplateStamp`). **This
+  does not retarget the library**: regulation still adopts R2.1 and SVAP use is
+  voluntary, so a later release is recognized and named, never read against.
+  4.0.0 also relaxed the US Realm Header and 5.0.0 added a Pregnancy Section, and
+  neither is modelled here.
+
+  Four things are decisions rather than details:
+  - **A reported stamp comes from a closed set of literals this package owns.** A
+    message names a member of `CCDA_RELEASE_STAMPS` or names no stamp at all, so a
+    sender-controlled `@extension` can never reach a `CcdaWarning.message` (or,
+    under `{ strict: true }`, a thrown error's stack). No factory gained a
+    parameter that a message interpolates.
+  - **The existential R2.1 rule is unchanged and beats a later stamp.** A document
+    carrying the resolving root twice, once stamped `2015-08-01` and once for a
+    later release, is inside the Schematron rule's context and is evaluated under
+    the full R2.1 obligation, in either sibling order.
+  - **`{ r21Stamped }` behaves exactly as it did.**
+    `requiredSectionKeys("ccd", { r21Stamped: false })` returns the same four keys
+    in the same order. A boolean cannot express three states, so the three-state
+    `{ stamp }` was added beside it rather than repurposing a published option.
+  - **`legacyR11` does not tolerate the new code.** It is receive-tolerance for
+    documents from the past, grounded in the receive-both-R2.1-and-R1.1
+    requirement; quieting a future-release stamp there would restore the silence
+    this change removes. Neither new code is safety-critical, so a consumer who has
+    read the later guide can still write their own profile for it.
+
+  Nothing became stricter. No fatal was added, no content the C-CDA open-template
+  rule permits is refused, and a post-R2.1 document's clinical reading (patient,
+  sections, entries, values) and its byte-faithful re-serialization are identical
+  to the same document stamped `2015-08-01`. Under `{ strict: true }` the new
+  warnings escalate like every other Tier-2 warning, which is pre-existing
+  caller-opted behaviour.
+
+- 0151ab9: subject override: an entry is never read as the patient's unless it is
+
+  CDA R2 gives `Section.subject` cardinality `0..1` and defines it as the "primary
+  target of the entries recorded in a section"; C-CDA admits the same override on a
+  clinical statement. So a conformant document can carry a relative's, a donor's or
+  a contact's clinical statement inside the patient's document. This parser read
+  `<subject>` in exactly one place (a Family History Organizer's `relatedSubject`)
+  and every other extractor handed such an entry back as the patient's, silently.
+  That is another person's clinical data attributed to this patient, in a read path
+  documented as the patient's own.
+
+  A top-level `<entry>` that a subject declaration governs is now **withheld** from
+  every record-target read path and flagged with a new safety-critical Tier-2
+  warning, `SUBJECT_CONTEXT_OVERRIDE`, which no vendor profile may tolerate. An
+  entry is governed when it carries a declaration itself, when a clinical statement
+  nested inside it carries one, or when an enclosing section carries one (the
+  nearest enclosing declaration wins, which is the standard's own conduction rule).
+
+  Four things are decisions rather than details:
+  - **Presence is the trigger.** A declaration is an override whatever it names.
+    Nothing is compared with the record target and nothing is resolved to the
+    patient, because that would make a clinical answer depend on vendor identifier
+    hygiene. A document that redundantly restates the patient as an entry subject
+    therefore loses those entries from the record-target read paths and gains a
+    warning for each: the safe direction of the error, and the accepted cost.
+  - **The whole top-level entry is withheld**, its own statement and every statement
+    nested inside it, and the same unit does the counting. A declaration on the
+    second Problem Observation of a Problem Concern Act withholds that whole concern
+    act and emits one warning at the act's locus, never a concern act handed back
+    one observation short.
+  - **Family History is untouched.** A Family History Organizer's own subject slot
+    is that template's mechanism for naming the relative, whatever it contains, so
+    it is never an override, draws no warning, and re-overrides an enclosing section
+    declaration. `getFamilyHistory()`, the `familyHistory` field,
+    `extractFamilyHistory` and the aggregate's family-history slot return exactly
+    what they returned before, in every document shape. That carve-out is read-side
+    and reaches only the organizer the family-history path itself reads: an entry
+    that carries the Family History Organizer template beside one a record-target
+    read path returns (a Result Organizer, a Problem Concern Act) is withheld and
+    reported like any other, because a `templateId` is one element and C-CDA entries
+    carry several. A declaration nested deeper inside an entry is never that slot.
+  - **Withholding is read-side only.** The withheld entry is not dropped: the
+    byte-faithful round trip through `toString()` / `serializeCcda` reproduces it
+    unchanged, and section narrative is returned unredacted, unreordered and
+    unannotated.
+
+  The count is per section and sums over the document: N governed top-level entries
+  in a section produce exactly N instances, in document order, each naming that
+  entry's own bounded locus (an element path from the CDA vocabulary, the section's
+  LOINC code, line and column, with `<withheld>` for anything that fails its bound),
+  and a section that declares an override but governs no entry anywhere beneath it
+  produces exactly one instance at its own locus instead. The same withholding
+  applies to a per-family or aggregate extraction invoked directly on a section,
+  including a nested subsection governed by an ancestor's declaration, with the
+  warnings delivered on the parse context those functions already accept: no
+  signature, parameter or return type changes. `extractFamilyHistory` delivers them
+  too, while returning its own contents whole.
+
+  Two behaviour changes to expect. A document carrying an override loses those
+  entries from `getProblems()` / `getMedications()` / `getAllergies()` and the other
+  ten record-target families where it previously returned them as the patient's,
+  and under `{ strict: true }` it now throws, because the new code escalates like
+  every other safety-critical Tier-2 warning. Nothing is modelled for third-party
+  subjects: a withheld entry is reachable only through the re-serialized document.
+
+- 33c543b: Add the shared `toObject` / `toISO` / `toDate` conversion surface for a parsed `TS`
+
+  Every `@cosyte/*` standard parser now exports the same three conversions, under the same
+  names, with the same return shapes and the same timezone rule, so moving between two of
+  them costs nothing to relearn. Five names are added to the package entry point:
+  `toObject`, `toISO`, `toDate`, and the `DateParts` and `ToDateOptions` types.
+  - `toObject(ts)` returns a frozen `DateParts` carrying **only** the components the document
+    stated. Nothing is zero-filled, so `Object.keys()` on a year-precision value is `["year"]`
+    and the value's precision survives the conversion. `month` is the spec-native 1 to 12, the
+    component names are singular, and there is no `raw`, `precision` or `valid` key.
+    `millisecond` is the first three digits of the stated fraction taken verbatim and
+    right-padded (`.5` is 500, `.0500` is 50), never a floating-point fraction multiplied by 1000. `offsetMinutes` is present if and only if the value carried an explicit offset, a
+    stated zero included. Deleting `offsetMinutes` leaves an object
+    `Temporal.PlainDateTime.from` and luxon's `DateTime.fromObject` accept unchanged; neither
+    library is a dependency and neither is imported.
+  - `toISO(ts)` renders ISO-8601 truncated to that same precision and pads nothing out, with
+    fractional digits rendered exactly as written. A stated offset is appended (`Z` for a
+    stated zero, otherwise `+HH:MM` / `-HH:MM`); with no stated offset nothing is appended and
+    no `Z` is fabricated. Because a stated zero renders `Z`, this is not a byte round-trip of
+    the wire value, and `serializeCcda` remains the round-tripping route.
+  - `toDate(ts, options?)` returns a `Date` only when the zone is determinate: the value
+    carried an offset, or the caller passed `assumeOffsetMinutes` (signed minutes east of UTC,
+    where an explicit `0` means "read this naive value as UTC"). With neither, the answer is
+    `undefined`. The host machine's timezone is never read and UTC is never assumed. A value's
+    own offset always beats an assumed one, a year below 100 stays that year rather than being
+    remapped into the 1900s, and components below the stated precision fill to their lowest
+    legal value for the instant only. An `assumeOffsetMinutes` that names no usable zone is
+    refused the same way: `NaN` and the two infinities are not a number of minutes, and a finite
+    offset large enough to push the result outside the range a JS `Date` holds denotes no
+    instant. Both answer `undefined`. What never comes back is an `Invalid Date`, which
+    satisfies the declared return type and defeats its point.
+  - An offset the **document** states is bounded as well, at 23 hours 59 minutes, and past that
+    bound the value is refused whole by all three functions. The v3 `±ZZZZ` token is four digits
+    wide and constrains neither field, so `+2400`, `+9999` and `-9999` are legal literals stating
+    1440, 6039 and -6039 minutes: finite numbers, none of them a zone, and none of them
+    expressible in the shared `+HH:MM` / `-HH:MM` slot, whose `HH` is a two-digit hour of the
+    day. Refusing them together is what keeps `toObject` from reporting a hundred-hour zone that
+    `toISO` renders as `+100:39`, a string no ISO-8601 reader accepts. `@cosyte/hl7` bounds at
+    the same 23:59; `@cosyte/dicom` bounds tighter, at 14:59.
+
+  None of the three ever throws, for any input: an absent value, a `TS` with no `@value`, a
+  `TS` whose `@nullFlavor` contradicts a populated `@value` (the grounds on which `parseTs`
+  already withholds `date`), and a `@value` this package parses as malformed all answer
+  `undefined`.
+
+  **`TS.date` is unchanged and stays unchanged.** It remains eager: it zero-fills a truncated
+  value, resolves an offset-less one as if it had said UTC, and resolves an unstatable stated
+  offset too, so there are values where `ts.date` is a populated `Date` and `toDate(ts)` is
+  `undefined`, on the same object. `parseTs`, `parseV3DateTime` and the warning codes are
+  untouched, and an out-of-range offset raises no new warning. That
+  divergence is deliberate rather than an oversight, it is documented in `README.md` and in the
+  docs bundle, and the old answer stays reachable by asking for it with
+  `{ assumeOffsetMinutes: 0 }`. Nothing reading `TS.date` today reads anything different.
+
+  Parts are derived by re-parsing `TS.raw`, the document's own bytes; `TS.date` is never read.
+  No dependency of any kind was added, runtime or development, and `engines.node` is unchanged
+  at `>=22.0.0`.
+
+### Patch Changes
+
+- de5305e: docs: cover the profile, terminology and conformance surfaces, and gate the bundle
+
+  The published narrative documentation gained a page and a guard. Three surfaces
+  that a caller has to configure correctly were described only in passing inside
+  the limitations page, with nothing a reader could copy and run: the vendor
+  profile system, the bring-your-own `TerminologyAdapter`, and the required-section
+  conformance status. Each now has its own section on a new "Conformance, profiles
+  & terminology" page with an executable example, and every one of those examples
+  is compiled and run against the built package by the existing doc/code agreement
+  suite, so a documented call that stops working fails the build rather than
+  misleading a reader. The terminology example uses an in-process stub adapter: it
+  opens no socket and needs no licensed terminology service, which is also what
+  makes it a usable template for testing an adapter of your own.
+
+  Three pages claimed the package was "published on npm at `0.0.3`" while it was
+  twelve patches past that. No page names a published version now; they point at
+  `npm view @cosyte/ccda version`, which cannot go stale. Every historical note
+  that dates a behaviour change to a past version is untouched and is now held in
+  place by a retention floor, because those sentences are the change record for a
+  reader pinned to an older version, not staleness.
+
+  Page frontmatter was inconsistent (`sidebar_label` on five pages of nine) and
+  `sidebar_position` collided across five pages. Every page now carries the same
+  four keys, and each position agrees with the page's place in `sidebars.json`
+  rather than being a second, disagreeing answer to what comes next.
+
+  A new guard holds all of it: every symbol the public entry point exports, types
+  included, must be named by a page or carry a stated reason in a committed
+  exemption record that cannot outlive the symbol it excuses. The formatter now
+  covers the bundle as well, so the pages cannot drift out of format.
+
+- 4bc6aa8: Bring this repo to the shared package baseline: install hardening, the required
+  js-yaml override, and a CLAUDE.md under its line ceiling
+
+  Three drifts the meta-repo's `config/drift-manifest.json` measures against this
+  repo are closed, and nothing else changes.
+
+  `pnpm-workspace.yaml` is new and carries `minimumReleaseAge: 1440` and
+  `trustPolicy: no-downgrade`, the publication cooldown and trust policy the
+  standard requires of every `@cosyte/*` package repo. Both keys are switched off
+  by default in pnpm 10, and both are ignored outright by a pnpm older than
+  10.16.0 and 10.21.0 respectively, so `packageManager` is raised from `pnpm@10.0.0`
+  to `pnpm@10.34.5`: a settings file the pinned package manager ignores decorates
+  rather than defends. A cold-store `pnpm install --frozen-lockfile` was measured
+  against the new policy and raised no `ERR_PNPM_TRUST_DOWNGRADE`, so no
+  `trustPolicyExclude` entry is carried and the exemption lists are absent rather
+  than empty.
+
+  `pnpm.overrides` gains the required `js-yaml@>=4.0.0 <4.3.0` entry. It is listed
+  BEFORE this repo's own `js-yaml@>=4.0.0 <4.3.2` entry on purpose: pnpm applies
+  the LAST matching override, measured on this tree, and the other order resolved
+  js-yaml 4.x down from 4.3.2 to 4.3.0, which would have been an advisory
+  remediation quietly undone by a compliance edit. The lockfile still resolves
+  js-yaml at 4.3.2, and no existing override was removed, narrowed or repointed.
+
+  `CLAUDE.md` goes from 459 lines to 232, under the ceiling of 300 the standard
+  declares, entirely by RELOCATION. Every block of prose that left it is
+  reproduced verbatim in `documentation/agent-notes.md`, under the very heading
+  the imperative's `Why:` pointer already resolved to, and what is left in
+  `CLAUDE.md` is the rule plus that pointer. Nothing was deleted, no imperative
+  lost its file, and no claim was reworded, softened or strengthened.
+
+  No published API, warning code, parser behaviour or emitted XML changes.
+
+- af15008: README: standardize the page, and make its usage example a test
+
+  The npm package page and the GitHub landing page are the same file, and for most
+  consumers it is the only page they will ever read. It was 1086 lines of deep
+  reference with no answer above the fold to the three questions a reader arrives
+  with: what is this for, is it safe to depend on, and what does it do with my
+  patients' data. It also carried a status line claiming the package was published
+  at `0.0.3`, twelve patch releases out of date, and a hand-written `alt` string on
+  the banner that disagreed with the one the brand assets declare for that tile.
+
+  The page now opens with the banner (carrying the declared `alt` string), the
+  title, a one-line hook, the four house badges and the `package.json`
+  `description` verbatim, followed by a table of contents. Four sections are new:
+  - **Why this exists**, which names the problem, the nearest alternative a reader
+    would otherwise reach for, and why this is not that.
+  - **Status**, which states the version this package declares, says what that
+    version does and does not claim about the public API, and names the surfaces
+    that are still moving instead of implying they are settled.
+  - **PHI and safety**, which states what the library does with patient data for
+    each of logging, in-memory retention and writing to disk, and names what the
+    consuming application still owns.
+  - **Contributing**, which says where to ask, whether unsolicited pull requests
+    are accepted, and every check a contribution has to clear.
+
+  `Install` now states the Node engine floor and the module format. The parse
+  walkthrough is consolidated into a single `Usage` example that builds a complete
+  synthetic CCD, reads it back and shows what every call returns, and that block is
+  now executed by the test suite against the built entry point: an example whose
+  shown output stops matching what the code produces fails the build. Roughly half
+  of documentation traffic is agents that lift a usage block verbatim, so a wrong
+  example is wrong generated code at scale.
+
+  No parse, emit, builder or profile behaviour changes, and no documented behaviour
+  was dropped: every reference section the page carried is still on it.
+
+- c361b4a: phi-scan: a target enumerated and never read refuses the scan
+
+  `--allow-fixture` withdrew a path from the target list and the run reported on
+  whatever remained, so the withdrawal never showed up in the verdict: four argv
+  shapes printed `OK, no hits` at exit 0 over a corpus holding a live, detectable
+  violator, including a whole-run sweep whose only violator was the withdrawn file.
+  CI could print a clean verdict over a corpus it never opened.
+
+  The scanner now refuses (exit 2), in every mode, over any target this run
+  enumerated and never read, naming the paths. The comparison is a set difference
+  rather than a count, because a count counts the targets that did get read. A
+  bypass naming a path the run does not enumerate refuses too, under its own
+  message, since such a flag subtracts nothing (in `paths` mode a nonexistent path
+  is refused earlier still, by `File not found`). `--allow-fixture` no longer
+  selects the mode and is unioned into the target list in `paths` mode, so it means
+  the same thing in every argv.
+
+  What it costs, stated rather than left to be discovered: `--allow-fixture` can no
+  longer reach exit 0 in any mode. The flag, `phi-scan-overrides.md` and the log
+  gate all stay, so an attempt is recorded and then refused rather than silently
+  honored, and `scripts/phi-allow-list.txt` is now the only mechanism that reaches
+  a clean run. The hit footer no longer advertises the flag as a remedy.
+
+  No published API, warning code or parser behaviour changes; this is the commit
+  gate only. There was no real unread corpus in this repo: the all-mode sweep
+  enumerates and reads the same set, and the four states were reproduced with
+  planted fixtures rather than found.
+
 ## 0.0.15
 
 ### Patch Changes
