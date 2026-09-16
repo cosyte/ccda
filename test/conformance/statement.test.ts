@@ -39,6 +39,27 @@ const statement = (() => {
   return readme.slice(start, end);
 })();
 
+/**
+ * The document types the statement CLAIMS, read from its own delimited list.
+ *
+ * Delimited rather than pattern-matched out of the prose, for the same reason the statement
+ * itself is: a regex over the sentence would be grading wording, and rewording the sentence
+ * would silently empty the claimed set and pass the comparison below in both directions
+ * (`testing` T2). The delimiters make the claim a value the README declares, which is the only
+ * thing this file is allowed to hold the report against.
+ */
+const claimedDocumentTypes = (() => {
+  const open = "<!-- conformance-statement:document-types:start -->";
+  const close = "<!-- conformance-statement:document-types:end -->";
+  const start = statement.indexOf(open);
+  const end = statement.indexOf(close);
+  if (start < 0 || end < 0) {
+    throw new Error("the README conformance statement carries no delimited document-type list");
+  }
+  const claimed = statement.slice(start + open.length, end);
+  return new Set([...claimed.matchAll(/`([^`]+)`/g)].map((match) => match[1]));
+})();
+
 describe("AC-8: the README conformance statement agrees with the tracked report", () => {
   it("names the artifact revision the measurement was made against", () => {
     expect(facts.artifactRevision).toMatch(/^[0-9a-f]{40}$/);
@@ -46,10 +67,13 @@ describe("AC-8: the README conformance statement agrees with the tracked report"
   });
 
   it("lists every document type the run validated, and claims no other", () => {
+    // BOTH DIRECTIONS, AS SETS. Containment alone would let the statement claim a type the run
+    // never validated: drop a type from BUILT_DOCUMENT_CASES and a one-directional check stays
+    // green over a README that over-claims coverage, which is the drift AC-8 and
+    // `compliance-claims` L1 exist to prevent. The under-claim direction matters too, because a
+    // statement that omits a measured type is a statement nobody can reconcile with the report.
     expect(facts.documentTypes.length).toBeGreaterThan(0);
-    for (const documentType of facts.documentTypes) {
-      expect(statement).toContain(`\`${documentType}\``);
-    }
+    expect([...claimedDocumentTypes].sort()).toStrictEqual([...facts.documentTypes].sort());
   });
 
   it("states the count of error-severity results on the built side", () => {

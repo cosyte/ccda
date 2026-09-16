@@ -21,6 +21,8 @@ export const CONFORMANCE_CODES = {
   ARTIFACT_DIGEST_MISMATCH: "CONFORMANCE_ARTIFACT_DIGEST_MISMATCH",
   /** The corpus archive does not carry a path the pin names, or unpacked to nothing readable. */
   ARTIFACT_MISSING_PATH: "CONFORMANCE_ARTIFACT_MISSING_PATH",
+  /** XML schema validation was asked to run against an empty schema set. */
+  SCHEMA_SET_EMPTY: "CONFORMANCE_SCHEMA_SET_EMPTY",
   /** The corpus archive unpacked cleanly and contained zero documents. */
   CORPUS_EMPTY: "CONFORMANCE_CORPUS_EMPTY",
   /** The run finished having validated zero built documents. */

@@ -54,16 +54,19 @@ function sha256(bytes: Uint8Array): string {
  * the arithmetic.
  *
  * @param corpusArchive - The gzipped corpus archive this pin set describes.
+ * @param schemaXml - The XML schema this pin set describes. Defaults to the permissive one,
+ *   which is what the tests about a run's plumbing want; a test whose subject is a schema
+ *   FAILURE passes the strict one and serves it through {@link fullyServingFetcher}.
  * @returns Pins whose digests are the digests of the fixture bytes.
  * @example
  * ```ts
  * const pins = selfTestPins(writeTarGz([{ path: "a.xml", text: doc }]));
  * ```
  */
-export function selfTestPins(corpusArchive: Uint8Array): Pins {
+export function selfTestPins(corpusArchive: Uint8Array, schemaXml = PERMISSIVE_SCHEMA): Pins {
   const schematron = encoder.encode(SELF_TEST_SCHEMATRON);
   const vocabulary = encoder.encode(SELF_TEST_VOCABULARY);
-  const schema = encoder.encode(PERMISSIVE_SCHEMA);
+  const schema = encoder.encode(schemaXml);
   const documents = readTarXmlEntries(new Uint8Array(gunzipSync(corpusArchive)));
   return {
     schematron: {

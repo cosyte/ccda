@@ -26,6 +26,7 @@
 
 import { validateXML, memoryPages } from "xmllint-wasm";
 
+import { CONFORMANCE_CODES, ConformanceError } from "./errors.js";
 import type { SchemaFile } from "./fetch.js";
 
 /** A schema violation, reduced to schema vocabulary and a structural location. */
@@ -118,6 +119,7 @@ export function classifySchemaMessage(rawMessage: string, line: number | null): 
  * @param schema - The schema set as fetched, entry point first.
  * @param documentXml - The document to validate.
  * @returns Every schema violation, redacted to schema vocabulary and a location.
+ * @throws {ConformanceError} `SCHEMA_SET_EMPTY` when there is no schema to validate against.
  * @example
  * ```ts
  * const findings = await validateAgainstSchema(schemaFiles, serializeCcda(document));
@@ -128,7 +130,19 @@ export async function validateAgainstSchema(
   documentXml: string,
 ): Promise<readonly SchemaFinding[]> {
   const [entry, ...rest] = schema;
-  if (!entry) return [];
+  // FAIL CLOSED ON AN EMPTY SCHEMA SET. Returning no findings would report "schema-valid" for a
+  // document nothing validated, which is the false green this whole harness is built to refuse,
+  // and it would do it silently. Nothing can reach it that way today, because `fetchSchema`
+  // refuses a pin whose entry point is not in its own non-empty file list; this is the backstop
+  // for the day that changes, not a live branch.
+  if (!entry) {
+    throw new ConformanceError(
+      CONFORMANCE_CODES.SCHEMA_SET_EMPTY,
+      "XML schema validation was handed an empty schema set, so nothing was validated",
+      "A document validated against no schema is not a schema-valid document. Check that " +
+        "artifacts.cdaSchema.files names the schema set and that the fetch layer returned it.",
+    );
+  }
   const result = await validateXML({
     xml: [{ fileName: "document.xml", contents: documentXml }],
     schema: [entry],

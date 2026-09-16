@@ -142,8 +142,19 @@ const PHQ9_SCALE: NonNullable<BuildCcdaInit["mentalStatusScales"]>[number] = {
   effectiveTime: "20240101",
 };
 
-/** The fully-populated init, shared by the CCD and Referral Note cases. */
+/**
+ * The fully-populated init, shared by the CCD and Referral Note cases.
+ *
+ * It carries every header field the builder accepts as well as every section, because a header
+ * field the caller supplies changes the emitted header and an unsupplied one measures only the
+ * default. `test/conformance/emit-surface-coverage.test.ts` holds this to the whole input type.
+ */
 const POPULATED: BuildCcdaInit = {
+  documentId: "SYNTH-DOC-0001",
+  title: "Synthetic summary of episode note",
+  languageCode: "en-US",
+  confidentiality: "N",
+  custodianName: "Synthetic Health Organization",
   patient: {
     mrn: "MRN001",
     given: ["Jane", "Q"],

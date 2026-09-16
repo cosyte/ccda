@@ -1296,7 +1296,9 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
   [`documentation/conformance-report.md`](documentation/conformance-report.md), it is rewritten by
   every run, and a run fails if the committed bytes disagree with what it just produced.
   **Measured against Schematron revision `6d3ed96160b45a111895da4df5510c7fad9de01f`**, the document
-  types validated are `ccd` and `referralNote`, with **0** error-severity results on the built side
+  types validated are
+  <!-- conformance-statement:document-types:start -->`ccd` and `referralNote`<!-- conformance-statement:document-types:end -->,
+  with **0** error-severity results on the built side
   and **0** round-trip documents whose Schematron error set differed.
   **This is an assessment against a published artifact, not a certification**, and no accredited body
   has reviewed this software or this result.

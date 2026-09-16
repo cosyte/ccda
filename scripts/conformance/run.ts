@@ -334,16 +334,55 @@ function collect(step: () => void): ConformanceError | null {
   }
 }
 
-if (isEntryPoint()) {
+/** Everything the command-line run needs, with every boundary injectable. */
+export interface CliOptions {
+  /** The network boundary. */
+  readonly fetcher: HttpFetcher;
+  /** Working directory for fetched artifacts. */
+  readonly directory: string;
+  /** Read the pins. A thunk, so a malformed pin file is refused inside the run rather than beside it. */
+  readonly readPins: () => Pins;
+  /** The documents to build and validate. */
+  readonly builtDocuments: readonly BuiltDocumentCase[];
+  /** Where the tracked report is written and compared. */
+  readonly reportPath: string;
+  /** Where progress goes. */
+  readonly stdout: (text: string) => void;
+  /** Where refusals go. */
+  readonly stderr: (text: string) => void;
+}
+
+/**
+ * The whole command-line run, INCLUDING the exit code it resolves to.
+ *
+ * THE EXIT CODE IS THE PRODUCT OF THIS FUNCTION, NOT A STATEMENT AT THE BOTTOM OF THE FILE.
+ * `scripts/attw.mjs` exists in this repository because a tool that read nothing exited 0 and
+ * its caller believed it, and a refusal that does not reach the shell is the same false green
+ * one level up: every fail-safe below can be correct and `pnpm conformance` still exit 0 in CI
+ * if the last link is a line nothing exercises. So the exit code is computed here, where
+ * `test/conformance/fail-safe.test.ts` drives it with the network boundary doubled, and the
+ * entry-point block below is one assignment with nothing left to get wrong.
+ *
+ * @param options - The boundaries: the network, the working directory, the pins, the document
+ *   set, the report path and the two output streams.
+ * @returns 0 when the run measured a clean result and the tracked report already matched it, 1
+ *   for every refusal and for every failure before one could be reported.
+ * @example
+ * ```ts
+ * process.exitCode = await runConformanceCli({ ...boundaries });
+ * ```
+ */
+export async function runConformanceCli(options: CliOptions): Promise<number> {
+  const { fetcher, directory, builtDocuments, reportPath, stdout, stderr } = options;
   let failed = false;
   try {
     const result = await runConformance({
-      fetcher: httpFetcher,
-      directory: WORKING_DIRECTORY,
-      pins: readPins(),
-      builtDocuments: BUILT_DOCUMENT_CASES,
+      fetcher,
+      directory,
+      pins: options.readPins(),
+      builtDocuments,
     });
-    process.stdout.write(
+    stdout(
       `conformance: ${String(result.built.length)} built documents, ` +
         `${String(result.roundTripDocuments)} corpus round trips, ` +
         `${String(result.assertionCount)} assertions compiled\n`,
@@ -352,7 +391,7 @@ if (isEntryPoint()) {
     // findings ALWAYS produces, so letting it short-circuit would hide the findings
     // behind their own symptom on exactly the run that first surfaced them.
     const stale = collect(() => {
-      writeReport(result, REPORT_PATH);
+      writeReport(result, reportPath);
     });
     const unclean = collect(() => {
       assertClean(result);
@@ -360,17 +399,29 @@ if (isEntryPoint()) {
     for (const failure of [unclean, stale]) {
       if (failure === null) continue;
       failed = true;
-      process.stderr.write(`\nERROR: ${failure.code}\n  ${failure.context}\n  ${failure.remedy}\n`);
+      stderr(`\nERROR: ${failure.code}\n  ${failure.context}\n  ${failure.remedy}\n`);
     }
-    if (!failed) process.stdout.write(`conformance: OK (report written to ${REPORT_PATH})\n`);
+    if (!failed) stdout(`conformance: OK (report written to ${reportPath})\n`);
   } catch (error) {
     failed = true;
     if (error instanceof ConformanceError) {
-      process.stderr.write(`\nERROR: ${error.code}\n  ${error.context}\n  ${error.remedy}\n`);
+      stderr(`\nERROR: ${error.code}\n  ${error.context}\n  ${error.remedy}\n`);
     } else {
-      process.stderr.write(`\nERROR: the conformance harness failed before it could report.\n`);
-      process.stderr.write(`  ${error instanceof Error ? error.message : String(error)}\n`);
+      stderr(`\nERROR: the conformance harness failed before it could report.\n`);
+      stderr(`  ${error instanceof Error ? error.message : String(error)}\n`);
     }
   }
-  if (failed) process.exitCode = 1;
+  return failed ? 1 : 0;
+}
+
+if (isEntryPoint()) {
+  process.exitCode = await runConformanceCli({
+    fetcher: httpFetcher,
+    directory: WORKING_DIRECTORY,
+    readPins,
+    builtDocuments: BUILT_DOCUMENT_CASES,
+    reportPath: REPORT_PATH,
+    stdout: (text) => process.stdout.write(text),
+    stderr: (text) => process.stderr.write(text),
+  });
 }
