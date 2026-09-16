@@ -77,6 +77,12 @@ importers:
       vitest:
         specifier: 4.1.4
         version: 4.1.4(@types/node@22.20.0)(@vitest/coverage-v8@4.1.4)(vite@7.3.6(@types/node@22.20.0)(tsx@4.21.0))
+      xmllint-wasm:
+        specifier: 5.3.0
+        version: 5.3.0(@types/node@22.20.0)
+      xpath:
+        specifier: 0.0.34
+        version: 0.0.34
 
 packages:
 
@@ -1795,6 +1801,16 @@ packages:
     resolution: {integrity: sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==}
     engines: {node: '>=10'}
 
+  xmllint-wasm@5.3.0:
+    resolution: {integrity: sha512-sEgRXdf2t13eYCFCURmCE6h2hwleEOIS9VL/jOh9JJJnez2YXIooi2Ghm05/JZEPXyPawN8sMASPVZlmh8Sd6A==}
+    engines: {node: '>=16'}
+    peerDependencies:
+      '@types/node': '>=16'
+
+  xpath@0.0.34:
+    resolution: {integrity: sha512-FxF6+rkr1rNSQrhUNYrAFJpRXNzlDoMxeXN5qI84939ylEv3qqPFKa85Oxr6tDaJKqwW6KKyo2v26TSv3k6LeA==}
+    engines: {node: '>=0.6.0'}
+
   y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
     engines: {node: '>=10'}
@@ -3431,6 +3447,12 @@ snapshots:
       ansi-styles: 4.3.0
       string-width: 4.2.3
       strip-ansi: 6.0.1
+
+  xmllint-wasm@5.3.0(@types/node@22.20.0):
+    dependencies:
+      '@types/node': 22.20.0
+
+  xpath@0.0.34: {}
 
   y18n@5.0.8: {}
 

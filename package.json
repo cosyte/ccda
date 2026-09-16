@@ -75,6 +75,7 @@
     "lint:fix": "eslint \"src/**/*.ts\" \"scripts/**/*.ts\" \"test/**/*.ts\" --fix --no-error-on-unmatched-pattern",
     "format": "prettier --write \"src/**/*.{ts,md}\" \"test/**/*.ts\" \"scripts/**/*.ts\" \"docs-content/**/*.md\" \"*.{json,md,yml}\"",
     "format:check": "prettier --check \"src/**/*.{ts,md}\" \"test/**/*.ts\" \"scripts/**/*.ts\" \"docs-content/**/*.md\" \"*.{json,md,yml}\"",
+    "conformance": "tsx --max-old-space-size=4096 scripts/conformance/run.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -108,7 +109,9 @@
     "tsx": "4.21.0",
     "typescript": "5.9.3",
     "vite": "7.3.6",
-    "vitest": "4.1.4"
+    "vitest": "4.1.4",
+    "xmllint-wasm": "5.3.0",
+    "xpath": "0.0.34"
   },
   "dependencies": {
     "@xmldom/xmldom": "0.9.10"

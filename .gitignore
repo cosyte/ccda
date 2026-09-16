@@ -34,6 +34,16 @@ pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Conformance harness working directory. `pnpm conformance` fetches the C-CDA R2.1
+# Schematron, its voc.xml, the CDA R2 XML schema and the public sample corpus into here at
+# run time and never commits any of them. This entry is load-bearing twice over: the
+# Schematron and voc.xml are forbidden in this repository by the harness's own acceptance
+# criterion, and a third-party clinical document that reached a commit would be in git
+# history forever. `scripts/phi-scan.ts` walks the whole working tree and decides scope by
+# content rather than by path, so a gitignored directory is the only place a fetched corpus
+# document can sit without reddening a blocking gate.
+.conformance-artifacts/
+
 # Local
 .cache/
 .turbo/

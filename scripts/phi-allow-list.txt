@@ -38,6 +38,11 @@ NAME DOE
 # Sentinel person-name token seeded into PHI-discipline guard tests
 # (test/phi-guard.test.ts) to prove diagnostics never echo the patient name.
 NAME ZZSECRETPATIENTZZ
+# Sentinel token seeded into the conformance harness's marker document
+# (test/__fixtures__/conformance.ts) in element text, attribute values and
+# narrative at once. It proves the conformance report and both output streams
+# carry nothing read out of the document under validation.
+NAME ZZCONFORMANCEMARKERZZ
 # Sentinel person-name token for the hostile subject-declaration fixture in
 # test/subject-override.test.ts, repeated so the name is oversized as well as
 # adversarial. It proves SUBJECT_CONTEXT_OVERRIDE's message and locus carry
