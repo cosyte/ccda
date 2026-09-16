@@ -3665,13 +3665,13 @@ function immunizationConsumable(doc: Document, vaccine: BuildCode, translate?: T
  *
  * **THE THREE VARIANTS DO NOT SHARE ONE effectiveTime RULE, AND THE ACT IS THE ODD
  * ONE OUT.** Measured against the normative Schematron at the pinned revision: the
- * Procedure Activity Act (`…22.4.12`) asserts `count(cda:effectiveTime)=1` in the
- * ERRORS phase (CONF:1098-8299), while the Procedure Activity Procedure
- * (`…22.4.14`) carries its only effectiveTime assertion in the WARNINGS phase as a
- * SHOULD (CONF:1098-7662) and the Procedure Activity Observation (`…22.4.13`)
- * carries none in the errors phase at all. This file previously applied the SHOULD
- * to all three and emitted nothing when the caller supplied no time, which left
- * every act-variant procedure non-conformant.
+ * Procedure Activity Act (`…22.4.12`) asserts `count(cda:effectiveTime)=1` at ERROR
+ * severity (CONF:1098-8299), while the Procedure Activity Procedure (`…22.4.14`)
+ * carries its only effectiveTime assertion as a SHOULD at warning severity
+ * (CONF:1098-7662) and the Procedure Activity Observation (`…22.4.13`) carries no
+ * error-severity effectiveTime assertion at all. This file previously applied the
+ * SHOULD to all three and emitted nothing when the caller supplied no time, which
+ * left every act-variant procedure non-conformant.
  * @internal
  */
 const PROCEDURE_VARIANTS: Readonly<
