@@ -318,7 +318,15 @@ describe("buildCcda, allergies + the negation/nullFlavor safety rule", () => {
     expect(nka?.noKnownAllergy).toBe(true);
     expect(nka?.negated).toBe(true);
     expect(nka?.nullFlavor).toBeUndefined();
-    expect(nka?.allergen).toBeUndefined();
+    // AC-1. The negated form now carries the substance participant its template's
+    // SHALL requires (CONF:1098-7402), with the playing entity's code
+    // nullFlavor="NA": not applicable, because "no known allergies" names no
+    // substance. So the allergen slot is PRESENT and explicitly empty rather than
+    // absent, which is what a real-world NKA entry from any other system has always
+    // parsed to here. The safety-bearing reads are unchanged and are asserted above:
+    // this is a negation, not an unknown, and there is no code to mistake for one.
+    expect(nka?.allergen?.code).toBeUndefined();
+    expect(nka?.allergen?.nullFlavor).toBe("NA");
   });
 
   it("supports an allergen without a reaction/severity/criticality", () => {
@@ -500,16 +508,26 @@ describe("buildCcda, emit conformance (header + section cardinality)", () => {
     expect((xml.match(/<telecom /g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 
-  it("empty required sections declare entries-optional templateId only (no entries-required)", () => {
+  it("empty required sections declare BOTH templateIds and carry nullFlavor with no entries", () => {
+    // AC-1. This assertion used to read the other way round, on the argument that an
+    // entries-required template with zero entries violates its "SHALL contain at least
+    // one entry" statement. Measured against the normative Schematron at the revision
+    // scripts/conformance/artifacts.json pins, that is wrong twice over: the section's
+    // own assertion admits a nullFlavor-ed section with no entries (it refuses only the
+    // combination of a nullFlavor AND entries), and the CCD's header rule names the
+    // entries-REQUIRED identifier for each of its five clinical SHALL sections, so
+    // declaring only the entries-optional one failed the document-level rule five times.
+    // Medications is stamped 2014-06-09, NOT 2015-08-01: R2.1 never re-issued this
+    // section at the later stamp. See CCD_SHALL_SECTION_STAMPS below.
     const xml = serializeCcda(buildCcda({ patient: { mrn: "M" } }));
-    // Empty Medications/Results must NOT carry the entries-required (.1) template
-    // with zero entries, that violates its "SHALL contain ≥1 entry" statement.
-    // Medications is stamped 2014-06-09, NOT 2015-08-01: R2.1 never re-issued
-    // this section at the later stamp. See CCD_SHALL_SECTION_STAMPS below.
     expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.1" extension="2014-06-09"');
-    expect(xml).not.toContain("2.16.840.1.113883.10.20.22.2.1.1");
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.1.1" extension="2014-06-09"');
     expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.3" extension="2015-08-01"');
-    expect(xml).not.toContain("2.16.840.1.113883.10.20.22.2.3.1");
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.3.1" extension="2015-08-01"');
+    // The escape the section rule grants is nullFlavor-with-no-entries, so both halves
+    // of it are the assertion: every empty section is null-flavored, and none has entries.
+    expect((xml.match(/<section nullFlavor="NI">/g) ?? []).length).toBe(6);
+    expect(xml).not.toContain("<entry>");
   });
 
   it("populated sections declare the entries-required templateId", () => {
@@ -572,14 +590,15 @@ describe("buildCcda, the six CCD SHALL section template stamps", () => {
   });
 
   it("stamps the Medications section identically when it is empty", () => {
-    // An empty CCD emits the entries-OPTIONAL root only (declaring
-    // entries-required with zero entries violates its own "SHALL contain at
-    // least one entry"), so such a document does NOT satisfy CONF:1198-30664 --
-    // that is inherent to having no medications, not something this fix closes.
-    // What is pinned here is that the stamp is right on whichever root is used.
+    // AC-1. An empty CCD now emits BOTH roots at 2014-06-09 and carries
+    // nullFlavor="NI" with no entries, which is the shape that satisfies
+    // CONF:1198-30664 and the section's own entry rule at the same time; the
+    // paragraph above this test's sibling in "emit conformance" has the
+    // measurement. What is pinned here is that the stamp is right on BOTH roots:
+    // the 2015-08-01 leak this file exists to catch would show on either one.
     const empty = serializeCcda(buildCcda({ patient: { mrn: "M" } }));
     expect(empty).toContain('root="2.16.840.1.113883.10.20.22.2.1" extension="2014-06-09"');
-    expect(empty).not.toContain("2.16.840.1.113883.10.20.22.2.1.1");
+    expect(empty).toContain('root="2.16.840.1.113883.10.20.22.2.1.1" extension="2014-06-09"');
   });
 
   it("stamps the Referral Note's Medications section the same way", () => {
@@ -786,8 +805,12 @@ describe("buildCcda, immunizations round-trip", () => {
     expect(flu?.route?.codeSystem).toBe("2.16.840.1.113883.3.26.1.1"); // NCI Thesaurus
     expect(flu?.effectiveTime?.value?.raw).toBe("20240101");
     expect(flu?.narrative).toBe("Influenza, split virus, trivalent, injectable, preservative free");
-    // An administered shot carries no negationInd, so `refused` is absent (not false).
-    expect(flu?.refused).toBeUndefined();
+    // AC-1. The Immunization Activity SHALL carry @negationInd (CONF:1198-8985),
+    // on the administered arm too, so an administered shot now states
+    // negationInd="false" and reads back as `refused: false`. That is the entry's
+    // own claim written where the guide requires it, not a default standing in for
+    // an unknown, and it is still distinct from the refused case below.
+    expect(flu?.refused).toBe(false);
   });
 
   it("emits the Immunizations section with entries-required templateId + LOINC", () => {
@@ -2392,10 +2415,15 @@ describe("buildCcda, SHALL effectiveTime conformance (all sections)", () => {
       ],
     });
     expect(doc.warnings).toEqual([]);
-    // Two supplied organizer times → two @value effectiveTimes on organizers.
-    expect(
-      (serializeCcda(doc).match(/<effectiveTime value="20240102"/g) ?? []).length,
-    ).toBeGreaterThanOrEqual(2);
+    const xml = serializeCcda(doc);
+    // AC-1. The two organizers carry the supplied time in the SHAPE each one's
+    // template requires, and the two shapes differ. The Vital Signs Organizer's
+    // effectiveTime stays a point, an @value. The Result Organizer's is an interval:
+    // CONF:1198-32488 and -32489 require exactly one low and exactly one high
+    // whenever the element is present, so the supplied time becomes the low and the
+    // high is nullFlavor="UNK" (nothing tells the builder when the panel ended).
+    expect(xml).toContain('<effectiveTime value="20240102"/>');
+    expect(xml).toContain('<effectiveTime><low value="20240102"/><high nullFlavor="UNK"/>');
   });
 });
 

@@ -315,6 +315,17 @@ function isEntryPoint(): boolean {
   return entry !== undefined && import.meta.url === new URL(`file://${entry}`).href;
 }
 
+/** Run one `ConformanceError`-throwing step, returning the error rather than propagating it. */
+function collect(step: () => void): ConformanceError | null {
+  try {
+    step();
+    return null;
+  } catch (error) {
+    if (error instanceof ConformanceError) return error;
+    throw error;
+  }
+}
+
 if (isEntryPoint()) {
   let failed = false;
   try {
@@ -329,9 +340,21 @@ if (isEntryPoint()) {
         `${String(result.roundTripDocuments)} corpus round trips, ` +
         `${String(result.assertionCount)} assertions compiled\n`,
     );
-    writeReport(result, REPORT_PATH);
-    assertClean(result);
-    process.stdout.write(`conformance: OK (report written to ${REPORT_PATH})\n`);
+    // Both gates run, and both report. A stale report is what a run with new
+    // findings ALWAYS produces, so letting it short-circuit would hide the findings
+    // behind their own symptom on exactly the run that first surfaced them.
+    const stale = collect(() => {
+      writeReport(result, REPORT_PATH);
+    });
+    const unclean = collect(() => {
+      assertClean(result);
+    });
+    for (const failure of [unclean, stale]) {
+      if (failure === null) continue;
+      failed = true;
+      process.stderr.write(`\nERROR: ${failure.code}\n  ${failure.context}\n  ${failure.remedy}\n`);
+    }
+    if (!failed) process.stdout.write(`conformance: OK (report written to ${REPORT_PATH})\n`);
   } catch (error) {
     failed = true;
     if (error instanceof ConformanceError) {

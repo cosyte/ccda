@@ -330,6 +330,20 @@ const R21 = "2015-08-01";
 const SYNTH_ROOT = "2.16.840.1.113883.19.5.99999";
 /** The v3 ActCode `ASSERTION` code system, used on allergy/reaction observations. @internal */
 const ACT_CODE = "2.16.840.1.113883.5.4";
+
+/**
+ * The HL7 ActClass code system, and the `CONC` concern code every C-CDA Concern
+ * Act carries. It is the template's own fixed literal (Problem Concern Act
+ * CONF:1198-9027 + -19184, Allergy Concern Act CONF:1198-7477 + -19158), the
+ * machine-readable statement "this act is a concern", and not a clinical value
+ * about a patient: there is exactly one admissible code and the guide names it.
+ * The CDA R2 `Act` sequence also makes `code` mandatory between `id` and
+ * `statusCode`, so a concern act without it is not schema-valid either.
+ * @internal
+ */
+const ACT_CLASS = "2.16.840.1.113883.5.6";
+/** @internal */
+const CONCERN_CODE = { code: "CONC", codeSystem: ACT_CLASS, displayName: "Concern" } as const;
 /** The LOINC document-type code + title for a CCD. @internal */
 const CCD_DOC_CODE = { code: "34133-9", displayName: "Summarization of Episode Note" } as const;
 /** The Referral Note document template OID (root); the R2.1 stamp lives in `@extension`. @internal */
@@ -1756,6 +1770,18 @@ interface DocTypeSpec {
   readonly documentCode: { readonly code: string; readonly displayName: string };
   /** The ordered SHALL sections the builder always emits for this document type. */
   readonly shallSections: readonly ShallSectionKey[];
+  /**
+   * Whether this type's header rule requires `documentationOf/serviceEvent`. The
+   * CCD's does (CONF:1198-8452); the Referral Note's does not, and emitting an
+   * unrequired care-provision act would be asserting one the document never claimed.
+   */
+  readonly requiresDocumentationOf: boolean;
+  /**
+   * Whether this type's header rule requires `informationRecipient`. The Referral
+   * Note's does (CONF:1198-31589), because a referral is addressed to someone; the
+   * CCD's does not.
+   */
+  readonly requiresInformationRecipient: boolean;
 }
 
 /**
@@ -1799,6 +1825,8 @@ const DOC_TYPE_SPECS: Readonly<Record<"ccd" | "referralNote", DocTypeSpec>> = {
       "vitalSigns",
       "socialHistory",
     ],
+    requiresDocumentationOf: true,
+    requiresInformationRecipient: false,
   },
   referralNote: {
     documentTemplateRoot: REFERRAL_NOTE_TEMPLATE,
@@ -1811,6 +1839,8 @@ const DOC_TYPE_SPECS: Readonly<Record<"ccd" | "referralNote", DocTypeSpec>> = {
       "assessment",
       "planOfTreatment",
     ],
+    requiresDocumentationOf: false,
+    requiresInformationRecipient: true,
   },
 };
 
@@ -1845,6 +1875,23 @@ function pointEffectiveTime(doc: Document, value: string | undefined, field: str
   return value === undefined
     ? el(doc, "effectiveTime", { nullFlavor: "UNK" })
     : el(doc, "effectiveTime", { value: assertHl7Ts(value, field) });
+}
+
+/**
+ * An interval `<effectiveTime>` for a slot whose template requires both bounds when
+ * the element is present (the Result Organizer `…22.4.1`, CONF:1198-32488 and
+ * -32489). The `low` carries the caller's time when supplied and `nullFlavor="UNK"`
+ * otherwise; the `high` is always `nullFlavor="UNK"`, because nothing tells this
+ * builder when the interval ended and copying the low into it would assert an end
+ * the caller never gave.
+ * @internal
+ */
+function intervalEffectiveTime(doc: Document, value: string | undefined, field: string): Element {
+  const low =
+    value === undefined
+      ? el(doc, "low", { nullFlavor: "UNK" })
+      : el(doc, "low", { value: assertHl7Ts(value, field) });
+  return el(doc, "effectiveTime", undefined, low, el(doc, "high", { nullFlavor: "UNK" }));
 }
 
 /**
@@ -2352,6 +2399,11 @@ function appendHeader(
   root.appendChild(recordTarget(doc, init.patient));
   root.appendChild(author(doc, effectiveTime));
   root.appendChild(custodian(doc, init.custodianName ?? "Synthetic Health Organization"));
+  // CDA R2 ClinicalDocument sequence: informationRecipient sits after custodian and
+  // documentationOf after inFulfillmentOf, both before component. Emitting either in
+  // the wrong place is XSD-invalid rather than cosmetic.
+  if (spec.requiresInformationRecipient) root.appendChild(informationRecipient(doc));
+  if (spec.requiresDocumentationOf) root.appendChild(documentationOf(doc));
 }
 
 /**
@@ -2408,6 +2460,16 @@ function patientEl(doc: Document, patient: BuildCcdaPatient): Element {
       ? el(doc, "birthTime", { nullFlavor: "UNK" })
       : el(doc, "birthTime", { value: assertHl7Ts(patient.birthTime, "patient.birthTime") }),
   );
+  // US Realm Header: the patient SHALL carry exactly one raceCode (CONF:1198-5322)
+  // and exactly one ethnicGroupCode (CONF:1198-5323). The builder is never told
+  // either, so both are nullFlavor="UNK": the cardinality is satisfied and nothing
+  // is invented. Race and ethnicity are self-reported facts about a person and a
+  // guessed one is a wrong fact about a patient, not a formatting choice, so there
+  // is no defensible default here and there is deliberately no builder input for
+  // them either. Position is the CDA R2 Patient sequence: after birthTime, before
+  // guardian / birthplace / languageCommunication.
+  p.appendChild(el(doc, "raceCode", { nullFlavor: "UNK" }));
+  p.appendChild(el(doc, "ethnicGroupCode", { nullFlavor: "UNK" }));
   return p;
 }
 
@@ -2447,7 +2509,74 @@ function author(doc: Document, time: string): Element {
     telecomStub(doc),
     device,
   );
+  // CONF:1198-8456: an assignedAuthor SHALL carry either an assignedPerson, or an
+  // assignedAuthoringDevice AND a representedOrganization. This author is a device
+  // (no person, so no PHI), which puts it on the second arm and obliges the
+  // organization. It carries the software's own producer rather than a clinical
+  // organization the builder was never told about, and it is last in the CDA R2
+  // AssignedAuthor sequence.
+  assigned.appendChild(
+    el(
+      doc,
+      "representedOrganization",
+      undefined,
+      el(doc, "id", { root: SYNTH_ROOT }),
+      textEl(doc, "name", "cosyte"),
+    ),
+  );
   return el(doc, "author", undefined, el(doc, "time", { value: time }), assigned);
+}
+
+/**
+ * The `<documentationOf><serviceEvent>` the US Realm CCD SHALL carry
+ * (CONF:1198-8452, -8480, -8481, -8453, -8454, -8455): the care-provision act the
+ * summary documents, `@classCode="PCPR"`, with an effectiveTime carrying both a
+ * `low` and a `high`.
+ *
+ * Both bounds are `nullFlavor="UNK"`. The builder is told what is IN the document,
+ * never over what period of care it was assembled, and the span of a care provision
+ * is a clinical fact: deriving it from the earliest and latest date that happens to
+ * appear in the content would manufacture a care episode out of whatever the caller
+ * put in, which is the guessing `clinical-safety` C1 forbids. The cardinality is
+ * satisfied, the fact is declared unknown, and the parser reads a nullFlavor bound
+ * back as absent.
+ * @internal
+ */
+function documentationOf(doc: Document): Element {
+  const effectiveTime = el(
+    doc,
+    "effectiveTime",
+    undefined,
+    el(doc, "low", { nullFlavor: "UNK" }),
+    el(doc, "high", { nullFlavor: "UNK" }),
+  );
+  const serviceEvent = el(doc, "serviceEvent", { classCode: "PCPR" }, effectiveTime);
+  return el(doc, "documentationOf", undefined, serviceEvent);
+}
+
+/**
+ * The `<informationRecipient>` the US Realm Referral Note SHALL carry
+ * (CONF:1198-31589, -31590, -31593, -31594): who the referral is addressed to.
+ *
+ * The name is `nullFlavor="UNK"`, for the same reason the patient's is when the
+ * caller supplies no parts: a referral recipient is a named person and there is no
+ * safe stand-in for one. There is deliberately no builder input for it either;
+ * adding one is a public-surface change and this item is not the place for it.
+ * @internal
+ */
+function informationRecipient(doc: Document): Element {
+  const recipient = el(
+    doc,
+    "informationRecipient",
+    undefined,
+    el(doc, "name", { nullFlavor: "UNK" }),
+  );
+  return el(
+    doc,
+    "informationRecipient",
+    undefined,
+    el(doc, "intendedRecipient", undefined, recipient),
+  );
 }
 
 /** Build a minimal `<custodian>` (organization only). @internal */
@@ -2575,11 +2704,30 @@ function cdValue(
 /**
  * Build a section's `<templateId>`s. The entries-**optional** template
  * (`root` = base, stamped `extension`, {@link R21} unless the caller overrides
- * it) is always emitted; the entries-**required**
- * template (`${base}.1`) is added only when the section carries entries, an
- * entries-required template with zero entries violates its "SHALL contain at
- * least one entry" conformance statement, so an empty (`nullFlavor="NI"`)
- * section must NOT declare it.
+ * it) is always emitted; the entries-**required** template (`${base}.1`) is added
+ * when the caller asks for it.
+ *
+ * **AN EMPTY ENTRIES-REQUIRED SECTION IS CONFORMANT WHEN IT IS `nullFlavor`-ed,
+ * AND THIS FILE USED TO SAY THE OPPOSITE.** The comment here previously read that
+ * "an entries-required template with zero entries violates its SHALL contain at
+ * least one entry conformance statement, so an empty section must NOT declare it",
+ * and the builder acted on it. Measured against the normative Schematron at the
+ * revision `scripts/conformance/artifacts.json` pins, that is false in one
+ * direction and costly in the other. The entries-required section's own assertion
+ * is written as an exclusive pair, for example the Problem Section's
+ * `a-1198-9183-c`:
+ *
+ *     ((count(@nullFlavor)=1) or (count(cda:entry[...])>0))
+ *       and (not((count(@nullFlavor)=1) and (count(cda:entry)>0)))
+ *
+ * which admits a null-flavored section with no entries and refuses only the
+ * combination of a `nullFlavor` AND entries. Meanwhile the CCD's own header rule
+ * names the entries-REQUIRED identifier in each of its five clinical SHALL
+ * sections (CONF:1198-30662, -30664, -30666, -30670, -30690) and the Referral
+ * Note's names three of them, so a document whose empty sections declare only the
+ * entries-optional template fails its document-level rule five times over. The
+ * only shape that satisfies both is the one this builder now emits: declare the
+ * entries-required template, and carry `nullFlavor="NI"` with no entries.
  * @internal
  */
 function sectionTemplateIds(
@@ -2634,12 +2782,25 @@ function sectionElement(
   return section;
 }
 
-/** Build a spec-clean empty required section (`nullFlavor="NI"`, no entries). @internal */
+/**
+ * Build a spec-clean empty required section (`nullFlavor="NI"`, no entries).
+ *
+ * `entriesRequired` is the caller's statement that this section HAS an
+ * entries-required specialization that its document type's header rule names by
+ * identifier, not a statement about whether it has entries. Pass it for the five
+ * clinical sections that have one (Problems, Allergies, Medications, Results,
+ * Vital Signs); Social History, Plan of Treatment, Reason for Referral and
+ * Assessment have no `.1` template at all and declaring one would name a template
+ * that does not exist. See {@link sectionTemplateIds} for why an empty section
+ * declares it.
+ * @internal
+ */
 function emptySection(
   doc: Document,
   base: string,
   loinc: string,
   title: string,
+  entriesRequired = false,
   extension: string | null = R21,
 ): Element {
   const section = sectionElement(
@@ -2648,7 +2809,7 @@ function emptySection(
     loinc,
     title,
     textEl(doc, "text", "No information"),
-    false,
+    entriesRequired,
     { nullFlavor: "NI" },
     extension,
   );
@@ -2694,7 +2855,7 @@ function problemsSection(
   translate?: Translate,
 ): Element {
   if (problems.length === 0) {
-    return emptySection(doc, PROBLEMS_SECTION_BASE, "11450-4", "Problems");
+    return emptySection(doc, PROBLEMS_SECTION_BASE, "11450-4", "Problems", true);
   }
   const text = el(doc, "text");
   const entries: Element[] = [];
@@ -2769,6 +2930,7 @@ function problemEntry(
     { classCode: "ACT", moodCode: "EVN" },
     el(doc, "templateId", { root: PROBLEM_CONCERN_ACT, extension: R21 }),
     el(doc, "id", { root: SYNTH_ROOT, extension: id("prob-act") }),
+    el(doc, "code", { ...CONCERN_CODE }),
     el(doc, "statusCode", { code: concernStatusCode(p.status) }),
   );
   // Problem Concern Act (…22.4.3) SHALL contain effectiveTime [1..1]
@@ -2795,7 +2957,7 @@ function allergiesSection(
   translate?: Translate,
 ): Element {
   if (allergies.length === 0) {
-    return emptySection(doc, ALLERGIES_SECTION_BASE, "48765-2", "Allergies");
+    return emptySection(doc, ALLERGIES_SECTION_BASE, "48765-2", "Allergies", true);
   }
   const text = el(doc, "text");
   const entries: Element[] = [];
@@ -2869,8 +3031,18 @@ function allergyEntry(
   );
   if (!nka && a.allergen !== undefined) {
     obs.appendChild(allergenParticipant(doc, a.allergen, translate));
+  } else if (nka) {
+    // CONF:1098-7402: the Allergy-Intolerance Observation SHALL carry exactly one
+    // participant/participantRole/playingEntity/code, on the negated form too.
+    // "No known allergies" has no substance to name, so the playing entity's code
+    // is nullFlavor="NA": not applicable, which is the fact, rather than UNK
+    // (a substance exists and is unknown) and rather than a stand-in code, which
+    // would put a substance into a negation that asserts there is none.
+    obs.appendChild(negatedAllergenParticipant(doc));
   }
-  if (a.reaction !== undefined) obs.appendChild(reactionRelationship(doc, a.reaction, a.severity));
+  if (a.reaction !== undefined) {
+    obs.appendChild(reactionRelationship(doc, a.reaction, a.severity, id));
+  }
   if (a.criticality !== undefined) obs.appendChild(criticalityRelationship(doc, a.criticality));
 
   const act = el(
@@ -2879,6 +3051,7 @@ function allergyEntry(
     { classCode: "ACT", moodCode: "EVN" },
     el(doc, "templateId", { root: ALLERGY_CONCERN_ACT, extension: R21 }),
     el(doc, "id", { root: SYNTH_ROOT, extension: id("alg-act") }),
+    el(doc, "code", { ...CONCERN_CODE }),
     el(doc, "statusCode", { code: concernStatusCode(a.status) }),
   );
   // Allergy Concern Act (…22.4.30) SHALL contain effectiveTime [1..1] under the
@@ -2901,17 +3074,39 @@ function allergenParticipant(doc: Document, allergen: BuildCode, translate?: Tra
   return el(doc, "participant", { typeCode: "CSM" }, role);
 }
 
+/**
+ * The substance participant a NEGATED (no-known-allergy) observation carries. The
+ * template's SHALL cardinality applies to the negated form as much as to a coded
+ * allergy, and the honest filling is `nullFlavor="NA"`: there is no substance,
+ * which is the entry's whole claim. @internal
+ */
+function negatedAllergenParticipant(doc: Document): Element {
+  const playingEntity = el(
+    doc,
+    "playingEntity",
+    { classCode: "MMAT" },
+    el(doc, "code", { nullFlavor: "NA" }),
+  );
+  const role = el(doc, "participantRole", { classCode: "MANU" }, playingEntity);
+  return el(doc, "participant", { typeCode: "CSM" }, role);
+}
+
 /** Build a Reaction Observation relationship, with a nested Severity when given. @internal */
 function reactionRelationship(
   doc: Document,
   reaction: BuildCode,
   severity: BuildCode | undefined,
+  id: (prefix: string) => string,
 ): Element {
   const obs = el(
     doc,
     "observation",
     { classCode: "OBS", moodCode: "EVN" },
     el(doc, "templateId", { root: REACTION_OBSERVATION, extension: "2014-06-09" }),
+    // CONF:1098-7329: the Reaction Observation SHALL carry at least one id. A
+    // generated, build-scoped identifier, the same shape every other entry in this
+    // builder uses; it identifies the entry, not the patient.
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("rxn-obs") }),
     el(doc, "code", { code: "ASSERTION", codeSystem: ACT_CODE }),
     el(doc, "statusCode", { code: "completed" }),
     cdValue(doc, reaction, SNOMED_CT),
@@ -2972,7 +3167,14 @@ function medicationsSection(
   translate?: Translate,
 ): Element {
   if (meds.length === 0) {
-    return emptySection(doc, MEDICATIONS_SECTION_BASE, "10160-0", "Medications", MED_SECTION_EXT);
+    return emptySection(
+      doc,
+      MEDICATIONS_SECTION_BASE,
+      "10160-0",
+      "Medications",
+      true,
+      MED_SECTION_EXT,
+    );
   }
   const text = el(doc, "text");
   const entries: Element[] = [];
@@ -3077,7 +3279,7 @@ function resultsSection(
   id: (prefix: string) => string,
 ): Element {
   if (panels.length === 0) {
-    return emptySection(doc, RESULTS_SECTION_BASE, "30954-2", "Results");
+    return emptySection(doc, RESULTS_SECTION_BASE, "30954-2", "Results", true);
   }
   const text = el(doc, "text");
   const entries = panels.map((panel) => resultOrganizerEntry(doc, panel, text, id));
@@ -3106,10 +3308,16 @@ function resultOrganizerEntry(
     }),
     el(doc, "statusCode", { code: panel.status ?? "completed" }),
   );
-  // Result Organizer (…22.4.1) effectiveTime spans the contained observations.
-  // Emitted for spec-completeness (nullFlavor="UNK" unless the caller supplied a
-  // panel time), the member observations each carry their own required time.
-  organizer.appendChild(pointEffectiveTime(doc, panel.effectiveTime, "resultPanel.effectiveTime"));
+  // Result Organizer (…22.4.1) effectiveTime spans the contained observations, and
+  // CONF:1198-32488 / -32489 make it an INTERVAL: present or absent, but when
+  // present it SHALL carry exactly one low and exactly one high. It was emitted as
+  // a point, which fails both. The low is the caller's panel time when supplied;
+  // the high is always nullFlavor="UNK", because a builder is told when a panel was
+  // collected and never when it ended, and turning a collection time into an end
+  // time invents a clinical fact rather than reformatting one.
+  organizer.appendChild(
+    intervalEffectiveTime(doc, panel.effectiveTime, "resultPanel.effectiveTime"),
+  );
   for (const result of panel.results) {
     organizer.appendChild(
       el(doc, "component", undefined, resultObservation(doc, result, text, id)),
@@ -3218,12 +3426,34 @@ function referenceRangeEl(
   return el(doc, "referenceRange", undefined, el(doc, "observationRange", undefined, ivl));
 }
 
-/** The SNOMED CT "Vital signs" cluster code the Vital Signs Organizer carries. @internal */
+/**
+ * The cluster code the Vital Signs Organizer carries, LOINC `74728-7`.
+ *
+ * **THIS IS THE 2.1-ONLY CODE AND THE CHOICE IS FORCED BY WHICH `templateId`s THE
+ * ORGANIZER DECLARES.** The normative Schematron splits the Vital Signs Organizer
+ * into two mutually exclusive rules on exactly that question. An organizer
+ * carrying BOTH the extension-less C-CDA 1.1 `templateId` and the 2015-08-01 one
+ * SHALL use SNOMED `46680005` with a LOINC `74728-7` `<translation>`
+ * (CONF:1198-32741, -32742, -32743). An organizer carrying ONLY the 2015-08-01
+ * `templateId`, which is what this builder emits and what the artifact's own
+ * 2025-09-08 note "Remove C-CDA 1.1 backwards compatibility requirement" points
+ * at, SHALL use LOINC `74728-7` directly (CONF:1198-32744, -32746). This builder
+ * emitted the SNOMED code under the 2.1-only templateId, which is the one
+ * combination neither rule admits.
+ *
+ * **DO NOT ADD THE LOINC `<translation>` BACK BESIDE THIS.** The artifact carries
+ * a generated branch rule whose context is precisely a `74728-7` LOINC
+ * `<translation>` under a 2015-08-01 organizer's `<code>`, and whose two
+ * assertions both test `not(tested)`: anything matching that context fails
+ * unconditionally. The translation belongs only on the dual-conformance shape,
+ * which this builder does not emit.
+ * @internal
+ */
 const VITAL_SIGNS_CLUSTER = {
-  code: "46680005",
-  codeSystem: SNOMED_CT,
-  displayName: "Vital signs",
-  codeSystemName: "SNOMED CT",
+  code: "74728-7",
+  codeSystem: LOINC,
+  displayName: "Vital signs, weight, height, head circumference, oximetry, BMI, and BSA panel",
+  codeSystemName: "LOINC",
 } as const;
 
 /** Build the Vital Signs section, populated, or empty when there are none. @internal */
@@ -3233,7 +3463,7 @@ function vitalsSection(
   id: (prefix: string) => string,
 ): Element {
   if (panels.length === 0) {
-    return emptySection(doc, VITALS_SECTION_BASE, "8716-3", "Vital Signs");
+    return emptySection(doc, VITALS_SECTION_BASE, "8716-3", "Vital Signs", true);
   }
   const text = el(doc, "text");
   const entries = panels.map((panel) => vitalsOrganizerEntry(doc, panel, text, id));
@@ -3364,10 +3594,14 @@ function immunizationEntry(
   // A refused / not-administered shot is `negationInd="true"`, the parser reads
   // it back as `refused` and flags IMMUNIZATION_REFUSED; it is NEVER conflated
   // with a `nullFlavor` "unknown" (opposite clinical meaning).
+  // CONF:1198-8985: the Immunization Activity SHALL carry @negationInd, on both
+  // arms. `false` is not a default standing in for an unknown; it is the entry's
+  // own claim, that the caller supplied an immunization that was administered,
+  // written where the guide requires it to be written.
   const attrs: Attrs =
     imm.refused === true
       ? { classCode: "SBADM", moodCode: "EVN", negationInd: "true" }
-      : { classCode: "SBADM", moodCode: "EVN" };
+      : { classCode: "SBADM", moodCode: "EVN", negationInd: "false" };
   const sbadm = el(
     doc,
     "substanceAdministration",
@@ -3425,16 +3659,50 @@ function immunizationConsumable(doc: Document, vaccine: BuildCode, translate?: T
   return el(doc, "consumable", undefined, product);
 }
 
-/** The element name, `@classCode`, and template root for each Procedure variant. @internal */
+/**
+ * The element name, `@classCode`, template root and effectiveTime obligation for
+ * each Procedure variant.
+ *
+ * **THE THREE VARIANTS DO NOT SHARE ONE effectiveTime RULE, AND THE ACT IS THE ODD
+ * ONE OUT.** Measured against the normative Schematron at the pinned revision: the
+ * Procedure Activity Act (`…22.4.12`) asserts `count(cda:effectiveTime)=1` in the
+ * ERRORS phase (CONF:1098-8299), while the Procedure Activity Procedure
+ * (`…22.4.14`) carries its only effectiveTime assertion in the WARNINGS phase as a
+ * SHOULD (CONF:1098-7662) and the Procedure Activity Observation (`…22.4.13`)
+ * carries none in the errors phase at all. This file previously applied the SHOULD
+ * to all three and emitted nothing when the caller supplied no time, which left
+ * every act-variant procedure non-conformant.
+ * @internal
+ */
 const PROCEDURE_VARIANTS: Readonly<
   Record<
     ProcedureKind,
-    { readonly element: string; readonly classCode: string; readonly root: string }
+    {
+      readonly element: string;
+      readonly classCode: string;
+      readonly root: string;
+      readonly requiresEffectiveTime: boolean;
+    }
   >
 > = {
-  procedure: { element: "procedure", classCode: "PROC", root: PROCEDURE_ACTIVITY_PROCEDURE },
-  act: { element: "act", classCode: "ACT", root: PROCEDURE_ACTIVITY_ACT },
-  observation: { element: "observation", classCode: "OBS", root: PROCEDURE_ACTIVITY_OBSERVATION },
+  procedure: {
+    element: "procedure",
+    classCode: "PROC",
+    root: PROCEDURE_ACTIVITY_PROCEDURE,
+    requiresEffectiveTime: false,
+  },
+  act: {
+    element: "act",
+    classCode: "ACT",
+    root: PROCEDURE_ACTIVITY_ACT,
+    requiresEffectiveTime: true,
+  },
+  observation: {
+    element: "observation",
+    classCode: "OBS",
+    root: PROCEDURE_ACTIVITY_OBSERVATION,
+    requiresEffectiveTime: false,
+  },
 };
 
 /**
@@ -3508,12 +3776,18 @@ function procedureEntry(
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     el(doc, "statusCode", { code: statusCode }),
   );
-  // Procedure Activity effectiveTime is SHOULD [0..1] (CONF:1098-7662): emitted
-  // only when supplied, never fabricated with a nullFlavor when unknown.
+  // The effectiveTime obligation is the variant's, not the section's: SHALL [1..1]
+  // for the act variant (CONF:1098-8299) and SHOULD [0..1] for the other two. A
+  // SHALL slot with no supplied time is nullFlavor="UNK", the cardinality satisfied
+  // without inventing a procedure date; a SHOULD slot with no supplied time stays
+  // absent, because a nullFlavor there would add an element the guide never asked
+  // for and would say "unknown" where the document said nothing.
   if (p.effectiveTime !== undefined) {
     act.appendChild(
       el(doc, "effectiveTime", { value: assertHl7Ts(p.effectiveTime, "procedure.effectiveTime") }),
     );
+  } else if (variant.requiresEffectiveTime) {
+    act.appendChild(el(doc, "effectiveTime", { nullFlavor: "UNK" }));
   }
   // The assessment `observation` variant carries its SHALL coded result `value`
   // (guaranteed present by the guard above; the parser reads it back).
@@ -4313,6 +4587,7 @@ function assessmentSection(doc: Document, narrative: string | undefined): Elemen
       ASSESSMENT_SECTION_BASE,
       ASSESSMENT_CODE.code,
       ASSESSMENT_CODE.displayName,
+      false,
       null,
     );
   }
@@ -4344,6 +4619,7 @@ function reasonForReferralSection(doc: Document, narrative: string | undefined):
       REASON_FOR_REFERRAL_SECTION_BASE,
       REASON_FOR_REFERRAL_CODE.code,
       REASON_FOR_REFERRAL_CODE.displayName,
+      false,
       REASON_FOR_REFERRAL_EXT,
     );
   }
@@ -4374,6 +4650,7 @@ function planOfTreatmentSection(
       PLAN_OF_TREATMENT_SECTION_BASE,
       PLAN_OF_TREATMENT_LOINC,
       "Plan of Treatment",
+      false,
       PLAN_OF_TREATMENT_EXT,
     );
   }
