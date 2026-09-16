@@ -15,6 +15,13 @@ import { WARNING_CODES, FATAL_CODES } from "../src/index.js";
  * which keeps its narrower meaning and its message) and
  * `REQUIRED_SECTIONS_NOT_EVALUATED` (that document's SHALL obligation was not
  * computed, rather than computed smaller in silence).
+ *
+ * **One more was ADDED when the builder's output was first measured against the
+ * normative Schematron**, again with nothing renamed or removed:
+ * `MISSING_SELF_CARE_ACTIVITY` (a Functional Status Organizer was asked for
+ * without the Self-Care Activities observation its template SHALL contain, so
+ * the findings were written standalone instead of an organizer claiming a
+ * template it does not satisfy).
  */
 describe("code surface stability", () => {
   it("warning codes are stable", () => {
@@ -42,6 +49,7 @@ describe("code surface stability", () => {
         "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
         "MISSING_PRODUCT_CODE",
         "MISSING_ROUTE_CODE",
+        "MISSING_SELF_CARE_ACTIVITY",
         "MISSING_TEMPLATE_ID",
         "MISSING_UNIT_ON_PQ",
         "MULTIPLE_EFFECTIVE_TIMES_UNRESOLVED",

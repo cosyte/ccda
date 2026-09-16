@@ -158,6 +158,13 @@ export const FUNCTIONAL_STATUS_OBSERVATION = "2.16.840.1.113883.10.20.22.4.67";
 export const MENTAL_STATUS_ORGANIZER = "2.16.840.1.113883.10.20.22.4.75";
 /** Mental Status Observation, a single coded mental-status finding + value. */
 export const MENTAL_STATUS_OBSERVATION = "2.16.840.1.113883.10.20.22.4.74";
+/**
+ * Self-Care Activities (ADL and IADL), an activity/ability observation. The
+ * Functional Status Organizer SHALL contain at least one component holding it
+ * (CONF:1098-31432), so it is a component of that organizer here rather than a
+ * top-level entry act, and it is read back as a functional-status finding.
+ */
+export const SELF_CARE_ACTIVITIES = "2.16.840.1.113883.10.20.22.4.128";
 /** Assessment Scale Observation, a scored scale (e.g. PHQ-9, Glasgow Coma) carried as a direct section entry. */
 export const ASSESSMENT_SCALE_OBSERVATION = "2.16.840.1.113883.10.20.22.4.69";
 /** Assessment Scale Supporting Observation, a scored component (item/question) of an Assessment Scale. */

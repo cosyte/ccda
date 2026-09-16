@@ -68,6 +68,7 @@ export const EXEMPTION_GROUPS: readonly ExemptionGroup[] = [
       "BuildCcdaProcedure",
       "BuildCcdaResult",
       "BuildCcdaResultPanel",
+      "BuildCcdaSelfCareActivity",
       "BuildCcdaSmokingStatus",
       "BuildCcdaVital",
       "BuildCcdaVitalsPanel",

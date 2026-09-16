@@ -8,11 +8,13 @@
  * TWO GROUPS, SERVING DIFFERENT HALVES OF THE HARNESS.
  *
  *   1. {@link BUILT_DOCUMENT_CASES} are the `buildCcda` inits the harness validates against the
- *      normative artifacts. They cover both document types the builder emits and both ends of
- *      its input range: an init carrying nothing but a patient, and one populating every
- *      section the builder knows how to emit. The populated shapes mirror the inits the
- *      existing builder suite already exercises, so the harness measures the same emit paths
- *      the rest of the tests do rather than a set invented for it.
+ *      normative artifacts. They cover both document types the builder emits, both ends of its
+ *      input range (an init carrying nothing but a patient, and one populating every section
+ *      the builder knows how to emit), and each optional section on its own. The shapes mirror
+ *      the inits the existing builder suite already exercises, so the harness measures the same
+ *      emit paths the rest of the tests do rather than a set invented for it. A section the
+ *      builder can emit and this list omits is a section nothing measures, which is how a
+ *      published "zero error-severity results" comes to describe a subset of the emit surface.
  *   2. The self-test Schematron, vocabulary and documents below are what `test/conformance/*`
  *      runs the harness against with the network boundary doubled. They are SMALL ON PURPOSE:
  *      the ordinary suite must stay runnable with no network, so it cannot fetch the real
@@ -38,6 +40,107 @@ export interface BuiltDocumentCase {
   /** The init itself. */
   readonly init: BuildCcdaInit;
 }
+
+/**
+ * The Past Medical History entries, shared by the populated inits and by the
+ * isolated case below so both measure the same emit path.
+ */
+const PAST_MEDICAL_HISTORY: NonNullable<BuildCcdaInit["pastMedicalHistory"]> = [
+  { problem: { code: "74400008", displayName: "Appendicitis" }, onset: "20230601" },
+];
+
+/** The Plan of Treatment entries, one per planned kind the builder emits. */
+const PLAN_OF_TREATMENT: NonNullable<BuildCcdaInit["planOfTreatment"]> = [
+  {
+    kind: "observation",
+    code: { code: "58410-2", displayName: "CBC panel" },
+    mood: "RQO",
+    effectiveTime: "20240801",
+  },
+  { kind: "procedure", code: { code: "73761001", displayName: "Colonoscopy" } },
+  {
+    kind: "medicationActivity",
+    code: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" },
+    mood: "RQO",
+    effectiveTime: "20240801",
+  },
+  {
+    kind: "encounter",
+    code: { code: "99213", displayName: "Office outpatient visit 15 minutes" },
+    mood: "APT",
+  },
+  { kind: "act", code: { code: "409073007", displayName: "Education" } },
+  { kind: "supply", code: { code: "58938008", displayName: "Wheelchair" } },
+];
+
+/**
+ * The Family History organizers. The first relative exercises every optional
+ * part of the emit path at once: the demographics subject, the
+ * `sdtc:deceasedInd` extension the SDTC schema pin exists for, the nested Age
+ * Observation and the nested Family History Death Observation.
+ */
+const FAMILY_HISTORY: NonNullable<BuildCcdaInit["familyHistory"]> = [
+  {
+    relative: {
+      relationship: { code: "9947008", displayName: "Father" },
+      gender: "M",
+      birthTime: "19500101",
+      deceased: true,
+    },
+    observations: [
+      {
+        condition: { code: "22298006", displayName: "Myocardial infarction" },
+        ageAtOnset: 57,
+        causeOfDeath: true,
+        effectiveTime: "20070101",
+      },
+    ],
+  },
+  {
+    relative: { relationship: { code: "72705000", displayName: "Mother" }, gender: "F" },
+    observations: [{ condition: { code: "73211009", displayName: "Diabetes mellitus" } }],
+  },
+];
+
+/**
+ * A Functional Status Organizer carrying the Self-Care Activities (ADL and
+ * IADL) observation its template SHALL contain, so the organizer emit path is
+ * measured rather than only the standalone one it degrades to.
+ */
+const FUNCTIONAL_STATUS_ORGANIZER_WITH_ACTIVITY: NonNullable<
+  BuildCcdaInit["functionalStatusOrganizers"]
+>[number] = {
+  code: { code: "118228005", displayName: "Musculoskeletal function" },
+  effectiveTime: "20240101",
+  findings: [{ value: { code: "165245003", displayName: "Able to walk" } }],
+  selfCareActivities: [
+    {
+      code: { code: "54520-2", displayName: "Bathing" },
+      value: { code: "371153006", displayName: "Independent" },
+      effectiveTime: "20240101",
+    },
+  ],
+};
+
+/** A Mental Status Organizer grouping one finding. */
+const MENTAL_STATUS_ORGANIZER_CASE: NonNullable<BuildCcdaInit["mentalStatusOrganizers"]>[number] = {
+  code: { code: "373930000", displayName: "Cognitive function finding" },
+  findings: [{ value: { code: "247663003", displayName: "Alert" } }],
+};
+
+/** A scored functional-status scale, a direct section entry rather than an organizer member. */
+const BARTHEL_SCALE: NonNullable<BuildCcdaInit["functionalStatusScales"]>[number] = {
+  code: { code: "85908-2", displayName: "Barthel index" },
+  score: 90,
+  effectiveTime: "20240101",
+};
+
+/** A scored mental-status scale, the same shape in the other domain. */
+const PHQ9_SCALE: NonNullable<BuildCcdaInit["mentalStatusScales"]>[number] = {
+  code: { code: "44249-1", displayName: "PHQ-9 total score" },
+  score: 4,
+  effectiveTime: "20240101",
+};
 
 /** The fully-populated init, shared by the CCD and Referral Note cases. */
 const POPULATED: BuildCcdaInit = {
@@ -148,10 +251,41 @@ const POPULATED: BuildCcdaInit = {
   functionalStatus: [
     { value: { code: "165245003", displayName: "Able to walk" }, effectiveTime: "20240101" },
   ],
+  functionalStatusOrganizers: [FUNCTIONAL_STATUS_ORGANIZER_WITH_ACTIVITY],
+  functionalStatusScales: [BARTHEL_SCALE],
+  mentalStatus: [{ value: { code: "247663003", displayName: "Alert" }, effectiveTime: "20240101" }],
+  mentalStatusOrganizers: [MENTAL_STATUS_ORGANIZER_CASE],
+  mentalStatusScales: [PHQ9_SCALE],
+  pastMedicalHistory: PAST_MEDICAL_HISTORY,
+  planOfTreatment: PLAN_OF_TREATMENT,
+  familyHistory: FAMILY_HISTORY,
 };
+
+/** The fixed document time every case carries. See {@link BUILT_DOCUMENT_CASES}. */
+const WHEN = "20240102030405+0000";
+
+/** The minimal patient every isolated section case is built around. */
+const PATIENT = { mrn: "MRN002" } as const;
+
+/** One isolated section case: the minimal init plus exactly one section's content. */
+function sectionCase(name: string, init: Omit<BuildCcdaInit, "patient">): BuiltDocumentCase {
+  return {
+    name,
+    documentType: "ccd",
+    init: { patient: PATIENT, effectiveTime: WHEN, ...init },
+  };
+}
 
 /**
  * Every document `buildCcda` emits, across the init shapes the existing fixtures cover.
+ *
+ * THE SET IS THE EMIT SURFACE, NOT A SAMPLE OF IT. Two cases per document type stand at the
+ * ends of the input range (nothing but a patient; every section the builder knows how to
+ * emit), and one case per optional section stands alone, so a result is attributable to the
+ * section that caused it rather than to the populated document that happened to contain it.
+ * The isolated cases are not redundant with the populated ones: a section emitted beside its
+ * neighbours and a section emitted alone are different documents, and the second is the one a
+ * caller who populates one field gets.
  *
  * The `effectiveTime` is fixed rather than defaulted to the clock: the conformance report is
  * compared byte for byte against its committed copy, so a document that carries "now" would
@@ -162,20 +296,20 @@ export const BUILT_DOCUMENT_CASES: readonly BuiltDocumentCase[] = [
   {
     name: "ccd-minimal",
     documentType: "ccd",
-    init: { patient: { mrn: "MRN002" }, effectiveTime: "20240102030405+0000" },
+    init: { patient: PATIENT, effectiveTime: WHEN },
   },
   {
     name: "ccd-populated",
     documentType: "ccd",
-    init: { ...POPULATED, effectiveTime: "20240102030405+0000" },
+    init: { ...POPULATED, effectiveTime: WHEN },
   },
   {
     name: "referral-note-minimal",
     documentType: "referralNote",
     init: {
-      patient: { mrn: "MRN002" },
+      patient: PATIENT,
       documentType: "referralNote",
-      effectiveTime: "20240102030405+0000",
+      effectiveTime: WHEN,
     },
   },
   {
@@ -184,11 +318,38 @@ export const BUILT_DOCUMENT_CASES: readonly BuiltDocumentCase[] = [
     init: {
       ...POPULATED,
       documentType: "referralNote",
-      effectiveTime: "20240102030405+0000",
+      effectiveTime: WHEN,
       reasonForReferral: "Referred for evaluation of blood pressure control.",
       assessment: "Stable. Follow up in three months.",
     },
   },
+  sectionCase("ccd-past-medical-history", { pastMedicalHistory: PAST_MEDICAL_HISTORY }),
+  sectionCase("ccd-plan-of-treatment", { planOfTreatment: PLAN_OF_TREATMENT }),
+  sectionCase("ccd-family-history", { familyHistory: FAMILY_HISTORY }),
+  sectionCase("ccd-mental-status", {
+    mentalStatus: [
+      { value: { code: "247663003", displayName: "Alert" }, effectiveTime: "20240101" },
+    ],
+  }),
+  sectionCase("ccd-mental-status-organizers", {
+    mentalStatusOrganizers: [MENTAL_STATUS_ORGANIZER_CASE],
+  }),
+  sectionCase("ccd-mental-status-scales", { mentalStatusScales: [PHQ9_SCALE] }),
+  sectionCase("ccd-functional-status-organizer", {
+    functionalStatusOrganizers: [FUNCTIONAL_STATUS_ORGANIZER_WITH_ACTIVITY],
+  }),
+  // The organizer the caller supplied no Self-Care Activities observation for. `buildCcda`
+  // writes its findings standalone rather than an organizer that does not satisfy its own
+  // template, and this case is what measures that the fallback is conformant.
+  sectionCase("ccd-functional-status-organizer-without-activity", {
+    functionalStatusOrganizers: [
+      {
+        code: { code: "118228005", displayName: "Musculoskeletal function" },
+        findings: [{ value: { code: "165245003", displayName: "Able to walk" } }],
+      },
+    ],
+  }),
+  sectionCase("ccd-functional-status-scales", { functionalStatusScales: [BARTHEL_SCALE] }),
 ];
 
 /** The token seeded into the marker document's text, attributes and narrative. */

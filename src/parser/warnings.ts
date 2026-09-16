@@ -95,6 +95,7 @@ export const WARNING_CODES = {
   PROCEDURE_MOOD_UNEXPECTED: "PROCEDURE_MOOD_UNEXPECTED",
   PLANNED_VS_PERFORMED_AMBIGUOUS: "PLANNED_VS_PERFORMED_AMBIGUOUS",
   MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME: "MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME",
+  MISSING_SELF_CARE_ACTIVITY: "MISSING_SELF_CARE_ACTIVITY",
   PLAN_ENTRY_NOT_MODELED: "PLAN_ENTRY_NOT_MODELED",
   SMOKING_STATUS_UNKNOWN: "SMOKING_STATUS_UNKNOWN",
   SMOKING_STATUS_CODE_UNRECOGNIZED: "SMOKING_STATUS_CODE_UNRECOGNIZED",
@@ -353,6 +354,8 @@ export const WARNING_MESSAGES: Readonly<Record<WarningCode, string>> = Object.fr
     "Procedure entry has no moodCode; performed (EVN) vs planned (INT) is ambiguous, never conflated, left unclassified.",
   MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME:
     "A Planned Medication Activity was just written with no effectiveTime, which the template makes a SHALL (exactly one, CONF:1098-30468): the caller supplied none and this library never fabricates a date, so the act is emitted short that element and says nothing about when the drug is to be given. Only content the emitting call itself wrote is checked, so the absence of this warning says nothing about sections that call did not write.",
+  MISSING_SELF_CARE_ACTIVITY:
+    "A Functional Status Organizer was asked for with no Self-Care Activities (ADL and IADL) observation, which its template SHALL contain at least one of (CONF:1098-31432): this library never fabricates an assessment nobody performed and never claims a template a document does not satisfy, so the organizer was not written and its findings were written as standalone Functional Status Observations instead. Every finding is in the document and reads back unchanged; the grouping, its categorization code and its effectiveTime are not. Supply at least one self-care activity to have the organizer written.",
   PLAN_ENTRY_NOT_MODELED:
     "An entry template the Plan of Treatment reading admits was found where planned items are read (a section entry, or an act nested in a Planned Intervention Act); this parser recognizes it but does not model it as a planned item, so it is excluded from getPlannedItems(), reaches no other model field, and survives only in the re-serialized document.",
   SMOKING_STATUS_UNKNOWN:
@@ -1999,6 +2002,49 @@ export function missingPlannedMedicationEffectiveTime(position: CcdaPosition): C
   return {
     code: WARNING_CODES.MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME,
     message: WARNING_MESSAGES.MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME,
+    position,
+  };
+}
+
+/**
+ * Build a `MISSING_SELF_CARE_ACTIVITY` warning. **Emitted by `buildCcda`, never
+ * by `parseCcda`**: it reports that a Functional Status Organizer the caller
+ * asked for was not written, because the R2.1 template SHALL contain at least
+ * one component holding a Self-Care Activities (ADL and IADL) observation
+ * (`…22.4.128`, CONF:1098-31432) and the caller supplied none.
+ *
+ * **It reports a grouping that was dropped, not a value that was lost.** Every
+ * finding the organizer held is in the document, as a standalone Functional
+ * Status Observation, and reads back through the same extractor with the same
+ * `domain`. What the document does not carry is the organizer, its
+ * categorization `code` and its `effectiveTime`, and that is exactly what this
+ * warning exists to say out loud rather than leave a caller to discover from a
+ * diff.
+ *
+ * **Why not the two alternatives.** Writing an all-`nullFlavor` activity would
+ * satisfy the cardinality by asserting an ADL assessment that never happened,
+ * and writing the organizer without one would stamp a template the document does
+ * not satisfy onto bytes a strict reader rejects. Neither is available to an
+ * emitter that never invents content.
+ *
+ * **This one reads the INPUT rather than the emitted DOM**, unlike
+ * {@link missingPlannedMedicationEffectiveTime}, and the reason is that the
+ * emitted shape is indistinguishable from a caller who asked for standalone
+ * findings in the first place. It is sound because the organizer reaches exactly
+ * one writer: `editCcda` has no Functional Status edit kind. Adding one means
+ * moving this check, not copying it.
+ *
+ * (No `@example` import: this factory is not on the package entry point.)
+ *
+ * @example
+ * ```ts
+ * const w = missingSelfCareActivity({ path: "organizer", sectionCode: "47420-5" });
+ * ```
+ */
+export function missingSelfCareActivity(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.MISSING_SELF_CARE_ACTIVITY,
+    message: WARNING_MESSAGES.MISSING_SELF_CARE_ACTIVITY,
     position,
   };
 }

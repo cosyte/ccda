@@ -50,47 +50,65 @@
       "documents": 444
     },
     "cdaSchema": {
-      "title": "CDA R2 normative XML schema",
+      "title": "CDA R2 XML schema, the SDTC-extended tree",
       "repository": "https://github.com/HL7/CDA-core-2.0",
       "commit": "e922fc35586fd2629f0c8a021080bca9ab424e18",
       "integrity": "bytes",
-      "entry": "schema/normative/infrastructure/cda/CDA.xsd",
+      "schemaNote": [
+        "The SDTC tree rather than schema/normative, and the difference is the whole reason the",
+        "pin names it. buildCcda emits {urn:hl7-org:sdtc}deceasedInd on a family history relative,",
+        "an HL7-approved SDO extension the parser reads back; the normative schema declares no",
+        "extension elements at all, so it rejects that document as structurally invalid while the",
+        "Schematron, which is written against C-CDA R2.1, says nothing about it. The repository's",
+        "own README states that 'the schema/extensions folder contains an SDTC folder which has the",
+        "updated CDA schema with all SDTC extensions that are approved by HL7'. Measuring against",
+        "the normative tree would have meant either publishing a schema failure for a conformant",
+        "document or dropping an extension a consumer relies on. The file list below is the",
+        "transitive closure of the entry point's own includes and imports, nothing more."
+      ],
+      "entry": "schema/extensions/SDTC/infrastructure/cda/CDA_SDTC.xsd",
       "files": [
         {
-          "path": "schema/normative/infrastructure/cda/CDA.xsd",
-          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/normative/infrastructure/cda/CDA.xsd",
-          "bytes": 462,
-          "sha256": "eedb18548c905534233252144dbc86d5aa64e22ff77aa8d25cc78e8d2a31afac"
+          "path": "schema/extensions/SDTC/infrastructure/cda/CDA_SDTC.xsd",
+          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/extensions/SDTC/infrastructure/cda/CDA_SDTC.xsd",
+          "bytes": 2439,
+          "sha256": "d596141f0a457b7b31c1a5b4e97ae55d16bedf8c08356e644475c339263d76e7"
         },
         {
-          "path": "schema/normative/infrastructure/cda/POCD_MT000040.xsd",
-          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/normative/infrastructure/cda/POCD_MT000040.xsd",
-          "bytes": 85285,
-          "sha256": "88e057edafa22ab7205c303e3cf1c09a5c899481601447e74dbc6d312b32599b"
+          "path": "schema/extensions/SDTC/infrastructure/cda/POCD_MT000040_SDTC.xsd",
+          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/extensions/SDTC/infrastructure/cda/POCD_MT000040_SDTC.xsd",
+          "bytes": 103074,
+          "sha256": "a9d1169721efe71124f2c5f7a7d53441a2129424742336e8324f27bce80e1eaf"
         },
         {
-          "path": "schema/normative/processable/coreschemas/NarrativeBlock.xsd",
-          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/normative/processable/coreschemas/NarrativeBlock.xsd",
-          "bytes": 24950,
-          "sha256": "8f02813bd43e0e1f383543dc22da1880ab8d93868116ee511888241cb8ebdfac"
+          "path": "schema/extensions/SDTC/infrastructure/cda/SDTC.xsd",
+          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/extensions/SDTC/infrastructure/cda/SDTC.xsd",
+          "bytes": 20795,
+          "sha256": "3a16dbaa0526005850eaf32f4f061ba4db63ee1f9e1267783c8f734feaf73a58"
         },
         {
-          "path": "schema/normative/processable/coreschemas/datatypes-base.xsd",
-          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/normative/processable/coreschemas/datatypes-base.xsd",
-          "bytes": 83450,
-          "sha256": "0c7dd69c07d41e18b02ece1aaf8a7a49d7f41bf1c2fa2b09e0932dd9446a3826"
+          "path": "schema/extensions/SDTC/processable/coreschemas/NarrativeBlock.xsd",
+          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/extensions/SDTC/processable/coreschemas/NarrativeBlock.xsd",
+          "bytes": 23929,
+          "sha256": "92a9ec2c6c00d10cd40a9afdf4d70f18c823bdec15db9e8b116cb5076d11f66e"
         },
         {
-          "path": "schema/normative/processable/coreschemas/datatypes.xsd",
-          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/normative/processable/coreschemas/datatypes.xsd",
-          "bytes": 65977,
-          "sha256": "e3ced45f77a48478e7db3b50cb753b50eb0f39fd2c3228e2faebde1945f6045f"
+          "path": "schema/extensions/SDTC/processable/coreschemas/datatypes-base_SDTC.xsd",
+          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/extensions/SDTC/processable/coreschemas/datatypes-base_SDTC.xsd",
+          "bytes": 78891,
+          "sha256": "832527e03eac5cb671880b87c9515e55c2089e8ef3fc82634e69c7337adb440f"
         },
         {
-          "path": "schema/normative/processable/coreschemas/voc.xsd",
-          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/normative/processable/coreschemas/voc.xsd",
-          "bytes": 84535,
-          "sha256": "22970695278df249ead5aacced0cdf9a77b731bd249d7f2234dd3f79511e4b6b"
+          "path": "schema/extensions/SDTC/processable/coreschemas/datatypes.xsd",
+          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/extensions/SDTC/processable/coreschemas/datatypes.xsd",
+          "bytes": 65795,
+          "sha256": "0238ba379eec458d9989ff2c2d9012da2964c9d29d5177cf2d74d4c17a7a6be2"
+        },
+        {
+          "path": "schema/extensions/SDTC/processable/coreschemas/voc.xsd",
+          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/extensions/SDTC/processable/coreschemas/voc.xsd",
+          "bytes": 84321,
+          "sha256": "63bacc8e6c0a662fe630b3377950a1bad8fa659242021a5db0d4778762ae8099"
         }
       ]
     }

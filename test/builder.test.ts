@@ -1321,9 +1321,10 @@ describe("buildCcda, mental status round-trip", () => {
 });
 
 describe("buildCcda, functional/mental status organizers", () => {
-  /** A functional organizer (ICF-coded self-care cluster) grouping two findings,
-   * plus a mental organizer (uncoded) grouping two, and one standalone functional
-   * finding, to prove grouping, domain separation, and mixed grouped/standalone. */
+  /** A functional organizer (ICF-coded self-care cluster) grouping two findings
+   * plus the Self-Care Activities observation its template SHALL contain, a mental
+   * organizer (uncoded) grouping two, and one standalone functional finding, to
+   * prove grouping, domain separation, and mixed grouped/standalone. */
   const ORG_INIT: BuildCcdaInit = {
     patient: { mrn: "M" },
     functionalStatusOrganizers: [
@@ -1338,6 +1339,13 @@ describe("buildCcda, functional/mental status organizers", () => {
         findings: [
           { value: { code: "129019007", displayName: "Self-care" } },
           { value: { code: "165245003", displayName: "Able to walk" } },
+        ],
+        selfCareActivities: [
+          {
+            code: { code: "54520-2", displayName: "Bathing" },
+            value: { code: "371153006", displayName: "Independent" },
+            effectiveTime: "20240101",
+          },
         ],
       },
     ],
@@ -1356,8 +1364,9 @@ describe("buildCcda, functional/mental status organizers", () => {
     const doc = buildCcda(ORG_INIT);
     const functional = doc.getFunctionalStatus();
     const mental = doc.getMentalStatus();
-    // Two grouped + one standalone functional finding; two grouped mental findings.
-    expect(functional).toHaveLength(3);
+    // Two grouped findings + the grouped self-care activity + one standalone finding;
+    // two grouped mental findings.
+    expect(functional).toHaveLength(4);
     expect(mental).toHaveLength(2);
     expect(functional.every((f) => f.domain === "functional")).toBe(true);
     expect(mental.every((f) => f.domain === "mental")).toBe(true);
@@ -1368,11 +1377,78 @@ describe("buildCcda, functional/mental status organizers", () => {
     expect(codes).toContain("129019007");
     expect(codes).toContain("165245003");
     expect(codes).toContain("105503008");
-    expect(functional.every((f) => f.code?.code === "54522-8")).toBe(true);
+    // The Self-Care Activities member reads back too, as an ordinary functional
+    // finding: its `code` is the activity assessed, its `value` the ability.
+    expect(codes).toContain("371153006");
+    expect(functional.map((f) => f.code?.code)).toContain("54520-2");
+    expect(functional.filter((f) => f.code?.code === "54522-8")).toHaveLength(3);
     expect(mental.every((f) => f.code?.code === "373930000")).toBe(true);
     // Nothing is flagged as an assessment scale (none emitted this slice).
     expect(functional.every((f) => f.assessmentScale === undefined)).toBe(true);
     expect(doc.warnings).toEqual([]);
+  });
+
+  it("writes the findings standalone, and says so, when no self-care activity is supplied", () => {
+    // The R2.1 Functional Status Organizer SHALL contain a Self-Care Activities (ADL and
+    // IADL) observation (CONF:1098-31432). With none supplied there is no conformant
+    // organizer to write, and neither fabricating the activity nor claiming the template
+    // anyway is available to an emitter that never invents content: the findings go out
+    // standalone and the document carries MISSING_SELF_CARE_ACTIVITY.
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      functionalStatusOrganizers: [
+        {
+          code: { code: "118228005", displayName: "Musculoskeletal function" },
+          effectiveTime: "20240101",
+          findings: [
+            { value: { code: "129019007", displayName: "Self-care" } },
+            { value: { code: "165245003", displayName: "Able to walk" } },
+          ],
+        },
+      ],
+    });
+    expect(doc.warnings.map((w) => w.code)).toEqual(["MISSING_SELF_CARE_ACTIVITY"]);
+    const xml = serializeCcda(doc);
+    expect(xml).not.toContain("2.16.840.1.113883.10.20.22.4.66");
+    expect(xml).not.toContain("<organizer");
+    // Every finding survives, as a Functional Status Observation of its own.
+    expect(xml.split('root="2.16.840.1.113883.10.20.22.4.67"')).toHaveLength(3);
+    const codes = doc
+      .getFunctionalStatus()
+      .map((f) => (f.value?.kind === "coded" ? f.value.code.code : undefined));
+    expect(codes).toStrictEqual(["129019007", "165245003"]);
+  });
+
+  it("emits the Self-Care Activities observation with every SHALL its template states", () => {
+    const xml = serializeCcda(buildCcda(ORG_INIT));
+    // …22.4.128, unversioned (CONF:1098-28457), inside a component of the organizer.
+    expect(xml).toContain('<templateId root="2.16.840.1.113883.10.20.22.4.128"/>');
+    expect(xml).toContain('code="54520-2"');
+    expect(xml).toContain('<value code="371153006"');
+    expect(xml).toMatch(
+      /<observation[^>]*>(?:(?!<\/observation>)[\s\S])*?4\.128[\s\S]*?xsi:type="CD"/,
+    );
+  });
+
+  it("emits EXPLICIT nullFlavor=UNK self-care slots rather than inventing an activity", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      functionalStatusOrganizers: [
+        {
+          findings: [{ value: { code: "165245003", displayName: "Able to walk" } }],
+          selfCareActivities: [{}],
+        },
+      ],
+    });
+    expect(doc.warnings).toEqual([]);
+    const xml = serializeCcda(doc);
+    const activity = xml.slice(xml.indexOf("2.16.840.1.113883.10.20.22.4.128"));
+    // The activity, the ability and the assessment time are all explicit unknowns; the
+    // statusCode is the one slot the template fixes, so it is the one slot that is filled.
+    expect(activity).toContain('<code nullFlavor="UNK"/>');
+    expect(activity).toContain('<effectiveTime nullFlavor="UNK"/>');
+    expect(activity).toContain('<value nullFlavor="UNK" xsi:type="CD"/>');
+    expect(activity).toContain('<statusCode code="completed"/>');
   });
 
   it("emits the organizer as a CLUSTER with the correct template stamps + ICF code", () => {
@@ -1407,7 +1483,10 @@ describe("buildCcda, functional/mental status organizers", () => {
     const doc = buildCcda({
       patient: { mrn: "M" },
       functionalStatusOrganizers: [
-        { findings: [{ value: { code: "129019007", displayName: "Self-care" } }] },
+        {
+          findings: [{ value: { code: "129019007", displayName: "Self-care" } }],
+          selfCareActivities: [{ value: { code: "371153006", displayName: "Independent" } }],
+        },
       ],
     });
     const xml = serializeCcda(doc);
@@ -2628,6 +2707,24 @@ describe("buildCcda, HL7 v3 TS date-format validation (fail loud, never coerce)"
             {
               effectiveTime: BAD,
               findings: [{ value: { code: "165245003", displayName: "Able to walk" } }],
+              // The organizer is only written when it carries the Self-Care
+              // Activities observation its template SHALL contain, and its own
+              // effectiveTime is only read on the path that writes it.
+              selfCareActivities: [{ value: { code: "371153006", displayName: "Independent" } }],
+            },
+          ],
+        },
+      ],
+      [
+        "functionalStatusOrganizers[].selfCareActivities[].effectiveTime",
+        {
+          ...base,
+          functionalStatusOrganizers: [
+            {
+              findings: [{ value: { code: "165245003", displayName: "Able to walk" } }],
+              selfCareActivities: [
+                { value: { code: "371153006", displayName: "Independent" }, effectiveTime: BAD },
+              ],
             },
           ],
         },

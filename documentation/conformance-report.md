@@ -26,7 +26,7 @@ Assertions compiled from the Schematron: 4102.
 
 ## Documents `buildCcda` emits
 
-4 documents validated, covering document types `ccd` and `referralNote`. Error-severity results: 0.
+13 documents validated, covering document types `ccd` and `referralNote`. Error-severity results: 0.
 
 | document | type | schema | schematron |
 | --- | --- | ---: | ---: |
@@ -34,6 +34,15 @@ Assertions compiled from the Schematron: 4102.
 | `ccd-populated` | `ccd` | 0 | 0 |
 | `referral-note-minimal` | `referralNote` | 0 | 0 |
 | `referral-note-populated` | `referralNote` | 0 | 0 |
+| `ccd-past-medical-history` | `ccd` | 0 | 0 |
+| `ccd-plan-of-treatment` | `ccd` | 0 | 0 |
+| `ccd-family-history` | `ccd` | 0 | 0 |
+| `ccd-mental-status` | `ccd` | 0 | 0 |
+| `ccd-mental-status-organizers` | `ccd` | 0 | 0 |
+| `ccd-mental-status-scales` | `ccd` | 0 | 0 |
+| `ccd-functional-status-organizer` | `ccd` | 0 | 0 |
+| `ccd-functional-status-organizer-without-activity` | `ccd` | 0 | 0 |
+| `ccd-functional-status-scales` | `ccd` | 0 | 0 |
 
 ## Round trip over the public sample corpus
 
@@ -58,7 +67,7 @@ unless the README's conformance statement agrees with it.
   ],
   "builtErrorSeverityResults": 0,
   "roundTripDocumentsDiffering": 0,
-  "builtDocuments": 4,
+  "builtDocuments": 13,
   "roundTripDocuments": 20,
   "artifacts": {
     "schematron": "6d3ed96160b45a111895da4df5510c7fad9de01f",

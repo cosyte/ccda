@@ -274,7 +274,11 @@ import type { TerminologyAdapter, TerminologyCoding } from "../model/terminology
 import type { PlannedItemKind } from "../model/entries/plan-of-treatment.js";
 import type { ProcedureKind } from "../model/entries/procedure.js";
 import { parseCcda } from "../parser/index.js";
-import { missingPlannedMedicationEffectiveTime, type CcdaWarning } from "../parser/warnings.js";
+import {
+  missingPlannedMedicationEffectiveTime,
+  missingSelfCareActivity,
+  type CcdaWarning,
+} from "../parser/warnings.js";
 import {
   AGE_OBSERVATION,
   ALLERGY_CONCERN_ACT,
@@ -309,6 +313,7 @@ import {
   REACTION_OBSERVATION,
   RESULT_OBSERVATION,
   RESULT_ORGANIZER,
+  SELF_CARE_ACTIVITIES,
   SEVERITY_OBSERVATION,
   SMOKING_STATUS_OBSERVATION,
   VITAL_SIGN_OBSERVATION,
@@ -501,10 +506,11 @@ const ADMINISTRATIVE_GENDER = "2.16.840.1.113883.5.1";
 const FAMILY_HISTORY_CONDITION_CODE = { code: "64572001", displayName: "Condition" } as const;
 /**
  * The fixed `code` an Age Observation (`…22.4.31`) carries, SNOMED CT
- * `397659008` "Age". The relative's age at onset is the observation's `PQ`
+ * `445518008` "Age At Onset", which the template pins exactly
+ * (CONF:81-16776). The relative's age at onset is the observation's `PQ`
  * `value` (in UCUM years). @internal
  */
-const AGE_OBSERVATION_CODE = { code: "397659008", displayName: "Age" } as const;
+const AGE_OBSERVATION_CODE = { code: "445518008", displayName: "Age At Onset" } as const;
 /**
  * The UCUM unit for an age in years (`a`, annum), the unit the Age Observation
  * `value` carries. @internal
@@ -512,10 +518,35 @@ const AGE_OBSERVATION_CODE = { code: "397659008", displayName: "Age" } as const;
 const AGE_UNIT = "a";
 /**
  * The fixed coded `value` a Family History Death Observation (`…22.4.47`)
- * carries, SNOMED CT `419620001` "Death", marking its parent condition as the
- * relative's cause of death. @internal
+ * carries, SNOMED CT `419099009` "Dead", which the template pins exactly
+ * (CONF:81-26470), marking its parent condition as the relative's cause of
+ * death. @internal
  */
-const DEATH_VALUE = { code: "419620001", displayName: "Death" } as const;
+const DEATH_VALUE = { code: "419099009", displayName: "Dead" } as const;
+
+/**
+ * The LOINC `translation` a Family History Observation's fixed SNOMED CT
+ * `code` SHALL carry (CONF:1198-32847), `75315-2` "Condition Family member"
+ * from the Problem Type (LOINC) value set. It restates the fixed `code`'s own
+ * meaning in a second code system; it says nothing the primary code did not
+ * already say, so it is a template obligation rather than clinical content.
+ * @internal
+ */
+const FAMILY_HISTORY_CONDITION_TRANSLATION = {
+  code: "75315-2",
+  displayName: "Condition Family member",
+} as const;
+
+/**
+ * The LOINC `translation` a Mental Status Observation's fixed SNOMED CT `code`
+ * SHALL carry exactly once (CONF:1198-32790, -32791, -32792), `75275-8`
+ * "Cognitive function [Interpretation]". Like the family-history translation
+ * above, it restates the template-fixed primary code in LOINC. @internal
+ */
+const MENTAL_STATUS_CODE_TRANSLATION = {
+  code: "75275-8",
+  displayName: "Cognitive function [Interpretation]",
+} as const;
 
 /**
  * A coded value for the builder, the tuple the parser reads back as a `CD`.
@@ -1053,6 +1084,45 @@ export interface BuildCcdaFunctionalStatus {
 }
 
 /**
+ * One Self-Care Activities (ADL and IADL) observation (`…22.4.128`), the
+ * activity a Functional Status Organizer SHALL carry at least one of
+ * (CONF:1098-31432). `code` names the activity assessed and SHOULD come from the
+ * ADL Result Type value set (LOINC, `2.16.840.1.113883.11.20.9.47`); `value` is
+ * the ability observed and SHOULD come from the Ability value set (SNOMED CT,
+ * `2.16.840.1.113883.11.20.9.46`).
+ *
+ * **Nothing here is defaulted.** An omitted `code` or `value` is emitted
+ * `nullFlavor="UNK"`, an explicit unknown rather than an invented activity or an
+ * invented ability, and an omitted `effectiveTime` is the same: the template's
+ * SHALL is satisfied without fabricating a date.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaSelfCareActivity } from "@cosyte/ccda";
+ * const bathing: BuildCcdaSelfCareActivity = {
+ *   code: { code: "54520-2", displayName: "Bathing" }, // LOINC, ADL Result Type
+ *   value: { code: "371153006", displayName: "Independent" }, // SNOMED CT, Ability
+ *   effectiveTime: "20240101",
+ * };
+ * ```
+ */
+export interface BuildCcdaSelfCareActivity {
+  /**
+   * The activity assessed (SHOULD be LOINC, ADL Result Type). Omit for an
+   * explicit unknown (`code nullFlavor="UNK"`), never a fabricated activity.
+   * `codeSystem` defaults to LOINC when a `code` is supplied without one.
+   */
+  readonly code?: BuildCode;
+  /**
+   * The ability observed (SHOULD be SNOMED CT, Ability). Omit for an explicit
+   * unknown (`value nullFlavor="UNK"`), never a fabricated ability.
+   */
+  readonly value?: BuildCode;
+  /** The date the activity was assessed (HL7 date string); `nullFlavor="UNK"` when omitted. */
+  readonly effectiveTime?: string;
+}
+
+/**
  * A Mental Status finding for the Mental Status section, a Mental Status
  * Observation (`…22.4.74`, the R2.1 `2015-08-01` stamp). The observation's `code`
  * is **fixed** to SNOMED CT `373930000` "Cognitive function finding" by the R2.1
@@ -1115,6 +1185,18 @@ export interface BuildCcdaMentalStatus {
  * entry* in C-CDA R2.1, **not** an organizer component; only status observations
  * are grouped here.
  *
+ * **`selfCareActivities` decides whether the organizer is emitted at all, and
+ * that is a conformance rule rather than a preference.** The R2.1 template SHALL
+ * also contain at least one [1..\*] component holding a Self-Care Activities (ADL
+ * and IADL) observation (`…22.4.128`, CONF:1098-31432), measured against the
+ * normative Schematron this repository pins. When none is supplied there is no
+ * conformant organizer to emit and none is fabricated, so the `findings` are
+ * emitted as standalone Functional Status Observations instead, which every
+ * reader of this section understands, and the built document carries
+ * `MISSING_SELF_CARE_ACTIVITY` saying the grouping was dropped and why. Supply
+ * one activity and the organizer is emitted with its categorization and its
+ * `effectiveTime` intact.
+ *
  * @example
  * ```ts
  * import type { BuildCcdaFunctionalStatusOrganizer } from "@cosyte/ccda";
@@ -1124,6 +1206,12 @@ export interface BuildCcdaMentalStatus {
  *   findings: [
  *     { value: { code: "129019007", displayName: "Self-care" } }, // SNOMED CT
  *     { value: { code: "165245003", displayName: "Able to walk" } },
+ *   ],
+ *   selfCareActivities: [
+ *     {
+ *       code: { code: "54520-2", displayName: "Bathing" }, // LOINC, ADL Result Type
+ *       value: { code: "371153006", displayName: "Independent" }, // SNOMED CT, Ability
+ *     },
  *   ],
  * };
  * ```
@@ -1142,6 +1230,13 @@ export interface BuildCcdaFunctionalStatusOrganizer {
    * non-empty**, the organizer SHALL contain at least one member.
    */
   readonly findings: readonly BuildCcdaFunctionalStatus[];
+  /**
+   * The Self-Care Activities (ADL and IADL) observations grouped by this
+   * organizer. The template SHALL contain at least one; with none supplied the
+   * organizer is not emitted and its findings are emitted standalone, reported
+   * as `MISSING_SELF_CARE_ACTIVITY`.
+   */
+  readonly selfCareActivities?: readonly BuildCcdaSelfCareActivity[];
 }
 
 /**
@@ -2224,8 +2319,31 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
   // path stays silent on it for third-party documents. Appended after the parse
   // warnings (never interleaved), and `withWarnings` returns a new document
   // rather than mutating the parsed one.
-  const diagnostics = plannedMedicationDiagnostics([structuredBody]);
+  const diagnostics = [
+    ...plannedMedicationDiagnostics([structuredBody]),
+    ...functionalStatusGroupingDiagnostics(init.functionalStatusOrganizers ?? []),
+  ];
   return diagnostics.length === 0 ? parsed : parsed.withWarnings(diagnostics);
+}
+
+/**
+ * One `MISSING_SELF_CARE_ACTIVITY` per Functional Status Organizer this call was
+ * asked for and did not write, because its template SHALL contain a Self-Care
+ * Activities (ADL and IADL) observation and the caller supplied none. See
+ * {@link missingSelfCareActivity} for why it reads the input rather than the
+ * emitted DOM, and {@link functionalStatusOrganizerEntries} for what is written
+ * instead. @internal
+ */
+function functionalStatusGroupingDiagnostics(
+  organizers: readonly BuildCcdaFunctionalStatusOrganizer[],
+): readonly CcdaWarning[] {
+  return organizers
+    .filter((org) => (org.selfCareActivities?.length ?? 0) === 0)
+    .map(() =>
+      // Bounded, from this module's own constants: no caller-supplied value
+      // reaches a position.
+      missingSelfCareActivity({ path: "organizer", sectionCode: FUNCTIONAL_STATUS_SECTION_LOINC }),
+    );
 }
 
 /**
@@ -2844,6 +2962,8 @@ const PAST_MEDICAL_HISTORY_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.20";
 const PLAN_OF_TREATMENT_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.10";
 /** The Plan of Treatment Section's LOINC `<code>`. @internal */
 const PLAN_OF_TREATMENT_LOINC = "18776-5";
+/** The Functional Status Section's LOINC `<code>`. @internal */
+const FUNCTIONAL_STATUS_SECTION_LOINC = "47420-5";
 /** @internal */
 const FAMILY_HISTORY_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.15";
 
@@ -4007,7 +4127,8 @@ function functionalStatusSection(
 ): Element {
   const text = el(doc, "text");
   const entries: Element[] = [];
-  for (const org of organizers) entries.push(functionalStatusOrganizerEntry(doc, org, text, id));
+  for (const org of organizers)
+    entries.push(...functionalStatusOrganizerEntries(doc, org, text, id));
   for (const scale of scales) {
     entries.push(
       el(
@@ -4031,7 +4152,7 @@ function functionalStatusSection(
   const section = sectionElement(
     doc,
     FUNCTIONAL_STATUS_SECTION_BASE,
-    "47420-5",
+    FUNCTIONAL_STATUS_SECTION_LOINC,
     "Functional Status",
     text,
     false,
@@ -4090,21 +4211,126 @@ function functionalStatusObservation(
 }
 
 /**
- * Build one Functional Status Organizer `<entry>` (`…22.4.66`, `@classCode="CLUSTER"`,
- * the `2014-06-09` stamp) grouping this organizer's Functional Status
- * Observations. Element order follows the CDA organizer schema: templateId, id,
- * code, statusCode, effectiveTime, component+. @internal
+ * The narrative line for a Self-Care Activities observation: the activity
+ * assessed, then the ability observed, so it agrees with the observation's own
+ * `code` (which the parser reconciles against the narrative). An unsupplied
+ * activity reads "Self-care activity" and an unsupplied ability reads "unknown",
+ * never a fabricated one; a PRESENT coded object with no `displayName` is
+ * refused by {@link narrativeLabel} rather than narrated as unknown beside its
+ * own code. @internal
  */
-function functionalStatusOrganizerEntry(
+function selfCareActivityLabel(activity: BuildCcdaSelfCareActivity): string {
+  const what =
+    activity.code === undefined
+      ? "Self-care activity"
+      : narrativeLabel(activity.code, "functionalStatusOrganizers[].selfCareActivities[].code");
+  const ability =
+    activity.value === undefined
+      ? "unknown"
+      : narrativeLabel(activity.value, "functionalStatusOrganizers[].selfCareActivities[].value");
+  return `${what}: ${ability}`;
+}
+
+/**
+ * Build one Self-Care Activities (ADL and IADL) `<observation>` (`…22.4.128`,
+ * unversioned), appending its narrative content line to `text`.
+ *
+ * Every SHALL the template states is satisfied from what the caller supplied or
+ * from an explicit `nullFlavor="UNK"`: the activity `code` (SHOULD be ADL Result
+ * Type), the `value` ability (SHOULD be Ability, `xsi:type="CD"`), the
+ * `statusCode` fixed "completed", and the `effectiveTime` [1..1]. Nothing here
+ * is guessed from the organizer's other members. @internal
+ */
+function selfCareActivityObservation(
+  doc: Document,
+  activity: BuildCcdaSelfCareActivity,
+  text: Element,
+  id: (prefix: string) => string,
+): Element {
+  const contentId = id("adl-txt");
+  text.appendChild(textEl(doc, "content", selfCareActivityLabel(activity), { ID: contentId }));
+  const obs = el(
+    doc,
+    "observation",
+    { classCode: "OBS", moodCode: "EVN" },
+    // The template carries no version `@extension` (CONF:1098-28457).
+    el(doc, "templateId", { root: SELF_CARE_ACTIVITIES }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("adl") }),
+    // SHALL code [1..1] (SHOULD be ADL Result Type, CONF:1098-28153). An omitted
+    // activity is an EXPLICIT nullFlavor="UNK", never a fabricated activity.
+    activity.code === undefined
+      ? el(doc, "code", { nullFlavor: "UNK" })
+      : codeEl(doc, "code", { ...activity.code, codeSystem: activity.code.codeSystem ?? LOINC }),
+    el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
+    // SHALL statusCode [1..1], fixed "completed" (CONF:1098-32491).
+    el(doc, "statusCode", { code: "completed" }),
+  );
+  // SHALL effectiveTime [1..1] (CONF:1098-32492); nullFlavor="UNK" when the
+  // caller supplied no date, never a fabricated one.
+  obs.appendChild(
+    pointEffectiveTime(
+      doc,
+      activity.effectiveTime,
+      "functionalStatusOrganizers[].selfCareActivities[].effectiveTime",
+    ),
+  );
+  // SHALL value [1..1] with xsi:type="CD" (CONF:1098-28042). An omitted ability
+  // is an EXPLICIT nullFlavor="UNK", never defaulted to a real ability.
+  obs.appendChild(
+    activity.value === undefined
+      ? typedValue(doc, "CD", { nullFlavor: "UNK" })
+      : cdValue(doc, activity.value, SNOMED_CT),
+  );
+  return obs;
+}
+
+/**
+ * Build the `<entry>` list one Functional Status Organizer contributes.
+ *
+ * **ONE ORGANIZER ENTRY, OR ONE ENTRY PER FINDING, AND THE TEMPLATE DECIDES
+ * WHICH.** The R2.1 Functional Status Organizer (`…22.4.66`, the `2014-06-09`
+ * stamp) SHALL contain at least one component holding a Functional Status
+ * Observation (CONF:1098-14359) **and** at least one holding a Self-Care
+ * Activities (ADL and IADL) observation (CONF:1098-31432). With no activity
+ * supplied there is no conformant organizer to write. The three ways out of that
+ * were weighed and two were refused: fabricating an all-`nullFlavor` activity
+ * asserts an ADL assessment that never happened (`clinical-safety` C1), and
+ * emitting the organizer anyway claims a template the document does not satisfy,
+ * which is the emit-side quirk `standards-conformance` S1 forbids. What is left
+ * is to emit the findings as standalone Functional Status Observations, which is
+ * conformant, loses no finding, reads back through the same extractor, and is
+ * reported rather than done in silence (`MISSING_SELF_CARE_ACTIVITY`).
+ *
+ * Element order inside the organizer follows the CDA organizer schema:
+ * templateId, id, code, statusCode, effectiveTime, component+. @internal
+ */
+function functionalStatusOrganizerEntries(
   doc: Document,
   org: BuildCcdaFunctionalStatusOrganizer,
   text: Element,
   id: (prefix: string) => string,
-): Element {
+): readonly Element[] {
   if (org.findings.length === 0) {
     throw new TypeError(
       "buildCcda: a Functional Status Organizer must contain at least one finding " +
         "(the template SHALL contain [1..*] a Functional Status Observation).",
+    );
+  }
+  const activities = org.selfCareActivities ?? [];
+  if (activities.length === 0) {
+    return org.findings.map((s) =>
+      el(
+        doc,
+        "entry",
+        undefined,
+        functionalStatusObservation(
+          doc,
+          s,
+          text,
+          id,
+          "functionalStatusOrganizers[].findings[].value",
+        ),
+      ),
     );
   }
   const organizer = el(
@@ -4144,7 +4370,12 @@ function functionalStatusOrganizerEntry(
       ),
     );
   }
-  return el(doc, "entry", undefined, organizer);
+  for (const activity of activities) {
+    organizer.appendChild(
+      el(doc, "component", undefined, selfCareActivityObservation(doc, activity, text, id)),
+    );
+  }
+  return [el(doc, "entry", undefined, organizer)];
 }
 
 /**
@@ -4217,6 +4448,30 @@ function mentalStatusSection(
 }
 
 /**
+ * The Mental Status Observation's SHALL `code`: the template-fixed SNOMED CT
+ * concept plus the single LOINC `translation` the template pins exactly
+ * (CONF:1198-32790). The translation is the same concept in a second code
+ * system, so emitting it invents nothing; omitting it leaves a document the
+ * normative Schematron rejects. @internal
+ */
+function mentalStatusObservationCode(doc: Document): Element {
+  return el(
+    doc,
+    "code",
+    {
+      ...MENTAL_STATUS_CODE,
+      codeSystem: SNOMED_CT,
+      codeSystemName: "SNOMED CT",
+    },
+    el(doc, "translation", {
+      ...MENTAL_STATUS_CODE_TRANSLATION,
+      codeSystem: LOINC,
+      codeSystemName: "LOINC",
+    }),
+  );
+}
+
+/**
  * Build one Mental Status Observation `<observation>` (`…22.4.74`), appending its
  * narrative content line to `text`. The `code` is the R2.1 template-fixed SNOMED
  * CT `373930000` "Cognitive function finding"; the specific finding is the coded
@@ -4241,12 +4496,9 @@ function mentalStatusObservation(
     }),
     el(doc, "id", { root: SYNTH_ROOT, extension: id("ment") }),
     // SHALL code [1..1], the R2.1 template-fixed SNOMED CT "Cognitive function
-    // finding"; the specific finding lives in `value`, not here.
-    codeEl(doc, "code", {
-      ...MENTAL_STATUS_CODE,
-      codeSystem: SNOMED_CT,
-      codeSystemName: "SNOMED CT",
-    }),
+    // finding"; the specific finding lives in `value`, not here. The code SHALL
+    // also carry exactly one LOINC translation (CONF:1198-32790).
+    mentalStatusObservationCode(doc),
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     // SHALL statusCode [1..1], fixed "completed".
     el(doc, "statusCode", { code: "completed" }),
@@ -4912,6 +5164,30 @@ function familyMemberSubject(doc: Document, relative: BuildCcdaFamilyMember): El
 }
 
 /**
+ * The Family History Observation's SHALL `code`: the template-fixed SNOMED CT
+ * "Condition" concept plus the LOINC `translation` the template requires at
+ * least one of (CONF:1198-32847), taken from the Problem Type (LOINC) value set
+ * that conformance statement names. The translation restates the fixed code, so
+ * it asserts nothing about the relative that the code did not. @internal
+ */
+function familyHistoryConditionCode(doc: Document): Element {
+  return el(
+    doc,
+    "code",
+    {
+      ...FAMILY_HISTORY_CONDITION_CODE,
+      codeSystem: SNOMED_CT,
+      codeSystemName: "SNOMED CT",
+    },
+    el(doc, "translation", {
+      ...FAMILY_HISTORY_CONDITION_TRANSLATION,
+      codeSystem: LOINC,
+      codeSystemName: "LOINC",
+    }),
+  );
+}
+
+/**
  * Build one Family History Observation (`…22.4.46`). Carries the SHALL fixed
  * `code` (SNOMED CT `64572001` "Condition"), a SHALL `statusCode` ("completed"),
  * the SHOULD [0..1] `effectiveTime` (emitted only when supplied), and the SHALL
@@ -4932,12 +5208,9 @@ function familyHistoryObservation(
     el(doc, "templateId", { root: FAMILY_HISTORY_OBSERVATION, extension: R21 }),
     el(doc, "id", { root: SYNTH_ROOT, extension: id("fhx-obs") }),
     // SHALL code [1..1], the template-fixed SNOMED CT "Condition"; the specific
-    // illness lives in `value`, not here.
-    codeEl(doc, "code", {
-      ...FAMILY_HISTORY_CONDITION_CODE,
-      codeSystem: SNOMED_CT,
-      codeSystemName: "SNOMED CT",
-    }),
+    // illness lives in `value`, not here. The code SHALL also carry at least one
+    // translation (CONF:1198-32847), the same concept in LOINC.
+    familyHistoryConditionCode(doc),
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
     // SHALL statusCode [1..1], fixed "completed".
     el(doc, "statusCode", { code: "completed" }),
@@ -5011,7 +5284,7 @@ function ageObservation(doc: Document, years: number): Element {
 
 /**
  * Build a Family History Death Observation (`…22.4.47`), a fixed `ASSERTION`
- * `code` and the SNOMED CT `419620001` "Death" coded `value`, marking its parent
+ * `code` and the SNOMED CT `419099009` "Dead" coded `value`, marking its parent
  * condition as the relative's cause of death. The template carries no version
  * `@extension`. @internal
  */
