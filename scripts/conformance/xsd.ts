@@ -60,6 +60,7 @@ const MESSAGE_SHAPES: readonly { readonly code: string; readonly pattern: RegExp
     pattern: /is not a valid value of the (atomic|local atomic|union) type/,
   },
   { code: "XSD_VALUE_NOT_FACET_VALID", pattern: /is not (accepted by the pattern|facet-valid)/ },
+  { code: "XSD_VALUE_NOT_IN_ENUMERATION", pattern: /^\[facet 'enumeration'\]/ },
   { code: "XSD_NO_MATCHING_DECLARATION", pattern: /^No matching global declaration available/ },
   { code: "XSD_TYPE_NOT_RESOLVED", pattern: /^The QName value '[^']*' of the xsi:type attribute/ },
 ];
@@ -98,7 +99,12 @@ export function classifySchemaMessage(rawMessage: string, line: number | null): 
         .filter((part) => part.length > 0),
     );
   }
-  const type = /type '([^']*)'/.exec(body);
+  // ANCHORED AT THE END OF THE MESSAGE, and that is load-bearing rather than tidy. The type
+  // name is the last thing libxml2 writes in this shape ("'V' is not a valid value of the
+  // atomic type 'T'."), and the offending value V comes BEFORE it. An unanchored match would
+  // take the first `type '...'` in the message, which a document value carrying the words
+  // `type 'x'` would supply, and the value would then travel into the report as a type name.
+  const type = /type '([^']*)'\.?\s*$/.exec(body);
   if (type?.[1]) expected.push(type[1]);
   const required = /attribute '([^']*)' is (?:required but missing|not allowed)/.exec(body);
   if (required?.[1]) expected.push(required[1]);

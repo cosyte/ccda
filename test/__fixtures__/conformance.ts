@@ -23,6 +23,8 @@
  *      `document('voc.xml')`.
  */
 
+import { gzipSync } from "node:zlib";
+
 import type { BuildCcdaInit } from "../../src/index.js";
 
 /**
@@ -233,7 +235,7 @@ export const SELF_TEST_SCHEMATRON = `<?xml version="1.0" encoding="utf-8"?>
   </sch:pattern>
   <sch:pattern id="p-self-test-warnings">
     <sch:rule id="r-self-test-warning" context="cda:observation[cda:templateId[@root='${SELF_TEST_ROOT}']]">
-      <sch:assert id="a-self-6" test="count(cda:text)=1">SHOULD contain exactly one [1..1] text (CONF:self-6).</sch:assert>
+      <sch:assert id="a-self-6" test="count(cda:code)=1">SHOULD contain exactly one [1..1] code (CONF:self-6).</sch:assert>
     </sch:rule>
   </sch:pattern>
 </sch:schema>
@@ -246,6 +248,31 @@ export const SELF_TEST_VOCABULARY = `<?xml version="1.0" encoding="utf-8"?>
     <code value="completed" displayName="Completed" codeSystem="2.16.840.1.113883.5.14"/>
   </system>
 </systems>
+`;
+
+/**
+ * A schema that accepts any `ClinicalDocument`, for the tests that drive a WHOLE run rather
+ * than one layer.
+ *
+ * A full run validates the documents `buildCcda` emits against whatever schema the network
+ * served it, and those tests are about the run's plumbing (what it fetches, what it refuses,
+ * what it leaves on disk) rather than about C-CDA's schema. Serving the strict self-test
+ * schema there would bury the property under a hundred irrelevant findings; serving the real
+ * CDA R2 schema is not available to a suite that takes no network. The strict schema below is
+ * used where the schema IS the subject.
+ */
+export const PERMISSIVE_SCHEMA = `<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:hl7-org:v3"
+           xmlns="urn:hl7-org:v3" elementFormDefault="qualified">
+  <xs:element name="ClinicalDocument">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:any minOccurs="0" maxOccurs="unbounded" processContents="skip"/>
+      </xs:sequence>
+      <xs:anyAttribute processContents="skip"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
 `;
 
 /** An XML schema for the self-test documents, standing in for the CDA R2 schema set. */
@@ -280,12 +307,21 @@ export const SELF_TEST_SCHEMA = `<?xml version="1.0" encoding="UTF-8"?>
         </xs:element>
         <xs:element name="text" minOccurs="0"/>
         <xs:element name="statusCode" minOccurs="0">
-          <xs:complexType><xs:attribute name="code" type="xs:string"/></xs:complexType>
+          <xs:complexType><xs:attribute name="code" type="ActStatusCode"/></xs:complexType>
         </xs:element>
       </xs:sequence>
-      <xs:attribute name="classCode" type="xs:string"/>
+      <xs:attribute name="classCode" type="ActClassCode"/>
     </xs:complexType>
   </xs:element>
+  <!-- Two enumerated attribute types, so the marker document produces a real schema
+       violation whose engine message quotes the offending VALUE. That is the message shape
+       the redaction seam exists for, and a schema with no such type could not grade it. -->
+  <xs:simpleType name="ActClassCode">
+    <xs:restriction base="xs:string"><xs:enumeration value="OBS"/></xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ActStatusCode">
+    <xs:restriction base="xs:string"><xs:enumeration value="completed"/></xs:restriction>
+  </xs:simpleType>
 </xs:schema>
 `;
 
@@ -333,3 +369,53 @@ export const SELF_TEST_MARKER_DOCUMENT = `<?xml version="1.0" encoding="UTF-8"?>
   </observation>
 </ClinicalDocument>
 `;
+
+/** One member of a synthetic corpus archive. */
+export interface ArchiveEntry {
+  /** Path inside the archive, without the top-level directory the writer adds. */
+  readonly path: string;
+  /** The member's text. */
+  readonly text: string;
+}
+
+/**
+ * Build a gzipped tar archive the fetch layer's own reader unpacks.
+ *
+ * This produces BYTES FOR THE NETWORK BOUNDARY, it is not a double: the tests that use it
+ * drive the real archive reader, the real content digest and the real emptiness refusal over
+ * an archive whose content they chose. A `tar` binary is not reachable from every platform
+ * this suite runs on, and shelling out to one would make the corpus the shell's product
+ * rather than the test's.
+ *
+ * @param entries - The members to write. A top-level directory is prefixed, as the host's own
+ *   generated tarballs carry one, so the reader's prefix stripping is exercised too.
+ * @returns The gzipped archive.
+ * @example
+ * ```ts
+ * const archive = writeTarGz([{ path: "a.xml", text: "<x/>" }]);
+ * ```
+ */
+export function writeTarGz(entries: readonly ArchiveEntry[]): Uint8Array {
+  const blocks: Buffer[] = [];
+  for (const entry of entries) {
+    const body = Buffer.from(entry.text, "utf8");
+    const header = Buffer.alloc(512);
+    header.write(`self-test-corpus/${entry.path}`, 0, 100, "utf8");
+    header.write("0000644\0", 100, 8, "utf8");
+    header.write("0000000\0", 108, 8, "utf8");
+    header.write("0000000\0", 116, 8, "utf8");
+    header.write(`${body.length.toString(8).padStart(11, "0")}\0`, 124, 12, "utf8");
+    header.write("00000000000\0", 136, 12, "utf8");
+    // The checksum field is computed over a header whose own checksum field is spaces.
+    header.write("        ", 148, 8, "utf8");
+    header.write("0", 156, 1, "utf8");
+    header.write("ustar\0", 257, 6, "utf8");
+    header.write("00", 263, 2, "utf8");
+    let checksum = 0;
+    for (const byte of header) checksum += byte;
+    header.write(`${checksum.toString(8).padStart(6, "0")}\0 `, 148, 8, "utf8");
+    blocks.push(header, body, Buffer.alloc((512 - (body.length % 512)) % 512));
+  }
+  blocks.push(Buffer.alloc(1024));
+  return new Uint8Array(gzipSync(Buffer.concat(blocks)));
+}
