@@ -28,7 +28,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 
 import { CONFORMANCE_CODES, ConformanceError } from "./errors.js";
@@ -67,6 +67,24 @@ function cachePathFor(directory: string, url: string): string {
   return `${directory}/${sha256(new TextEncoder().encode(url)).slice(0, 16)}.bin`;
 }
 
+/**
+ * Read a cache entry, or `null` if it is not there.
+ *
+ * ONE SYSCALL, NOT AN `existsSync` FOLLOWED BY A READ. The two-step form is a time-of-check to
+ * time-of-use race (CWE-367): between the check and the read the path can become a different
+ * file, and CodeQL's `js/file-system-race` flagged all three occurrences of it in this
+ * directory. Opening once and treating the failure as absence has no window to race in. It is
+ * also honest about a cache that cannot be read for any other reason: an unreadable entry is a
+ * miss, and a miss is always safe here, because a miss re-fetches and re-hashes.
+ */
+function readIfPresent(path: string): Uint8Array | null {
+  try {
+    return new Uint8Array(readFileSync(path));
+  } catch {
+    return null;
+  }
+}
+
 async function fetchChecked(
   fetcher: HttpFetcher,
   directory: string,
@@ -74,9 +92,9 @@ async function fetchChecked(
   label: string,
 ): Promise<Uint8Array> {
   const cachePath = cachePathFor(directory, file.url);
-  if (existsSync(cachePath)) {
-    const cached = new Uint8Array(readFileSync(cachePath));
-    if (cached.length === file.bytes && sha256(cached) === file.sha256) return cached;
+  const cached = readIfPresent(cachePath);
+  if (cached !== null && cached.length === file.bytes && sha256(cached) === file.sha256) {
+    return cached;
   }
 
   let received: Uint8Array;
@@ -270,9 +288,7 @@ export async function fetchCorpus(
   corpus: PinnedCorpus,
 ): Promise<readonly CorpusDocument[]> {
   const cachePath = cachePathFor(directory, corpus.url);
-  let archive: Uint8Array | null = existsSync(cachePath)
-    ? new Uint8Array(readFileSync(cachePath))
-    : null;
+  let archive: Uint8Array | null = readIfPresent(cachePath);
 
   if (archive === null) {
     try {

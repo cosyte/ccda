@@ -22,7 +22,7 @@
  * The CLI at the bottom supplies the real ones.
  */
 
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { DOMParser } from "@xmldom/xmldom";
@@ -253,7 +253,15 @@ export async function runConformance(options: RunOptions): Promise<RunResult> {
  */
 export function writeReport(result: RunResult, reportPath: string): string {
   const rendered = renderReport(result);
-  const previous = existsSync(reportPath) ? readFileSync(reportPath, "utf8") : null;
+  // Read once and treat the failure as absence, rather than asking `existsSync` and then
+  // reading: the two-step form is a time-of-check to time-of-use race (CWE-367), which
+  // CodeQL's `js/file-system-race` flags, and the one-step form has no window to race in.
+  let previous: string | null;
+  try {
+    previous = readFileSync(reportPath, "utf8");
+  } catch {
+    previous = null;
+  }
   mkdirSync(dirname(reportPath), { recursive: true });
   writeFileSync(reportPath, rendered);
   if (previous !== rendered) {
