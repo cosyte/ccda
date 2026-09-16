@@ -64,19 +64,24 @@ function initFields(): readonly string[] {
     .sort();
 }
 
-/** Which fields of the input type no built case sets. Pure, so the control below can feed it. */
+/**
+ * Which fields of the input type no built case sets. Pure, so the controls below can feed it a
+ * broken case list without touching the real one.
+ *
+ * Membership is an OWN PROPERTY of the init, asked without reading the value: the compiler's
+ * `exactOptionalPropertyTypes` already refuses an explicit `undefined` on any of these optional
+ * fields, so a key that is there is a key the case set.
+ */
 export function unmeasuredFields(
   fields: readonly string[],
-  cases: readonly { readonly init: Readonly<Record<string, unknown>> }[],
+  cases: readonly { readonly init: object }[],
   exempt: ReadonlySet<string>,
 ): readonly string[] {
-  const set = new Set<string>();
-  for (const entry of cases) {
-    for (const [key, value] of Object.entries(entry.init)) {
-      if (value !== undefined) set.add(key);
-    }
-  }
-  return fields.filter((field) => !exempt.has(field) && !set.has(field));
+  return fields.filter(
+    (field) =>
+      !exempt.has(field) &&
+      !cases.some((entry) => Object.prototype.hasOwnProperty.call(entry.init, field)),
+  );
 }
 
 describe("AC-1: the built-document set covers the whole emit surface", () => {
@@ -115,10 +120,15 @@ describe("AC-1: the built-document set covers the whole emit surface", () => {
       ).toStrictEqual(["dischargeInstructions"]);
     });
 
-    it("does not count a field whose value is undefined", () => {
-      expect(
-        unmeasuredFields(["problems"], [{ init: { problems: undefined } }], new Set()),
-      ).toStrictEqual(["problems"]);
+    it("names every field when the case list is empty", () => {
+      expect(unmeasuredFields(["problems", "allergies"], [], new Set())).toStrictEqual([
+        "problems",
+        "allergies",
+      ]);
+    });
+
+    it("says nothing about a field that is exempt", () => {
+      expect(unmeasuredFields(["patient"], [], ALWAYS_SET)).toStrictEqual([]);
     });
   });
 });
