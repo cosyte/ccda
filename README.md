@@ -1283,11 +1283,34 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
   organizers + observations. When the caller supplied a time it is used; when a `SHALL` requires the
   element but no time is known the slot is `nullFlavor="UNK"` (satisfying the cardinality without inventing
   a clinical time, read back as absent), the same fail-safe as the header's `SHALL` `addr`/`telecom` and
-  the never-guessed `dose`/`route`. **Limitation:** the builder does not assert full XSD
-  element-order or the complete Schematron rule set, and this gap was grounded against the raw C-CDA R2.1
-  IG text rather than a validator run, so a `buildCcda` document is expected-but-not-proven to pass an
-  external IG validator. The reaction/severity/criticality sub-observations' optional (`0..1`, non-`SHALL`)
-  `effectiveTime` is not emitted.
+  the never-guessed `dose`/`route`. The reaction/severity/criticality sub-observations' optional
+  (`0..1`, non-`SHALL`) `effectiveTime` is not emitted.
+
+<!-- conformance-statement:start -->
+
+- **Conformance, measured rather than expected.** `pnpm conformance` fetches the normative C-CDA R2.1
+  Schematron, its vocabulary file and the CDA R2 XML schema at run time from pinned immutable
+  references, validates every document `buildCcda` emits against the schema and then the
+  error-severity phase of the Schematron, and re-runs the Schematron over a public sample corpus
+  parsed and re-serialized through this library. The result is tracked at
+  [`documentation/conformance-report.md`](documentation/conformance-report.md), it is rewritten by
+  every run, and a run fails if the committed bytes disagree with what it just produced.
+  **Measured against Schematron revision `6d3ed96160b45a111895da4df5510c7fad9de01f`**, the document
+  types validated are `ccd` and `referralNote`, with **0** error-severity results on the built side
+  and **0** round-trip documents whose Schematron error set differed.
+  **This is an assessment against a published artifact, not a certification**, and no accredited body
+  has reviewed this software or this result.
+  **Limits, and they sit here beside the capability rather than in a footer.** The measurement covers
+  the two document types `buildCcda` emits and says nothing about the other ten, which it does not
+  emit. It covers the error-severity phase; the Schematron's warning phase is not run and a clean
+  result is not a claim about it. Value-set membership is checked only where the Schematron's own
+  vocabulary file checks it, so a clean result is not a terminology verification. The round-trip half
+  is **differential**: a public sample may carry Schematron errors of its own, and what is measured is
+  that parsing and re-serializing it introduces none and removes none, not that the sample was clean.
+  The run needs network egress and fails explicitly without it, by design; there is no offline pass.
+
+<!-- conformance-statement:end -->
+
 - **Vendor profiles tolerate, they never relax safety**: a `CcdaProfile` only downgrades the
   **non-safety-critical** deviations it expects (re-badged `PROFILE_QUIRK_APPLIED`, flagged
   `expected`); it can never tolerate a dose/allergen/unit/identity/code-system warning (refused at

@@ -2117,11 +2117,131 @@ deleted; the imperative as it stood is reproduced here verbatim.
     Referral Note's two narrative-only sections are **buildable but not editable**. There is no
     entry-level append and no section removal.
 
-## A built document's conformance is expected, not proven
+## A built document's conformance is measured, and the measurement has edges
 
-  - A built document round-trips through `parseCcda` with zero warnings, but its conformance was
-    grounded against the raw C-CDA R2.1 IG text, not a validator run: it is **expected but not
-    proven** to pass an external IG validator.
+**THIS ENTRY USED TO SAY THE OPPOSITE, AND THE OLD WORDING IS REPRODUCED HERE RATHER THAN
+DELETED**, because the reason it was true for a year is the reason to re-read what replaced it.
+It said: "A built document round-trips through `parseCcda` with zero warnings, but its conformance
+was grounded against the raw C-CDA R2.1 IG text, not a validator run: it is **expected but not
+proven** to pass an external IG validator."
+
+**IT IS PROVEN NOW, AND PROVING IT FOUND 86 ERROR-SEVERITY RESULTS.** `pnpm conformance` fetches
+the normative C-CDA R2.1 Schematron, its vocabulary file and the CDA R2 XML schema from the pinned
+immutable references in `scripts/conformance/artifacts.json`, validates every document `buildCcda`
+emits against the schema and then the Schematron's error-severity phase, and writes
+`documentation/conformance-report.md`. The first run raised 86 error-severity results across the
+four documents the builder emits. Reading against the raw IG text had produced a document that was
+wrong in nineteen distinct ways, which is the whole argument for measuring rather than reasoning:
+every one of them was a `SHALL` somebody had read and believed they had satisfied.
+
+**THE COUNT IS ZERO NOW. DO NOT READ THAT AS "CONFORMANT".** What is measured is narrower than
+what a reader will assume, and each edge is real:
+
+  - **Two document types.** `buildCcda` emits a CCD and a Referral Note. Nothing is measured about
+    the other ten, because it does not emit them.
+  - **The error phase only.** The Schematron declares `errors` and `warnings`. A run evaluates
+    `errors`. A clean result is not a claim about the warning phase and never has been.
+  - **Value sets only where the artifact checks them.** The Schematron's own `voc.xml` backs 24 of
+    its assertions. A clean result is not a terminology verification, and the library's own
+    `TerminologyAdapter` is consulted at five `CodeSlot`s, which is a different and smaller thing
+    again.
+  - **The round trip is DIFFERENTIAL.** For each public sample the harness compares the Schematron
+    error set of the input with the error set of `serializeCcda(parseCcda(input))`. A sample may
+    carry errors of its own and the comparison passes when both sides carry the same ones. A test
+    asserting an empty error set on corpus input would be grading something else.
+  - **It is an assessment, not a certification.** No accredited body has reviewed this software or
+    this result, and the report says so in its own words.
+
+**THE STATEMENT AND THE MEASUREMENT CANNOT DRIFT APART, BY CONSTRUCTION.** `pnpm conformance`
+rewrites the report and fails when the committed bytes differ from what the run produced;
+`test/conformance/statement.test.ts` reads the report as a FILE, with no network, and fails unless
+the README's delimited conformance statement agrees with it on the artifact revision, the document
+types, the count of error-severity results and the count of round trips that differed. Do not
+update one without the other, and do not make `statement.test.ts` reach the network: the ordinary
+suite has to stay runnable offline, which is the whole reason `pnpm conformance` is a separate
+command.
+
+## The conformance harness fetches its artifacts and vendors none of them
+
+**NO `.sch`, NO `voc.xml`, NO `.xsd` AND NO CORPUS DOCUMENT IS EVER COMMITTED, AND THE GITIGNORE
+ENTRY IS LOAD-BEARING RATHER THAN TIDY.** `scripts/phi-scan.ts` walks the whole working tree,
+decides scope per file by CONTENT rather than by path, and gitignored paths are the only ones
+outside its read set. A third-party clinical sample that merely sat uncommitted would still be in
+that set, and one that reached a commit would be in git history forever. So the harness fetches
+into `.conformance-artifacts/`, which `.gitignore` covers, and
+`test/conformance/working-tree-is-clean.test.ts` asks git directly whether each file a run wrote is
+IGNORED rather than merely uncommitted. A set comparison of `git status --porcelain` alone passes
+happily over a visible working directory; that is why the second half of that test exists.
+
+**SIZE IS THE SECOND REASON AND IT IS INDEPENDENT OF THE FIRST.** The Schematron is about 1 MB and
+its vocabulary file is about 65 MB. Neither belongs in an npm package, and the corpus is CC0 so
+licence is not what forbids vendoring it.
+
+**A BRANCH IS NOT A PIN.** Every reference in `scripts/conformance/artifacts.json` is a git commit
+SHA, which is content-addressed over the whole tree at that commit, and every fetch is checked
+against a sha256 recorded from the bytes of the first fetch before anything is validated against
+it. **The corpus is the exception worth knowing**: its digest is over the archive's CONTENT (a
+sorted `sha256  path` line per document) rather than over its gzip bytes, because the host
+generates that tarball on demand and has changed its compression before. A digest over the
+packaging would go red on a recompression and would have said nothing about the documents.
+
+## The conformance harness's two development dependencies, and why the Schematron driver is ours
+
+**BOTH ARE `devDependencies` AND NEITHER MAY REACH `dependencies`.** The runtime cap is three and
+one is used: `@xmldom/xmldom`, ratified one-way by `docs/adr/0001-xml-parser.md`. Nothing here ships
+in the published package; `files` is unchanged.
+
+**`xmllint-wasm`, for XSD validation** (`dependencies` Y1 and Y2). What it does that the standard
+library and `@xmldom/xmldom` do not: validate an instance against a W3C XML Schema. There is no
+route to that in Node without an XML Schema processor, and `@xmldom/xmldom` is a DOM, not a
+validator. **Reach:** it is libxml2 compiled to WebAssembly and runs inside the Wasm sandbox with
+no filesystem and no network of its own; the harness hands it the schema and the document as
+strings. **Install-time execution:** none, and that mattered to the choice, because this repository
+installs with lifecycle scripts off. It has zero dependencies of its own. **If it is abandoned:**
+the WASM module is a build of libxml2 and keeps working at the pinned version; the cost is
+eventually rebuilding that binding or moving to another XML Schema processor, and it is confined to
+`scripts/conformance/xsd.ts`. **What was rejected:** a native binding (`libxmljs2`) needs a node-gyp
+build this repository's install hardening switches off; a Java wrapper puts a JVM in the toolchain
+of a TypeScript library; a hosted validator is refused outright, because the point of this harness
+is that it can be pointed at a real record without that record leaving the machine.
+
+**`xpath`, for XPath 1.0 evaluation** (Y1 and Y2). What it does that nothing here does: evaluate the
+277 distinct rule contexts and 985 distinct assertion tests the Schematron is written in. **Reach:**
+pure JavaScript, zero dependencies, evaluates expressions against a DOM and touches nothing else.
+**Install-time execution:** none. **If it is abandoned:** the pinned version keeps evaluating XPath
+1.0, which is a frozen 1999 specification, so the abandonment risk is unusually low; the cost lands
+in one file. **One defect is worked around and it is narrow:** its parser refuses whitespace between
+a core function's name and its opening parenthesis, which XPath 1.0 permits, and exactly one
+assertion of the pinned artifact (`a-1198-8964-c`) is written that way. `closeFunctionNameGap` in
+`scripts/conformance/schematron.ts` closes that gap for core function names only, so `a div (b)` and
+`contains(x, 'not (y)')` come back unchanged.
+
+**THE ISO SCHEMATRON LAYER IS WRITTEN HERE, AND THAT WAS MEASURED RATHER THAN ASSUMED.**
+`node-schematron@2.1.0` was installed and run against the pinned artifact before this file was
+written. It throws on the first rule it reads, because it takes `@context` off every `sch:rule` and
+this artifact carries 505 ABSTRACT rules that have none; abstract rules plus `sch:extends` are not a
+corner of it, they are its shape (556 `sch:extends` across 432 patterns). The other route, the ISO
+skeleton XSLT under a full XSLT processor, is how the reference validators do it and would be the
+right answer if one were available on terms this repository can take: the only maintained XSLT 3.0
+engine for Node ships under a proprietary licence and pulls an HTTP client into a validation
+toolchain. What is written here is the small part ISO Schematron adds on top of XPath, and it is
+small: phases select patterns, patterns hold rules, a rule splices in the assertions of the abstract
+rules it extends, and within one pattern a node is evaluated by the FIRST rule whose context selects
+it and by no later one.
+
+**AN EXPRESSION THE ENGINE CANNOT COMPILE FAILS THE RUN.** It is never skipped and never counted as
+a pass. A validator that silently drops the assertions it could not read reports a green it did not
+earn, which is the same trap `scripts/attw.mjs` exists to refuse, restated one level up.
+
+**A DIAGNOSTIC NEVER CARRIES A DOCUMENT VALUE, AND THE TWO ENGINES LEAK DIFFERENTLY.** The
+Schematron half is safe by construction on this artifact family: it contains zero `sch:value-of`
+elements, so no assertion message interpolates anything, and a finding carries the assertion id, its
+own static text and a structural path of element names and positions. The XSD half is the real
+hazard, because libxml2 writes the offending VALUE into several of its messages.
+`classifySchemaMessage` keeps the schema's own vocabulary and the line number and drops everything
+else, a shape it does not recognise degrades to `XSD_UNCLASSIFIED` carrying nothing of the message,
+and the type-name capture is anchored at the END of the message so a document value carrying the
+words `type 'x'` cannot travel into the report as a type name.
 
 ## The XML-parser dependency, ratified
 

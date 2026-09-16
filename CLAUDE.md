@@ -121,9 +121,18 @@ immutability + explicit mutation, and the profile system.
   - `editCcda` covers **twelve single-list section kinds**; Functional Status, Mental Status and the
     Referral Note's two narrative-only sections are **buildable but not editable**.
     Why: `documentation/agent-notes.md#what-editccda-covers`
-  - A built document round-trips through `parseCcda` with zero warnings, but its conformance is
-    **expected, not proven**: grounded against the raw C-CDA R2.1 IG text, not a validator run.
-    Why: `documentation/agent-notes.md#a-built-documents-conformance-is-expected-not-proven`
+  - **A built document's conformance is MEASURED now (`pnpm conformance`), and proving it found 86
+    error-severity results. Zero is not "conformant": two document types, the error phase only,
+    value sets only where the artifact checks them, and a DIFFERENTIAL round trip.**
+    Why: `documentation/agent-notes.md#a-built-documents-conformance-is-measured-and-the-measurement-has-edges`
+  - **No `.sch`, no `voc.xml`, no `.xsd` and no corpus document is ever committed or ever sits in a
+    tracked path. Every pin is a commit SHA and every fetch is digest-checked; the CORPUS digest is
+    over its CONTENT, never its gzip bytes.**
+    Why: `documentation/agent-notes.md#the-conformance-harness-fetches-its-artifacts-and-vendors-none-of-them`
+  - **The harness's two dev deps must never reach `dependencies`, and the ISO Schematron layer is
+    OURS because the published JS implementations cannot read an abstract rule. An expression the
+    engine cannot compile FAILS the run; it is never skipped.**
+    Why: `documentation/agent-notes.md#the-conformance-harnesss-two-development-dependencies-and-why-the-schematron-driver-is-ours`
 - **XML-parser dependency: ratified (one-way door).** `@xmldom/xmldom`, exact-pinned, **1 of the
   ≤ 3** runtime-dep cap, per `docs/adr/0001-xml-parser.md` (**Accepted**).
   Why: `documentation/agent-notes.md#the-xml-parser-dependency-ratified`
