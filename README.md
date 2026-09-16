@@ -1285,6 +1285,15 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
   a clinical time, read back as absent), the same fail-safe as the header's `SHALL` `addr`/`telecom` and
   the never-guessed `dose`/`route`. The reaction/severity/criticality sub-observations' optional
   (`0..1`, non-`SHALL`) `effectiveTime` is not emitted.
+- **A Functional Status Organizer is written only when it carries a self-care activity.** The R2.1
+  template SHALL contain a Self-Care Activities (ADL and IADL) observation as well as a Functional
+  Status Observation, so `BuildCcdaFunctionalStatusOrganizer` takes `selfCareActivities` (the
+  activity assessed as `code`, the ability observed as `value`, each `nullFlavor="UNK"` when you
+  supply none). Pass no activity and the organizer is **not** written: its findings are emitted as
+  standalone Functional Status Observations, all of them present and read back unchanged, and the
+  returned document carries `MISSING_SELF_CARE_ACTIVITY` saying the grouping, its categorization
+  code and its `effectiveTime` were dropped. The builder will neither invent an assessment nobody
+  performed nor stamp a template the document does not satisfy.
 
 <!-- conformance-statement:start -->
 

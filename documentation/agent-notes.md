@@ -2134,6 +2134,20 @@ four documents the builder emits. Reading against the raw IG text had produced a
 wrong in nineteen distinct ways, which is the whole argument for measuring rather than reasoning:
 every one of them was a `SHALL` somebody had read and believed they had satisfied.
 
+**THE SECOND THING THAT WAS WRONG WAS THE SET, NOT THE COUNT, AND IT IS THE FAILURE MODE TO
+CARRY FORWARD.** The first harness built four documents: two minimal, and one populated init
+shape mirrored from the builder suite. That suite exercises eight more shapes, and four of them
+(family history, mental status, the mental-status organizer and the functional-status organizer)
+emitted documents carrying error-severity results with `document.warnings` empty, which is the
+library's own sanctioned output rather than a malformed init. Because nothing built them, the
+run was green, the report recorded "Error-severity results: 0", and the README published that as
+the builder's measured conformance. **A green measurement over a subset reads exactly like a
+green measurement over the whole surface**, and no check anywhere could tell them apart. The set
+is thirteen documents now, one per optional section as well as the populated pair, and
+`test/conformance/emit-surface-coverage.test.ts` reads `BuildCcdaInit` through the TypeScript
+checker and fails when a field of it is set by no built case. Widen the builder and that test
+names the section nothing measures, on the commit that widened it.
+
 **THE COUNT IS ZERO NOW. DO NOT READ THAT AS "CONFORMANT".** What is measured is narrower than
 what a reader will assume, and each edge is real:
 
@@ -2184,6 +2198,61 @@ it. **The corpus is the exception worth knowing**: its digest is over the archiv
 sorted `sha256  path` line per document) rather than over its gzip bytes, because the host
 generates that tarball on demand and has changed its compression before. A digest over the
 packaging would go red on a recompression and would have said nothing about the documents.
+
+**THE XML SCHEMA PIN IS THE SDTC TREE, NOT `schema/normative`, AND THAT IS A DECISION RATHER THAN
+A PATH.** `buildCcda` emits `{urn:hl7-org:sdtc}deceasedInd` on a family history relative and the
+parser reads it back by local name. The normative schema declares no extension elements at all,
+so it rejects that document as structurally invalid, while the Schematron, which is written
+against C-CDA R2.1, says nothing about it: one artifact called a conformant document broken and
+the other did not notice. The `CDA-core-2.0` README states that "the schema/extensions folder
+contains an SDTC folder which has the updated CDA schema with all SDTC extensions that are
+approved by HL7", so the pin moved to `schema/extensions/SDTC/infrastructure/cda/CDA_SDTC.xsd` at
+the same commit, with the transitive closure of its includes pinned beside it and each digest
+taken from the bytes of its first fetch. **The refused alternative was dropping the extension**,
+which would have removed a documented capability from the builder to make an artifact happy, and
+`schema/extensions/SDTC/processable/coreschemas/infrastructureRoot.xsd` is deliberately NOT in the
+file list: nothing in the entry point's include graph reaches it, and a pin list wider than the
+graph is a set of digests nobody verifies.
+
+## A Functional Status Organizer is not written without a Self-Care Activities observation
+
+**THE R2.1 TEMPLATE REQUIRES BOTH KINDS OF COMPONENT, AND THE BUILDER'S INPUT MODELLED ONE.** The
+Functional Status Organizer (`…22.4.66`, the `2014-06-09` stamp) SHALL contain at least one
+component holding a Functional Status Observation (CONF:1098-14359) **and** at least one holding a
+Self-Care Activities (ADL and IADL) observation (`…22.4.128`, CONF:1098-31432). The builder had a
+guard for the first and none for the second, so every organizer it wrote claimed a template the
+normative Schematron rejects. `BuildCcdaFunctionalStatusOrganizer` gained `selfCareActivities`,
+and each activity is written as a `…22.4.128` observation: the `code` is the activity assessed,
+the `value` the ability observed, and an unsupplied slot is `nullFlavor="UNK"` rather than a
+guess.
+
+**WITH NO ACTIVITY SUPPLIED THE FINDINGS ARE WRITTEN STANDALONE AND THE DOCUMENT SAYS SO**
+(`MISSING_SELF_CARE_ACTIVITY`). Three outcomes were available and two are refused by rules this
+repository already holds:
+
+  - **Fabricate an all-`nullFlavor` activity.** It satisfies the cardinality by asserting that an
+    ADL assessment happened, of an unknown activity, with an unknown result, at an unknown time.
+    A `nullFlavor` on a slot says a known statement has an unknown value; a whole observation
+    nobody performed is content, and this package does not invent content.
+  - **Write the organizer anyway.** That stamps a template onto bytes a strict reader rejects,
+    which is the emit-side quirk the archetype forbids outright: liberal on parse, spec-clean on
+    emit.
+  - **Write the findings standalone.** Conformant, loses no finding, and every one reads back
+    through the same extractor with the same `domain`. What it loses is the grouping, the
+    organizer's categorization `code` and its `effectiveTime`, which is why it is reported rather
+    than done in silence.
+
+**THE DIAGNOSTIC READS THE INPUT, NOT THE EMITTED DOM, AND THAT IS THE ONE PLACE THIS REPOSITORY
+DOES SO.** `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` reads what was written, because two writers
+raise it and an input reading is false on `editCcda`'s ordered edits. This one cannot: the emitted
+shape is a standalone Functional Status Observation, indistinguishable from a caller who asked for
+one. It is sound only because `editCcda` has no Functional Status edit kind, so `buildCcda` is the
+sole writer. **Adding a Functional Status edit kind means moving this check, not copying it.**
+
+**A SELF-CARE ACTIVITY IS READ BACK AS AN ORDINARY FUNCTIONAL FINDING.** `organizerMembers` reads
+`…22.4.128` components alongside `…22.4.67` ones and tags them with the organizer's own domain.
+It is not flagged `assessmentScale`: it carries no score and no supporting items. Without that,
+the builder would write an entry its own reader dropped.
 
 ## The conformance harness's two development dependencies, and why the Schematron driver is ours
 
