@@ -1,0 +1,116 @@
+{
+  "note": [
+    "The validation artifacts this repository measures its conformance against. Every",
+    "reference here is immutable and every fetch is checked against the digest beside it",
+    "before a single validation result is produced. A branch name is not a pin: each entry",
+    "names a git commit SHA, which is content-addressed over the whole tree at that commit,",
+    "so the same URL can never serve different bytes. Nothing in this list is committed to",
+    "this repository; the harness fetches it into a gitignored working directory at run time.",
+    "Each sha256 was computed from the bytes of the first fetch, recorded here, and is",
+    "re-verified on every run. To move a pin: change the commit, run pnpm conformance, and",
+    "take the digest it refuses with, having first read the diff between the two commits."
+  ],
+  "artifacts": {
+    "schematron": {
+      "title": "Consolidated CDA Templates for Clinical Notes (US Realm) DSTU R2.1 Schematron",
+      "repository": "https://github.com/HL7/CDA-ccda-2.1",
+      "commit": "6d3ed96160b45a111895da4df5510c7fad9de01f",
+      "path": "validation/Consolidated CDA Templates for Clinical Notes (US Realm) DSTU R2.1.sch",
+      "url": "https://raw.githubusercontent.com/HL7/CDA-ccda-2.1/6d3ed96160b45a111895da4df5510c7fad9de01f/validation/Consolidated%20CDA%20Templates%20for%20Clinical%20Notes%20(US%20Realm)%20DSTU%20R2.1.sch",
+      "integrity": "bytes",
+      "bytes": 1010531,
+      "sha256": "04be58046a675735616e46cf52053688a2fc9d0c88010f14fd1c5a2f4ca5bd54"
+    },
+    "vocabulary": {
+      "title": "Schematron vocabulary file (voc.xml)",
+      "repository": "https://github.com/HL7/CDA-ccda-2.1",
+      "commit": "6d3ed96160b45a111895da4df5510c7fad9de01f",
+      "path": "validation/voc.xml",
+      "url": "https://raw.githubusercontent.com/HL7/CDA-ccda-2.1/6d3ed96160b45a111895da4df5510c7fad9de01f/validation/voc.xml",
+      "integrity": "bytes",
+      "bytes": 64971998,
+      "sha256": "bc15f23f4f9d4abe8fa98a36eb57e5ade7f9d8f1829e7d0bf6359b2d1b1ced52"
+    },
+    "corpus": {
+      "title": "HL7 C-CDA-Examples, the public R2.1 sample set",
+      "repository": "https://github.com/HL7/C-CDA-Examples",
+      "licence": "CC0-1.0",
+      "commit": "ad5007abd912a45bbd04ce96e871c70954c2b2c2",
+      "url": "https://codeload.github.com/HL7/C-CDA-Examples/tar.gz/ad5007abd912a45bbd04ce96e871c70954c2b2c2",
+      "integrity": "content-manifest",
+      "integrityNote": [
+        "The digest below is over the archive's CONTENT, not over its gzip bytes: the sorted",
+        "list of one 'sha256  relative/path' line per .xml entry, newline-joined and newline-",
+        "terminated. GitHub generates the tarball on demand and has changed its compression",
+        "settings before, so the packaging bytes are not a sound pin while the content at a",
+        "commit SHA is fixed forever. A single changed byte in a single sample moves this",
+        "digest, which is the property AC-7 needs."
+      ],
+      "sha256": "eb933e72cea076c6eaa18aad0650b7affe150576824c2e48774f4087ffcd60c0",
+      "documents": 444
+    },
+    "cdaSchema": {
+      "title": "CDA R2 XML schema, the SDTC-extended tree",
+      "repository": "https://github.com/HL7/CDA-core-2.0",
+      "commit": "e922fc35586fd2629f0c8a021080bca9ab424e18",
+      "integrity": "bytes",
+      "schemaNote": [
+        "The SDTC tree rather than schema/normative, and the difference is the whole reason the",
+        "pin names it. buildCcda emits {urn:hl7-org:sdtc}deceasedInd on a family history relative,",
+        "an HL7-approved SDO extension the parser reads back; the normative schema declares no",
+        "extension elements at all, so it rejects that document as structurally invalid while the",
+        "Schematron, which is written against C-CDA R2.1, says nothing about it. The repository's",
+        "own README states that 'the schema/extensions folder contains an SDTC folder which has the",
+        "updated CDA schema with all SDTC extensions that are approved by HL7'. Measuring against",
+        "the normative tree would have meant either publishing a schema failure for a conformant",
+        "document or dropping an extension a consumer relies on. The file list below is the",
+        "transitive closure of the entry point's own includes and imports, nothing more."
+      ],
+      "entry": "schema/extensions/SDTC/infrastructure/cda/CDA_SDTC.xsd",
+      "files": [
+        {
+          "path": "schema/extensions/SDTC/infrastructure/cda/CDA_SDTC.xsd",
+          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/extensions/SDTC/infrastructure/cda/CDA_SDTC.xsd",
+          "bytes": 2439,
+          "sha256": "d596141f0a457b7b31c1a5b4e97ae55d16bedf8c08356e644475c339263d76e7"
+        },
+        {
+          "path": "schema/extensions/SDTC/infrastructure/cda/POCD_MT000040_SDTC.xsd",
+          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/extensions/SDTC/infrastructure/cda/POCD_MT000040_SDTC.xsd",
+          "bytes": 103074,
+          "sha256": "a9d1169721efe71124f2c5f7a7d53441a2129424742336e8324f27bce80e1eaf"
+        },
+        {
+          "path": "schema/extensions/SDTC/infrastructure/cda/SDTC.xsd",
+          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/extensions/SDTC/infrastructure/cda/SDTC.xsd",
+          "bytes": 20795,
+          "sha256": "3a16dbaa0526005850eaf32f4f061ba4db63ee1f9e1267783c8f734feaf73a58"
+        },
+        {
+          "path": "schema/extensions/SDTC/processable/coreschemas/NarrativeBlock.xsd",
+          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/extensions/SDTC/processable/coreschemas/NarrativeBlock.xsd",
+          "bytes": 23929,
+          "sha256": "92a9ec2c6c00d10cd40a9afdf4d70f18c823bdec15db9e8b116cb5076d11f66e"
+        },
+        {
+          "path": "schema/extensions/SDTC/processable/coreschemas/datatypes-base_SDTC.xsd",
+          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/extensions/SDTC/processable/coreschemas/datatypes-base_SDTC.xsd",
+          "bytes": 78891,
+          "sha256": "832527e03eac5cb671880b87c9515e55c2089e8ef3fc82634e69c7337adb440f"
+        },
+        {
+          "path": "schema/extensions/SDTC/processable/coreschemas/datatypes.xsd",
+          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/extensions/SDTC/processable/coreschemas/datatypes.xsd",
+          "bytes": 65795,
+          "sha256": "0238ba379eec458d9989ff2c2d9012da2964c9d29d5177cf2d74d4c17a7a6be2"
+        },
+        {
+          "path": "schema/extensions/SDTC/processable/coreschemas/voc.xsd",
+          "url": "https://raw.githubusercontent.com/HL7/CDA-core-2.0/e922fc35586fd2629f0c8a021080bca9ab424e18/schema/extensions/SDTC/processable/coreschemas/voc.xsd",
+          "bytes": 84321,
+          "sha256": "63bacc8e6c0a662fe630b3377950a1bad8fa659242021a5db0d4778762ae8099"
+        }
+      ]
+    }
+  }
+}

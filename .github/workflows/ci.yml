@@ -22,3 +22,55 @@ jobs:
     uses: cosyte/.github/.github/workflows/ci.yml@main
     with:
       run-phi-scan: true
+
+  # The conformance harness, added ON TOP of the caller above and never instead of it.
+  #
+  # WHY IT IS NOT PART OF THE SHARED LADDER. `pnpm conformance` reaches the network by design:
+  # it fetches the normative C-CDA R2.1 Schematron, its vocabulary file, the CDA R2 XML schema
+  # and a public sample corpus from the pinned immutable references in
+  # `scripts/conformance/artifacts.json`, and an artifact it cannot obtain FAILS the run rather
+  # than passing it. That is a criterion, not a nicety, and it is why the check is a separate
+  # command from `pnpm test`: folding it into the ordinary suite would make that suite red on
+  # any machine behind an egress lockdown, and the pressure to soften that red is exactly how
+  # a fail-safe like this one gets quietly reversed.
+  #
+  # WHAT IT BLOCKS TODAY, said plainly rather than assumed. The required contexts on this
+  # repository are the org ruleset's, and this job's context is not among them, so a red here
+  # is VISIBLE on every pull request and does not by itself stop a merge. Adding it is a
+  # GitHub settings change, not a file change. The em-dash and public-surface gates sit behind
+  # the identical gap and their own workflows say so.
+  #
+  # ONE NODE VERSION, NOT THE MATRIX. The shared caller already runs the type checker, the
+  # linter and the suite on Node 22 and 24. What this job measures is a property of the
+  # DOCUMENTS the builder emits, which is the same on both, so a second run would buy a
+  # duplicate answer and a second 65 MB download.
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # The vocabulary file alone is about 65 MB and is fetched on every run. Caching it is a
+      # PERFORMANCE matter and nothing more: the key is the pin file's own hash, so moving a
+      # pin misses the cache, and a cache hit is still re-hashed against the pin before a
+      # single byte of it is validated against. A miss therefore cannot become a reason to
+      # skip the vocabulary input, and a poisoned cache entry is a cache miss rather than a
+      # way past the digest check.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .conformance-artifacts
+          key: conformance-artifacts-${{ hashFiles('scripts/conformance/artifacts.json') }}
+
+      - run: pnpm install --frozen-lockfile
+
+      # No `|| true` and no `continue-on-error`: a check that cannot fail is documentation.
+      # The command writes `documentation/conformance-report.md` and fails if the committed
+      # bytes differ from what this run produced, so a behaviour that moved without its
+      # published statement moving with it reds here.
+      - run: pnpm conformance

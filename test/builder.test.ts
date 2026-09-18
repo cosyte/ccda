@@ -318,7 +318,15 @@ describe("buildCcda, allergies + the negation/nullFlavor safety rule", () => {
     expect(nka?.noKnownAllergy).toBe(true);
     expect(nka?.negated).toBe(true);
     expect(nka?.nullFlavor).toBeUndefined();
-    expect(nka?.allergen).toBeUndefined();
+    // AC-1. The negated form now carries the substance participant its template's
+    // SHALL requires (CONF:1098-7402), with the playing entity's code
+    // nullFlavor="NA": not applicable, because "no known allergies" names no
+    // substance. So the allergen slot is PRESENT and explicitly empty rather than
+    // absent, which is what a real-world NKA entry from any other system has always
+    // parsed to here. The safety-bearing reads are unchanged and are asserted above:
+    // this is a negation, not an unknown, and there is no code to mistake for one.
+    expect(nka?.allergen?.code).toBeUndefined();
+    expect(nka?.allergen?.nullFlavor).toBe("NA");
   });
 
   it("supports an allergen without a reaction/severity/criticality", () => {
@@ -500,16 +508,26 @@ describe("buildCcda, emit conformance (header + section cardinality)", () => {
     expect((xml.match(/<telecom /g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 
-  it("empty required sections declare entries-optional templateId only (no entries-required)", () => {
+  it("empty required sections declare BOTH templateIds and carry nullFlavor with no entries", () => {
+    // AC-1. This assertion used to read the other way round, on the argument that an
+    // entries-required template with zero entries violates its "SHALL contain at least
+    // one entry" statement. Measured against the normative Schematron at the revision
+    // scripts/conformance/artifacts.json pins, that is wrong twice over: the section's
+    // own assertion admits a nullFlavor-ed section with no entries (it refuses only the
+    // combination of a nullFlavor AND entries), and the CCD's header rule names the
+    // entries-REQUIRED identifier for each of its five clinical SHALL sections, so
+    // declaring only the entries-optional one failed the document-level rule five times.
+    // Medications is stamped 2014-06-09, NOT 2015-08-01: R2.1 never re-issued this
+    // section at the later stamp. See CCD_SHALL_SECTION_STAMPS below.
     const xml = serializeCcda(buildCcda({ patient: { mrn: "M" } }));
-    // Empty Medications/Results must NOT carry the entries-required (.1) template
-    // with zero entries, that violates its "SHALL contain ≥1 entry" statement.
-    // Medications is stamped 2014-06-09, NOT 2015-08-01: R2.1 never re-issued
-    // this section at the later stamp. See CCD_SHALL_SECTION_STAMPS below.
     expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.1" extension="2014-06-09"');
-    expect(xml).not.toContain("2.16.840.1.113883.10.20.22.2.1.1");
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.1.1" extension="2014-06-09"');
     expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.3" extension="2015-08-01"');
-    expect(xml).not.toContain("2.16.840.1.113883.10.20.22.2.3.1");
+    expect(xml).toContain('root="2.16.840.1.113883.10.20.22.2.3.1" extension="2015-08-01"');
+    // The escape the section rule grants is nullFlavor-with-no-entries, so both halves
+    // of it are the assertion: every empty section is null-flavored, and none has entries.
+    expect((xml.match(/<section nullFlavor="NI">/g) ?? []).length).toBe(6);
+    expect(xml).not.toContain("<entry>");
   });
 
   it("populated sections declare the entries-required templateId", () => {
@@ -572,14 +590,15 @@ describe("buildCcda, the six CCD SHALL section template stamps", () => {
   });
 
   it("stamps the Medications section identically when it is empty", () => {
-    // An empty CCD emits the entries-OPTIONAL root only (declaring
-    // entries-required with zero entries violates its own "SHALL contain at
-    // least one entry"), so such a document does NOT satisfy CONF:1198-30664 --
-    // that is inherent to having no medications, not something this fix closes.
-    // What is pinned here is that the stamp is right on whichever root is used.
+    // AC-1. An empty CCD now emits BOTH roots at 2014-06-09 and carries
+    // nullFlavor="NI" with no entries, which is the shape that satisfies
+    // CONF:1198-30664 and the section's own entry rule at the same time; the
+    // paragraph above this test's sibling in "emit conformance" has the
+    // measurement. What is pinned here is that the stamp is right on BOTH roots:
+    // the 2015-08-01 leak this file exists to catch would show on either one.
     const empty = serializeCcda(buildCcda({ patient: { mrn: "M" } }));
     expect(empty).toContain('root="2.16.840.1.113883.10.20.22.2.1" extension="2014-06-09"');
-    expect(empty).not.toContain("2.16.840.1.113883.10.20.22.2.1.1");
+    expect(empty).toContain('root="2.16.840.1.113883.10.20.22.2.1.1" extension="2014-06-09"');
   });
 
   it("stamps the Referral Note's Medications section the same way", () => {
@@ -786,8 +805,12 @@ describe("buildCcda, immunizations round-trip", () => {
     expect(flu?.route?.codeSystem).toBe("2.16.840.1.113883.3.26.1.1"); // NCI Thesaurus
     expect(flu?.effectiveTime?.value?.raw).toBe("20240101");
     expect(flu?.narrative).toBe("Influenza, split virus, trivalent, injectable, preservative free");
-    // An administered shot carries no negationInd, so `refused` is absent (not false).
-    expect(flu?.refused).toBeUndefined();
+    // AC-1. The Immunization Activity SHALL carry @negationInd (CONF:1198-8985),
+    // on the administered arm too, so an administered shot now states
+    // negationInd="false" and reads back as `refused: false`. That is the entry's
+    // own claim written where the guide requires it, not a default standing in for
+    // an unknown, and it is still distinct from the refused case below.
+    expect(flu?.refused).toBe(false);
   });
 
   it("emits the Immunizations section with entries-required templateId + LOINC", () => {
@@ -1298,9 +1321,10 @@ describe("buildCcda, mental status round-trip", () => {
 });
 
 describe("buildCcda, functional/mental status organizers", () => {
-  /** A functional organizer (ICF-coded self-care cluster) grouping two findings,
-   * plus a mental organizer (uncoded) grouping two, and one standalone functional
-   * finding, to prove grouping, domain separation, and mixed grouped/standalone. */
+  /** A functional organizer (ICF-coded self-care cluster) grouping two findings
+   * plus the Self-Care Activities observation its template SHALL contain, a mental
+   * organizer (uncoded) grouping two, and one standalone functional finding, to
+   * prove grouping, domain separation, and mixed grouped/standalone. */
   const ORG_INIT: BuildCcdaInit = {
     patient: { mrn: "M" },
     functionalStatusOrganizers: [
@@ -1315,6 +1339,13 @@ describe("buildCcda, functional/mental status organizers", () => {
         findings: [
           { value: { code: "129019007", displayName: "Self-care" } },
           { value: { code: "165245003", displayName: "Able to walk" } },
+        ],
+        selfCareActivities: [
+          {
+            code: { code: "54520-2", displayName: "Bathing" },
+            value: { code: "371153006", displayName: "Independent" },
+            effectiveTime: "20240101",
+          },
         ],
       },
     ],
@@ -1333,8 +1364,9 @@ describe("buildCcda, functional/mental status organizers", () => {
     const doc = buildCcda(ORG_INIT);
     const functional = doc.getFunctionalStatus();
     const mental = doc.getMentalStatus();
-    // Two grouped + one standalone functional finding; two grouped mental findings.
-    expect(functional).toHaveLength(3);
+    // Two grouped findings + the grouped self-care activity + one standalone finding;
+    // two grouped mental findings.
+    expect(functional).toHaveLength(4);
     expect(mental).toHaveLength(2);
     expect(functional.every((f) => f.domain === "functional")).toBe(true);
     expect(mental.every((f) => f.domain === "mental")).toBe(true);
@@ -1345,11 +1377,78 @@ describe("buildCcda, functional/mental status organizers", () => {
     expect(codes).toContain("129019007");
     expect(codes).toContain("165245003");
     expect(codes).toContain("105503008");
-    expect(functional.every((f) => f.code?.code === "54522-8")).toBe(true);
+    // The Self-Care Activities member reads back too, as an ordinary functional
+    // finding: its `code` is the activity assessed, its `value` the ability.
+    expect(codes).toContain("371153006");
+    expect(functional.map((f) => f.code?.code)).toContain("54520-2");
+    expect(functional.filter((f) => f.code?.code === "54522-8")).toHaveLength(3);
     expect(mental.every((f) => f.code?.code === "373930000")).toBe(true);
     // Nothing is flagged as an assessment scale (none emitted this slice).
     expect(functional.every((f) => f.assessmentScale === undefined)).toBe(true);
     expect(doc.warnings).toEqual([]);
+  });
+
+  it("writes the findings standalone, and says so, when no self-care activity is supplied", () => {
+    // The R2.1 Functional Status Organizer SHALL contain a Self-Care Activities (ADL and
+    // IADL) observation (CONF:1098-31432). With none supplied there is no conformant
+    // organizer to write, and neither fabricating the activity nor claiming the template
+    // anyway is available to an emitter that never invents content: the findings go out
+    // standalone and the document carries MISSING_SELF_CARE_ACTIVITY.
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      functionalStatusOrganizers: [
+        {
+          code: { code: "118228005", displayName: "Musculoskeletal function" },
+          effectiveTime: "20240101",
+          findings: [
+            { value: { code: "129019007", displayName: "Self-care" } },
+            { value: { code: "165245003", displayName: "Able to walk" } },
+          ],
+        },
+      ],
+    });
+    expect(doc.warnings.map((w) => w.code)).toEqual(["MISSING_SELF_CARE_ACTIVITY"]);
+    const xml = serializeCcda(doc);
+    expect(xml).not.toContain("2.16.840.1.113883.10.20.22.4.66");
+    expect(xml).not.toContain("<organizer");
+    // Every finding survives, as a Functional Status Observation of its own.
+    expect(xml.split('root="2.16.840.1.113883.10.20.22.4.67"')).toHaveLength(3);
+    const codes = doc
+      .getFunctionalStatus()
+      .map((f) => (f.value?.kind === "coded" ? f.value.code.code : undefined));
+    expect(codes).toStrictEqual(["129019007", "165245003"]);
+  });
+
+  it("emits the Self-Care Activities observation with every SHALL its template states", () => {
+    const xml = serializeCcda(buildCcda(ORG_INIT));
+    // …22.4.128, unversioned (CONF:1098-28457), inside a component of the organizer.
+    expect(xml).toContain('<templateId root="2.16.840.1.113883.10.20.22.4.128"/>');
+    expect(xml).toContain('code="54520-2"');
+    expect(xml).toContain('<value code="371153006"');
+    expect(xml).toMatch(
+      /<observation[^>]*>(?:(?!<\/observation>)[\s\S])*?4\.128[\s\S]*?xsi:type="CD"/,
+    );
+  });
+
+  it("emits EXPLICIT nullFlavor=UNK self-care slots rather than inventing an activity", () => {
+    const doc = buildCcda({
+      patient: { mrn: "M" },
+      functionalStatusOrganizers: [
+        {
+          findings: [{ value: { code: "165245003", displayName: "Able to walk" } }],
+          selfCareActivities: [{}],
+        },
+      ],
+    });
+    expect(doc.warnings).toEqual([]);
+    const xml = serializeCcda(doc);
+    const activity = xml.slice(xml.indexOf("2.16.840.1.113883.10.20.22.4.128"));
+    // The activity, the ability and the assessment time are all explicit unknowns; the
+    // statusCode is the one slot the template fixes, so it is the one slot that is filled.
+    expect(activity).toContain('<code nullFlavor="UNK"/>');
+    expect(activity).toContain('<effectiveTime nullFlavor="UNK"/>');
+    expect(activity).toContain('<value nullFlavor="UNK" xsi:type="CD"/>');
+    expect(activity).toContain('<statusCode code="completed"/>');
   });
 
   it("emits the organizer as a CLUSTER with the correct template stamps + ICF code", () => {
@@ -1384,7 +1483,10 @@ describe("buildCcda, functional/mental status organizers", () => {
     const doc = buildCcda({
       patient: { mrn: "M" },
       functionalStatusOrganizers: [
-        { findings: [{ value: { code: "129019007", displayName: "Self-care" } }] },
+        {
+          findings: [{ value: { code: "129019007", displayName: "Self-care" } }],
+          selfCareActivities: [{ value: { code: "371153006", displayName: "Independent" } }],
+        },
       ],
     });
     const xml = serializeCcda(doc);
@@ -2392,10 +2494,15 @@ describe("buildCcda, SHALL effectiveTime conformance (all sections)", () => {
       ],
     });
     expect(doc.warnings).toEqual([]);
-    // Two supplied organizer times → two @value effectiveTimes on organizers.
-    expect(
-      (serializeCcda(doc).match(/<effectiveTime value="20240102"/g) ?? []).length,
-    ).toBeGreaterThanOrEqual(2);
+    const xml = serializeCcda(doc);
+    // AC-1. The two organizers carry the supplied time in the SHAPE each one's
+    // template requires, and the two shapes differ. The Vital Signs Organizer's
+    // effectiveTime stays a point, an @value. The Result Organizer's is an interval:
+    // CONF:1198-32488 and -32489 require exactly one low and exactly one high
+    // whenever the element is present, so the supplied time becomes the low and the
+    // high is nullFlavor="UNK" (nothing tells the builder when the panel ended).
+    expect(xml).toContain('<effectiveTime value="20240102"/>');
+    expect(xml).toContain('<effectiveTime><low value="20240102"/><high nullFlavor="UNK"/>');
   });
 });
 
@@ -2600,6 +2707,24 @@ describe("buildCcda, HL7 v3 TS date-format validation (fail loud, never coerce)"
             {
               effectiveTime: BAD,
               findings: [{ value: { code: "165245003", displayName: "Able to walk" } }],
+              // The organizer is only written when it carries the Self-Care
+              // Activities observation its template SHALL contain, and its own
+              // effectiveTime is only read on the path that writes it.
+              selfCareActivities: [{ value: { code: "371153006", displayName: "Independent" } }],
+            },
+          ],
+        },
+      ],
+      [
+        "functionalStatusOrganizers[].selfCareActivities[].effectiveTime",
+        {
+          ...base,
+          functionalStatusOrganizers: [
+            {
+              findings: [{ value: { code: "165245003", displayName: "Able to walk" } }],
+              selfCareActivities: [
+                { value: { code: "371153006", displayName: "Independent" }, effectiveTime: BAD },
+              ],
             },
           ],
         },

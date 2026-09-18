@@ -22,6 +22,7 @@ export type {
   BuildCcdaSmokingStatus,
   BuildCcdaFunctionalStatus,
   BuildCcdaFunctionalStatusOrganizer,
+  BuildCcdaSelfCareActivity,
   BuildCcdaMentalStatus,
   BuildCcdaMentalStatusOrganizer,
   BuildCcdaPlannedItem,

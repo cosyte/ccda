@@ -490,12 +490,27 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   encounter, planned-item, and family-history codes are **not** wired. An adapter without
   `translate`, or one returning no matches, leaves the output byte-identical: an unmapped code never
   produces a guessed alternate.
-- **A built document is expected, but not proven, to pass an external IG validator.** The builder does
-  not assert full
-  XSD element order or the complete Schematron rule set, and its conformance was grounded against the
-  raw C-CDA R2.1 IG text rather than a validator run. A clean build does round-trip through
-  `parseCcda` with zero warnings, but that is a strictly weaker guarantee than external validation.
-  If your pipeline requires IG conformance, validate the output yourself.
+- **A built document is validated against the normative artifacts, and the result is published.**
+  `pnpm conformance` fetches the C-CDA R2.1 Schematron, its vocabulary file and the CDA R2 XML schema
+  from pinned immutable references, validates every document `buildCcda` emits against the schema and
+  then the Schematron's error-severity phase, and writes `documentation/conformance-report.md`. The
+  measured set is one document per optional section as well as the two populated documents, so a
+  green run is not a green run over a subset of what the builder can emit. The current result is zero
+  error-severity results.
+  **What that does and does not tell you, stated here rather than left to be assumed.** It covers the
+  two document types the builder emits and says nothing about the other ten, which it does not emit.
+  It covers the error-severity phase; the warning phase is not run. It checks value-set membership
+  only where the Schematron's own vocabulary file checks it, so it is not a terminology verification.
+  It is an assessment against a published artifact, **not a certification**, and no accredited body
+  has reviewed it. If your pipeline requires a validation of record, run your own validator over the
+  output.
+- **A Functional Status Organizer you asked for is missing, and the document says why.** Its R2.1
+  template SHALL contain a Self-Care Activities (ADL and IADL) observation as well as a Functional
+  Status Observation. Supply `selfCareActivities` on the organizer and it is written with its
+  categorization code and `effectiveTime`; supply none and the findings are written as standalone
+  Functional Status Observations (all present, all read back unchanged) and the returned document
+  carries `MISSING_SELF_CARE_ACTIVITY`. The builder writes neither a fabricated activity nor an
+  organizer claiming a template it does not satisfy.
 - **`serializeCcda` / `toString()` need a parsed or built document.** `buildCcda` returns the parse of
   the XML it just emitted, so a built document serializes. A hand-constructed `CcdaDocument` retains
   no source XML and throws.

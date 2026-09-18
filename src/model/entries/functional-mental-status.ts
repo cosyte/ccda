@@ -32,6 +32,7 @@ import {
   FUNCTIONAL_STATUS_ORGANIZER,
   MENTAL_STATUS_OBSERVATION,
   MENTAL_STATUS_ORGANIZER,
+  SELF_CARE_ACTIVITIES,
   entryAct,
   hasTemplateRoot,
   idsOf,
@@ -256,7 +257,18 @@ function supportingObservations(
   return out;
 }
 
-/** A status organizer's member observations + assessment scales, in document order. @internal */
+/**
+ * A status organizer's member observations + assessment scales, in document
+ * order.
+ *
+ * A Self-Care Activities (ADL and IADL) observation (`…22.4.128`) is read here
+ * too, as an ordinary finding of the organizer's own domain. The Functional
+ * Status Organizer SHALL contain at least one (CONF:1098-31432), so it is a
+ * member every conformant organizer carries rather than an extra: its `code` is
+ * the activity assessed and its `value` the ability observed, which is the same
+ * shape a status observation already has. It is not flagged `assessmentScale`,
+ * because it carries no score and no supporting items. @internal
+ */
 function organizerMembers(
   organizer: Element,
   domain: StatusDomain,
@@ -268,7 +280,7 @@ function organizerMembers(
   for (const comp of children(organizer, "component")) {
     const obs = child(comp, "observation");
     if (obs === undefined) continue;
-    if (hasTemplateRoot(obs, observationRoot)) {
+    if (hasTemplateRoot(obs, observationRoot) || hasTemplateRoot(obs, SELF_CARE_ACTIVITIES)) {
       out.push(buildStatusObservation(obs, domain, false, narrativeById, ctx));
     } else if (hasTemplateRoot(obs, ASSESSMENT_SCALE_OBSERVATION)) {
       out.push(buildStatusObservation(obs, domain, true, narrativeById, ctx));
