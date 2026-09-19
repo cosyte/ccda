@@ -63,6 +63,7 @@ export const WARNING_CODES = {
   MALFORMED_DATETIME: "MALFORMED_DATETIME",
   MULTIPLE_RECORD_TARGETS: "MULTIPLE_RECORD_TARGETS",
   MISSING_ASSIGNING_AUTHORITY: "MISSING_ASSIGNING_AUTHORITY",
+  UNIDENTIFIED_AUTHOR: "UNIDENTIFIED_AUTHOR",
   ENCODING_BOM_STRIPPED: "ENCODING_BOM_STRIPPED",
   NEGATION_VS_NULLFLAVOR_AMBIGUOUS: "NEGATION_VS_NULLFLAVOR_AMBIGUOUS",
   ALLERGEN_GRANULARITY_SUSPECT: "ALLERGEN_GRANULARITY_SUSPECT",
@@ -292,6 +293,8 @@ export const WARNING_MESSAGES: Readonly<Record<WarningCode, string>> = Object.fr
   MULTIPLE_RECORD_TARGETS:
     "ClinicalDocument carries more than one recordTarget element; getPatient() resolves the first and header.recordTargets carries them all.",
   MISSING_ASSIGNING_AUTHORITY: "Patient identifier has a root OID but no assigningAuthorityName.",
+  UNIDENTIFIED_AUTHOR:
+    "An author participation carries neither an assignedPerson nor an assignedAuthoringDevice, so nothing in it names who authored the content; the participation is surfaced as present and marked unidentified, it is never omitted from the header or from a reading inherited from it, and no identity is inferred for it from any other participation.",
   ENCODING_BOM_STRIPPED: "A UTF-8 byte-order mark was stripped from the head of the input.",
   NEGATION_VS_NULLFLAVOR_AMBIGUOUS:
     'Act carries both negationInd="true" and a nullFlavor; modeled as distinct fields, not collapsed.',
@@ -878,6 +881,43 @@ export function missingAssigningAuthority(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MISSING_ASSIGNING_AUTHORITY,
     message: WARNING_MESSAGES.MISSING_ASSIGNING_AUTHORITY,
+    position,
+  };
+}
+
+/**
+ * Build an `UNIDENTIFIED_AUTHOR` warning. Emitted when an `author`
+ * participation's `assignedAuthor` carries neither an `assignedPerson` nor an
+ * `assignedAuthoringDevice`. The US Realm Header requires one arm or the other
+ * (CONF:1198-8456, the same constraint the builder's own `author()` cites), so
+ * an `assignedAuthor` carrying neither is a deviation rather than a shape the
+ * parser may read past in silence.
+ *
+ * **Tolerated, and therefore declared.** The author is kept: it is surfaced on
+ * the reading with `unidentified` set, it still counts as the level's author for
+ * conduction, and a nested level with no author of its own still inherits it.
+ * Dropping it would turn "the document names an author whose identity it never
+ * states" into "the document names no author", which is a different and more
+ * reassuring claim than the document supports.
+ *
+ * The factory takes only a position, like every other factory in this module:
+ * an author participation is the one place a clinician's name enters this
+ * parser, and the message is the registry entry whole.
+ *
+ * (No `@cosyte/ccda` import in the example, deliberately: this factory is not on
+ * the package entry point, and citing an import that does not resolve is the
+ * open `@example` defect this repo already has filed.)
+ *
+ * @example
+ * ```ts
+ * const w = unidentifiedAuthor({ path: "author" });
+ * w.code; // "UNIDENTIFIED_AUTHOR"
+ * ```
+ */
+export function unidentifiedAuthor(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.UNIDENTIFIED_AUTHOR,
+    message: WARNING_MESSAGES.UNIDENTIFIED_AUTHOR,
     position,
   };
 }

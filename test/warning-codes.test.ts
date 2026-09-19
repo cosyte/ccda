@@ -22,6 +22,12 @@ import { WARNING_CODES, FATAL_CODES } from "../src/index.js";
  * without the Self-Care Activities observation its template SHALL contain, so
  * the findings were written standalone instead of an organizer claiming a
  * template it does not satisfy).
+ *
+ * **One more was ADDED when the header participations were first read**, again
+ * with nothing renamed or removed: `UNIDENTIFIED_AUTHOR` (an `author`
+ * participation carrying neither arm of the `assignedAuthor` choice, which the
+ * US Realm Header requires one of; the author is kept and marked unidentified
+ * rather than dropped, so the tolerance is declared instead of silent).
  */
 describe("code surface stability", () => {
   it("warning codes are stable", () => {
@@ -75,6 +81,7 @@ describe("code surface stability", () => {
         "TEMPLATE_EXTENSION_UNMODELED_RELEASE",
         "UCUM_CASE_SUSPECT",
         "UNEXPECTED_CODE_SYSTEM",
+        "UNIDENTIFIED_AUTHOR",
         "UNKNOWN_DOCUMENT_TEMPLATE",
         "UNKNOWN_NAMESPACE_PREFIX",
         "UNKNOWN_SECTION_CODE",
