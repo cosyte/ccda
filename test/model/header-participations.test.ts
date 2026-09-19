@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   TIER1_AUTHORED,
   TIER1_DISCHARGE,
+  TIER2_BARE_AUTHOR,
+  TIER2_CONTRADICTORY_ENTRY_ID,
   TIER2_MALFORMED,
   TIER2_NO_AUTHOR,
   TIER2_NO_COMPONENT_OF,
+  TIER2_UNCLAIMED_ENTRY_ID,
   TIER2_UNIDENTIFIED,
   TIER2_UNREADABLE_TIMES,
   TIER3_ROUND_TRIP,
@@ -106,14 +109,14 @@ describe("AC-2: an author reading is conducted to a section and to a top-level e
 
   it("AC-2: an entry act with its own author reports it and is NOT marked inherited", () => {
     const problems = section(TIER1_AUTHORED, "problems");
-    const authored = problems.entryAuthorship[0];
+    const authored = problems.entryAuthorship?.[0];
     expect(firstFamily(authored?.authorship?.authors)).toBe("Revel");
     expect(authored?.authorship?.inherited).toBe(false);
   });
 
   it("AC-2: an entry act with no author reports the nearest enclosing one, marked inherited", () => {
     const problems = section(TIER1_AUTHORED, "problems");
-    const plain = problems.entryAuthorship[1];
+    const plain = problems.entryAuthorship?.[1];
     // The Problems section states no author either, so the nearest enclosing
     // level that does is the document.
     expect(firstFamily(plain?.authorship?.authors)).toBe("Lirio");
@@ -129,7 +132,7 @@ describe("AC-2: an author reading is conducted to a section and to a top-level e
     const problems = section(TIER3_ROUND_TRIP, "problems");
     expect(firstFamily(problems.authorship?.authors)).toBe("Okonkwo");
     expect(problems.authorship?.inherited).toBe(false);
-    const plain = problems.entryAuthorship[1];
+    const plain = problems.entryAuthorship?.[1];
     expect(firstFamily(plain?.authorship?.authors)).toBe("Okonkwo");
     expect(plain?.authorship?.inherited).toBe(true);
   });
@@ -137,7 +140,7 @@ describe("AC-2: an author reading is conducted to a section and to a top-level e
   it("AC-2: an entry reading carries the act's ids, so it joins to an extracted entry", () => {
     const parsed = parseCcda(TIER1_AUTHORED);
     const problems = parsed.findSection("problems");
-    expect(problems?.entryAuthorship.map((e) => e.ids[0]?.extension)).toStrictEqual([
+    expect(problems?.entryAuthorship?.map((e) => e.ids[0]?.extension)).toStrictEqual([
       "prob-act-authored",
       "prob-act-plain",
     ]);
@@ -146,6 +149,49 @@ describe("AC-2: an author reading is conducted to a section and to a top-level e
       "prob-act-authored",
       "prob-act-plain",
     ]);
+  });
+});
+
+/**
+ * The conduction AC-2 requires reads each top-level entry act's `<id>`s, so a
+ * consumer can join the reading to an extracted entry. Reading them must not
+ * change what the document REPORTS: the entry-extraction walk parses those same
+ * elements, the emitter deduplicates nothing, and the item's scope is the
+ * READING, so a document carrying no author at all has to come out of the parser
+ * saying exactly what it said before. Framing is therefore a non-emitting read
+ * of those ids, and these three tests are what holds it there.
+ */
+describe("AC-2: framing an entry act leaves the warning output for its ids unchanged", () => {
+  it("AC-2: a contradictory entry-act id is reported once, not once per reader", () => {
+    const parsed = parseCcda(TIER2_CONTRADICTORY_ENTRY_ID);
+    // Exactly one warning, from the extraction walk that reads the `<id>` for
+    // its value. Two would be one deviation reported twice, and this one is
+    // safety-critical.
+    expect(parsed.warnings.map((w) => w.code)).toStrictEqual([
+      WARNING_CODES.CONTRADICTORY_NULL_FLAVOR,
+    ]);
+    // And the reading still carries the act's ids, which is the join key AC-2
+    // needs: the second parse is gone, not the values it produced.
+    expect(
+      parsed.findSection("problems")?.entryAuthorship?.map((e) => e.ids[0]?.extension),
+    ).toStrictEqual(["prob-act-plain"]);
+  });
+
+  it("AC-2: an id deviation on an act no extractor family claims stays unreported", () => {
+    const parsed = parseCcda(TIER2_UNCLAIMED_ENTRY_ID);
+    expect(parsed.warnings.map((w) => w.code)).toStrictEqual([]);
+    // The act is still framed and its id still read verbatim, `nullFlavor` and
+    // all; only the emitting parse of it is absent.
+    const reading = parsed.findSection("problems")?.entryAuthorship;
+    expect(reading).toHaveLength(1);
+    expect(reading?.[0]?.ids[0]?.nullFlavor).toBe("NOT-A-NULL-FLAVOR");
+  });
+
+  it("AC-2: strict mode still parses a document whose only deviation nothing reads", () => {
+    // Strict mode escalates the first warning it is handed into a
+    // CcdaParseError, so a warning raised where none was raised before turns a
+    // document that parsed into one that throws.
+    expect(() => parseCcda(TIER2_UNCLAIMED_ENTRY_ID, { strict: true })).not.toThrow();
   });
 });
 
@@ -185,6 +231,23 @@ describe("AC-4: an author identifying nobody is present, not omitted", () => {
     expect(authors[0]?.representedOrganization?.name).toBe("Synthetic Cardiology Practice");
   });
 
+  it("AC-4: an author carrying no assignedAuthor at all takes the same reading", () => {
+    // The emptier shape has to be the louder one, not the quieter one: an
+    // `<author>` with nothing inside it identifies nobody either.
+    const bare = parseCcda(TIER2_BARE_AUTHOR);
+    const authors = bare.header.authorship?.authors ?? [];
+    expect(authors).toHaveLength(1);
+    expect(authors[0]?.unidentified).toBe(true);
+    expect(authors[0]?.person).toBeUndefined();
+    expect(authors[0]?.device).toBeUndefined();
+    expect(authors[0]?.identifiers).toStrictEqual([]);
+    // What it DID carry is still read.
+    expect(authors[0]?.time?.raw).toBe("20240301");
+    expect(bare.warnings.filter((w) => w.code === WARNING_CODES.UNIDENTIFIED_AUTHOR)).toHaveLength(
+      1,
+    );
+  });
+
   it("AC-4: an identified author is NOT marked unidentified", () => {
     const identified = parseCcda(TIER1_AUTHORED).header.authorship?.authors ?? [];
     expect(identified.map((a) => a.unidentified)).toStrictEqual([false, false]);
@@ -194,7 +257,7 @@ describe("AC-4: an author identifying nobody is present, not omitted", () => {
     const problems = section(TIER2_UNIDENTIFIED, "problems");
     expect(problems.authorship?.inherited).toBe(true);
     expect(problems.authorship?.authors[0]?.unidentified).toBe(true);
-    const plain = problems.entryAuthorship[1];
+    const plain = problems.entryAuthorship?.[1];
     expect(plain?.authorship?.inherited).toBe(true);
     expect(plain?.authorship?.authors[0]?.unidentified).toBe(true);
   });

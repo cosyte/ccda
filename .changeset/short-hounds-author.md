@@ -55,5 +55,16 @@ code. `buildSection` takes an optional third argument, the enclosing author read
 every existing call keeps working and reads the section as having no enclosing author,
 which is what a caller framing a detached `<section>` is looking at.
 
+**Nothing here is breaking, and the new `CcdaSection` field is optional so that stays
+true.** `CcdaSection` is an input surface as well as an output one, reachable through
+`CcdaDocumentInit.sections`, which the public `CcdaDocument` constructor takes: a
+required `entryAuthorship` would stop a consumer's existing section literal from
+compiling, which is not a minor change. The parser populates the field on every section
+it frames, empty where the section has no entry act to read.
+
+Framing a section reads each entry act's `<id>`s without reporting on them, because the
+entry-extraction walk already parses those same elements. No document's warning output
+moves: not the count, not the order, and not whether `strict: true` throws.
+
 This is the READ side only. Nothing the builder emits changes, and emitting
 `componentOf` is not part of it.

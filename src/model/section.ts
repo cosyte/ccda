@@ -13,7 +13,7 @@ import type { CcdaPosition } from "../parser/types.js";
 import { sectionMatchedByLoincFallback, unknownSectionCode } from "../parser/warnings.js";
 import { attr, child, childElements, children, positionOf, text } from "./dom.js";
 import { readAuthorship, type CcdaAuthorship, type CcdaEntryAuthorship } from "./header.js";
-import { anyEntryAct, childEntries, idsOf } from "./entries/shared.js";
+import { anyEntryAct, childEntries, readIds } from "./entries/shared.js";
 import { entryGoverned, sectionUnderSubjectDeclaration } from "./entries/subject.js";
 import { parseCd, type CD } from "./types/cd.js";
 import { boundTemplateId, parseIi, type II } from "./types/ii.js";
@@ -39,6 +39,13 @@ const ELEMENT_NODE = 1 as const;
  * declaration governs is absent from it entirely, exactly as it is absent from
  * every extracted entry family.
  *
+ * `entryAuthorship` is optional on the type and always populated by the parser:
+ * {@link buildSection} sets it on every section it frames, empty where the
+ * section has no entry act to read. It is optional because this interface is an
+ * INPUT surface as well as an output one, reachable through
+ * `CcdaDocumentInit.sections`, so requiring it would stop a consumer's existing
+ * section literal from compiling.
+ *
  * @example
  * ```ts
  * import type { CcdaSection } from "@cosyte/ccda";
@@ -57,7 +64,7 @@ export interface CcdaSection {
   readonly narrativeById: ReadonlyMap<string, string>;
   readonly subsections: readonly CcdaSection[];
   readonly authorship?: CcdaAuthorship;
-  readonly entryAuthorship: readonly CcdaEntryAuthorship[];
+  readonly entryAuthorship?: readonly CcdaEntryAuthorship[];
 }
 
 /**
@@ -159,6 +166,14 @@ export function buildSection(el: Element, ctx: ParseCtx, enclosing?: CcdaAuthors
  * entry-extraction walk that already reports it, once per section, and framing a
  * section must not move where a safety-critical warning is raised.
  *
+ * **The act's `<id>`s are read here through {@link readIds}, which emits
+ * nothing.** They are wanted as a join key, and the entry-extraction walk parses
+ * the same elements: parsing them a second time reports one deviation twice,
+ * reports one on an act no extractor family claims where nothing reported it
+ * before (which under `strict: true` throws on a document that parsed), and
+ * moves where an existing one lands in `warnings[]`. Framing a section changes
+ * no document's warning output.
+ *
  * @internal
  */
 function readEntryAuthorship(
@@ -174,7 +189,7 @@ function readEntryAuthorship(
     if (act === undefined) continue;
     const authorship = readAuthorship(act, ctx, sectionAuthorship);
     const reading: { ids: readonly II[]; authorship?: CcdaAuthorship } = {
-      ids: idsOf(act, ctx),
+      ids: readIds(act),
     };
     if (authorship !== undefined) reading.authorship = authorship;
     out.push(reading);

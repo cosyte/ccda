@@ -281,6 +281,71 @@ export const TIER2_UNIDENTIFIED = participationDoc({
 });
 
 /**
+ * TIER 2, vendor quirk. An `<author>` carrying no `assignedAuthor` element at
+ * all: a `time` and nothing else. It is the emptier sibling of
+ * {@link TIER2_UNIDENTIFIED}, and it reads the same way, because nothing in it
+ * identifies anybody either.
+ */
+export const TIER2_BARE_AUTHOR = participationDoc({
+  afterRecordTarget: `
+  <author><time value="20240301"/></author>${CUSTODIAN}`,
+});
+
+/**
+ * TIER 2. A Problems section holding ONE Problem Concern Act whose `<id>`
+ * declares a `nullFlavor` beside an `@extension`: the act says both "this
+ * identifier is unknown" and "this identifier is prob-act-plain". The
+ * extraction walk reads that `<id>`, so `CONTRADICTORY_NULL_FLAVOR` is its
+ * deviation to report, and one deviation is reported once.
+ */
+export const TIER2_CONTRADICTORY_ENTRY_ID = participationDoc({
+  sections: `
+    <component><section>
+      <templateId root="2.16.840.1.113883.10.20.22.2.5.1" extension="2015-08-01"/>
+      <code code="11450-4" codeSystem="${LOINC}"/>
+      <title>Problems</title>
+      <text><content ID="p1">Essential hypertension</content></text>
+      <entry><act classCode="ACT" moodCode="EVN">
+        <templateId root="2.16.840.1.113883.10.20.22.4.3" extension="2015-08-01"/>
+        <id root="${SYNTH_ROOT}.2" extension="prob-act-plain" nullFlavor="UNK"/>
+        <statusCode code="active"/>
+        <entryRelationship typeCode="SUBJ"><observation classCode="OBS" moodCode="EVN">
+          <templateId root="2.16.840.1.113883.10.20.22.4.4" extension="2015-08-01"/>
+          <id root="${SYNTH_ROOT}.2" extension="prob-obs-plain"/>
+          <code code="55607006" codeSystem="2.16.840.1.113883.6.96"/>
+          <statusCode code="completed"/>
+          <effectiveTime><low value="20210101"/></effectiveTime>
+          <value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96"
+            displayName="Essential hypertension"><originalText><reference value="#p1"/></originalText></value>
+        </observation></entryRelationship>
+      </act></entry>
+    </section></component>`,
+});
+
+/**
+ * TIER 2. A section holding a top-level entry act NO extractor family claims
+ * (its `templateId` root names no C-CDA template), whose `<id>` carries a token
+ * outside the v3 NullFlavor code system and asserts no `@extension`. Nothing
+ * reads that `<id>`, so the document parses silently and carries no author of
+ * any kind: a reader that reached the act while framing the section would
+ * report a deviation on a document that had none.
+ */
+export const TIER2_UNCLAIMED_ENTRY_ID = participationDoc({
+  sections: `
+    <component><section>
+      <templateId root="2.16.840.1.113883.10.20.22.2.5.1" extension="2015-08-01"/>
+      <code code="11450-4" codeSystem="${LOINC}"/>
+      <title>Problems</title>
+      <text>Essential hypertension</text>
+      <entry><act classCode="ACT" moodCode="EVN">
+        <templateId root="1.2.3.4.5.6.7.8.9" extension="2015-08-01"/>
+        <id root="${SYNTH_ROOT}.2" nullFlavor="NOT-A-NULL-FLAVOR"/>
+        <statusCode code="active"/>
+      </act></entry>
+    </section></component>`,
+});
+
+/**
  * TIER 2, vendor quirk. A document carrying NO `author` at any level, but
  * carrying a record target, a custodian, a legal authenticator and an informant,
  * every one of which names an entity a lenient reader might be tempted to report

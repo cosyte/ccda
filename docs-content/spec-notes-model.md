@@ -131,6 +131,12 @@ reassuring claim than the document supports.
 Entries an overriding `<subject>` declaration governs are absent from `entryAuthorship` entirely, not
 even their `ids`, exactly as they are absent from every extracted entry family.
 
+`entryAuthorship` is optional on the type and populated on every section the parser frames, empty
+where the section has no entry act to read. It is optional because `CcdaSection` is an input surface
+too (`CcdaDocumentInit.sections`), so a section literal you already build keeps compiling. Framing
+reads each act's `<id>`s without reporting on them: the entry-extraction walk parses those same
+elements, so a deviation on one is reported once, by that walk, exactly as before.
+
 ```ts runnable
 import { parseCcda } from "@cosyte/ccda";
 
