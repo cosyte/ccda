@@ -10,6 +10,14 @@
  * terminology (SNOMED CT / RxNorm via UMLS), which the suite never bundles. See
  * the package README "Code systems & provenance" for the bring-your-own path.
  *
+ * **Two opt-in tiers run after that recognition, and they answer different
+ * questions.** A supplied `TerminologyAdapter` answers membership in a CODE
+ * SYSTEM; a supplied `ValueSetSource` answers membership in the VALUE SET
+ * C-CDA R2.1 binds the slot to (`./value-set-bindings.ts`), which is the case
+ * where the system is right, the code is real, and the value is still outside
+ * what the template allows. Neither tier changes a parsed value, and a parse
+ * that supplies neither is unchanged.
+ *
  * Every OID below is a public, non-redistributable-data identifier (the number
  * that names a code system), not the code-system content itself.
  */
@@ -17,6 +25,7 @@
 import { assertsConcept, type CD } from "./types/cd.js";
 import type { ParseCtx } from "./types/_shared.js";
 import type { TerminologyCoding } from "./terminology.js";
+import { checkSlotValueSetBinding } from "./value-set-bindings.js";
 import {
   deprecatedCodeSystem,
   deprecatedLoinc,
@@ -158,6 +167,14 @@ export function checkCodeSlot(
   // regardless of the structural verdict above (system-expectation and
   // code-membership are orthogonal axes).
   validateCodeSemantically(code, oid, slot, position, ctx);
+  // Value-set tier (opt-in, and independent of the two above): when a consumer
+  // supplied a bring-your-own value-set source, ask it whether the code is in
+  // the value set C-CDA R2.1 binds this slot to. A code can be a real member of
+  // the right system and still sit outside that value set, which against a
+  // Required binding is a SHALL violation neither tier above can see. Runs on
+  // the same orthogonality argument: nothing here is conditioned on the
+  // structural verdict or on whether an adapter was supplied.
+  checkSlotValueSetBinding(code, oid, slot, position, ctx);
 }
 
 /**

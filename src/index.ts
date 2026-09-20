@@ -43,8 +43,14 @@ export { parseSecureXml, resolveLimits, DEFAULT_LIMITS } from "./parser/secure-x
 export type { ResolvedLimits } from "./parser/secure-xml.js";
 
 // Tier-2 warning registry + Tier-3 fatal registry (stable public contract).
-export { WARNING_CODES, profileQuirkApplied, semanticCodeInvalid } from "./parser/warnings.js";
-export type { WarningCode, CcdaWarning } from "./parser/warnings.js";
+export {
+  WARNING_CODES,
+  profileQuirkApplied,
+  semanticCodeInvalid,
+  valueSetBindingNotEvaluated,
+  valueSetBindingViolated,
+} from "./parser/warnings.js";
+export type { WarningCode, CcdaWarning, BoundValueSet } from "./parser/warnings.js";
 export { FATAL_CODES, CcdaParseError, CcdaProfileDefinitionError } from "./parser/errors.js";
 export type { FatalCode } from "./parser/errors.js";
 
@@ -213,6 +219,21 @@ export type {
   CodeValidationResult,
   CodeTranslationResult,
 } from "./model/terminology.js";
+
+// Bring-your-own value-set source, the pluggable membership contract for the
+// value set each checked slot's C-CDA R2.1 binding names, plus the declared
+// binding table itself (identifiers and provenance, never member codes).
+export type {
+  ValueSetSource,
+  ValueSetMembershipQuery,
+  ValueSetMembershipAnswer,
+} from "./model/terminology.js";
+export { valueSetBinding, valueSetBindings } from "./model/value-set-bindings.js";
+export type {
+  ValueSetBinding,
+  ValueSetBindingSource,
+  ValueSetBindingStrength,
+} from "./model/value-set-bindings.js";
 
 // Recognition tables, document types + section catalog.
 export {

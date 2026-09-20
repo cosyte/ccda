@@ -167,3 +167,114 @@ export interface TerminologyAdapter {
    */
   readonly translate?: (coding: TerminologyCoding) => CodeTranslationResult | undefined;
 }
+
+/**
+ * One membership question put to a {@link ValueSetSource}: is this coded value a
+ * member of this value set?
+ *
+ * `valueSet` is the OID of the value set the slot's C-CDA binding names, taken
+ * from this package's own frozen binding table and never from the document.
+ * `coding` is the document's value exactly as the wire carried it, the same
+ * shape {@link TerminologyAdapter.validateCode} receives.
+ *
+ * @example
+ * ```ts
+ * import type { ValueSetMembershipQuery } from "@cosyte/ccda";
+ * const query: ValueSetMembershipQuery = {
+ *   valueSet: "2.16.840.1.113762.1.4.1010.4",
+ *   coding: { system: "2.16.840.1.113883.6.88", code: "314076" },
+ * };
+ * ```
+ */
+export interface ValueSetMembershipQuery {
+  /** The bound value set's OID, from this package's declared binding table. */
+  readonly valueSet: string;
+  /** The coded value to test, carried verbatim from the document. */
+  readonly coding: TerminologyCoding;
+}
+
+/**
+ * What a {@link ValueSetSource} can say about one membership question. Three
+ * states, and the third is the reason this is not a boolean.
+ *
+ * - `member`: the code is in the expansion the source holds. Silent.
+ * - `not-a-member`: it is not. Against a Required binding this is a SHALL
+ *   violation and raises `VALUE_SET_BINDING_VIOLATED`.
+ * - `no-expansion`: the source holds no expansion for that value set, so it did
+ *   not evaluate the binding at all. This raises
+ *   `VALUE_SET_BINDING_NOT_EVALUATED` rather than nothing, because a package
+ *   that quietly skips a value set it does not hold reads exactly like one that
+ *   checked and found the code fine.
+ *
+ * Returning `undefined` instead of an answer is the fourth state and the only
+ * silent one: the source declares it has no opinion here, the same "out of my
+ * scope" answer {@link TerminologyAdapter.validateCode} gives. Use it when the
+ * source is not the authority for a value set; use `no-expansion` when it is the
+ * authority and the package it answers from does not carry the expansion.
+ *
+ * @example
+ * ```ts
+ * import type { ValueSetMembershipAnswer } from "@cosyte/ccda";
+ * const answer: ValueSetMembershipAnswer = { membership: "not-a-member" };
+ * ```
+ */
+export interface ValueSetMembershipAnswer {
+  /** The verdict, or the declaration that no expansion was available to give one. */
+  readonly membership: "member" | "not-a-member" | "no-expansion";
+}
+
+/**
+ * The bring-your-own **value-set** contract, the sibling of
+ * {@link TerminologyAdapter} for the question an adapter cannot answer: is this
+ * code inside the VALUE SET the C-CDA template binds this slot to?
+ *
+ * C-CDA binds each checked slot to a value set, and a Required binding makes
+ * membership a SHALL. The member codes of those value sets are licensed data
+ * (SNOMED CT, RxNorm and CVX expansions published through VSAC), so
+ * `@cosyte/ccda` carries the value set OIDs and never their contents: you hold
+ * the package, you answer the question, and the parser reports what you say.
+ *
+ * **`release` is not optional, and it is what makes the finding honest.** C-CDA's
+ * own guidance states that for a Required binding any valid expansion of a value
+ * set is conformant, so "not a member" is only ever a statement about the
+ * expansion that answered. A finding therefore carries the release you declare
+ * here beside the value set OID, and asserts non-conformance no wider than that.
+ * The string is your own package label; this library never reads it from a
+ * document and never puts it in a message.
+ *
+ * **Fail-safe, exactly like the terminology adapter.** The source can only
+ * report: no value is rewritten, refused, reordered or dropped on a negative
+ * verdict, and an exception `isMember` raises is not swallowed.
+ *
+ * @example
+ * ```ts
+ * import { parseCcda, type ValueSetSource } from "@cosyte/ccda";
+ *
+ * // Your own package, in process. `@cosyte/ccda` ships no expansion.
+ * const expansions = new Map([["2.16.840.1.113762.1.4.1010.4", new Set(["314076"])]]);
+ * const valueSets: ValueSetSource = {
+ *   release: "my-vsac-package-2026.1",
+ *   isMember: ({ valueSet, coding }) => {
+ *     const expansion = expansions.get(valueSet);
+ *     if (expansion === undefined) return { membership: "no-expansion" };
+ *     return { membership: expansion.has(coding.code) ? "member" : "not-a-member" };
+ *   },
+ * };
+ *
+ * const doc = parseCcda(xml, { valueSets });
+ * ```
+ */
+export interface ValueSetSource {
+  /**
+   * The release of the value-set package these answers come from, in your own
+   * terms (a VSAC package version, a build tag, a date). It rides on every
+   * finding this source produces, so a reader can tell which expansion said so.
+   */
+  readonly release: string;
+  /**
+   * Answer one membership question, or return `undefined` to declare no opinion.
+   * Return `{ membership: "no-expansion" }` when the package holds no expansion
+   * for the value set: that is reported as "not evaluated", never as a pass.
+   */
+  readonly isMember: (query: ValueSetMembershipQuery) => ValueSetMembershipAnswer | undefined;
+}

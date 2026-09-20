@@ -14,7 +14,7 @@
 // remains the single source of truth for `CcdaWarning`.
 import type { CcdaWarning } from "./warnings.js";
 import type { CcdaProfile } from "../profiles/types.js";
-import type { TerminologyAdapter } from "../model/terminology.js";
+import type { TerminologyAdapter, ValueSetSource } from "../model/terminology.js";
 
 /**
  * Structural locator attached to every warning and fatal error. Every field is
@@ -177,4 +177,21 @@ export interface ParseCcdaOptions {
    * never imports a terminology library; you supply the adapter.
    */
   readonly terminology?: TerminologyAdapter;
+  /**
+   * An optional consumer-supplied bring-your-own {@link ValueSetSource}. When
+   * present, the parser asks it whether each coded value at a recognized slot is
+   * a member of the value set C-CDA R2.1 binds that slot to, and emits
+   * `VALUE_SET_BINDING_VIOLATED` where a **Required** binding's value set does
+   * not contain the code (a SHALL violation) or
+   * `VALUE_SET_BINDING_NOT_EVALUATED` where the source holds no expansion for
+   * it. Omit it and nothing is asked: a parse with no source is exactly the
+   * parse this library has always produced, and no membership is ever inferred
+   * from the code system alone.
+   *
+   * This is a different question from {@link ParseCcdaOptions.terminology},
+   * which asks whether a code is a real member of its CODE SYSTEM. A value can
+   * pass that and still sit outside the VALUE SET its template binds.
+   * `@cosyte/ccda` ships no value set content; you supply the package.
+   */
+  readonly valueSets?: ValueSetSource;
 }

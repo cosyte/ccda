@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { sortedCodeSet } from "@cosyte/test-utils";
 
 import { WARNING_CODES, FATAL_CODES } from "../src/index.js";
+import { WARNING_MESSAGES } from "../src/parser/warnings.js";
 
 /**
  * The warning + fatal code surface is part of the public contract, consumers
@@ -28,6 +29,18 @@ import { WARNING_CODES, FATAL_CODES } from "../src/index.js";
  * participation carrying neither arm of the `assignedAuthor` choice, which the
  * US Realm Header requires one of; the author is kept and marked unidentified
  * rather than dropped, so the tolerance is declared instead of silent).
+ *
+ * **Two more were ADDED with the bring-your-own value-set source**, and again
+ * nothing was renamed, removed or repurposed: `VALUE_SET_BINDING_VIOLATED` (a
+ * supplied source reports the code is outside the value set a Required C-CDA
+ * binding names, which is a SHALL violation) and
+ * `VALUE_SET_BINDING_NOT_EVALUATED` (the source holds no expansion for that
+ * value set, so the binding was not evaluated and the silence says nothing).
+ *
+ * **The second half of the contract is graded separately below**, because it is
+ * the half that regresses without a diff anyone reads: adding a code is not what
+ * breaks a consumer, quietly redefining one is. The frozen code-to-message
+ * registry is pinned entry for entry, so a reworded published message reds here.
  */
 describe("code surface stability", () => {
   it("warning codes are stable", () => {
@@ -85,6 +98,8 @@ describe("code surface stability", () => {
         "UNKNOWN_DOCUMENT_TEMPLATE",
         "UNKNOWN_NAMESPACE_PREFIX",
         "UNKNOWN_SECTION_CODE",
+        "VALUE_SET_BINDING_NOT_EVALUATED",
+        "VALUE_SET_BINDING_VIOLATED",
       ]
     `);
   });
@@ -106,5 +121,16 @@ describe("code surface stability", () => {
   it("every code key equals its value (snapshot-safe registries)", () => {
     for (const [k, v] of Object.entries(WARNING_CODES)) expect(k).toBe(v);
     for (const [k, v] of Object.entries(FATAL_CODES)) expect(k).toBe(v);
+  });
+
+  /**
+   * A published code never changes meaning, and the meaning a consumer reads is
+   * the message the registry gives it. The code list above cannot see that: it
+   * would stay green while every message under it was rewritten. Pinning the
+   * whole mapping entry for entry is what makes a redefinition a reviewable
+   * diff rather than a silent release.
+   */
+  it("the code-to-message registry is unchanged entry for entry", () => {
+    expect(Object.fromEntries(Object.entries(WARNING_MESSAGES).sort())).toMatchSnapshot();
   });
 });

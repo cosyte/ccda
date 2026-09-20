@@ -90,10 +90,17 @@ export function parseCcda(raw: string, options: ParseCcdaOptions = {}): CcdaDocu
   }
 
   // The parse context threads the warning sink and, when the consumer supplied
-  // one, the bring-your-own terminology adapter down to the code-system layer.
-  // Under `exactOptionalPropertyTypes`, omit the key rather than pass `undefined`.
-  const ctx =
-    options.terminology !== undefined ? { emit, terminology: options.terminology } : { emit };
+  // them, the two bring-your-own contracts down to the code-system layer: the
+  // terminology adapter (is this code real in its SYSTEM) and the value-set
+  // source (is it in the VALUE SET its slot's binding names). They are
+  // independent, so each key is added on its own and a parse supplying neither
+  // is byte-for-byte the parse this library has always produced.
+  // Under `exactOptionalPropertyTypes`, omit a key rather than pass `undefined`.
+  const ctx = {
+    emit,
+    ...(options.terminology !== undefined ? { terminology: options.terminology } : {}),
+    ...(options.valueSets !== undefined ? { valueSets: options.valueSets } : {}),
+  };
   const parts = buildDocument(root, ctx);
   for (const warning of foreignNamespaces) emit(warning);
   const serialized = serializeDocument(doc);

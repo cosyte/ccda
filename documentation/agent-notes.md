@@ -223,6 +223,43 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     document was terminology-verified.** `MISSING_CODE_SYSTEM` and `MISSING_CODE_VALUE` are
     safety-critical and no profile may tolerate them.
 
+## The value-set binding rows come off the pinned Schematron, never from memory
+
+  - The five checked slots carry a **value-set** binding as well as a code-system expectation, and
+    `src/model/value-set-bindings.ts` declares it. Every row was read off the C-CDA R2.1 Schematron
+    `scripts/conformance/artifacts.json` pins by commit SHA and sha256, fetched and digest-verified
+    at implement time. **Re-read it before touching a row.** Writing one from memory, or from the
+    C-CDA guide published today (which is generated from a later package), mis-states a binding, and
+    a mis-stated binding turns a conformant document into a reported SHALL violation at a
+    safety-critical slot.
+  - **Binding strength is the verb attached to "be selected from", not the cardinality beside it**,
+    and the two disagree on two of the five rows. C-CDA's general guidance represents a SHALL binding
+    as Required and a SHOULD or MAY binding as Preferred. So the Problem Observation's `value`, which
+    the template SHALL contain and whose code SHOULD come from the Problem value set
+    (CONF:1198-9058), is **Preferred**, while a Medication Activity's `routeCode`, which the template
+    only SHOULD contain and whose code SHALL come from the route value set (CONF:1098-7514), is
+    **Required**. Reading the cardinality as the strength inverts both.
+  - **The four Required rows, with the OIDs the artifact actually names.** Medication Clinical Drug
+    `2.16.840.1.113762.1.4.1010.4` (CONF:1098-7412, Medication Information V2), Substance Reactant
+    for Intolerance `2.16.840.1.113762.1.4.1010.1` (CONF:1098-7419, Allergy - Intolerance Observation
+    V2), CVX Vaccines Administered Vaccine Set `2.16.840.1.113762.1.4.1010.6` (CONF:1098-9007,
+    Immunization Medication Information V2), SPL Drug Route of Administration Terminology
+    `2.16.840.1.113883.3.88.12.3221.8.7` (CONF:1098-7514). The first three are `…113762.1.4.1010.*`
+    identifiers, **not** the `…3.88.12.80.*` ones an older guide and most secondary sources quote.
+  - **A Required sentence naming a value set is not automatically that slot's row.** The Problem
+    value set is bound with a SHALL elsewhere in the same artifact (CONF:1098-7369, the Precondition
+    for Substance Administration criterion, and others), at templates this parser does not
+    slot-check. Take the row from the rule for the template the slot is actually read at.
+  - **The `route` row's scope is stated, not implied.** The artifact carries exactly one
+    element-level route binding, on the Medication Activity; the Immunization Activity's `routeCode`
+    binds only its `<translation>` (CONF:1198-32970). The `route` slot is checked at both call sites
+    and is not split, because the slot set is not widened. The row names the sentence it came from so
+    that scope is visible.
+  - **The finding carries identifiers, never the value.** `CcdaWarning.valueSet` is typed
+    `BoundValueSet`, a closed list `src/parser/warnings.ts` owns, so the compiler refuses a document
+    value there; `valueSetRelease` is the consumer's own declared package label. Both ride as fields,
+    never in message text, and the message still comes whole from the frozen registry.
+
 ## A nullFlavor asserted beside a value is a contradiction
 
   - **A `nullFlavor` asserted beside a value is a contradiction, not a refinement.** Every v3 datatype
