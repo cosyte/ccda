@@ -124,13 +124,13 @@ describe("code surface stability", () => {
   });
 
   /**
-   * A published code never changes meaning, and the meaning a consumer reads is
-   * the message the registry gives it. The code list above cannot see that: it
-   * would stay green while every message under it was rewritten. Pinning the
-   * whole mapping entry for entry is what makes a redefinition a reviewable
-   * diff rather than a silent release.
+   * AC-9, second half. A published code never changes meaning, and the meaning a
+   * consumer reads is the message the registry gives it. The code list above
+   * cannot see that: it would stay green while every message under it was
+   * rewritten. Pinning the whole mapping entry for entry is what makes a
+   * redefinition a reviewable diff rather than a silent release.
    */
-  it("the code-to-message registry is unchanged entry for entry", () => {
+  it("AC-9: the code-to-message registry is unchanged entry for entry", () => {
     expect(Object.fromEntries(Object.entries(WARNING_MESSAGES).sort())).toMatchSnapshot();
   });
 });
