@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`code surface stability > the code-to-message registry is unchanged entry for entry 1`] = `
+exports[`code surface stability > AC-9: the code-to-message registry is unchanged entry for entry 1`] = `
 {
   "ALLERGEN_GRANULARITY_SUSPECT": "Allergen appears coded at product level where an ingredient-level concept is expected; granularity flagged.",
   "CODE_NARRATIVE_MISMATCH": "A coded value and its referenced narrative disagree; both preserved, no winner chosen.",
