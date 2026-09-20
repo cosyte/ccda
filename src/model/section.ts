@@ -12,6 +12,9 @@ import { safeDerivedToken } from "../parser/tokens.js";
 import type { CcdaPosition } from "../parser/types.js";
 import { sectionMatchedByLoincFallback, unknownSectionCode } from "../parser/warnings.js";
 import { attr, child, childElements, children, positionOf, text } from "./dom.js";
+import { readAuthorship, type CcdaAuthorship, type CcdaEntryAuthorship } from "./header.js";
+import { anyEntryAct, childEntries, readIds } from "./entries/shared.js";
+import { entryGoverned, sectionUnderSubjectDeclaration } from "./entries/subject.js";
 import { parseCd, type CD } from "./types/cd.js";
 import { boundTemplateId, parseIi, type II } from "./types/ii.js";
 import type { ParseCtx } from "./types/_shared.js";
@@ -26,6 +29,22 @@ const ELEMENT_NODE = 1 as const;
  * `narrativeText` is the human-readable `<text>` block and `narrativeById`
  * indexes its `ID`-bearing nodes; `subsections` holds nested
  * `<component><section>` children.
+ *
+ * `authorship` is the section's author reading and `entryAuthorship` holds one
+ * reading per top-level entry act in the section, in document order. Either is
+ * the level's own participation where it carries one, and otherwise the nearest
+ * enclosing level's marked `inherited`; both are absent when no enclosing level
+ * carries an author either. `entryAuthorship` runs over the entry acts a
+ * record-target read path may read, so an entry an overriding `<subject>`
+ * declaration governs is absent from it entirely, exactly as it is absent from
+ * every extracted entry family.
+ *
+ * `entryAuthorship` is optional on the type and always populated by the parser:
+ * {@link buildSection} sets it on every section it frames, empty where the
+ * section has no entry act to read. It is optional because this interface is an
+ * INPUT surface as well as an output one, reachable through
+ * `CcdaDocumentInit.sections`, so requiring it would stop a consumer's existing
+ * section literal from compiling.
  *
  * @example
  * ```ts
@@ -44,6 +63,8 @@ export interface CcdaSection {
   readonly narrativeText?: string;
   readonly narrativeById: ReadonlyMap<string, string>;
   readonly subsections: readonly CcdaSection[];
+  readonly authorship?: CcdaAuthorship;
+  readonly entryAuthorship?: readonly CcdaEntryAuthorship[];
 }
 
 /**
@@ -53,6 +74,13 @@ export interface CcdaSection {
  * `UNKNOWN_SECTION_CODE` and is retained as narrative-only. Recurses into
  * nested `<component><section>` subsections. Never throws.
  *
+ * `enclosing` is the author reading of the level this section sits inside (the
+ * document's for a top-level section, the parent section's for a subsection). It
+ * is conducted down to this section and on to its entry acts wherever the level
+ * carries no `author` of its own, and marked `inherited` when it is. Omit it and
+ * the section is read as having no enclosing author, which is what a caller
+ * framing a detached `<section>` element is actually looking at.
+ *
  * @example
  * ```ts
  * import { buildSection } from "@cosyte/ccda";
@@ -60,7 +88,7 @@ export interface CcdaSection {
  * console.log(section.key, section.subsections.length);
  * ```
  */
-export function buildSection(el: Element, ctx: ParseCtx): CcdaSection {
+export function buildSection(el: Element, ctx: ParseCtx, enclosing?: CcdaAuthorship): CcdaSection {
   const templateIds = children(el, "templateId")
     .map((t) => parseIi(t, ctx))
     .filter((t): t is II => t !== undefined)
@@ -80,10 +108,13 @@ export function buildSection(el: Element, ctx: ParseCtx): CcdaSection {
     narrativeText?: string;
     narrativeById: ReadonlyMap<string, string>;
     subsections: readonly CcdaSection[];
+    authorship?: CcdaAuthorship;
+    entryAuthorship: readonly CcdaEntryAuthorship[];
   } = {
     templateIds,
     narrativeById: new Map(),
     subsections: [],
+    entryAuthorship: [],
   };
 
   if (match !== undefined) {
@@ -100,11 +131,69 @@ export function buildSection(el: Element, ctx: ParseCtx): CcdaSection {
     out.narrativeById = buildNarrativeIndex(textEl);
   }
 
+  const authorship = readAuthorship(el, ctx, enclosing);
+  if (authorship !== undefined) out.authorship = authorship;
+  out.entryAuthorship = readEntryAuthorship(el, ctx, authorship);
+
   out.subsections = children(el, "component")
     .map((comp) => child(comp, "section"))
     .filter((s): s is Element => s !== undefined)
-    .map((s) => buildSection(s, ctx));
+    .map((s) => buildSection(s, ctx, authorship));
 
+  return out;
+}
+
+/**
+ * The author reading for each of a section's top-level entry acts, in document
+ * order.
+ *
+ * **A "top-level entry act" is this package's existing notion of one**: the
+ * clinical statement {@link anyEntryAct} resolves inside a direct `<entry>`
+ * child of the section, which is the same unit `SECTION_PLACEMENT_SUSPECT` and
+ * `SUBJECT_CONTEXT_OVERRIDE` are already scoped to. An `<entry>` holding no such
+ * statement contributes no reading, so the list runs over the section's entry
+ * acts rather than over its `<entry>` elements; a statement NESTED inside one
+ * (an `entryRelationship` target) gets no reading of its own, because the
+ * top-level act is the unit and nothing smaller.
+ *
+ * **An entry an overriding `<subject>` declaration governs contributes nothing
+ * here, not even its `<id>`s.** This is a record-target read path: it answers
+ * "who authored this patient's entry", so a governed entry appearing in it would
+ * put another person's entry back on the model through a second door, which is
+ * exactly what the whole-entry withholding rule exists to stop. The governance
+ * test is the same one `readableEntries` partitions on, called directly so that
+ * NO warning is emitted from here: `SUBJECT_CONTEXT_OVERRIDE` belongs to the
+ * entry-extraction walk that already reports it, once per section, and framing a
+ * section must not move where a safety-critical warning is raised.
+ *
+ * **The act's `<id>`s are read here through {@link readIds}, which emits
+ * nothing.** They are wanted as a join key, and the entry-extraction walk parses
+ * the same elements: parsing them a second time reports one deviation twice,
+ * reports one on an act no extractor family claims where nothing reported it
+ * before (which under `strict: true` throws on a document that parsed), and
+ * moves where an existing one lands in `warnings[]`. Framing a section changes
+ * no document's warning output.
+ *
+ * @internal
+ */
+function readEntryAuthorship(
+  sectionEl: Element,
+  ctx: ParseCtx,
+  sectionAuthorship: CcdaAuthorship | undefined,
+): readonly CcdaEntryAuthorship[] {
+  const sectionGoverned = sectionUnderSubjectDeclaration(sectionEl);
+  const out: CcdaEntryAuthorship[] = [];
+  for (const entry of childEntries(sectionEl)) {
+    if (entryGoverned(entry, sectionGoverned)) continue;
+    const act = anyEntryAct(entry);
+    if (act === undefined) continue;
+    const authorship = readAuthorship(act, ctx, sectionAuthorship);
+    const reading: { ids: readonly II[]; authorship?: CcdaAuthorship } = {
+      ids: readIds(act),
+    };
+    if (authorship !== undefined) reading.authorship = authorship;
+    out.push(reading);
+  }
   return out;
 }
 

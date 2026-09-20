@@ -88,6 +88,33 @@ export interface II {
  */
 export function parseIi(el: Element | undefined, ctx: ParseCtx): II | undefined {
   if (el === undefined) return undefined;
+  const out = readIi(el);
+  const nullFlavor = readNullFlavor(el, ctx);
+  contradictsAssertedValue(el, "II", nullFlavor, out.extension !== undefined, ctx);
+  return out;
+}
+
+/**
+ * Read an `II` element's four attributes into a typed {@link II} and emit
+ * NOTHING: no `INVALID_NULL_FLAVOR`, no `CONTRADICTORY_NULL_FLAVOR`, no warning
+ * of any kind. The fields it produces are exactly {@link parseIi}'s, which is
+ * this function plus the two checks.
+ *
+ * **It exists because `parseIi` is not idempotent from a consumer's seat.** The
+ * emitter deduplicates nothing, so a second pass over an `<id>` some other pass
+ * already parses reports one deviation twice, and a pass over an `<id>` nothing
+ * used to read reports a deviation that was silent before, which under
+ * `strict: true` turns a document that parsed into one that throws. A reader
+ * that needs an identifier only as a JOIN KEY, on an element another pass owns,
+ * reads it here and leaves the document's warning output to that pass.
+ *
+ * Use it only where the deviation on this element is reported elsewhere or is
+ * deliberately not this reader's to report; anything reading an identifier for
+ * its own sake goes through {@link parseIi}.
+ *
+ * @internal
+ */
+export function readIi(el: Element): II {
   const out: {
     root?: string;
     extension?: string;
@@ -100,9 +127,8 @@ export function parseIi(el: Element | undefined, ctx: ParseCtx): II | undefined 
   if (extension !== undefined) out.extension = extension;
   const authority = attr(el, "assigningAuthorityName");
   if (authority !== undefined) out.assigningAuthorityName = authority;
-  const nullFlavor = readNullFlavor(el, ctx);
+  const nullFlavor = attr(el, "nullFlavor");
   if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
-  contradictsAssertedValue(el, "II", nullFlavor, extension !== undefined, ctx);
   return out;
 }
 

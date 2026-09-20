@@ -115,6 +115,13 @@ export type {
   HumanName,
   RelatedDocument,
   ParentDocument,
+  CcdaAuthor,
+  CcdaAuthoringDevice,
+  CcdaAuthorship,
+  CcdaCustodian,
+  CcdaEncompassingEncounter,
+  CcdaEntryAuthorship,
+  CcdaOrganization,
 } from "./model/header.js";
 export { buildSection, buildNarrativeIndex } from "./model/section.js";
 export type { CcdaSection } from "./model/section.js";

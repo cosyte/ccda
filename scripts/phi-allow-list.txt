@@ -49,6 +49,36 @@ NAME ZZCONFORMANCEMARKERZZ
 # nothing a hostile <subject> said.
 NAME ZZHOSTILESUBJECTZZ
 
+# --- Synthetic CLINICIAN names (author participations) ---
+# The header-participation corpus is the first in this repo to put a CLINICIAN's
+# <given>/<family> into a fixture rather than a patient's, and the scanner reads
+# those elements wherever they appear, so each token is declared here in the same
+# change that introduces it. Three invented clinicians, one per authoring level,
+# because the inherited-author reading is only observable when the document, the
+# section and the entry can name DIFFERENT authors:
+#   Avery Lirio     document-level author
+#   Bryn Okonkwo    section-level author
+#   Cass Revel      entry-level author
+# None is a real person; the surnames were invented for this corpus.
+NAME AVERY
+NAME LIRIO
+NAME BRYN
+NAME OKONKWO
+NAME CASS
+NAME REVEL
+
+# --- Synthetic ORGANIZATION names (custodian / representedOrganization) ---
+# A bare <name> carrying direct text is scanned as an unstructured person or
+# organization name, so an invented organization is declared token by token like
+# any other name. "Synthetic Health Organization" is the custodian (and matches
+# the label buildCcda already writes for one); "Synthetic Cardiology Practice" is
+# the organization an author is stated to have acted for.
+NAME SYNTHETIC
+NAME HEALTH
+NAME ORGANIZATION
+NAME CARDIOLOGY
+NAME PRACTICE
+
 # --- Synthetic dates of birth (`birthTime@value`), normalized YYYYMMDD / YYYY ---
 # The default synthetic patient DOB and the Family-History relative's birthTime.
 DOB 19800101

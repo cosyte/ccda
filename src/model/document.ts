@@ -689,10 +689,13 @@ export function buildDocument(root: Element, ctx: ParseCtx): Omit<CcdaDocumentIn
   if (component !== undefined) {
     const structuredBody = child(component, "structuredBody");
     if (structuredBody !== undefined) {
+      // The header's author reading is the enclosing level for every top-level
+      // section, which is what makes a section or an entry with no `author` of
+      // its own report the document's, marked inherited, rather than nothing.
       out.sections = children(structuredBody, "component")
         .map((comp) => child(comp, "section"))
         .filter((s): s is Element => s !== undefined)
-        .map((s) => buildSection(s, ctx));
+        .map((s) => buildSection(s, ctx, header.authorship));
       const entries = extractClinical(structuredBody, ctx);
       out.problems = entries.problems;
       out.medications = entries.medications;

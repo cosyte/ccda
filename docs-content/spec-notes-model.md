@@ -85,6 +85,136 @@ as likely to be an account or member number. The verbatim value is still on
 `getPatient()?.identifiers`, with its `nullFlavor` beside it. The header also carries the document
 `code`, `title`, `effectiveTime`, `confidentialityCode`, and `languageCode`.
 
+## Provenance: who authored it, who holds it, which encounter it covers
+
+Three header participations answer the questions a clinician asks of a list assembled by three
+systems. All three are **absent when the document carries none**, and nothing else in the document is
+substituted for an absent one.
+
+- `header.authorship` is the document-level author reading, a `CcdaAuthorship`. Its `authors` are
+  every `<author>` in document order as `CcdaAuthor`s, each with its `identifiers`, its `person`
+  (a `HumanName`) or its `device` (a `CcdaAuthoringDevice`), its `representedOrganization` (a
+  `CcdaOrganization`), and its `time` at exactly the precision the document stated. A partial author
+  time stays partial: nothing here completes a date.
+- `header.custodian` is a `CcdaCustodian`, the organization responsible for the document. Its
+  `organization` is omitted when the `<custodian>` carried no
+  `assignedCustodian/representedCustodianOrganization` to read, so a malformed custodian is reported
+  as present-with-nothing-readable rather than invented or dropped.
+- `header.encompassingEncounter` is a `CcdaEncompassingEncounter`, the
+  `componentOf/encompassingEncounter` an inpatient Discharge Summary carries: an `effectiveTime`
+  interval whose bounds keep the document's own precision and `nullFlavor`s, and a
+  `dischargeDispositionCode`. **Its bounds are never derived** from the document `effectiveTime`,
+  from a `documentationOf` service event, or from any other date in the document. No `componentOf`
+  means no encounter frame at all.
+
+### An inherited author reading is marked, never asserted
+
+CDA conducts an author down from the document to a section and on to that section's entries. This
+parser reports that conduction rather than performing it silently. `CcdaSection.authorship` and each
+entry's reading in `CcdaSection.entryAuthorship` (a `CcdaEntryAuthorship`, which also carries the
+act's `ids` so you can join it to an extracted entry) carry an `inherited` flag:
+
+- `inherited: false`: this level carried these `<author>` participations itself.
+- `inherited: true`: this level carried none, and these are the nearest enclosing level's.
+
+The distinction is the whole point. "The nearest enclosing author is Dr Lirio" and "this entry was
+authored by Dr Lirio" are different claims and only the first is one the document made. When no level
+carries an author, the reading is **absent** at every level: the record target, the custodian, a legal
+authenticator and an informant are never read as the author.
+
+An `<author>` whose `assignedAuthor` carries neither an `assignedPerson` nor an
+`assignedAuthoringDevice` is kept, marked `unidentified: true`, and reported with
+`UNIDENTIFIED_AUTHOR`. It still conducts to nested levels. Dropping it would turn "the document names
+an author whose identity it never states" into "the document names no author", which is a more
+reassuring claim than the document supports.
+
+Entries an overriding `<subject>` declaration governs are absent from `entryAuthorship` entirely, not
+even their `ids`, exactly as they are absent from every extracted entry family.
+
+`entryAuthorship` is optional on the type and populated on every section the parser frames, empty
+where the section has no entry act to read. It is optional because `CcdaSection` is an input surface
+too (`CcdaDocumentInit.sections`), so a section literal you already build keeps compiling. Framing
+reads each act's `<id>`s without reporting on them: the entry-extraction walk parses those same
+elements, so a deviation on one is reported once, by that walk, exactly as before.
+
+```ts runnable
+import { parseCcda } from "@cosyte/ccda";
+
+const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <realmCode code="US"/>
+  <templateId root="2.16.840.1.113883.10.20.22.1.1" extension="2015-08-01"/>
+  <templateId root="2.16.840.1.113883.10.20.22.1.9" extension="2015-08-01"/>
+  <id root="2.16.840.1.113883.19.5.99999.1" extension="DOC-0007"/>
+  <code code="11506-3" codeSystem="2.16.840.1.113883.6.1"/>
+  <title>Synthetic Progress Note</title>
+  <effectiveTime value="20240301"/>
+  <recordTarget><patientRole>
+    <id root="2.16.840.1.113883.19.5" extension="MRN-00042" assigningAuthorityName="Sample Hospital"/>
+    <patient>
+      <name><given>Jane</given><family>Doe</family></name>
+      <administrativeGenderCode code="F" codeSystem="2.16.840.1.113883.5.1"/>
+    </patient>
+  </patientRole></recordTarget>
+  <author>
+    <time value="202403"/>
+    <assignedAuthor>
+      <id root="2.16.840.1.113883.4.6" extension="NPI-SYNTH-1"/>
+      <assignedPerson><name><given>Avery</given><family>Lirio</family></name></assignedPerson>
+      <representedOrganization>
+        <id root="2.16.840.1.113883.19.5.99999.3"/>
+        <name>Synthetic Cardiology Practice</name>
+      </representedOrganization>
+    </assignedAuthor>
+  </author>
+  <custodian><assignedCustodian><representedCustodianOrganization>
+    <id root="2.16.840.1.113883.19.5.99999.4"/>
+    <name>Synthetic Health Organization</name>
+  </representedCustodianOrganization></assignedCustodian></custodian>
+  <component><structuredBody>
+    <component><section>
+      <templateId root="2.16.840.1.113883.10.20.22.2.6.1" extension="2015-08-01"/>
+      <code code="48765-2" codeSystem="2.16.840.1.113883.6.1"/>
+      <title>Allergies</title>
+      <text>No known allergies.</text>
+      <author>
+        <time value="20240302"/>
+        <assignedAuthor>
+          <id root="2.16.840.1.113883.4.6" extension="NPI-SYNTH-2"/>
+          <assignedPerson><name><given>Bryn</given><family>Okonkwo</family></name></assignedPerson>
+        </assignedAuthor>
+      </author>
+    </section></component>
+    <component><section>
+      <templateId root="2.16.840.1.113883.10.20.22.2.5.1" extension="2015-08-01"/>
+      <code code="11450-4" codeSystem="2.16.840.1.113883.6.1"/>
+      <title>Problems</title>
+      <text>None recorded.</text>
+    </section></component>
+  </structuredBody></component>
+</ClinicalDocument>`;
+
+const doc = parseCcda(xml);
+
+// The document names its author, and the author time keeps month precision.
+doc.header.authorship?.inherited; // => false
+doc.header.authorship?.authors[0]?.person?.family; // => "Lirio"
+doc.header.authorship?.authors[0]?.time?.raw; // => "202403"
+doc.header.authorship?.authors[0]?.representedOrganization?.name; // => "Synthetic Cardiology Practice"
+doc.header.custodian?.organization?.name; // => "Synthetic Health Organization"
+
+// The Allergies section states its own author, so nothing is inherited there.
+doc.findSection("allergies")?.authorship?.inherited; // => false
+doc.findSection("allergies")?.authorship?.authors[0]?.person?.family; // => "Okonkwo"
+
+// The Problems section states none, so it reports the document's, marked inherited.
+doc.findSection("problems")?.authorship?.inherited; // => true
+doc.findSection("problems")?.authorship?.authors[0]?.person?.family; // => "Lirio"
+
+// No componentOf in this document, so there is no encounter frame at all.
+doc.header.encompassingEncounter; // => undefined
+```
+
 ## Section framing
 
 Every `<section>` is framed by `templateId` root (primary) with a LOINC `code` fallback:

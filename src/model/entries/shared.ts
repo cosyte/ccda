@@ -11,7 +11,7 @@ import { attr, child, children, positionOf, xsiType } from "../dom.js";
 import { sectionForLoinc, sectionForTemplateRoot } from "../../parser/templates.js";
 import { parseBlAttr } from "../types/bl.js";
 import { parseCd, type CD } from "../types/cd.js";
-import { parseIi, type II } from "../types/ii.js";
+import { parseIi, readIi, type II } from "../types/ii.js";
 import type { ParseCtx } from "../types/_shared.js";
 import type { CcdaPosition } from "../../parser/types.js";
 import {
@@ -1397,4 +1397,22 @@ export function idsOf(el: Element, ctx: ParseCtx): readonly II[] {
   return children(el, "id")
     .map((idEl) => parseIi(idEl, ctx))
     .filter((ii): ii is II => ii !== undefined);
+}
+
+/**
+ * The direct `<id>` children of an act/observation, read as {@link II}s and
+ * emitting nothing (see {@link readIi}). The values are identical to
+ * {@link idsOf}'s; only the warnings are absent.
+ *
+ * This is the reader for an `<id>` wanted as a JOIN KEY on an act some other
+ * pass parses. {@link idsOf} reports a deviation on the `<id>` it reads, and the
+ * emitter deduplicates nothing, so a second `idsOf` over the same act reports
+ * that deviation twice and one over an act no extractor family claims reports a
+ * deviation that was silent before. Reading here leaves the document's warning
+ * output exactly as the passes that own those elements wrote it.
+ *
+ * @internal
+ */
+export function readIds(el: Element): readonly II[] {
+  return children(el, "id").map((idEl) => readIi(idEl));
 }
