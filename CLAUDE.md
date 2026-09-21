@@ -46,6 +46,13 @@ immutability + explicit mutation, and the profile system.
   - A `TerminologyAdapter` is consulted at the **five `CodeSlot`s only**. **A clean run means those
     five slots passed, NOT that the document was terminology-verified.**
     Why: `documentation/agent-notes.md#the-terminologyadapter-is-consulted-at-five-codeslots-only`
+  - **The value-set binding of each of those five slots is READ OFF THE PINNED R2.1 SCHEMATRON,
+    never from memory and never from the guide published today.** Strength is the verb on "be
+    selected from", not the cardinality: the problem slot is **Preferred**, the other four Required,
+    and three of their OIDs are `…113762.1.4.1010.*` rather than the `…3.88.12.80.*` most sources
+    quote. A finding carries `valueSet` (typed to a closed list) and the source's `valueSetRelease`,
+    never the coded value.
+    Why: `documentation/agent-notes.md#the-value-set-binding-rows-come-off-the-pinned-schematron-never-from-memory`
   - **A `nullFlavor` asserted beside a value is a contradiction, not a refinement**
     (`CONTRADICTORY_NULL_FLAVOR`, safety-critical), and the derived reading is **withheld**.
     Why: `documentation/agent-notes.md#a-nullflavor-asserted-beside-a-value-is-a-contradiction`

@@ -14,7 +14,7 @@ import {
   type CcdaWarning,
 } from "../../parser/warnings.js";
 import { attr, positionOf } from "../dom.js";
-import type { TerminologyAdapter } from "../terminology.js";
+import type { TerminologyAdapter, ValueSetSource } from "../terminology.js";
 import type { Element } from "@xmldom/xmldom";
 
 /**
@@ -118,6 +118,16 @@ export interface ParseCtx {
    * the adapter a consumer passed to `parseCcda` / `buildCcda`.
    */
   readonly terminology?: TerminologyAdapter;
+  /**
+   * The optional consumer-supplied {@link ValueSetSource}. When present, the
+   * value-set binding layer (`../value-set-bindings.ts`) asks it whether each
+   * coded value at a checked slot is a member of the value set C-CDA binds that
+   * slot to; when absent, nothing is asked and nothing is emitted. Membership in
+   * a VALUE SET is a different question from membership in a CODE SYSTEM, which
+   * is what {@link TerminologyAdapter} answers, and a consumer may supply either,
+   * both or neither.
+   */
+  readonly valueSets?: ValueSetSource;
 }
 
 /**

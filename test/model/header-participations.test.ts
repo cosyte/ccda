@@ -537,9 +537,20 @@ describe("AC-10: adding a code leaves every published code and message untouched
   });
 
   it("AC-10: the only difference from the published registry is the added code", () => {
+    // The list grows by ADDITION only, and each entry names the change that put
+    // it here. `PUBLISHED_WARNING_MESSAGES` is the registry as published at
+    // 0.0.15; every code below post-dates it. The two value-set codes arrived
+    // with the bring-your-own value-set source (a Required binding's value set
+    // does not contain the code, and the supplied source holds no expansion for
+    // that value set). Nothing was renamed, removed or repurposed, which is
+    // what the two assertions above and the `removed` check below still pin.
     const published = new Set(Object.keys(PUBLISHED_WARNING_MESSAGES));
     const added = Object.keys(WARNING_CODES).filter((code) => !published.has(code));
-    expect(added).toStrictEqual(["UNIDENTIFIED_AUTHOR"]);
+    expect(added).toStrictEqual([
+      "UNIDENTIFIED_AUTHOR",
+      "VALUE_SET_BINDING_VIOLATED",
+      "VALUE_SET_BINDING_NOT_EVALUATED",
+    ]);
     const removed = [...published].filter(
       (code) => !Object.prototype.hasOwnProperty.call(WARNING_CODES, code),
     );

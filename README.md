@@ -67,7 +67,9 @@ exact version rather than a range. These surfaces are named rather than implied:
 - **Required-section validation under-warns**, and every document type reports how much of its
   obligation has been read off the normative source. A quiet parse is not a conformance result.
 - **A terminology adapter is consulted at five coded slots only**, so a clean run means those five
-  slots passed, not that the document was terminology-verified.
+  slots passed, not that the document was terminology-verified. The same five carry a declared
+  value-set binding, and a value-set source you supply is what checks it: this package ships value
+  set identifiers, never their member codes.
 
 [Known limitations](#known-limitations) carries the boundaries in full, and each is stated
 under-warning rather than talked around.
@@ -1119,6 +1121,50 @@ separates the two cases, and a `nullFlavor`-only value stays silent: it is a _co
 ("this concept is unknown"), while a value that says nothing at all leaves you unable to tell an
 absent concept from one lost in transformation. An absent element is silent too, there is nothing
 there to judge.
+
+### Value-set bindings (bring your own expansions)
+
+C-CDA binds each of those five slots to a **value set** as well as to a code system, and where the
+binding is **Required** the standard states membership as a SHALL. That is a third question, and an
+adapter cannot answer it: a code can be a real, active member of the right system and still sit
+outside the value set the template allows.
+
+`valueSetBinding(slot)` is this package's declaration of that binding, one row per checked slot.
+Each row carries the bound value set's OID, whether C-CDA R2.1 binds it as `required` or
+`preferred`, and the conformance statement, template and artifact revision the reading was taken
+from, so no binding is asserted that the normative source was not read for. Four of the five are
+Required; the problem slot's is Preferred, because the Problem Observation's value only **SHOULD**
+be selected from its value set:
+
+```ts
+import { parseCcda, valueSetBinding, WARNING_CODES, type ValueSetSource } from "@cosyte/ccda";
+
+valueSetBinding("medication").valueSet; // "2.16.840.1.113762.1.4.1010.4"
+valueSetBinding("medication").strength; // "required"
+valueSetBinding("problem").strength; // "preferred"
+
+const valueSets: ValueSetSource = {
+  release: "my-value-set-package-2026.1", // rides on every finding
+  isMember: ({ valueSet, coding }) => {
+    const expansion = myPackage.get(valueSet);
+    if (expansion === undefined) return { membership: "no-expansion" };
+    return { membership: expansion.has(coding.code) ? "member" : "not-a-member" };
+  },
+};
+
+const doc = parseCcda(xml, { valueSets });
+// A non-member at a Required binding now carries VALUE_SET_BINDING_VIOLATED, with the
+// value set OID on `valueSet` and your declared release on `valueSetRelease`. The
+// document's own code is preserved verbatim, exactly as with the adapter.
+doc.warnings.some((w) => w.code === WARNING_CODES.VALUE_SET_BINDING_VIOLATED);
+```
+
+Member codes are licensed data, so this package ships **identifiers only** and never an expansion.
+Three answers are possible and the third is why this is not a boolean: `no-expansion` says the
+source holds nothing for that value set, and raises `VALUE_SET_BINDING_NOT_EVALUATED` rather than
+passing in silence, because a skipped value set reads exactly like a clean one. Returning
+`undefined` is "no opinion" and is silent. Supply no source and nothing is asked: membership is
+never inferred from the code system alone.
 
 ### A `nullFlavor` asserted beside a value
 

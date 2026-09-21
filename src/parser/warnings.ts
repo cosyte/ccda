@@ -101,6 +101,8 @@ export const WARNING_CODES = {
   SMOKING_STATUS_UNKNOWN: "SMOKING_STATUS_UNKNOWN",
   SMOKING_STATUS_CODE_UNRECOGNIZED: "SMOKING_STATUS_CODE_UNRECOGNIZED",
   SEMANTIC_CODE_INVALID: "SEMANTIC_CODE_INVALID",
+  VALUE_SET_BINDING_VIOLATED: "VALUE_SET_BINDING_VIOLATED",
+  VALUE_SET_BINDING_NOT_EVALUATED: "VALUE_SET_BINDING_NOT_EVALUATED",
   PROFILE_QUIRK_APPLIED: "PROFILE_QUIRK_APPLIED",
 } as const;
 
@@ -163,6 +165,31 @@ export interface CcdaWarning {
    * re-badged as expected.
    */
   readonly toleratedCode?: WarningCode;
+  /**
+   * When `code` is {@link WARNING_CODES.VALUE_SET_BINDING_VIOLATED} or
+   * {@link WARNING_CODES.VALUE_SET_BINDING_NOT_EVALUATED}, the OID of the value
+   * set the slot's C-CDA binding names.
+   *
+   * It is a member of {@link BOUND_VALUE_SETS}, a closed list this module owns,
+   * never a value read from the document, which is why it can ride on a
+   * diagnostic at all: the factories take {@link BoundValueSet}, so the compiler
+   * holds that bound rather than the next author's memory. It is a field rather
+   * than part of the message for the same reason every other identifier here is:
+   * a message comes whole from the frozen registry and interpolates nothing.
+   */
+  readonly valueSet?: BoundValueSet;
+  /**
+   * When `code` is {@link WARNING_CODES.VALUE_SET_BINDING_VIOLATED} or
+   * {@link WARNING_CODES.VALUE_SET_BINDING_NOT_EVALUATED}, the release the
+   * supplying {@link ValueSetSource} declared for the package it answered from.
+   *
+   * C-CDA states that any valid expansion of a value set is conformant against a
+   * Required binding, so a non-membership finding is only ever a statement about
+   * the expansion that answered. Without this a finding would assert
+   * non-conformance it cannot support. The string is the consumer's own package
+   * label, supplied with the source and never read from a document.
+   */
+  readonly valueSetRelease?: string;
 }
 
 /**
@@ -202,6 +229,50 @@ export const NARRATIVE_SLOTS = [
 
 /** Which coded slot a `CODE_NARRATIVE_MISMATCH` is about. Closed by construction. */
 export type NarrativeSlot = (typeof NARRATIVE_SLOTS)[number];
+
+/**
+ * The value set OIDs a warning from this module may NAME: the ones C-CDA R2.1
+ * binds the five checked {@link CODE_SLOTS} to.
+ *
+ * A closed set this module owns, exactly like {@link CODE_SLOTS}, and owned
+ * *here* for the same reason {@link UNMODELED_PLAN_ENTRIES} is: the table that
+ * carries the rest of each row (`../model/value-set-bindings.ts`, with its
+ * strength, its conformance statement and its provenance) imports this module,
+ * and a back-import would close a cycle. The two are pinned to each other by a
+ * test rather than by a comment.
+ *
+ * **This is the PHI bound on the new diagnostic field, held by the compiler
+ * rather than by the next author's memory.** `CcdaWarning.valueSet` can only
+ * ever be a member of this list, so no document value can reach it: the
+ * `@codeSystem` OID a sender controls is not assignable to
+ * {@link BoundValueSet}, and `MISSING_CODE_SYSTEM` says what happens to a value
+ * whose system is anything else.
+ */
+export const BOUND_VALUE_SETS = [
+  /** Problem, bound to the Problem Observation's `value`. */
+  "2.16.840.1.113883.3.88.12.3221.7.4",
+  /** Medication Clinical Drug, bound to Medication Information's product code. */
+  "2.16.840.1.113762.1.4.1010.4",
+  /** Substance Reactant for Intolerance, bound to the allergen's playing entity. */
+  "2.16.840.1.113762.1.4.1010.1",
+  /** SPL Drug Route of Administration Terminology, bound to a Medication Activity's `routeCode`. */
+  "2.16.840.1.113883.3.88.12.3221.8.7",
+  /** CVX Vaccines Administered Vaccine Set, bound to Immunization Medication Information. */
+  "2.16.840.1.113762.1.4.1010.6",
+] as const;
+
+/**
+ * A value set OID this parser is allowed to put on a diagnostic. Closed by
+ * construction, so naming one names a parser constant rather than document
+ * content.
+ *
+ * @example
+ * ```ts
+ * import type { BoundValueSet } from "@cosyte/ccda";
+ * const vs: BoundValueSet = "2.16.840.1.113762.1.4.1010.4";
+ * ```
+ */
+export type BoundValueSet = (typeof BOUND_VALUE_SETS)[number];
 
 /**
  * The two structural loci a `SUBJECT_CONTEXT_OVERRIDE` warning can name: the
@@ -367,6 +438,10 @@ export const WARNING_MESSAGES: Readonly<Record<WarningCode, string>> = Object.fr
     "The smoking status code is not in the recognized Smoking Status value set; preserved verbatim.",
   SEMANTIC_CODE_INVALID:
     "The supplied terminology adapter reports the code is not a valid member of its system; code preserved verbatim, never coerced.",
+  VALUE_SET_BINDING_VIOLATED:
+    "The supplied value-set source reports the code is not a member of the value set C-CDA R2.1 binds this slot to with a Required (SHALL) binding, which makes it a conformance violation rather than a preference; code preserved verbatim, never coerced. The bound value set's OID is on `valueSet` and the release it was checked against on `valueSetRelease`, because any valid expansion of a value set is conformant and the verdict is only ever about the expansion that answered.",
+  VALUE_SET_BINDING_NOT_EVALUATED:
+    "The supplied value-set source holds no expansion for the value set C-CDA R2.1 binds this slot to, so membership was not evaluated: no non-membership is reported here and this silence says nothing about whether the code is a member. The bound value set's OID is on `valueSet` and the answering package's release on `valueSetRelease`.",
   PROFILE_QUIRK_APPLIED:
     "An active profile expected this deviation and downgraded it; the deviation's own code is on `toleratedCode`, the tolerating profile on `profile`, and `expected` is set.",
 });
@@ -424,6 +499,18 @@ const SEMANTIC_CODE_INVALID_BY_SLOT = tableOver(
   CODE_SLOTS,
   (slot) =>
     `The supplied terminology adapter reports the ${slot} code is not a valid member of its system; code preserved verbatim, never coerced.`,
+);
+
+const VALUE_SET_BINDING_VIOLATED_BY_SLOT = tableOver(
+  CODE_SLOTS,
+  (slot) =>
+    `The supplied value-set source reports the ${slot} code is not a member of the value set C-CDA R2.1 binds the ${slot} slot to with a Required (SHALL) binding, which makes it a conformance violation rather than a preference; code preserved verbatim, never coerced. The bound value set's OID is on \`valueSet\` and the release it was checked against on \`valueSetRelease\`, because any valid expansion of a value set is conformant and the verdict is only ever about the expansion that answered.`,
+);
+
+const VALUE_SET_BINDING_NOT_EVALUATED_BY_SLOT = tableOver(
+  CODE_SLOTS,
+  (slot) =>
+    `The supplied value-set source holds no expansion for the value set C-CDA R2.1 binds the ${slot} slot to, so membership was not evaluated: no non-membership is reported here and this silence says nothing about whether the code is a member. The bound value set's OID is on \`valueSet\` and the answering package's release on \`valueSetRelease\`.`,
 );
 
 const SECTION_PLACEMENT_SUSPECT_BY_SECTION = tableOver(
@@ -542,6 +629,8 @@ export const ALL_WARNING_MESSAGES: ReadonlySet<string> = new Set([
   ...Object.values(MISSING_CODE_SYSTEM_BY_SLOT),
   ...Object.values(MISSING_CODE_VALUE_BY_SLOT),
   ...Object.values(SEMANTIC_CODE_INVALID_BY_SLOT),
+  ...Object.values(VALUE_SET_BINDING_VIOLATED_BY_SLOT),
+  ...Object.values(VALUE_SET_BINDING_NOT_EVALUATED_BY_SLOT),
   ...Object.values(SECTION_PLACEMENT_SUSPECT_BY_SECTION),
   ...Object.values(REQUIRED_SECTION_MISSING_BY_SECTION),
   ...Object.values(CONTRADICTORY_NULL_FLAVOR_BY_DATATYPE),
@@ -2196,6 +2285,93 @@ export function semanticCodeInvalid(position: CcdaPosition, slot: CodeSlot): Ccd
     code: WARNING_CODES.SEMANTIC_CODE_INVALID,
     message: variant(SEMANTIC_CODE_INVALID_BY_SLOT, slot, WARNING_MESSAGES.SEMANTIC_CODE_INVALID),
     position,
+  };
+}
+
+/**
+ * Build a `VALUE_SET_BINDING_VIOLATED` warning. Emitted only when a
+ * consumer-supplied `ValueSetSource` reports that a coded value is **not** a
+ * member of the value set C-CDA R2.1 binds its slot to with a **Required**
+ * binding, which the standard states as a SHALL. The code is preserved verbatim
+ * and never coerced.
+ *
+ * **Neither string parameter can carry a document value, and that is the whole
+ * reason the factory takes any at all.** `valueSet` is a fixed OID literal from
+ * this package's own frozen binding table, and `release` is the label the
+ * consumer declared on the source they supplied. Neither is read from the
+ * document, neither reaches the message (which comes whole from the frozen
+ * registry), and the offending code appears nowhere in the warning.
+ *
+ * @example
+ * ```ts
+ * import { valueSetBindingViolated } from "@cosyte/ccda";
+ * const w = valueSetBindingViolated(
+ *   { path: "manufacturedMaterial" },
+ *   "medication",
+ *   "2.16.840.1.113762.1.4.1010.4",
+ *   "my-vsac-package-2026.1",
+ * );
+ * ```
+ */
+export function valueSetBindingViolated(
+  position: CcdaPosition,
+  slot: CodeSlot,
+  valueSet: BoundValueSet,
+  release: string,
+): CcdaWarning {
+  return {
+    code: WARNING_CODES.VALUE_SET_BINDING_VIOLATED,
+    message: variant(
+      VALUE_SET_BINDING_VIOLATED_BY_SLOT,
+      slot,
+      WARNING_MESSAGES.VALUE_SET_BINDING_VIOLATED,
+    ),
+    position,
+    valueSet,
+    valueSetRelease: release,
+  };
+}
+
+/**
+ * Build a `VALUE_SET_BINDING_NOT_EVALUATED` warning. Emitted when a
+ * consumer-supplied `ValueSetSource` answers that it holds **no expansion** for
+ * the value set a slot's Required binding names: the binding was not evaluated,
+ * so no non-membership is reported and the absence of a violation says nothing.
+ *
+ * This is the guard against the confident-wrong failure mode in its purest form.
+ * A source that skipped a value set it does not hold, in silence, is
+ * indistinguishable from one that checked and found the code conformant.
+ *
+ * Both string parameters are library- or consumer-owned constants, exactly as in
+ * {@link valueSetBindingViolated}; no part of the document reaches the warning.
+ *
+ * @example
+ * ```ts
+ * import { valueSetBindingNotEvaluated } from "@cosyte/ccda";
+ * const w = valueSetBindingNotEvaluated(
+ *   { path: "routeCode" },
+ *   "route",
+ *   "2.16.840.1.113883.3.88.12.3221.8.7",
+ *   "my-vsac-package-2026.1",
+ * );
+ * ```
+ */
+export function valueSetBindingNotEvaluated(
+  position: CcdaPosition,
+  slot: CodeSlot,
+  valueSet: BoundValueSet,
+  release: string,
+): CcdaWarning {
+  return {
+    code: WARNING_CODES.VALUE_SET_BINDING_NOT_EVALUATED,
+    message: variant(
+      VALUE_SET_BINDING_NOT_EVALUATED_BY_SLOT,
+      slot,
+      WARNING_MESSAGES.VALUE_SET_BINDING_NOT_EVALUATED,
+    ),
+    position,
+    valueSet,
+    valueSetRelease: release,
   };
 }
 
