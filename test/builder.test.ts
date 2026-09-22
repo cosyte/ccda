@@ -2336,8 +2336,10 @@ describe("buildCcda, defaults, escaping, and input validation", () => {
   });
 
   it("rejects an unsupported document type", () => {
-    // @ts-expect-error, documentType is typed to "ccd"; exercise the runtime guard.
-    expect(() => buildCcda({ documentType: "dischargeSummary", patient: { mrn: "M" } })).toThrow(
+    // `consultationNote` rather than `dischargeSummary`: the latter is a type the
+    // builder emits now, so asking for it is no longer the unhappy path.
+    // @ts-expect-error, documentType is typed to the three buildable types; exercise the runtime guard.
+    expect(() => buildCcda({ documentType: "consultationNote", patient: { mrn: "M" } })).toThrow(
       TypeError,
     );
   });
@@ -3067,8 +3069,10 @@ describe("buildCcda, Referral Note document type", () => {
   });
 
   it("rejects an unsupported document type with a TypeError", () => {
+    // `consultationNote` rather than `dischargeSummary`: the latter is a type the
+    // builder emits now, so asking for it is no longer the unhappy path.
     // @ts-expect-error, exercise the runtime guard for untyped (JS) callers.
-    expect(() => buildCcda({ documentType: "dischargeSummary", patient: { mrn: "X" } })).toThrow(
+    expect(() => buildCcda({ documentType: "consultationNote", patient: { mrn: "X" } })).toThrow(
       TypeError,
     );
   });

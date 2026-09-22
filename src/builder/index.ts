@@ -6,9 +6,11 @@
 
 export { buildCcda } from "./build-ccda.js";
 export type {
+  BuildableDocumentType,
   BuildCcdaInit,
   BuildCcdaOptions,
   BuildCcdaPatient,
+  BuildCcdaEncompassingEncounter,
   BuildCcdaProblem,
   BuildCcdaAllergy,
   BuildCcdaMedication,
