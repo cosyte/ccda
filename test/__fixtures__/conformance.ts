@@ -143,11 +143,16 @@ const PHQ9_SCALE: NonNullable<BuildCcdaInit["mentalStatusScales"]>[number] = {
 };
 
 /**
- * The fully-populated init, shared by the CCD and Referral Note cases.
+ * The fully-populated init, spread into the populated case of every document type.
  *
- * It carries every header field the builder accepts as well as every section, because a header
- * field the caller supplies changes the emitted header and an unsupplied one measures only the
- * default. `test/conformance/emit-surface-coverage.test.ts` holds this to the whole input type.
+ * It carries every header field the builder accepts as well as every section that is not specific
+ * to one document type, because a header field the caller supplies changes the emitted header and
+ * an unsupplied one measures only the default. The per-type fields (`assessment` and
+ * `reasonForReferral` for a Referral Note; `hospitalCourse`, `dischargeDiagnoses` and
+ * `encompassingEncounter` for a Discharge Summary) are added by the case that can emit them, since
+ * the builder ignores each of them for the other types and a case setting one it ignores would
+ * measure nothing. `test/conformance/emit-surface-coverage.test.ts` holds the CASE LIST, not this
+ * object, to every field of the input type.
  */
 const POPULATED: BuildCcdaInit = {
   documentId: "SYNTH-DOC-0001",

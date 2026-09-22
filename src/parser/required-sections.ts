@@ -51,9 +51,21 @@
  * `2024-05-01` CCD through `0.0.15`.
  *
  * **Keep the builder in lockstep.** This table and the builder's
- * `DOC_TYPE_SPECS.*.shallSections` name the same sections for the two document
- * types the builder emits (CCD, Referral Note). If they drift, `buildCcda` emits
- * a set the parser will not validate, or vice versa.
+ * `DOC_TYPE_SPECS.*.shallSections` name the same sections for the three document
+ * types the builder emits (CCD, Referral Note, Discharge Summary). If they
+ * drift, `buildCcda` emits a set the parser will not validate, or vice versa.
+ *
+ * **With ONE deliberate asymmetry, on the Discharge Summary.** The builder's
+ * SHALL set for that type has four entries and this table asserts three: the
+ * builder also emits the **Hospital Course Section**, because the document's
+ * normative errors rule requires it (CONF:1198-30522) and `pnpm conformance`
+ * fails without it, while this table cannot assert it because the section is
+ * outside the recognized catalog and so is enumerated in `unasserted` instead.
+ * The two are therefore in lockstep on what is VALIDATED and not on what is
+ * EMITTED, and the difference is exactly that one section. A built Discharge
+ * Summary consequently reparses with one `UNKNOWN_SECTION_CODE`: recognizing the
+ * template would close that, and it would move the row here from `unasserted` to
+ * asserted in the same edit.
  */
 
 import { DOCUMENT_TYPES, type DocumentType, type TemplateStampReading } from "./templates.js";
