@@ -58,9 +58,9 @@ claims is narrow and worth reading literally: the behaviour documented on this p
 and covered by tests, but the public API is **not settled**, and any release may change it, so pin an
 exact version rather than a range. These surfaces are named rather than implied:
 
-- **Building is partial.** `buildCcda` emits two of the twelve US Realm document types (CCD and
-  Referral Note); the other ten throw rather than emitting something that merely resembles the type
-  you asked for.
+- **Building is partial.** `buildCcda` emits three of the twelve US Realm document types (CCD,
+  Referral Note and inpatient Discharge Summary); the other nine throw rather than emitting
+  something that merely resembles the type you asked for.
 - **Editing is whole-section.** `editCcda` covers twelve section kinds. Functional Status, Mental
   Status and the Referral Note's narrative-only sections are buildable but not editable, and there is
   no entry-level append and no section removal.
@@ -966,8 +966,9 @@ condition is resolved, per Problem Observation `…22.4.4`) is emitted only for 
 keeps the `nullFlavor="UNK"` high, never a fabricated date. Each CCD SHALL section for which no content
 is supplied is emitted as a spec-clean empty `nullFlavor="NI"` section; the non-required Immunizations /
 Procedures / Encounters / Functional Status / Mental Status / Past Medical History /
-Plan of Treatment / Family History sections are emitted only when populated. The builder emits two of
-the twelve document types (**CCD** and **Referral Note**); the other ten are **not implemented**, and any
+Plan of Treatment / Family History sections are emitted only when populated. The builder emits three of
+the twelve document types (**CCD**, **Referral Note** and inpatient **Discharge Summary**); the other
+nine are **not implemented**, and any
 other `documentType` throws a `TypeError` rather than emitting something that merely resembles the type
 you asked for. Any C-CDA section outside the set listed above cannot be built at all.
 `buildCcda(init, { terminology })` accepts an optional bring-your-own terminology adapter (see "Code
@@ -1314,16 +1315,28 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
   removal, and no `APND` / `XFRM` relationship: an edit stamps `RPLC` only.
 - **Serializer re-emits a parsed document; the builder constructs one**: `serializeCcda` / `toString()`
   faithfully re-emit a _parsed_ document (the spec-clean emit half of Postel's Law). To construct a
-  document from scratch, `buildCcda` emits a spec-clean **CCD** or **Referral Note**
-  (`documentType: "referralNote"`) with the US Realm header + the CCD's six SHALL sections
+  document from scratch, `buildCcda` emits a spec-clean **CCD**, **Referral Note**
+  (`documentType: "referralNote"`) or inpatient **Discharge Summary**
+  (`documentType: "dischargeSummary"`) with the US Realm header + the CCD's six SHALL sections
   (**Problems, Allergies, Medications, Results, Vital Signs, and Social History**), plus
   **Immunizations, Procedures, Encounters, Functional
   Status, Mental Status, Past Medical History, Plan of Treatment, and Family History** emitted only
   when populated (none is a CCD SHALL section); a Referral Note additionally
-  specializes the header and emits its own SHALL set (Reason for Referral, Assessment, Plan of Treatment).
-  To change a section of a document you already parsed, use `editCcda`. The remaining ten document
+  specializes the header and emits its own SHALL set (Reason for Referral, Assessment, Plan of Treatment);
+  and a Discharge Summary specializes the header with its own SHALL set (Allergies, Hospital Course,
+  Discharge Diagnosis, Plan of Treatment) plus the `componentOf/encompassingEncounter` frame its
+  template requires, an encounter period and a discharge disposition, each emitted verbatim when
+  supplied and as an explicit `nullFlavor="UNK"` when not, never derived from another date in the
+  document.
+  To change a section of a document you already parsed, use `editCcda`. The remaining nine document
   types are not implemented. "Spec-clean" here means well-formed,
-  correctly-templated, and **round-tripping** through `parseCcda` with zero warnings. Every entry
+  correctly-templated, and **round-tripping** through `parseCcda` with zero warnings, with one
+  named exception: a **Discharge Summary** SHALL contain a **Hospital Course** section
+  (CONF:1198-30522), that section is an IHE PCC template this parser's section catalog does not
+  recognize, so every Discharge Summary this builder emits reparses with exactly one
+  `UNKNOWN_SECTION_CODE` naming it. The section is emitted because the document's normative rule
+  requires it; the warning is the parser saying truthfully that it does not know the template.
+  Every entry
   emits the `SHALL`-cardinality `effectiveTime` its C-CDA R2.1 template requires: the Problems/Allergies
   concern acts + observations, the Medication Activity `IVL_TS` duration, and the Results/Vital Signs
   organizers + observations. When the caller supplied a time it is used; when a `SHALL` requires the
@@ -1352,13 +1365,13 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
   every run, and a run fails if the committed bytes disagree with what it just produced.
   **Measured against Schematron revision `6d3ed96160b45a111895da4df5510c7fad9de01f`**, the document
   types validated are
-  <!-- conformance-statement:document-types:start -->`ccd` and `referralNote`<!-- conformance-statement:document-types:end -->,
+  <!-- conformance-statement:document-types:start -->`ccd`, `dischargeSummary` and `referralNote`<!-- conformance-statement:document-types:end -->,
   with **0** error-severity results on the built side
   and **0** round-trip documents whose Schematron error set differed.
   **This is an assessment against a published artifact, not a certification**, and no accredited body
   has reviewed this software or this result.
   **Limits, and they sit here beside the capability rather than in a footer.** The measurement covers
-  the two document types `buildCcda` emits and says nothing about the other ten, which it does not
+  the three document types `buildCcda` emits and says nothing about the other nine, which it does not
   emit. It covers the error-severity phase; the Schematron's warning phase is not run and a clean
   result is not a claim about it. Value-set membership is checked only where the Schematron's own
   vocabulary file checks it, so a clean result is not a terminology verification. The round-trip half

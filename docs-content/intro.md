@@ -25,10 +25,11 @@ configured XXE-safe.
 > Functional Status / Mental Status / Family History / Past Medical History), per-document-type
 > required-section (SHALL)
 > validation, and a **round-trip serializer** (`serializeCcda` / `toString()`). A document **builder**
-> (`buildCcda`) emits a spec-clean **CCD** or **Referral Note**, a document **editor** (`editCcda`)
+> (`buildCcda`) emits a spec-clean **CCD**, **Referral Note** or inpatient **Discharge Summary**, a
+> document **editor** (`editCcda`)
 > re-emits a parsed document with a section added or replaced (every untouched section byte-preserved),
 > and a **bring-your-own terminology adapter** semantically validates coded values against your own
-> licensed service. The builder emits two of the twelve document types; the other ten are not
+> licensed service. The builder emits three of the twelve document types; the other nine are not
 > implemented. See [Troubleshooting](./troubleshooting) for exactly what the parser, builder, and
 > editor do and do not do today.
 

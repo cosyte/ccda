@@ -371,8 +371,9 @@ doc.getSmokingStatus()[0]?.unknown; // => false
 doc.getSmokingStatus()[1]?.unknown; // => true
 ```
 
-> Current builder scope: `buildCcda` emits a **CCD** (the default) or a **Referral Note**
-> (`documentType: "referralNote"`). A CCD carries the US Realm header, the six CCD SHALL sections
+> Current builder scope: `buildCcda` emits a **CCD** (the default), a **Referral Note**
+> (`documentType: "referralNote"`) or an inpatient **Discharge Summary**
+> (`documentType: "dischargeSummary"`). A CCD carries the US Realm header, the six CCD SHALL sections
 > (Problems, Allergies, Medications, Results, Vital Signs and **Social History** (Smoking Status),
 > emitted empty as `nullFlavor="NI"` when no
 > content is supplied), and **Immunizations**, **Procedures**, **Encounters**,
@@ -383,8 +384,46 @@ doc.getSmokingStatus()[1]?.unknown; // => true
 > History Organizer per relative, with conditions carrying optional age-at-onset + cause-of-death)
 > sections when populated. A Referral Note specializes the header and always emits Problems,
 > Allergies, Medications, **Reason for Referral**, **Assessment**, and Plan of Treatment, which makes
-> Results, Vital Signs and Social History populated-only. Both accept an optional bring-your-own `terminology`
-> adapter. The other ten C-CDA R2.1 document types are not implemented.
+> Results, Vital Signs and Social History populated-only. A Discharge Summary specializes it again
+> and always emits Allergies, **Hospital Course**, **Discharge Diagnosis** and Plan of Treatment,
+> plus the `componentOf/encompassingEncounter` frame its template requires. All three accept an
+> optional bring-your-own `terminology`
+> adapter. The other nine C-CDA R2.1 document types are not implemented.
+
+### Build a Discharge Summary, with its encounter frame
+
+A Discharge Summary carries one more thing than the other two types: the encounter it summarises.
+Supply the period and the discharge disposition through `encompassingEncounter`; any slot you leave
+out is emitted as an explicit `nullFlavor="UNK"` and reparses as absent, never as a guessed date or
+a guessed disposition.
+
+```ts
+import { buildCcda } from "@cosyte/ccda";
+
+const summary = buildCcda({
+  documentType: "dischargeSummary",
+  patient: { mrn: "MRN001", given: ["Jane"], family: "Doe", gender: "F" },
+  hospitalCourse: "Admitted for observation. Uneventful course, discharged home.",
+  dischargeDiagnoses: [
+    { problem: { code: "59621000", displayName: "Essential hypertension" }, onset: "20240102" },
+  ],
+  encompassingEncounter: {
+    period: { low: "20240102", high: "20240108" },
+    // `codeSystem` defaults to the NUBC UB-04 Patient Discharge Status code set.
+    dischargeDisposition: { code: "01", displayName: "Discharged to Home or Self Care" },
+  },
+});
+
+summary.header.encompassingEncounter?.effectiveTime?.low?.raw; // => "20240102"
+summary.header.encompassingEncounter?.dischargeDispositionCode?.code; // => "01"
+```
+
+> **A Discharge Summary reparses with exactly one warning, and it is expected.** Its SHALL Hospital
+> Course Section is an IHE PCC template this parser's section catalog does not recognize, so the
+> section is emitted (the document's normative rule requires it, and `pnpm conformance` fails
+> without it) and the parser raises one `UNKNOWN_SECTION_CODE` saying truthfully that it does not
+> know the template. `findSection("hospitalCourse")` does not resolve; the section is in
+> `doc.sections` with `key: undefined` and its narrative intact.
 
 ## 6. Edit a parsed document: add or replace a section, keep a revision trail
 

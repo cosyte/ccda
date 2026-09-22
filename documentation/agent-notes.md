@@ -38,8 +38,45 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
 
 ## What buildCcda emits, and what it does not
 
-  - `buildCcda` emits **two of the twelve** document types (CCD, Referral Note). The other ten are
-    not implemented. Parsing **recognizes** all twelve; only building is limited.
+  - `buildCcda` emits **three of the twelve** document types (CCD, Referral Note, inpatient
+    Discharge Summary). The other nine are not implemented. Parsing **recognizes** all twelve; only
+    building is limited.
+  - **The refusal for those nine is derived, not listed.** `buildCcda` asks `DOC_TYPE_SPECS`
+    whether it has a specialization for the requested type, so the refused set is whatever the
+    table does not cover: the nine unimplemented types, a thirteenth type the parser starts
+    recognizing tomorrow, and any string that is not a document type at all. `Object.hasOwn` and
+    not `in`, because `in` walks the prototype chain and an untyped caller passing `"toString"`
+    would otherwise reach the table. **Do not reintroduce a hand-written list of refused types**:
+    the fall-through it opens on the day a thirteenth is added is a document silently emitted
+    under the wrong document template.
+  - **`BuildableDocumentType` is `Extract<DocumentType, …>`**, so the builder's surface cannot
+    drift from the parser's recognition enumeration without a compile error.
+  - **A Discharge Summary reparses with exactly one warning, and that is expected rather than a
+    defect to fix by changing what is emitted.** Its SHALL set includes the **Hospital Course
+    Section** (`1.3.6.1.4.1.19376.1.5.3.1.3.5`, LOINC `8648-8`, CONF:1198-30522), an IHE PCC
+    template that is **outside this parser's section catalog**, so every Discharge Summary the
+    builder emits raises one `UNKNOWN_SECTION_CODE` naming it on reparse. The section is emitted
+    because the document's normative errors rule requires it and `pnpm conformance` fails without
+    it; the warning is the parser stating truthfully that it does not know the template. **Never
+    answer that warning by dropping the section**, which trades a true diagnostic for a
+    non-conformant document. Recognizing the template in `SECTION_CATALOG` would close it, and
+    that is a **parser** change with its own blast radius (it moves the Discharge Summary row in
+    `required-sections.ts` from `unasserted` to asserted, so a Discharge Summary missing the
+    section would newly draw `REQUIRED_SECTION_MISSING`); it is filed rather than smuggled in
+    beside a builder change.
+  - **The Discharge Summary's SHALL set is not the CCD's minus a few.** It contains neither
+    Problems nor Medications, so neither is forced for that type, and its Allergies assert names
+    the entries-**optional** identifier where the CCD's names the entries-required one. Discharge
+    Medications is a **SHOULD** in the document's *warnings* rule (CONF:1198-30525) and is
+    therefore not emitted at all.
+  - **`componentOf/encompassingEncounter` is emitted for the Discharge Summary alone**, and every
+    one of its slots is required by the template: `id` [1..*] (CONF:1198-9959, which lives in the
+    shared US Realm Header rule rather than the Discharge Summary's own and is easy to read past),
+    `effectiveTime` with both a `low` and a `high` (-8473, -8475), and `dischargeDispositionCode`
+    (-8476). **A bound or a disposition the caller did not supply is an explicit
+    `nullFlavor="UNK"`, never derived** from the document `effectiveTime`, from a
+    `documentationOf` service event, or from any other date in the document. An admission date, a
+    discharge date and a discharge disposition are each facts a clinician acts on.
 
 ## A narrative label is refused, never fabricated
 
@@ -2180,16 +2217,24 @@ library's own sanctioned output rather than a malformed init. Because nothing bu
 run was green, the report recorded "Error-severity results: 0", and the README published that as
 the builder's measured conformance. **A green measurement over a subset reads exactly like a
 green measurement over the whole surface**, and no check anywhere could tell them apart. The set
-is thirteen documents now, one per optional section as well as the populated pair, and
+is fifteen documents now, one per optional section as well as a minimal and a populated case per
+document type, and
 `test/conformance/emit-surface-coverage.test.ts` reads `BuildCcdaInit` through the TypeScript
 checker and fails when a field of it is set by no built case. Widen the builder and that test
 names the section nothing measures, on the commit that widened it.
 
+**THAT IS EXACTLY HOW THE DISCHARGE SUMMARY WAS ADDED, AND IT WORKED.** The third document type
+arrived with a minimal case and a populated one, and the harness raised CONF:1198-9959 (the
+encompassing encounter SHALL carry at least one `id`) on the first run, from the shared US Realm
+Header rule rather than the Discharge Summary's own, against identifiers that had otherwise been
+read correctly off the Schematron. Reading the document type's own rule and believing it is the
+same mistake the 86 results came from; the harness is what tells them apart.
+
 **THE COUNT IS ZERO NOW. DO NOT READ THAT AS "CONFORMANT".** What is measured is narrower than
 what a reader will assume, and each edge is real:
 
-  - **Two document types.** `buildCcda` emits a CCD and a Referral Note. Nothing is measured about
-    the other ten, because it does not emit them.
+  - **Three document types.** `buildCcda` emits a CCD, a Referral Note and an inpatient Discharge
+    Summary. Nothing is measured about the other nine, because it does not emit them.
   - **The error phase only.** The Schematron declares `errors` and `warnings`. A run evaluates
     `errors`. A clean result is not a claim about the warning phase and never has been.
   - **Value sets only where the artifact checks them.** The Schematron's own `voc.xml` backs 24 of

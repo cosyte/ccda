@@ -455,17 +455,32 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
 
 ### Building a document
 
-- **`buildCcda` emits two of the twelve document types.** A **CCD** (the default) and a **Referral
-  Note** (`documentType: "referralNote"`). Any other value throws a `TypeError` rather than emitting
-  something that merely resembles the type you asked for. The other ten types are not implemented.
+- **`buildCcda` emits three of the twelve document types.** A **CCD** (the default), a **Referral
+  Note** (`documentType: "referralNote"`) and an inpatient **Discharge Summary**
+  (`documentType: "dischargeSummary"`). Any other value throws a `TypeError` rather than emitting
+  something that merely resembles the type you asked for. The other nine types are not implemented.
+- **A Discharge Summary reparses with exactly one `UNKNOWN_SECTION_CODE`, and that is expected.**
+  Its SHALL set includes the Hospital Course Section (`1.3.6.1.4.1.19376.1.5.3.1.3.5`, LOINC
+  `8648-8`), an IHE PCC template outside this parser's section catalog. The section is emitted
+  because the document's normative errors rule requires it; the warning is the parser saying it
+  does not know the template. `findSection("hospitalCourse")` does not resolve, and the section
+  sits in `doc.sections` with `key: undefined` and its narrative intact. Every other section of a
+  clean Discharge Summary build is recognized and the document carries no other warning.
+- **A Discharge Summary's encounter frame is never guessed.** `componentOf/encompassingEncounter`
+  is always emitted for that type, because its template requires it, and each slot the caller did
+  not supply through `encompassingEncounter` (either period bound, the discharge disposition) is
+  emitted `nullFlavor="UNK"` and reparses as absent. None of the three is ever derived from the
+  document `effectiveTime` or from a `documentationOf` service event.
 - **Which sections a build can carry.** For a CCD, its six SHALL sections are always emitted, as
   spec-clean empty `nullFlavor="NI"` sections when you supply no content: Problems, Allergies,
   Medications, Results, Vital Signs, and Social History (smoking status). Immunizations, Procedures,
   Encounters, Functional Status, Mental Status, Past Medical History, Plan of Treatment, and Family
   History are emitted only when populated, so an empty one is never fabricated. A Referral Note
   instead always emits Problems, Allergies, Medications, Reason for Referral, Assessment, and Plan of
-  Treatment, and demotes Results, Vital Signs and Social History to populated-only. Any C-CDA section
-  outside that set cannot be built.
+  Treatment, and demotes Results, Vital Signs and Social History to populated-only. A Discharge
+  Summary always emits Allergies, Hospital Course, Discharge Diagnosis and Plan of Treatment, and
+  forces nothing else: neither Problems nor Medications is in its SHALL set, so both are
+  populated-only there. Any C-CDA section outside that set cannot be built.
 - **Every coded value that reaches the narrative needs a `displayName`, and a missing one is
   refused.** Each populated section regenerates its `<text>` narrative from the same
   `BuildCode.displayName` the coded entry carries, and links the two with a `<reference>`, so the
@@ -494,11 +509,12 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   `pnpm conformance` fetches the C-CDA R2.1 Schematron, its vocabulary file and the CDA R2 XML schema
   from pinned immutable references, validates every document `buildCcda` emits against the schema and
   then the Schematron's error-severity phase, and writes `documentation/conformance-report.md`. The
-  measured set is one document per optional section as well as the two populated documents, so a
+  measured set is one document per optional section as well as a minimal and a populated document
+  per document type, so a
   green run is not a green run over a subset of what the builder can emit. The current result is zero
   error-severity results.
   **What that does and does not tell you, stated here rather than left to be assumed.** It covers the
-  two document types the builder emits and says nothing about the other ten, which it does not emit.
+  three document types the builder emits and says nothing about the other nine, which it does not emit.
   It covers the error-severity phase; the warning phase is not run. It checks value-set membership
   only where the Schematron's own vocabulary file checks it, so it is not a terminology verification.
   It is an assessment against a published artifact, **not a certification**, and no accredited body
