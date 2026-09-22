@@ -1097,8 +1097,11 @@ describe("emit and validate stay in lockstep", () => {
         expect(back.findSection(key)).toBeDefined();
       }
     }
-    // Guard against the loop going quiet: the builder emits two types today.
-    expect(emittable).toEqual(["ccd", "referralNote"]);
+    // Guard against the loop going quiet: the builder emits three types today, in the
+    // recognition enumeration's own order. S0352-ccda-7 added the Discharge Summary, and this
+    // walk covered it without a line of its own, which is what discovering the set rather than
+    // listing it buys.
+    expect(emittable).toEqual(["ccd", "dischargeSummary", "referralNote"]);
   });
 });
 

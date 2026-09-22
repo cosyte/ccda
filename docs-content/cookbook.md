@@ -392,10 +392,15 @@ doc.getSmokingStatus()[1]?.unknown; // => true
 
 ### Build a Discharge Summary, with its encounter frame
 
+`BuildableDocumentType` is the union of the three types `buildCcda` emits (`"ccd"`,
+`"referralNote"`, `"dischargeSummary"`); ask for any of the other nine and you get a `TypeError`
+naming what you asked for, never a document that merely resembles it.
+
 A Discharge Summary carries one more thing than the other two types: the encounter it summarises.
-Supply the period and the discharge disposition through `encompassingEncounter`; any slot you leave
-out is emitted as an explicit `nullFlavor="UNK"` and reparses as absent, never as a guessed date or
-a guessed disposition.
+Supply the period and the discharge disposition through `encompassingEncounter`, a
+`BuildCcdaEncompassingEncounter`. Any slot you leave out is emitted as an explicit
+`nullFlavor="UNK"` and reparses as absent, never as a guessed date or a guessed disposition; an
+admission date, a discharge date and a discharge disposition are each facts a clinician acts on.
 
 ```ts
 import { buildCcda } from "@cosyte/ccda";
