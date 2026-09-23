@@ -1,10 +1,22 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, readdirSync, rmSync } from "node:fs";
+import { join, relative } from "node:path";
 
-import { beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
-import { docSnippetSuite } from "@cosyte/vitest-config/snippets";
+import {
+  docSnippetSuite,
+  extractRunnableSnippets,
+  runSnippet,
+} from "@cosyte/vitest-config/snippets";
+
+import {
+  documentLiterals,
+  fences,
+  fixturesByContent,
+  runnableTaggedFences,
+  section,
+} from "./_helpers/first-use.js";
 
 /**
  * Doc/code-agreement gate. Every ```` ```ts runnable ```` block in `docs-content/` **and in
@@ -72,5 +84,136 @@ describe("README status section", () => {
     const status = /^## Status\n([\s\S]*?)\n## /m.exec(readFileSync(README, "utf8"))?.[1];
     expect(status, "no `## Status` section found in README.md").toBeDefined();
     expect(status).toContain(`\`${version ?? ""}\``);
+  });
+});
+
+/**
+ * The two FIRST-USE examples, the quickstart's first block and the first block under the README's
+ * `## Usage`, are the ones a reader runs first. Each must be the block a sweep above executes, each
+ * is run again here with a changed value to prove the run can go red, and every C-CDA document
+ * literal either one prints must be a byte-for-byte copy of a committed fixture under
+ * `test/__fixtures__`, which `pnpm phi-scan` reads as a document. Temp modules for these runs live
+ * in their own directory inside the root, as the harness requires, and are removed when the file is
+ * done.
+ */
+const resolveEntry = (specifier: string): string | undefined =>
+  specifier === "@cosyte/ccda" ? ENTRY : undefined;
+const FIRST_USE_TMP = join(root, ".cosyte-first-use-snippets");
+const FIXTURE_DIR = join(root, "test", "__fixtures__");
+const QUICKSTART_TEXT = readFileSync(join(root, "docs-content", "quickstart.md"), "utf8");
+const README_TEXT = readFileSync(README, "utf8");
+const FIRST_USE = [
+  {
+    doc: "docs-content/quickstart.md",
+    fence: fences(QUICKSTART_TEXT)[0],
+    snippets: extractRunnableSnippets(QUICKSTART_TEXT),
+    claim: 'doc.getMrn(); // => "MRN-00042"',
+    claimMutated: 'doc.getMrn(); // => "MRN-00043"',
+  },
+  {
+    doc: "README.md",
+    fence: fences(section(README_TEXT, "## Usage"))[0],
+    snippets: extractRunnableSnippets(README_TEXT),
+    claim: 'doc.getMrn(); // => "MRN001"',
+    claimMutated: 'doc.getMrn(); // => "MRN002"',
+  },
+] as const;
+
+afterAll(() => {
+  rmSync(FIRST_USE_TMP, { recursive: true, force: true });
+});
+
+describe("the first-use examples", () => {
+  for (const example of FIRST_USE) {
+    const acRun = example.doc === "README.md" ? "AC-CC2" : "AC-CC1";
+
+    test(`${acRun}: the first block of ${example.doc} is one the sweep executes, and it runs`, async () => {
+      expect(example.fence?.lang).toBe("ts");
+      expect(example.fence?.tags).toContain("runnable");
+      expect(example.fence?.tags).not.toContain("throws");
+      const executed = example.snippets.find((s) => s.code === example.fence?.body);
+      expect(
+        executed,
+        `${example.doc}: the first block is not among the executed ones`,
+      ).toBeDefined();
+      if (executed === undefined) return;
+      await runSnippet(executed, { resolve: resolveEntry, tmpDir: FIRST_USE_TMP });
+    });
+
+    test(`AC-CC4: a changed claimed value in the first block of ${example.doc} turns it red`, async () => {
+      const code = example.fence?.body ?? "";
+      expect(code.split(example.claim).length - 1).toBe(1);
+      const mutated = code.replace(example.claim, example.claimMutated);
+      await expect(
+        runSnippet(mutated, { resolve: resolveEntry, tmpDir: FIRST_USE_TMP }),
+      ).rejects.toThrow();
+    });
+
+    test(`AC-CC5: every document literal in the first block of ${example.doc} is a committed fixture`, () => {
+      const fixtures = fixturesByContent(root, FIXTURE_DIR);
+      for (const literal of documentLiterals(example.fence?.body ?? "")) {
+        expect(
+          fixtures.get(literal),
+          `${example.doc}: a document literal is no fixture`,
+        ).toBeDefined();
+      }
+    });
+  }
+
+  test("AC-CC5: the quickstart's first block reads exactly one document, and a changed value leaves the corpus", async () => {
+    const code = FIRST_USE[0].fence?.body ?? "";
+    expect(documentLiterals(code)).toHaveLength(1);
+    expect(code.split('extension="MRN-00042"').length - 1).toBe(1);
+    const mutated = code.replace('extension="MRN-00042"', 'extension="MRN-00043"');
+    const fixtures = fixturesByContent(root, FIXTURE_DIR);
+    expect(fixtures.get(documentLiterals(mutated)[0] ?? "")).toBeUndefined();
+    await expect(
+      runSnippet(mutated, { resolve: resolveEntry, tmpDir: FIRST_USE_TMP }),
+    ).rejects.toThrow();
+  });
+});
+
+/**
+ * A fence tagged `runnable` is a claim that something executes it. The two sweeps above execute
+ * every TypeScript block so tagged in `docs-content/` and `README.md`; a block tagged `runnable` in
+ * any other language is extracted by nothing, so it is named here instead of passing silently.
+ */
+function markdownUnder(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...markdownUnder(full));
+    else if (/\.mdx?$/i.test(entry.name)) out.push(full);
+  }
+  return out;
+}
+
+/** `file:line` for every runnable-tagged fence in `markdown` that the snippet harness does not extract. */
+function unexecutedRunnableFences(file: string, markdown: string): string[] {
+  const tagged = runnableTaggedFences(markdown);
+  const unexecuted = tagged
+    .filter((f) => !["ts", "typescript", "tsx"].includes(f.lang.toLowerCase()))
+    .map((f) => `${file}:${String(f.line)}`);
+  if (unexecuted.length === 0 && tagged.length !== extractRunnableSnippets(markdown).length) {
+    unexecuted.push(
+      `${file}: tagged ${String(tagged.length)}, extracted ${String(extractRunnableSnippets(markdown).length)}`,
+    );
+  }
+  return unexecuted;
+}
+
+describe("a runnable tag is an execution that happens", () => {
+  test("AC-CC3: every runnable-tagged block in README.md and docs-content/ is executed", () => {
+    const files = [README, ...markdownUnder(join(root, "docs-content"))];
+    const unexecuted = files.flatMap((file) =>
+      unexecutedRunnableFences(relative(root, file), readFileSync(file, "utf8")),
+    );
+    expect(unexecuted).toEqual([]);
+  });
+
+  test("AC-CC3: a runnable-tagged block no sweep executes is named by file and line", () => {
+    const fence = "```";
+    const planted = `# Page\n\n${fence}js runnable\nconst x = 1;\n${fence}\n\n${fence}ts runnable\nconst y = 2;\n${fence}\n`;
+    expect(unexecutedRunnableFences("planted.md", planted)).toEqual(["planted.md:3"]);
   });
 });
