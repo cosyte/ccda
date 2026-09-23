@@ -27,6 +27,7 @@ import {
   missingRequiredSections,
   requiredSectionStatus,
   DOCUMENT_TYPES,
+  type BuildableDocumentType,
   type BuildCcdaInit,
   type BuildCcdaPlannedItem,
   type TerminologyAdapter,
@@ -3430,7 +3431,10 @@ describe("buildCcda, a narrative label is refused rather than fabricated", () =>
 describe("S0352-ccda-7: buildCcda emits an inpatient Discharge Summary", () => {
   /** The Discharge Summary document template, read off the pinned normative R2.1 Schematron. */
   const DISCHARGE_SUMMARY_TEMPLATE = "2.16.840.1.113883.10.20.22.1.8";
-  /** The Hospital Course Section, an IHE PCC template outside this parser's section catalog. */
+  /**
+   * The Hospital Course Section, an IHE PCC template the parser frames by this root and keeps out
+   * of its section catalog (`FRAMING_ONLY_SECTIONS` in `src/parser/templates.ts`).
+   */
   const HOSPITAL_COURSE_ROOT = "1.3.6.1.4.1.19376.1.5.3.1.3.5";
   /** Its LOINC `code`, CONF:81-15488. */
   const HOSPITAL_COURSE_LOINC = "8648-8";
@@ -3466,13 +3470,21 @@ describe("S0352-ccda-7: buildCcda emits an inpatient Discharge Summary", () => {
     return xml.slice(start, end + "</componentOf>".length);
   }
 
-  describe("S0352 AC-1: a typed init reparses with a known warning set and round-trips exactly", () => {
+  describe("S0352 AC-1: a typed init reparses with zero warnings and round-trips exactly", () => {
+    /** Every Discharge Summary the harness measures, plus this suite's own two. */
+    const summaries: readonly BuildCcdaInit[] = [
+      MINIMAL,
+      POPULATED_SUMMARY,
+      ...BUILT_DOCUMENT_CASES.filter((entry) => entry.documentType === "dischargeSummary").map(
+        (entry) => entry.init,
+      ),
+    ];
+
     it("S0352 AC-1: every supported type round-trips to an identical string", () => {
       const inits: BuildCcdaInit[] = [
         { patient: { mrn: "M" } },
         { documentType: "referralNote", patient: { mrn: "M" } },
-        MINIMAL,
-        POPULATED_SUMMARY,
+        ...summaries,
       ];
       for (const init of inits) {
         const xml = serializeCcda(buildCcda(init));
@@ -3480,30 +3492,128 @@ describe("S0352-ccda-7: buildCcda emits an inpatient Discharge Summary", () => {
       }
     });
 
-    it("S0352 AC-1: a CCD and a Referral Note still reparse with zero warnings", () => {
-      // The half of AC-1 that is unqualified, asserted so the Discharge Summary's documented
-      // exception below cannot quietly become the rule for the other two types.
-      expect(buildCcda({ patient: { mrn: "M" } }).warnings).toEqual([]);
-      expect(buildCcda({ documentType: "referralNote", patient: { mrn: "M" } }).warnings).toEqual(
-        [],
-      );
+    it("S0352 AC-1: every supported type reparses with zero warnings, a Discharge Summary included", () => {
+      // Zero, for all three types and with no exception carved out. Both the returned document
+      // (the builder's own reparse) and an independent reparse of the emitted string are read.
+      // The Discharge Summary carries a Hospital Course Section (CONF:1198-30522), an IHE PCC
+      // template the parser now frames by its root, so the section it emits draws no
+      // UNKNOWN_SECTION_CODE; the harness's populated case, which carries problems and
+      // medications too, is in the set.
+      expect(summaries.length).toBeGreaterThan(2);
+      const inits: BuildCcdaInit[] = [
+        { patient: { mrn: "M" } },
+        { documentType: "referralNote", patient: { mrn: "M" } },
+        ...summaries,
+      ];
+      for (const init of inits) {
+        const built = buildCcda(init);
+        const label = init.documentType ?? "ccd";
+        expect(built.warnings, label).toEqual([]);
+        expect(parseCcda(serializeCcda(built)).warnings, label).toEqual([]);
+      }
     });
 
-    it("S0352 AC-1: a Discharge Summary reparses with exactly one warning, for the Hospital Course Section", () => {
-      // DOCUMENTED DEVIATION, recorded in this item's notes.md. The Discharge Summary's errors
-      // rule SHALL contain a Hospital Course Section (CONF:1198-30522), and that section is an
-      // IHE PCC template outside this parser's section catalog, so the parser reports that it
-      // does not know the template. Emitting the section is not optional (`pnpm conformance`
-      // fails without it) and recognizing it is a parser change this spec puts out of scope.
-      // The assertion is EXACT rather than a tolerance: one warning, that code, that section. A
-      // second warning of any kind, or this one naming a different section, fails.
-      for (const init of [MINIMAL, POPULATED_SUMMARY]) {
-        const warnings = buildCcda(init).warnings;
-        expect(warnings).toHaveLength(1);
-        expect(warnings[0]?.code).toBe("UNKNOWN_SECTION_CODE");
-        expect(warnings[0]?.position?.sectionCode).toBe(HOSPITAL_COURSE_LOINC);
-        expect(warnings[0]?.position?.templateId).toBe(HOSPITAL_COURSE_ROOT);
+    it("S0352 AC-1: the reparse frames the Hospital Course Section by its root", () => {
+      // What removed the warning, asserted directly: the emitted section is recognized, by
+      // templateId, under its own key, with the narrative the caller supplied.
+      const course = buildCcda(POPULATED_SUMMARY).findSection("hospitalCourse");
+      expect(course?.recognizedBy).toBe("templateId");
+      expect(course?.code?.code).toBe(HOSPITAL_COURSE_LOINC);
+      expect(course?.narrativeText).toBe(POPULATED_SUMMARY.hospitalCourse);
+    });
+  });
+
+  describe("S0352 AC-1 / Scope: framing the Hospital Course Section makes parseCcda no stricter", () => {
+    // Scope, Out: "Making parseCcda stricter in any way", and repo rule 9, "Nothing here may make
+    // parseCcda reject content it accepts today". Recognizing a section the parser did not know
+    // is a parser change, so these are the shapes a THIRD-PARTY document can carry, built
+    // synthetically from this suite's own Discharge Summary (`phi-safety` P2). Each asserts what
+    // the parser did BEFORE the section was framed: the one outcome allowed to move is a
+    // section carrying the root and resolving by nothing else, which loses its
+    // UNKNOWN_SECTION_CODE (the AC-1 tests above).
+    const HC_TEMPLATE = `<templateId root="${HOSPITAL_COURSE_ROOT}"/>`;
+    const HC_CODE = `<code code="${HOSPITAL_COURSE_LOINC}" codeSystem="2.16.840.1.113883.6.1" displayName="Hospital Course" codeSystemName="LOINC"/>`;
+    const ASSESSMENT_TEMPLATE = '<templateId root="2.16.840.1.113883.10.20.22.2.8"/>';
+    const ASSESSMENT_CODE =
+      '<code code="51848-0" codeSystem="2.16.840.1.113883.6.1" displayName="Assessment" codeSystemName="LOINC"/>';
+    const BODY = "<title>Hospital Course</title><text>Uneventful course.</text>";
+    /** A Discharge Summary the builder emitted, and its Hospital Course section verbatim. */
+    const built = serializeCcda(buildCcda(POPULATED_SUMMARY));
+    const courseStart = built.indexOf(`<section>${HC_TEMPLATE}`);
+    const COURSE = built.slice(courseStart, built.indexOf("</section>", courseStart) + 10);
+    /** A Problem Concern Act entry, as the builder emits one into a CCD's Problems section. */
+    const ccd = serializeCcda(
+      buildCcda({
+        patient: { mrn: "M" },
+        problems: [{ problem: { code: "59621000", displayName: "Essential hypertension" } }],
+      }),
+    );
+    const PROBLEM_ENTRY = ccd.slice(ccd.indexOf("<entry>"), ccd.indexOf("</entry>") + 8);
+
+    const codes = (doc: { readonly warnings: readonly { readonly code: string }[] }): string[] =>
+      doc.warnings.map((warning) => warning.code);
+    /** The same document with its Hospital Course section replaced by `section`. */
+    function withCourse(section: string): ReturnType<typeof parseCcda> {
+      return parseCcda(built.replace(COURSE, section));
+    }
+
+    it("S0352 AC-1: the fixtures carry what they claim to", () => {
+      expect(courseStart).toBeGreaterThan(-1);
+      expect(COURSE.startsWith(`<section>${HC_TEMPLATE}${HC_CODE}`)).toBe(true);
+      expect(PROBLEM_ENTRY).toContain('<templateId root="2.16.840.1.113883.10.20.22.4.3"');
+      expect(PROBLEM_ENTRY.endsWith("</act></entry>")).toBe(true);
+    });
+
+    it("S0352 AC-1: the code WITHOUT the root still draws UNKNOWN_SECTION_CODE, and no key", () => {
+      // No LOINC fallback onto the framing-only entry: a sender coding 8648-8 under some other
+      // template gets exactly what it got before, not SECTION_MATCHED_BY_LOINC_FALLBACK.
+      const doc = withCourse(`<section>${HC_CODE}${BODY}</section>`);
+      expect(codes(doc)).toEqual(["UNKNOWN_SECTION_CODE"]);
+      expect(doc.findSection("hospitalCourse")).toBeUndefined();
+    });
+
+    it("S0352 AC-1: a catalog root beside the Hospital Course root keeps the section it named", () => {
+      // Consulted LAST: a section a catalog root resolved keeps that key whichever root comes
+      // first, so no section a document already carried changes identity.
+      for (const head of [HC_TEMPLATE + ASSESSMENT_TEMPLATE, ASSESSMENT_TEMPLATE + HC_TEMPLATE]) {
+        const doc = withCourse(`<section>${head}${HC_CODE}${BODY}</section>`);
+        expect(doc.findSection("assessment")?.recognizedBy, head).toBe("templateId");
+        expect(doc.findSection("hospitalCourse"), head).toBeUndefined();
+        expect(codes(doc), head).toEqual([]);
       }
+    });
+
+    it("S0352 AC-1: a catalog LOINC code under the Hospital Course root keeps its fallback reading", () => {
+      const doc = withCourse(`<section>${HC_TEMPLATE}${ASSESSMENT_CODE}${BODY}</section>`);
+      expect(doc.findSection("assessment")?.recognizedBy).toBe("loinc");
+      expect(doc.findSection("hospitalCourse")).toBeUndefined();
+      expect(codes(doc)).toEqual(["SECTION_MATCHED_BY_LOINC_FALLBACK"]);
+    });
+
+    it("S0352 AC-1: an entry inside a Hospital Course Section is not newly flagged as misplaced", () => {
+      // The entry layer does not see the framing-only entry, so a Problem Concern Act a sender
+      // put in its Hospital Course Section is extracted exactly as before and draws no
+      // SECTION_PLACEMENT_SUSPECT, which an unrecognized section never drew either. The control
+      // proves the check is live: the same entry in a catalog narrative section IS flagged.
+      const course = withCourse(
+        `<section>${HC_TEMPLATE}${HC_CODE}${BODY}${PROBLEM_ENTRY}</section>`,
+      );
+      expect(codes(course)).not.toContain("SECTION_PLACEMENT_SUSPECT");
+      expect(course.getProblems()).toHaveLength(1);
+      const control = withCourse(
+        `<section>${ASSESSMENT_TEMPLATE}${ASSESSMENT_CODE}${BODY}${PROBLEM_ENTRY}</section>`,
+      );
+      expect(codes(control)).toContain("SECTION_PLACEMENT_SUSPECT");
+    });
+
+    it("S0352 AC-1: a Discharge Summary with no Hospital Course Section is not reported for it", () => {
+      // Framed, and still not asserted: asserting it would put REQUIRED_SECTION_MISSING on this
+      // document, and under `strict: true` refuse it, where it parses clean today.
+      const without = built.replace(`<component>${COURSE}</component>`, "");
+      expect(without).not.toContain(HOSPITAL_COURSE_ROOT);
+      expect(codes(parseCcda(without))).toEqual([]);
+      expect(() => parseCcda(without, { strict: true })).not.toThrow();
+      expect(requiredSectionStatus("dischargeSummary").keys).not.toContain("hospitalCourse");
     });
   });
 
@@ -3560,6 +3670,65 @@ describe("S0352-ccda-7: buildCcda emits an inpatient Discharge Summary", () => {
       expect(xml.split(`<templateId root="${DISCHARGE_DIAGNOSIS_ACT}"`)).toHaveLength(2);
       expect(xml).toContain(">Essential hypertension</content>");
       expect(xml).toContain(">Type 2 diabetes mellitus</content>");
+    });
+  });
+
+  describe("S0352 AC-1 / Scope: content the caller supplies is emitted or refused, never dropped", () => {
+    // Scope, In: "The typed build input needed to supply that document's content". A typed init
+    // the builder accepts and then discards in part emits a document that is missing clinical
+    // content without a word (`clinical-safety` C1), so each input is either in the emitted
+    // document or refused with a typed error.
+    const PROBLEM = { problem: { code: "59621000", displayName: "Essential hypertension" } };
+    const MEDICATION = {
+      drug: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" },
+      dose: { value: 1, unit: "{tablet}" },
+      route: { code: "C38288", displayName: "Oral" },
+    };
+
+    it("S0352 AC-1: a Discharge Summary emits the problems and medications it is handed", () => {
+      const doc = buildCcda({
+        ...POPULATED_SUMMARY,
+        problems: [PROBLEM],
+        medications: [MEDICATION],
+      });
+      expect(doc.getProblems()).toHaveLength(1);
+      expect(doc.getProblems()[0]?.problems[0]?.value?.code).toBe("59621000");
+      expect(doc.getMedications()).toHaveLength(1);
+      expect(doc.getMedications()[0]?.drug?.code).toBe("314076");
+      // Each in its own section, and the medications in the Medications Section rather than the
+      // Discharge Medications Section, which would assert they are discharge medications.
+      expect(doc.findSection("problems")).toBeDefined();
+      expect(doc.findSection("medications")).toBeDefined();
+      expect(doc.findSection("dischargeMedications")).toBeUndefined();
+      expect(doc.warnings).toEqual([]);
+    });
+
+    it("S0352 AC-1: a Discharge Summary handed neither carries neither section", () => {
+      // Neither is in the type's SHALL set, so neither is fabricated as an empty section.
+      const doc = buildCcda(POPULATED_SUMMARY);
+      expect(doc.findSection("problems")).toBeUndefined();
+      expect(doc.findSection("medications")).toBeUndefined();
+    });
+
+    it("S0352 AC-1: an input one document type carries is refused on a type that does not", () => {
+      const cases: readonly [BuildableDocumentType, Partial<BuildCcdaInit>][] = [
+        ["ccd", { hospitalCourse: "Uneventful course." }],
+        ["referralNote", { hospitalCourse: "Uneventful course." }],
+        ["ccd", { dischargeDiagnoses: [PROBLEM] }],
+        ["referralNote", { dischargeDiagnoses: [PROBLEM] }],
+        ["ccd", { encompassingEncounter: { period: { low: "20240102" } } }],
+        ["referralNote", { encompassingEncounter: {} }],
+        ["dischargeSummary", { assessment: "Stable." }],
+        ["dischargeSummary", { reasonForReferral: "Cardiology follow-up." }],
+      ];
+      for (const [documentType, extra] of cases) {
+        const field = Object.keys(extra)[0] ?? "";
+        const ask = (): unknown => buildCcda({ ...extra, documentType, patient: { mrn: "M" } });
+        expect(ask, `${field} on ${documentType}`).toThrow(TypeError);
+        expect(ask, `${field} on ${documentType}`).toThrow(
+          new RegExp(`\`${field}\` is \\w+ content and documentType "${documentType}"`),
+        );
+      }
     });
   });
 
@@ -3669,6 +3838,47 @@ describe("S0352-ccda-7: buildCcda emits an inpatient Discharge Summary", () => {
         expect(ask, documentType).toThrow(TypeError);
         expect(ask, documentType).toThrow(/buildCcda: documentType .* is not supported yet/);
       }
+    });
+
+    it("S0352 AC-12: a value that is not a string is refused, never defaulted and never coerced", () => {
+      // `null` is not an omission: read through `??` it fell through to the default CCD. An
+      // array or an object whose `toString` names a member is not a member either: handed to
+      // `Object.hasOwn` it was coerced to that member's key and built that member. Each is
+      // refused before any lookup, by the guard's own message, and the message never runs the
+      // value's own `toString`.
+      let converted = false;
+      const trap = {
+        toString: (): string => {
+          converted = true;
+          return "referralNote";
+        },
+      };
+      const values: readonly [string, unknown][] = [
+        ["null", null],
+        ['["dischargeSummary"]', ["dischargeSummary"]],
+        ['["ccd"]', ["ccd"]],
+        ["an object whose toString names a member", trap],
+        ["a number", 0],
+        ["a boolean", false],
+      ];
+      for (const [label, documentType] of values) {
+        const ask = (): unknown =>
+          buildCcda({ documentType, patient: { mrn: "M" } } as unknown as BuildCcdaInit);
+        expect(ask, label).toThrow(TypeError);
+        expect(ask, label).toThrow(/buildCcda: documentType of type \w+ is not supported yet/);
+      }
+      expect(converted).toBe(false);
+    });
+
+    it("S0352 AC-12: only an omitted document type defaults to a CCD", () => {
+      // The reading recorded in notes.md: `undefined` is the omission the published type offers
+      // ("omit for a CCD"), so it is not a value outside the enumeration. Stated so the line
+      // between an omission and a refused value is graded rather than assumed.
+      expect(buildCcda({ patient: { mrn: "M" } }).documentType).toBe("ccd");
+      // An explicit `undefined` is reachable from an untyped caller only (the published type
+      // is exact-optional), and it reads as the omission it is.
+      const explicit = { documentType: undefined, patient: { mrn: "M" } };
+      expect(buildCcda(explicit as unknown as BuildCcdaInit).documentType).toBe("ccd");
     });
 
     it("S0352 AC-4: a refused build emits no document at all", () => {

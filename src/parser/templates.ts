@@ -553,6 +553,75 @@ export function sectionForTemplateRoot(root: string): SectionInfo | undefined {
 }
 
 /**
+ * Sections recognized when a section is FRAMED, by `templateId` root, and in no
+ * other way. Kept out of the section catalog above on purpose, and consulted by
+ * {@link framingOnlySectionForTemplateRoot} alone.
+ *
+ * **What an entry here changes, and the one thing it changes.** A section
+ * carrying one of these roots, and resolving by neither a catalog root nor a
+ * catalog LOINC code, is framed with this entry's `key` instead of drawing
+ * `UNKNOWN_SECTION_CODE`. Nothing else moves, and each exclusion below exists
+ * because it would otherwise move something on a document this parser already
+ * reads:
+ *
+ * - It is consulted LAST, after the LOINC fallback, so a section a catalog root
+ *   or a catalog LOINC code already resolved keeps the key it had. Consulted
+ *   first, a section stamped with one of these roots beside a catalog one would
+ *   change key, and a required section it used to satisfy would go missing.
+ * - It has no LOINC fallback, so a section carrying this code WITHOUT the root
+ *   still draws `UNKNOWN_SECTION_CODE`, exactly as before, rather than trading it
+ *   for `SECTION_MATCHED_BY_LOINC_FALLBACK`.
+ * - It is invisible to {@link sectionForTemplateRoot}, {@link sectionForLoinc}
+ *   and {@link SECTION_KEYS}, so the entry layer (the misplaced-entry check, the
+ *   Plan of Treatment scoping) and `editCcda` see exactly what they saw before,
+ *   and no entry sitting in one of these sections is newly flagged as misplaced.
+ * - It is never a required-section key: `src/parser/required-sections.ts` names
+ *   it and does not assert it.
+ *
+ * **One entry today: the Hospital Course Section.** An IHE PCC template
+ * (`1.3.6.1.4.1.19376.1.5.3.1.3.5`, LOINC `8648-8`, unversioned) that the R2.1
+ * Discharge Summary SHALL carry (CONF:1198-30522), read off the normative R2.1
+ * Schematron the conformance harness pins rather than from memory. `buildCcda`
+ * emits it in every Discharge Summary, so without this entry every Discharge
+ * Summary the library itself built reparsed with a warning about a section the
+ * library wrote. Promoting it into the catalog, or asserting it, is a change to
+ * how third-party documents parse and is its own item.
+ * @internal
+ */
+const FRAMING_ONLY_SECTIONS: readonly SectionInfo[] = [
+  {
+    key: "hospitalCourse",
+    title: "Hospital Course",
+    loinc: "8648-8",
+    templateRoots: ["1.3.6.1.4.1.19376.1.5.3.1.3.5"],
+  },
+];
+
+/** Framing-only section `templateId` root OID → {@link SectionInfo}. @internal */
+const FRAMING_ONLY_BY_TEMPLATE: ReadonlyMap<string, SectionInfo> = new Map(
+  FRAMING_ONLY_SECTIONS.flatMap((s) => s.templateRoots.map((root) => [root, s] as const)),
+);
+
+/**
+ * Resolve a section `templateId` root to a framing-only {@link SectionInfo}
+ * (see {@link FRAMING_ONLY_SECTIONS}), or `undefined`. Asked by section framing
+ * only, and only after the catalog root and the catalog LOINC code have both
+ * failed to resolve the section.
+ *
+ * (No `@example` import: this helper is not on the package entry point, and
+ * citing one that does not resolve is the open `@example` defect already filed.)
+ *
+ * @example
+ * ```ts
+ * framingOnlySectionForTemplateRoot("1.3.6.1.4.1.19376.1.5.3.1.3.5")?.key; // "hospitalCourse"
+ * ```
+ * @internal
+ */
+export function framingOnlySectionForTemplateRoot(root: string): SectionInfo | undefined {
+  return FRAMING_ONLY_BY_TEMPLATE.get(root);
+}
+
+/**
  * Resolve a section LOINC `code` to its {@link SectionInfo}, or `undefined`
  * when unrecognized. This is the fallback section-recognition path used when no
  * recognized `templateId` is present.

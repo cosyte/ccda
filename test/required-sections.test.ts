@@ -410,10 +410,12 @@ describe("required-section verification status", () => {
   });
 
   it("names a SHALL section outside the catalog rather than dropping it", () => {
-    // Hospital Course is an unconditional SHALL for a Discharge Summary that this
-    // parser cannot recognize. It is neither asserted as a key (the parser could
-    // never find it) nor omitted from the reported obligation (a caller has to be
-    // able to see what is not being checked).
+    // Hospital Course is an unconditional SHALL for a Discharge Summary. S0352 AC-1: the
+    // parser now frames it by its root (a built Discharge Summary reparses with zero
+    // warnings), and S0352's Scope forbids making the parse stricter, so it is still not
+    // asserted as a key, and it is still named in the reported obligation, now with the
+    // reason that says which: recognized, and withheld because asserting it would newly
+    // flag a Discharge Summary that omits it.
     const discharge = requiredSectionStatus("dischargeSummary");
     expect(discharge.verification).toBe("traced-partial");
     expect(discharge.keys).not.toContain("hospitalCourse");
@@ -421,7 +423,7 @@ describe("required-section verification status", () => {
       {
         sourceName: "Hospital Course Section",
         conformanceId: "CONF:1198-30522",
-        reason: "outside-section-catalog",
+        reason: "assertion-would-tighten-parse",
       },
     ]);
 

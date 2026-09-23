@@ -233,7 +233,9 @@
  * version stamp), **Discharge Diagnosis** (V3, `…22.2.24`, LOINC `11535-2`,
  * whose `code` carries a required `<translation>`), and **Plan of Treatment**.
  * Neither Problems nor Medications is in that set, so unlike a CCD or a Referral
- * Note a Discharge Summary emits them only when the caller supplies content.
+ * Note a Discharge Summary emits them only when the caller supplies content, the
+ * medications in the Medications Section (never the Discharge Medications
+ * Section, which would assert they are discharge medications).
  *
  * It is also the only type carrying a `componentOf/encompassingEncounter`, the
  * frame naming the stay: an encounter period with both bounds and a discharge
@@ -243,9 +245,15 @@
  * is ever derived from the document `effectiveTime` or from anything else in the
  * document. See {@link BuildCcdaEncompassingEncounter}.
  *
- * **The Hospital Course Section is outside this parser's section catalog**, so a
- * reparse will not report it missing and `pnpm conformance` is the only thing
- * that catches an omission or a wrong identifier.
+ * **Supplied content is emitted or refused, never dropped.** The three
+ * Discharge-Summary-only inputs are refused with a `TypeError` on a CCD or a
+ * Referral Note, and the Referral Note's two narratives are refused on a
+ * Discharge Summary, rather than ignored.
+ *
+ * **The Hospital Course Section is framed by the parser and not asserted by
+ * it**, so a built Discharge Summary reparses with zero warnings, but a reparse
+ * will not report the section MISSING either: `pnpm conformance` is the only
+ * thing that catches an omission or a wrong identifier.
  *
  * The remaining nine document types are not emitted, and asking for one throws
  * rather than producing a document that resembles it.
@@ -411,9 +419,10 @@ const DISCHARGE_SUMMARY_DOC_CODE = { code: "18842-5", displayName: "Discharge su
  * and it is **unversioned**: the Discharge Summary rule matches it as
  * `@root='1.3.6.1.4.1.19376.1.5.3.1.3.5' and not(@extension)` (CONF:1198-30522),
  * and the section's own rule repeats the no-extension context (CONF:81-7852 /
- * -10459). Narrative-only, and outside this parser's section catalog, so the
- * conformance harness is the only thing that can catch getting it wrong.
- * @internal
+ * -10459). Narrative-only. The parser frames it by this root but keeps it out of
+ * its section catalog and does not assert it (`FRAMING_ONLY_SECTIONS` in
+ * `src/parser/templates.ts`), so the conformance harness is the only thing that
+ * can catch getting it wrong. @internal
  */
 const HOSPITAL_COURSE_SECTION_BASE = "1.3.6.1.4.1.19376.1.5.3.1.3.5";
 /** The LOINC `code` + title for the Hospital Course Section (CONF:81-15488). @internal */
@@ -1886,11 +1895,22 @@ export interface BuildCcdaInit {
   readonly custodianName?: string;
   /** The single record-target patient (required). */
   readonly patient: BuildCcdaPatient;
-  /** Problem Concerns for the Problems section; empty section when omitted. */
+  /**
+   * Problem Concerns for the Problems section; an empty section when omitted
+   * for a CCD or a Referral Note, whose SHALL sets include it. A Discharge
+   * Summary's does not, so for that type the section is emitted only when this
+   * is non-empty.
+   */
   readonly problems?: readonly BuildCcdaProblem[];
   /** Allergy Concerns for the Allergies section; empty section when omitted. */
   readonly allergies?: readonly BuildCcdaAllergy[];
-  /** Medication Activities for the Medications section; empty section when omitted. */
+  /**
+   * Medication Activities for the Medications section; an empty section when
+   * omitted for a CCD or a Referral Note, whose SHALL sets include it. A
+   * Discharge Summary's does not, so for that type the section is emitted only
+   * when this is non-empty, and always as the Medications Section, never as the
+   * Discharge Medications Section.
+   */
   readonly medications?: readonly BuildCcdaMedication[];
   /** Result panels for the Results section; empty section when omitted. */
   readonly results?: readonly BuildCcdaResultPanel[];
@@ -1971,14 +1991,16 @@ export interface BuildCcdaInit {
    * Referral Note SHALL section). Narrative-only, so this is a free-text
    * clinician summary; when omitted the SHALL section is emitted as a spec-clean
    * empty `nullFlavor="NI"` section (never a fabricated assessment). Ignored for
-   * a CCD.
+   * a CCD; refused with a `TypeError` for a Discharge Summary, which carries no
+   * Assessment Section.
    */
   readonly assessment?: string;
   /**
    * The Reason for Referral Section narrative (`documentType: "referralNote"`
    * only, a Referral Note SHALL section). Narrative-only free text; when omitted
    * the SHALL section is emitted as an empty `nullFlavor="NI"` section (never a
-   * fabricated reason). Ignored for a CCD.
+   * fabricated reason). Ignored for a CCD; refused with a `TypeError` for a
+   * Discharge Summary, which carries no Reason for Referral Section.
    */
   readonly reasonForReferral?: string;
   /**
@@ -1986,7 +2008,8 @@ export interface BuildCcdaInit {
    * only, a Discharge Summary SHALL section, CONF:1198-30522). Narrative-only,
    * so this is the free-text account of the stay; when omitted the SHALL section
    * is emitted as a spec-clean empty `nullFlavor="NI"` section, never an
-   * invented course. Ignored for the other document types.
+   * invented course. Refused with a `TypeError` for the other document types,
+   * rather than dropped.
    */
   readonly hospitalCourse?: string;
   /**
@@ -1997,8 +2020,8 @@ export interface BuildCcdaInit {
    * omitted the SHALL section is emitted as an empty `nullFlavor="NI"` section,
    * which is conformant because the section's entry is optional
    * (CONF:1198-15489). Read back through `getProblems` is NOT how these surface:
-   * they are diagnoses of the stay, not the concern list. Ignored for the other
-   * document types.
+   * they are diagnoses of the stay, not the concern list. Refused with a
+   * `TypeError` for the other document types, rather than dropped.
    */
   readonly dischargeDiagnoses?: readonly BuildCcdaProblem[];
   /**
@@ -2007,8 +2030,9 @@ export interface BuildCcdaInit {
    * encounter period's two bounds and the discharge disposition; each slot the
    * caller omits is emitted as an explicit `nullFlavor="UNK"` rather than
    * guessed. When the whole field is omitted the frame is still emitted, with
-   * every slot unknown, because the document type's rule requires it. Ignored
-   * for the other document types, whose rules do not carry the frame.
+   * every slot unknown, because the document type's rule requires it. Refused
+   * with a `TypeError` for the other document types, whose rules do not carry
+   * the frame, rather than dropped.
    */
   readonly encompassingEncounter?: BuildCcdaEncompassingEncounter;
 }
@@ -2202,6 +2226,93 @@ const DOC_TYPE_SPECS: Readonly<Record<BuildableDocumentType, DocTypeSpec>> = {
  */
 function isBuildableDocumentType(value: string): value is BuildableDocumentType {
   return Object.hasOwn(DOC_TYPE_SPECS, value);
+}
+
+/**
+ * The refusal {@link buildCcda} throws for a `documentType` it does not emit.
+ *
+ * A string is named in the message, because it is the caller's own argument
+ * and naming it tells them which request was refused. A value that is not a
+ * string is described by its kind and never converted: stringifying it would run
+ * a caller-supplied `toString`, and the whole point of refusing it before the
+ * lookup is that no such conversion decides anything here. @internal
+ */
+function unsupportedDocumentType(value: unknown): TypeError {
+  const named =
+    typeof value === "string"
+      ? `"${value}"`
+      : `of type ${value === null ? "null" : Array.isArray(value) ? "array" : typeof value}`;
+  return new TypeError(
+    `buildCcda: documentType ${named} is not supported yet, this builder emits ` +
+      `${Object.keys(DOC_TYPE_SPECS)
+        .map((type) => `"${type}"`)
+        .join(", ")} (omit for a CCD). It will not emit a document resembling a type it ` +
+      "does not implement.",
+  );
+}
+
+/**
+ * The {@link BuildCcdaInit} fields that belong to ONE document type: the type
+ * that carries each, and the types that refuse it. See
+ * {@link refuseContentTheTypeDoesNotCarry}. @internal
+ */
+const TYPE_SPECIFIC_INPUTS: readonly {
+  readonly field: keyof BuildCcdaInit;
+  readonly carriedBy: BuildableDocumentType;
+  readonly refusedFor: readonly BuildableDocumentType[];
+}[] = [
+  { field: "hospitalCourse", carriedBy: "dischargeSummary", refusedFor: ["ccd", "referralNote"] },
+  {
+    field: "dischargeDiagnoses",
+    carriedBy: "dischargeSummary",
+    refusedFor: ["ccd", "referralNote"],
+  },
+  {
+    field: "encompassingEncounter",
+    carriedBy: "dischargeSummary",
+    refusedFor: ["ccd", "referralNote"],
+  },
+  { field: "assessment", carriedBy: "referralNote", refusedFor: ["dischargeSummary"] },
+  { field: "reasonForReferral", carriedBy: "referralNote", refusedFor: ["dischargeSummary"] },
+];
+
+/**
+ * Refuse an init that supplies a type-specific input to a document type that
+ * does not carry it, rather than drop that content in silence.
+ *
+ * Supplied clinical content is either emitted or refused with a typed error; it
+ * is never discarded without a word (`clinical-safety` C1). The general clinical
+ * collections (`problems`, `medications`, `results`, ...) are emitted on every
+ * type that is handed them, each in its own section. The inputs listed in
+ * {@link TYPE_SPECIFIC_INPUTS} are not general: each names a section or a frame
+ * one document type carries, so a Discharge Summary's hospital course, discharge
+ * diagnoses or encounter frame is refused on a CCD or a Referral Note, and a
+ * Referral Note's assessment or reason for referral is refused on a Discharge
+ * Summary. Presence is the trigger, not content: a field the type does not carry
+ * is refused whenever it is supplied at all.
+ *
+ * **One silent drop remains, and it is older than this check.** A CCD handed
+ * `assessment` or `reasonForReferral` still ignores them, exactly as it always
+ * has: the CCD's emitted bytes for an init naming no Discharge Summary input are
+ * held identical to the pre-Discharge-Summary builder, and refusing there would
+ * move a published behaviour. That is why `refusedFor` is a list rather than
+ * "every type but the owner".
+ *
+ * The message names the field and the two document types, all constants of this
+ * module, and never any of the content supplied. @internal
+ */
+function refuseContentTheTypeDoesNotCarry(
+  documentType: BuildableDocumentType,
+  init: BuildCcdaInit,
+): void {
+  for (const { field, carriedBy, refusedFor } of TYPE_SPECIFIC_INPUTS) {
+    if (init[field] === undefined || !refusedFor.includes(documentType)) continue;
+    throw new TypeError(
+      `buildCcda: \`${field}\` is ${carriedBy} content and documentType "${documentType}" ` +
+        `does not carry it. The builder refuses rather than drop supplied content in silence: ` +
+        `pass documentType "${carriedBy}", or omit \`${field}\`.`,
+    );
+  }
 }
 
 /** A monotonic id generator scoped to one build, for stable act/content ids. @internal */
@@ -2441,7 +2552,12 @@ export interface BuildCcdaOptions {
  *   carrying the re-parse's warnings plus any build-time diagnostic about the
  *   input (today: `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, appended last).
  * @throws {TypeError} When `documentType` is anything other than a
- *   {@link BuildableDocumentType} (the three types this builder supports), when an allergy
+ *   {@link BuildableDocumentType} (the three types this builder supports; only an
+ *   omitted, `undefined` one defaults to a CCD, and `null` or a non-string is
+ *   refused), when a type-specific input is supplied to a type that does not
+ *   carry it (`hospitalCourse`, `dischargeDiagnoses` or `encompassingEncounter`
+ *   on anything but a Discharge Summary; `assessment` or `reasonForReferral` on a
+ *   Discharge Summary), when an allergy
  *   is neither an `allergen` nor `noKnownAllergy`, when a result does not carry
  *   exactly one value form (`quantity` / `codedValue` / `stringValue`), when a
  *   `"observation"`-variant procedure omits its SHALL `value`, when a
@@ -2462,7 +2578,7 @@ export interface BuildCcdaOptions {
  */
 export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): CcdaDocument {
   // Typed as a closed union so the compiler narrows an invalid value to `never`;
-  // widen to a string for the runtime guard that protects untyped (JS) callers.
+  // widen to `unknown` for the runtime guard that protects untyped (JS) callers.
   //
   // THE GUARD ASKS THE SPEC TABLE, NOT A SECOND LIST OF STRINGS. A type this
   // builder does not specialize has no entry here, so it is refused whether it
@@ -2476,17 +2592,21 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
   // `documentType: "toString"` would pass the guard and then index the table to
   // a function. That is reachable from an untyped caller and it is exactly the
   // fall-through this guard exists to prevent.
-  const documentType: string = init.documentType ?? "ccd";
-  if (!isBuildableDocumentType(documentType)) {
-    throw new TypeError(
-      `buildCcda: documentType "${documentType}" is not supported yet, this builder emits ` +
-        `${Object.keys(DOC_TYPE_SPECS)
-          .map((type) => `"${type}"`)
-          .join(", ")} (omit for a CCD). It will not emit a document resembling a type it ` +
-        "does not implement.",
-    );
+  //
+  // ONLY AN OMITTED FIELD DEFAULTS, AND ONLY A STRING IS LOOKED UP. `undefined` is
+  // the omission the published type offers ("omit for a CCD"). Every other value
+  // is a document type the caller asked for, so `null` is refused rather than
+  // read as an omission (`??` would read it as one and build a CCD), and a
+  // non-string is refused before the lookup, because `Object.hasOwn` coerces its
+  // key: `["dischargeSummary"]`, or an object whose `toString` names a member,
+  // would otherwise pass the guard and build that member.
+  const requested: unknown = init.documentType;
+  const documentType = requested === undefined ? "ccd" : requested;
+  if (typeof documentType !== "string" || !isBuildableDocumentType(documentType)) {
+    throw unsupportedDocumentType(documentType);
   }
   const spec = DOC_TYPE_SPECS[documentType];
+  refuseContentTheTypeDoesNotCarry(documentType, init);
 
   const { doc, root } = newCdaDocument();
   const id = makeIdGen();
@@ -2509,6 +2629,25 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
   const shall = new Set<ShallSectionKey>(spec.shallSections);
   for (const key of spec.shallSections) {
     structuredBody.appendChild(shallSection(key, doc, init, id, translate));
+  }
+
+  // Problems and Medications are SHALL sections for a CCD and a Referral Note,
+  // and are emitted by the loop above for both. A Discharge Summary's SHALL set
+  // names neither, so for that type they are emitted here, each in its own
+  // section and only when the caller supplied content: without these two
+  // branches a Discharge Summary handed problems or medications dropped them in
+  // silence. The `shall.has` guard is what keeps a CCD and a Referral Note from
+  // emitting either section twice, and so keeps their bytes unchanged.
+  //
+  // The medications go in the Medications Section, which is what the input
+  // names, and NOT in the Discharge Medications Section: nothing in the input
+  // says a medication is one the patient was discharged on, and placing it there
+  // would assert that it is.
+  if (!shall.has("problems") && (init.problems?.length ?? 0) > 0) {
+    structuredBody.appendChild(problemsSection(doc, init.problems ?? [], id, translate));
+  }
+  if (!shall.has("medications") && (init.medications?.length ?? 0) > 0) {
+    structuredBody.appendChild(medicationsSection(doc, init.medications ?? [], id, translate));
   }
 
   // Results / Vital Signs are always-on SHALL sections for a CCD but *optional*
@@ -5300,10 +5439,11 @@ function reasonForReferralSection(doc: Document, narrative: string | undefined):
  * stay. The section has no entries-required variant, so declaring one would name
  * a template that does not exist.
  *
- * **Nothing in `src/parser/` can check this one.** The template is outside this
- * parser's section catalog, so a reparse will not report it missing and the
- * conformance harness is the only thing that catches an omission or a wrong
- * root. @internal
+ * **Nothing in `src/parser/` can check this one.** The parser frames the section
+ * by this root, so a reparse draws no warning about it, but it is outside the
+ * section catalog and is not asserted as required, so a reparse will not report
+ * it missing and the conformance harness is the only thing that catches an
+ * omission or a wrong root. @internal
  */
 function hospitalCourseSection(doc: Document, narrative: string | undefined): Element {
   if (narrative === undefined) {
