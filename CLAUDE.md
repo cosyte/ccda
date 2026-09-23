@@ -31,8 +31,14 @@ immutability + explicit mutation, and the profile system.
 - **Boundaries that are real, and stated under-warning. They are FILED, NOT FIXED.** Relocating the
   reasoning closed none of them, and the 64 unresolvable `@example` imports below are still an open
   defect. Do not describe the package as more complete than these:
-  - `buildCcda` emits **two of the twelve** document types (CCD, Referral Note); parsing
-    **recognizes** all twelve, only building is limited.
+  - `buildCcda` emits **three of the twelve** document types (CCD, Referral Note, Discharge
+    Summary); parsing **recognizes** all twelve, only building is limited. **All three reparse with
+    zero warnings.** The Discharge Summary's SHALL Hospital Course Section is an IHE PCC template the
+    parser FRAMES by root (`FRAMING_ONLY_SECTIONS`, consulted last, no LOINC fallback, invisible to
+    the entry layer) and does **not assert**: promoting it into the catalog or asserting it makes
+    third-party parses stricter, which is its own item. Never delete the section to go green.
+    **Supplied content is emitted or refused, never dropped** (a CCD ignoring `assessment` /
+    `reasonForReferral` is the one older exception, frozen byte-for-byte).
     Why: `documentation/agent-notes.md#what-buildccda-emits-and-what-it-does-not`
   - **A narrative label is REFUSED, never fabricated: `narrativeLabel()` THROWS when a PRESENT coded
     object carries no `displayName`. Never render a confident sentence the entry does not support.**
@@ -129,9 +135,9 @@ immutability + explicit mutation, and the profile system.
     Referral Note's two narrative-only sections are **buildable but not editable**.
     Why: `documentation/agent-notes.md#what-editccda-covers`
   - **A built document's conformance is MEASURED now (`pnpm conformance`), and proving it found 86
-    error-severity results. Zero is not "conformant": two document types, the error phase only,
+    error-severity results. Zero is not "conformant": three document types, the error phase only,
     value sets only where the artifact checks them, and a DIFFERENTIAL round trip. A GREEN
-    MEASUREMENT OVER A SUBSET READS EXACTLY LIKE ONE OVER THE WHOLE SURFACE: the set is thirteen
+    MEASUREMENT OVER A SUBSET READS EXACTLY LIKE ONE OVER THE WHOLE SURFACE: the set is fifteen
     documents and a test holds it to every field of `BuildCcdaInit`.**
     Why: `documentation/agent-notes.md#a-built-documents-conformance-is-measured-and-the-measurement-has-edges`
   - **No `.sch`, no `voc.xml`, no `.xsd` and no corpus document is ever committed or ever sits in a

@@ -8,7 +8,7 @@
  * TWO GROUPS, SERVING DIFFERENT HALVES OF THE HARNESS.
  *
  *   1. {@link BUILT_DOCUMENT_CASES} are the `buildCcda` inits the harness validates against the
- *      normative artifacts. They cover both document types the builder emits, both ends of its
+ *      normative artifacts. They cover every document type the builder emits, both ends of its
  *      input range (an init carrying nothing but a patient, and one populating every section
  *      the builder knows how to emit), and each optional section on its own. The shapes mirror
  *      the inits the existing builder suite already exercises, so the harness measures the same
@@ -27,7 +27,7 @@
 
 import { gzipSync } from "node:zlib";
 
-import type { BuildCcdaInit } from "../../src/index.js";
+import type { BuildableDocumentType, BuildCcdaInit } from "../../src/index.js";
 
 /**
  * A `buildCcda` init and the name the conformance report files its results under.
@@ -36,7 +36,7 @@ export interface BuiltDocumentCase {
   /** Stable name, used as the report key. Never derived from content. */
   readonly name: string;
   /** The document type `buildCcda` emits for this init. */
-  readonly documentType: "ccd" | "referralNote";
+  readonly documentType: BuildableDocumentType;
   /** The init itself. */
   readonly init: BuildCcdaInit;
 }
@@ -143,11 +143,16 @@ const PHQ9_SCALE: NonNullable<BuildCcdaInit["mentalStatusScales"]>[number] = {
 };
 
 /**
- * The fully-populated init, shared by the CCD and Referral Note cases.
+ * The fully-populated init, spread into the populated case of every document type.
  *
- * It carries every header field the builder accepts as well as every section, because a header
- * field the caller supplies changes the emitted header and an unsupplied one measures only the
- * default. `test/conformance/emit-surface-coverage.test.ts` holds this to the whole input type.
+ * It carries every header field the builder accepts as well as every section that is not specific
+ * to one document type, because a header field the caller supplies changes the emitted header and
+ * an unsupplied one measures only the default. The per-type fields (`assessment` and
+ * `reasonForReferral` for a Referral Note; `hospitalCourse`, `dischargeDiagnoses` and
+ * `encompassingEncounter` for a Discharge Summary) are added by the case that can emit them, since
+ * the builder ignores each of them for the other types and a case setting one it ignores would
+ * measure nothing. `test/conformance/emit-surface-coverage.test.ts` holds the CASE LIST, not this
+ * object, to every field of the input type.
  */
 const POPULATED: BuildCcdaInit = {
   documentId: "SYNTH-DOC-0001",
@@ -272,6 +277,25 @@ const POPULATED: BuildCcdaInit = {
   familyHistory: FAMILY_HISTORY,
 };
 
+/**
+ * The discharge diagnoses for the Discharge Summary case. Reuses the corpus's existing synthetic
+ * problem vocabulary rather than inventing a condition, per the repo's PHI-by-default rule.
+ */
+const DISCHARGE_DIAGNOSES: NonNullable<BuildCcdaInit["dischargeDiagnoses"]> = [
+  { problem: { code: "59621000", displayName: "Essential hypertension" }, onset: "20240102" },
+];
+
+/**
+ * The encounter frame for the Discharge Summary case. BOTH bounds and the disposition are
+ * supplied here so the populated path is what the harness measures; the minimal case below
+ * supplies none of the three and measures the `nullFlavor="UNK"` path instead, which is the one
+ * that has to satisfy the same SHALL cardinalities without stating a clinical fact.
+ */
+const ENCOMPASSING_ENCOUNTER: NonNullable<BuildCcdaInit["encompassingEncounter"]> = {
+  period: { low: "20240102", high: "20240108" },
+  dischargeDisposition: { code: "01", displayName: "Discharged to Home or Self Care" },
+};
+
 /** The fixed document time every case carries. See {@link BUILT_DOCUMENT_CASES}. */
 const WHEN = "20240102030405+0000";
 
@@ -332,6 +356,30 @@ export const BUILT_DOCUMENT_CASES: readonly BuiltDocumentCase[] = [
       effectiveTime: WHEN,
       reasonForReferral: "Referred for evaluation of blood pressure control.",
       assessment: "Stable. Follow up in three months.",
+    },
+  },
+  // The Discharge Summary at both ends of its own input range. The minimal one is the case that
+  // matters most for this type: its encounter frame carries no period bound and no disposition,
+  // so it is what measures that three `nullFlavor="UNK"` slots still satisfy CONF:1198-8473,
+  // -8475 and -8476. A type measured only in its populated shape would pass those three
+  // cardinalities by supplying values, which says nothing about the caller who supplies none.
+  {
+    name: "discharge-summary-minimal",
+    documentType: "dischargeSummary",
+    init: { patient: PATIENT, documentType: "dischargeSummary", effectiveTime: WHEN },
+  },
+  {
+    name: "discharge-summary-populated",
+    documentType: "dischargeSummary",
+    init: {
+      ...POPULATED,
+      documentType: "dischargeSummary",
+      effectiveTime: WHEN,
+      planOfTreatment: PLAN_OF_TREATMENT,
+      hospitalCourse:
+        "Admitted for observation of blood pressure control. Uneventful course, discharged home.",
+      dischargeDiagnoses: DISCHARGE_DIAGNOSES,
+      encompassingEncounter: ENCOMPASSING_ENCOUNTER,
     },
   },
   sectionCase("ccd-past-medical-history", { pastMedicalHistory: PAST_MEDICAL_HISTORY }),

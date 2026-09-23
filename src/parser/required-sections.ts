@@ -27,9 +27,17 @@
  *   Schematron marks them SHOULD, CONF:1198-29090 / -29066, not SHALL. For the
  *   Discharge Summary it is why *Discharge Medications* is absent: that section
  *   is in the document's *warnings* rule, CONF:1198-30525, not its errors rule.)
- * - **SHALL sections outside the recognized catalog** (e.g. Hospital Course,
- *   Physical Exam), the parser cannot recognize them, so it does not pretend to
- *   validate them. They are still enumerated, by the source's own name and id.
+ * - **SHALL sections outside the recognized catalog** (e.g. Physical Exam), the
+ *   parser cannot recognize them, so it does not pretend to validate them. They
+ *   are still enumerated, by the source's own name and id.
+ * - **One SHALL section the parser recognizes and still does not assert**: the
+ *   Discharge Summary's Hospital Course Section, framed by its root (see
+ *   `FRAMING_ONLY_SECTIONS` in `./templates.ts`) so that a document carrying it
+ *   no longer warns about it. Asserting it would newly report
+ *   `REQUIRED_SECTION_MISSING` on a Discharge Summary this parser reads without
+ *   that warning today, and under `strict: true` refuse one, so it is enumerated
+ *   with its own reason rather than asserted as a side effect of being
+ *   recognized.
  *
  * A document type with an **empty** list is therefore *"no unconditional,
  * in-catalog SHALL section is asserted yet"*, **not** *"this type has no
@@ -51,9 +59,21 @@
  * `2024-05-01` CCD through `0.0.15`.
  *
  * **Keep the builder in lockstep.** This table and the builder's
- * `DOC_TYPE_SPECS.*.shallSections` name the same sections for the two document
- * types the builder emits (CCD, Referral Note). If they drift, `buildCcda` emits
- * a set the parser will not validate, or vice versa.
+ * `DOC_TYPE_SPECS.*.shallSections` name the same sections for the three document
+ * types the builder emits (CCD, Referral Note, Discharge Summary). If they
+ * drift, `buildCcda` emits a set the parser will not validate, or vice versa.
+ *
+ * **With ONE deliberate asymmetry, on the Discharge Summary.** The builder's
+ * SHALL set for that type has four entries and this table asserts three: the
+ * builder also emits the **Hospital Course Section**, because the document's
+ * normative errors rule requires it (CONF:1198-30522) and `pnpm conformance`
+ * fails without it, while this table does not assert it (reason
+ * `assertion-would-tighten-parse`, above) and enumerates it in `unasserted`
+ * instead. The two are therefore in lockstep on what is VALIDATED and not on
+ * what is EMITTED, and the difference is exactly that one section. The parser
+ * does recognize it when framing, so a built Discharge Summary reparses with no
+ * warning about it; what the reparse cannot do is report it MISSING, which is
+ * why `pnpm conformance` stays the check on its presence.
  */
 
 import { DOCUMENT_TYPES, type DocumentType, type TemplateStampReading } from "./templates.js";
@@ -82,8 +102,9 @@ const REQUIRED_SECTIONS: Readonly<Record<DocumentType, readonly string[]>> = {
   // rule's own order: Allergies and Intolerances Section (entries optional) (V3)
   // (CONF:1198-30520), Hospital Course Section (-30522), Discharge Diagnosis
   // Section (V3) (-30524), Plan of Treatment Section (V2) (-30528). Hospital
-  // Course is an IHE PCC template outside this parser's catalog, so it is
-  // enumerated rather than asserted. **Discharge Medications is NOT a SHALL
+  // Course is an IHE PCC template the parser frames by root but does not
+  // assert, so it is enumerated rather than asserted (see the module note).
+  // **Discharge Medications is NOT a SHALL
   // here**: the source puts it in the document's *warnings* rule as a SHOULD
   // (CONF:1198-30525), so asserting it drew a false REQUIRED_SECTION_MISSING on
   // a conformant Discharge Summary that omits it. It was withdrawn for that
@@ -417,8 +438,9 @@ export interface TracedRequiredSection {
 }
 
 /**
- * Why a SHALL section the source names is **not** asserted. Exactly two reasons
- * exist, and neither is a judgement call:
+ * Why a SHALL section the source names is **not** asserted. Three reasons
+ * exist. The first two are facts about the parser or the source, and neither is
+ * a judgement call; the third is a decision, and says so:
  *
  * - `outside-section-catalog`: this parser does not recognize the section at
  *   all, so it can neither find it nor honestly report it missing.
@@ -427,6 +449,14 @@ export interface TracedRequiredSection {
  *   conditioned on something other than the R2.1 `@extension` stamp), and
  *   asserting a conditional requirement as unconditional mis-flags conformant
  *   documents.
+ * - `assertion-would-tighten-parse`: the parser recognizes the section when a
+ *   document carries it, and the source requires it unconditionally, but
+ *   asserting it would newly report `REQUIRED_SECTION_MISSING` on documents this
+ *   parser reads without that warning today (and, under `strict: true`, refuse
+ *   them). Making the parser stricter is its own change with its own blast
+ *   radius, so it is not taken as a side effect of recognizing a section. One
+ *   section carries this reason today: the Discharge Summary's Hospital Course
+ *   Section.
  *
  * @example
  * ```ts
@@ -436,7 +466,10 @@ export interface TracedRequiredSection {
  * // "outside-section-catalog"
  * ```
  */
-export type UnassertedSectionReason = "outside-section-catalog" | "not-unconditionally-required";
+export type UnassertedSectionReason =
+  | "outside-section-catalog"
+  | "not-unconditionally-required"
+  | "assertion-would-tighten-parse";
 
 /**
  * Whether a {@link RequiredSectionStatus}'s key set was **computed for this
@@ -648,8 +681,10 @@ const REQUIRED_SECTION_TRACE: Readonly<Record<DocumentType, DocumentTypeTrace>> 
   },
   dischargeSummary: {
     // Four SHALL sections, three of them in catalog and asserted. Hospital Course
-    // is an IHE PCC template this parser does not recognize, so it is named here
-    // rather than asserted. Discharge Medications is deliberately absent from
+    // is an IHE PCC template this parser frames by root and does not assert,
+    // because asserting it would make the parse of a Discharge Summary that omits
+    // it stricter; it is named here with that reason rather than asserted.
+    // Discharge Medications is deliberately absent from
     // BOTH lists: the source states it as a SHOULD (CONF:1198-30525, in the
     // document's warnings rule), so it is not a SHALL section left unasserted, it
     // is not a SHALL section at all.
@@ -675,7 +710,7 @@ const REQUIRED_SECTION_TRACE: Readonly<Record<DocumentType, DocumentTypeTrace>> 
       {
         sourceName: "Hospital Course Section",
         conformanceId: "CONF:1198-30522",
-        reason: "outside-section-catalog",
+        reason: "assertion-would-tighten-parse",
       },
     ],
     source: R21_SCHEMATRON,

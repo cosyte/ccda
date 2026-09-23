@@ -24,11 +24,17 @@ import {
   editCcda,
   parseCcda,
   serializeCcda,
+  missingRequiredSections,
+  requiredSectionStatus,
+  DOCUMENT_TYPES,
+  type BuildableDocumentType,
   type BuildCcdaInit,
   type BuildCcdaPlannedItem,
   type TerminologyAdapter,
 } from "../src/index.js";
 import { ALL_WARNING_MESSAGES } from "../src/parser/warnings.js";
+import { BUILDER_BASELINE_DOCUMENTS } from "./__fixtures__/builder-baseline.js";
+import { BUILT_DOCUMENT_CASES } from "./__fixtures__/conformance.js";
 
 const PROBLEM_OBSERVATION = "2.16.840.1.113883.10.20.22.4.4";
 const ALLERGY_OBSERVATION = "2.16.840.1.113883.10.20.22.4.7";
@@ -2336,8 +2342,10 @@ describe("buildCcda, defaults, escaping, and input validation", () => {
   });
 
   it("rejects an unsupported document type", () => {
-    // @ts-expect-error, documentType is typed to "ccd"; exercise the runtime guard.
-    expect(() => buildCcda({ documentType: "dischargeSummary", patient: { mrn: "M" } })).toThrow(
+    // `consultationNote` rather than `dischargeSummary`: the latter is a type the
+    // builder emits now, so asking for it is no longer the unhappy path.
+    // @ts-expect-error, documentType is typed to the three buildable types; exercise the runtime guard.
+    expect(() => buildCcda({ documentType: "consultationNote", patient: { mrn: "M" } })).toThrow(
       TypeError,
     );
   });
@@ -3067,8 +3075,10 @@ describe("buildCcda, Referral Note document type", () => {
   });
 
   it("rejects an unsupported document type with a TypeError", () => {
+    // `consultationNote` rather than `dischargeSummary`: the latter is a type the
+    // builder emits now, so asking for it is no longer the unhappy path.
     // @ts-expect-error, exercise the runtime guard for untyped (JS) callers.
-    expect(() => buildCcda({ documentType: "dischargeSummary", patient: { mrn: "X" } })).toThrow(
+    expect(() => buildCcda({ documentType: "consultationNote", patient: { mrn: "X" } })).toThrow(
       TypeError,
     );
   });
@@ -3407,5 +3417,652 @@ describe("buildCcda, a narrative label is refused rather than fabricated", () =>
       expect(xml, field).not.toContain(">undefined<");
       expect(xml, field).not.toContain("No known allergies");
     }
+  });
+  // S0352-ccda-7's own suite follows the closing brace below.
+});
+
+/**
+ * S0352-ccda-7: the inpatient Discharge Summary, the third document type `buildCcda` emits.
+ *
+ * Every test below names the criterion it grades QUALIFIED with this spec's id (`S0352 AC-n`).
+ * The conformance suite already carries bare `AC-1` through `AC-8` names from an earlier spec,
+ * so an unqualified id here would grade nothing anybody could find (`testing` T1).
+ */
+describe("S0352-ccda-7: buildCcda emits an inpatient Discharge Summary", () => {
+  /** The Discharge Summary document template, read off the pinned normative R2.1 Schematron. */
+  const DISCHARGE_SUMMARY_TEMPLATE = "2.16.840.1.113883.10.20.22.1.8";
+  /**
+   * The Hospital Course Section, an IHE PCC template the parser frames by this root and keeps out
+   * of its section catalog (`FRAMING_ONLY_SECTIONS` in `src/parser/templates.ts`).
+   */
+  const HOSPITAL_COURSE_ROOT = "1.3.6.1.4.1.19376.1.5.3.1.3.5";
+  /** Its LOINC `code`, CONF:81-15488. */
+  const HOSPITAL_COURSE_LOINC = "8648-8";
+  /** The Discharge Diagnosis Section (V3) and the Hospital Discharge Diagnosis act (V3). */
+  const DISCHARGE_DIAGNOSIS_SECTION = "2.16.840.1.113883.10.20.22.2.24";
+  const DISCHARGE_DIAGNOSIS_ACT = "2.16.840.1.113883.10.20.22.4.33";
+
+  /** A Discharge Summary carrying nothing but a patient and a fixed document time. */
+  const MINIMAL: BuildCcdaInit = {
+    documentType: "dischargeSummary",
+    patient: { mrn: "MRN002" },
+    effectiveTime: "20240102030405+0000",
+  };
+
+  /** The same document with every Discharge Summary input supplied. */
+  const POPULATED_SUMMARY: BuildCcdaInit = {
+    ...MINIMAL,
+    hospitalCourse: "Admitted for observation. Uneventful course, discharged home.",
+    dischargeDiagnoses: [
+      { problem: { code: "59621000", displayName: "Essential hypertension" }, onset: "20240102" },
+    ],
+    encompassingEncounter: {
+      period: { low: "20240102", high: "20240108" },
+      dischargeDisposition: { code: "01", displayName: "Discharged to Home or Self Care" },
+    },
+  };
+
+  /** The `<componentOf>` element's own text, so a test can assert on it and nothing else. */
+  function componentOfXml(xml: string): string {
+    const start = xml.indexOf("<componentOf>");
+    const end = xml.indexOf("</componentOf>");
+    expect(start, "the document carries no componentOf").toBeGreaterThan(-1);
+    return xml.slice(start, end + "</componentOf>".length);
+  }
+
+  describe("S0352 AC-1: a typed init reparses with zero warnings and round-trips exactly", () => {
+    /** Every Discharge Summary the harness measures, plus this suite's own two. */
+    const summaries: readonly BuildCcdaInit[] = [
+      MINIMAL,
+      POPULATED_SUMMARY,
+      ...BUILT_DOCUMENT_CASES.filter((entry) => entry.documentType === "dischargeSummary").map(
+        (entry) => entry.init,
+      ),
+    ];
+
+    it("S0352 AC-1: every supported type round-trips to an identical string", () => {
+      const inits: BuildCcdaInit[] = [
+        { patient: { mrn: "M" } },
+        { documentType: "referralNote", patient: { mrn: "M" } },
+        ...summaries,
+      ];
+      for (const init of inits) {
+        const xml = serializeCcda(buildCcda(init));
+        expect(serializeCcda(parseCcda(xml)), init.documentType ?? "ccd").toBe(xml);
+      }
+    });
+
+    it("S0352 AC-1: every supported type reparses with zero warnings, a Discharge Summary included", () => {
+      // Zero, for all three types and with no exception carved out. Both the returned document
+      // (the builder's own reparse) and an independent reparse of the emitted string are read.
+      // The Discharge Summary carries a Hospital Course Section (CONF:1198-30522), an IHE PCC
+      // template the parser now frames by its root, so the section it emits draws no
+      // UNKNOWN_SECTION_CODE; the harness's populated case, which carries problems and
+      // medications too, is in the set.
+      expect(summaries.length).toBeGreaterThan(2);
+      const inits: BuildCcdaInit[] = [
+        { patient: { mrn: "M" } },
+        { documentType: "referralNote", patient: { mrn: "M" } },
+        ...summaries,
+      ];
+      for (const init of inits) {
+        const built = buildCcda(init);
+        const label = init.documentType ?? "ccd";
+        expect(built.warnings, label).toEqual([]);
+        expect(parseCcda(serializeCcda(built)).warnings, label).toEqual([]);
+      }
+    });
+
+    it("S0352 AC-1: the reparse frames the Hospital Course Section by its root", () => {
+      // What removed the warning, asserted directly: the emitted section is recognized, by
+      // templateId, under its own key, with the narrative the caller supplied.
+      const course = buildCcda(POPULATED_SUMMARY).findSection("hospitalCourse");
+      expect(course?.recognizedBy).toBe("templateId");
+      expect(course?.code?.code).toBe(HOSPITAL_COURSE_LOINC);
+      expect(course?.narrativeText).toBe(POPULATED_SUMMARY.hospitalCourse);
+    });
+  });
+
+  describe("S0352 AC-1 / Scope: framing the Hospital Course Section makes parseCcda no stricter", () => {
+    // Scope, Out: "Making parseCcda stricter in any way", and repo rule 9, "Nothing here may make
+    // parseCcda reject content it accepts today". Recognizing a section the parser did not know
+    // is a parser change, so these are the shapes a THIRD-PARTY document can carry, built
+    // synthetically from this suite's own Discharge Summary (`phi-safety` P2). Each asserts what
+    // the parser did BEFORE the section was framed: the one outcome allowed to move is a
+    // section carrying the root and resolving by nothing else, which loses its
+    // UNKNOWN_SECTION_CODE (the AC-1 tests above).
+    const HC_TEMPLATE = `<templateId root="${HOSPITAL_COURSE_ROOT}"/>`;
+    const HC_CODE = `<code code="${HOSPITAL_COURSE_LOINC}" codeSystem="2.16.840.1.113883.6.1" displayName="Hospital Course" codeSystemName="LOINC"/>`;
+    const ASSESSMENT_TEMPLATE = '<templateId root="2.16.840.1.113883.10.20.22.2.8"/>';
+    const ASSESSMENT_CODE =
+      '<code code="51848-0" codeSystem="2.16.840.1.113883.6.1" displayName="Assessment" codeSystemName="LOINC"/>';
+    const BODY = "<title>Hospital Course</title><text>Uneventful course.</text>";
+    /** A Discharge Summary the builder emitted, and its Hospital Course section verbatim. */
+    const built = serializeCcda(buildCcda(POPULATED_SUMMARY));
+    const courseStart = built.indexOf(`<section>${HC_TEMPLATE}`);
+    const COURSE = built.slice(courseStart, built.indexOf("</section>", courseStart) + 10);
+    /** A Problem Concern Act entry, as the builder emits one into a CCD's Problems section. */
+    const ccd = serializeCcda(
+      buildCcda({
+        patient: { mrn: "M" },
+        problems: [{ problem: { code: "59621000", displayName: "Essential hypertension" } }],
+      }),
+    );
+    const PROBLEM_ENTRY = ccd.slice(ccd.indexOf("<entry>"), ccd.indexOf("</entry>") + 8);
+
+    const codes = (doc: { readonly warnings: readonly { readonly code: string }[] }): string[] =>
+      doc.warnings.map((warning) => warning.code);
+    /** The same document with its Hospital Course section replaced by `section`. */
+    function withCourse(section: string): ReturnType<typeof parseCcda> {
+      return parseCcda(built.replace(COURSE, section));
+    }
+
+    it("S0352 AC-1: the fixtures carry what they claim to", () => {
+      expect(courseStart).toBeGreaterThan(-1);
+      expect(COURSE.startsWith(`<section>${HC_TEMPLATE}${HC_CODE}`)).toBe(true);
+      expect(PROBLEM_ENTRY).toContain('<templateId root="2.16.840.1.113883.10.20.22.4.3"');
+      expect(PROBLEM_ENTRY.endsWith("</act></entry>")).toBe(true);
+    });
+
+    it("S0352 AC-1: the code WITHOUT the root still draws UNKNOWN_SECTION_CODE, and no key", () => {
+      // No LOINC fallback onto the framing-only entry: a sender coding 8648-8 under some other
+      // template gets exactly what it got before, not SECTION_MATCHED_BY_LOINC_FALLBACK.
+      const doc = withCourse(`<section>${HC_CODE}${BODY}</section>`);
+      expect(codes(doc)).toEqual(["UNKNOWN_SECTION_CODE"]);
+      expect(doc.findSection("hospitalCourse")).toBeUndefined();
+    });
+
+    it("S0352 AC-1: a catalog root beside the Hospital Course root keeps the section it named", () => {
+      // Consulted LAST: a section a catalog root resolved keeps that key whichever root comes
+      // first, so no section a document already carried changes identity.
+      for (const head of [HC_TEMPLATE + ASSESSMENT_TEMPLATE, ASSESSMENT_TEMPLATE + HC_TEMPLATE]) {
+        const doc = withCourse(`<section>${head}${HC_CODE}${BODY}</section>`);
+        expect(doc.findSection("assessment")?.recognizedBy, head).toBe("templateId");
+        expect(doc.findSection("hospitalCourse"), head).toBeUndefined();
+        expect(codes(doc), head).toEqual([]);
+      }
+    });
+
+    it("S0352 AC-1: a catalog LOINC code under the Hospital Course root keeps its fallback reading", () => {
+      const doc = withCourse(`<section>${HC_TEMPLATE}${ASSESSMENT_CODE}${BODY}</section>`);
+      expect(doc.findSection("assessment")?.recognizedBy).toBe("loinc");
+      expect(doc.findSection("hospitalCourse")).toBeUndefined();
+      expect(codes(doc)).toEqual(["SECTION_MATCHED_BY_LOINC_FALLBACK"]);
+    });
+
+    it("S0352 AC-1: an entry inside a Hospital Course Section is not newly flagged as misplaced", () => {
+      // The entry layer does not see the framing-only entry, so a Problem Concern Act a sender
+      // put in its Hospital Course Section is extracted exactly as before and draws no
+      // SECTION_PLACEMENT_SUSPECT, which an unrecognized section never drew either. The control
+      // proves the check is live: the same entry in a catalog narrative section IS flagged.
+      const course = withCourse(
+        `<section>${HC_TEMPLATE}${HC_CODE}${BODY}${PROBLEM_ENTRY}</section>`,
+      );
+      expect(codes(course)).not.toContain("SECTION_PLACEMENT_SUSPECT");
+      expect(course.getProblems()).toHaveLength(1);
+      const control = withCourse(
+        `<section>${ASSESSMENT_TEMPLATE}${ASSESSMENT_CODE}${BODY}${PROBLEM_ENTRY}</section>`,
+      );
+      expect(codes(control)).toContain("SECTION_PLACEMENT_SUSPECT");
+    });
+
+    it("S0352 AC-1: a Discharge Summary with no Hospital Course Section is not reported for it", () => {
+      // Framed, and still not asserted: asserting it would put REQUIRED_SECTION_MISSING on this
+      // document, and under `strict: true` refuse it, where it parses clean today.
+      const without = built.replace(`<component>${COURSE}</component>`, "");
+      expect(without).not.toContain(HOSPITAL_COURSE_ROOT);
+      expect(codes(parseCcda(without))).toEqual([]);
+      expect(() => parseCcda(without, { strict: true })).not.toThrow();
+      expect(requiredSectionStatus("dischargeSummary").keys).not.toContain("hospitalCourse");
+    });
+  });
+
+  describe("S0352 AC-2: every SHALL section of the type is emitted, empty ones as no-information", () => {
+    it("S0352 AC-2: an init with no clinical content at all emits all four SHALL sections", () => {
+      const xml = serializeCcda(buildCcda(MINIMAL));
+      // The four the document's errors rule names, in the rule's own order: Allergies
+      // (CONF:1198-30520), Hospital Course (-30522), Discharge Diagnosis (-30524), Plan of
+      // Treatment (-30528). Asserted by template identifier rather than by title, because the
+      // identifier is what the normative rule matches on.
+      const roots = [
+        '<templateId root="2.16.840.1.113883.10.20.22.2.6" extension="2015-08-01"/>',
+        `<templateId root="${HOSPITAL_COURSE_ROOT}"/>`,
+        `<templateId root="${DISCHARGE_DIAGNOSIS_SECTION}" extension="2015-08-01"/>`,
+        '<templateId root="2.16.840.1.113883.10.20.22.2.10" extension="2014-06-09"/>',
+      ];
+      for (const root of roots) expect(xml, root).toContain(root);
+      for (let i = 1; i < roots.length; i++) {
+        expect(xml.indexOf(roots[i - 1] ?? ""), roots[i]).toBeLessThan(xml.indexOf(roots[i] ?? ""));
+      }
+    });
+
+    it("S0352 AC-2: each unsupplied section is an EXPLICIT no-information section, not an absent one", () => {
+      const xml = serializeCcda(buildCcda(MINIMAL));
+      // Four sections, four `nullFlavor="NI"` shells with a "No information" narrative and no
+      // entries. A fabricated narrative in any of them would be clinical content nobody supplied.
+      expect(xml.split('<section nullFlavor="NI">')).toHaveLength(5);
+      expect(xml.split("<text>No information</text>")).toHaveLength(5);
+      expect(xml).not.toContain("<entry>");
+    });
+
+    it("S0352 AC-2: the Discharge Diagnosis Section carries the code translation its template requires", () => {
+      // CONF:1198-32834: the section `code` SHALL contain exactly one translation `78375-3`.
+      // Unconditional, so the empty section carries it too.
+      for (const init of [MINIMAL, POPULATED_SUMMARY]) {
+        expect(serializeCcda(buildCcda(init))).toContain(
+          '<translation code="78375-3" codeSystem="2.16.840.1.113883.6.1"',
+        );
+      }
+    });
+
+    it("S0352 AC-2: supplied diagnoses become Problem Observations under ONE Hospital Discharge Diagnosis act", () => {
+      const xml = serializeCcda(
+        buildCcda({
+          ...POPULATED_SUMMARY,
+          dischargeDiagnoses: [
+            { problem: { code: "59621000", displayName: "Essential hypertension" } },
+            { problem: { code: "44054006", displayName: "Type 2 diabetes mellitus" } },
+          ],
+        }),
+      );
+      // CONF:1198-7666 puts every diagnosis under one act as an entryRelationship, rather than
+      // one act per diagnosis: the act is the "these are the discharge diagnoses" assertion.
+      expect(xml.split(`<templateId root="${DISCHARGE_DIAGNOSIS_ACT}"`)).toHaveLength(2);
+      expect(xml).toContain(">Essential hypertension</content>");
+      expect(xml).toContain(">Type 2 diabetes mellitus</content>");
+    });
+  });
+
+  describe("S0352 AC-1 / Scope: content the caller supplies is emitted or refused, never dropped", () => {
+    // Scope, In: "The typed build input needed to supply that document's content". A typed init
+    // the builder accepts and then discards in part emits a document that is missing clinical
+    // content without a word (`clinical-safety` C1), so each input is either in the emitted
+    // document or refused with a typed error.
+    const PROBLEM = { problem: { code: "59621000", displayName: "Essential hypertension" } };
+    const MEDICATION = {
+      drug: { code: "314076", displayName: "Lisinopril 10 MG Oral Tablet" },
+      dose: { value: 1, unit: "{tablet}" },
+      route: { code: "C38288", displayName: "Oral" },
+    };
+
+    it("S0352 AC-1: a Discharge Summary emits the problems and medications it is handed", () => {
+      const doc = buildCcda({
+        ...POPULATED_SUMMARY,
+        problems: [PROBLEM],
+        medications: [MEDICATION],
+      });
+      expect(doc.getProblems()).toHaveLength(1);
+      expect(doc.getProblems()[0]?.problems[0]?.value?.code).toBe("59621000");
+      expect(doc.getMedications()).toHaveLength(1);
+      expect(doc.getMedications()[0]?.drug?.code).toBe("314076");
+      // Each in its own section, and the medications in the Medications Section rather than the
+      // Discharge Medications Section, which would assert they are discharge medications.
+      expect(doc.findSection("problems")).toBeDefined();
+      expect(doc.findSection("medications")).toBeDefined();
+      expect(doc.findSection("dischargeMedications")).toBeUndefined();
+      expect(doc.warnings).toEqual([]);
+    });
+
+    it("S0352 AC-1: a Discharge Summary handed neither carries neither section", () => {
+      // Neither is in the type's SHALL set, so neither is fabricated as an empty section.
+      const doc = buildCcda(POPULATED_SUMMARY);
+      expect(doc.findSection("problems")).toBeUndefined();
+      expect(doc.findSection("medications")).toBeUndefined();
+    });
+
+    it("S0352 AC-1: an input one document type carries is refused on a type that does not", () => {
+      const cases: readonly [BuildableDocumentType, Partial<BuildCcdaInit>][] = [
+        ["ccd", { hospitalCourse: "Uneventful course." }],
+        ["referralNote", { hospitalCourse: "Uneventful course." }],
+        ["ccd", { dischargeDiagnoses: [PROBLEM] }],
+        ["referralNote", { dischargeDiagnoses: [PROBLEM] }],
+        ["ccd", { encompassingEncounter: { period: { low: "20240102" } } }],
+        ["referralNote", { encompassingEncounter: {} }],
+        ["dischargeSummary", { assessment: "Stable." }],
+        ["dischargeSummary", { reasonForReferral: "Cardiology follow-up." }],
+      ];
+      for (const [documentType, extra] of cases) {
+        const field = Object.keys(extra)[0] ?? "";
+        const ask = (): unknown => buildCcda({ ...extra, documentType, patient: { mrn: "M" } });
+        expect(ask, `${field} on ${documentType}`).toThrow(TypeError);
+        expect(ask, `${field} on ${documentType}`).toThrow(
+          new RegExp(`\`${field}\` is \\w+ content and documentType "${documentType}"`),
+        );
+      }
+    });
+  });
+
+  describe("S0352 AC-3: the componentOf encompassingEncounter the template requires", () => {
+    it("S0352 AC-3: a Discharge Summary carries componentOf with both bounds and a disposition", () => {
+      const frame = componentOfXml(serializeCcda(buildCcda(POPULATED_SUMMARY)));
+      expect(frame).toContain("<encompassingEncounter>");
+      expect(frame).toContain('<low value="20240102"/>');
+      expect(frame).toContain('<high value="20240108"/>');
+      expect(frame).toContain('<dischargeDispositionCode code="01"');
+    });
+
+    it("S0352 AC-3: componentOf sits in the CDA R2 ClinicalDocument element order", () => {
+      // POCD_MT000040.ClinicalDocument is an xs:sequence ending
+      // …authorization*, componentOf?, component. Emitting componentOf anywhere else is
+      // XSD-invalid and fails before the Schematron is reached, which is not cosmetic.
+      const xml = serializeCcda(buildCcda(POPULATED_SUMMARY));
+      expect(xml.indexOf("<custodian>")).toBeLessThan(xml.indexOf("<componentOf>"));
+      expect(xml.indexOf("</componentOf>")).toBeLessThan(
+        xml.indexOf("<component><structuredBody>"),
+      );
+    });
+
+    it("S0352 AC-3: the encounter's own children are in the CDA R2 EncompassingEncounter order", () => {
+      // POCD_MT000040.EncompassingEncounter: … id*, code?, effectiveTime,
+      // dischargeDispositionCode?, responsibleParty?, … The id is CONF:1198-9959, which lives in
+      // the shared US Realm Header rule rather than in the Discharge Summary's own.
+      const frame = componentOfXml(serializeCcda(buildCcda(POPULATED_SUMMARY)));
+      expect(frame.indexOf("<id ")).toBeLessThan(frame.indexOf("<effectiveTime>"));
+      expect(frame.indexOf("<effectiveTime>")).toBeLessThan(
+        frame.indexOf("<dischargeDispositionCode"),
+      );
+    });
+
+    it("S0352 AC-3: neither a CCD nor a Referral Note carries the frame", () => {
+      // Emitting an encounter for a type whose rule does not carry the frame would assert an
+      // encounter the document never claimed.
+      const inits: BuildCcdaInit[] = [
+        { patient: { mrn: "M" } },
+        { documentType: "referralNote", patient: { mrn: "M" } },
+      ];
+      for (const init of inits) {
+        expect(serializeCcda(buildCcda(init))).not.toContain("<componentOf>");
+      }
+    });
+  });
+
+  describe("S0352 AC-4 / AC-9 / AC-12: the other nine types are refused, by derivation", () => {
+    it("S0352 AC-4: an unimplemented type throws a TypeError NAMING the requested type", () => {
+      const ask = (): unknown =>
+        buildCcda({ documentType: "carePlan", patient: { mrn: "M" } } as unknown as BuildCcdaInit);
+      expect(ask).toThrow(TypeError);
+      expect(ask).toThrow(/carePlan/);
+    });
+
+    it("S0352 AC-9: exactly three of the exported enumeration build, and the other nine throw", () => {
+      // The nine are DERIVED from `DOCUMENT_TYPES`, the package's own exported enumeration,
+      // rather than from a list written into this test: a thirteenth recognized type joins this
+      // walk the moment it is recognized, and it has to be classified deliberately.
+      expect(DOCUMENT_TYPES).toHaveLength(12);
+      const built: string[] = [];
+      const refused: string[] = [];
+      for (const documentType of DOCUMENT_TYPES) {
+        try {
+          const doc = buildCcda({
+            documentType,
+            patient: { mrn: "M" },
+          } as unknown as BuildCcdaInit);
+          expect(doc.documentType, documentType).toBe(documentType);
+          built.push(documentType);
+        } catch (error) {
+          expect(error, documentType).toBeInstanceOf(TypeError);
+          // The refusal names the type asked for, so a caller is told WHICH request was refused.
+          expect((error as TypeError).message, documentType).toContain(documentType);
+          refused.push(documentType);
+        }
+      }
+      expect([...built].sort()).toStrictEqual(["ccd", "dischargeSummary", "referralNote"]);
+      expect(refused).toHaveLength(9);
+      expect([...built, ...refused].sort()).toStrictEqual([...DOCUMENT_TYPES].sort());
+    });
+
+    it("S0352 AC-12: a value outside the enumeration is REFUSED, not crashed into and not defaulted", () => {
+      // Including the values an untyped JavaScript caller can reach the builder with. The
+      // prototype keys are the reason the guard is `Object.hasOwn` and not `in`: with `in` they
+      // pass the membership test and index the spec table to a function.
+      //
+      // THE ASSERTION IS THE REFUSAL'S OWN MESSAGE, NOT MERELY `TypeError`. Measured: with the
+      // guard written as `in`, every prototype key below passes the membership test and the
+      // builder then dies on `Cannot read properties of undefined (reading 'displayName')`,
+      // which IS a TypeError and which a bare `.toThrow(TypeError)` accepts. A crash and a
+      // refusal are the one pair this criterion exists to tell apart, exactly as
+      // `test/conformance/fail-safe.test.ts` asserts an exact exit code rather than a non-zero
+      // one, so the message has to be the guard's.
+      for (const documentType of [
+        "",
+        "ccd ",
+        "CCD",
+        "notADocumentType",
+        "toString",
+        "constructor",
+        "__proto__",
+        "hasOwnProperty",
+      ]) {
+        const ask = (): unknown =>
+          buildCcda({ documentType, patient: { mrn: "M" } } as unknown as BuildCcdaInit);
+        expect(ask, documentType).toThrow(TypeError);
+        expect(ask, documentType).toThrow(/buildCcda: documentType .* is not supported yet/);
+      }
+    });
+
+    it("S0352 AC-12: a value that is not a string is refused, never defaulted and never coerced", () => {
+      // `null` is not an omission: read through `??` it fell through to the default CCD. An
+      // array or an object whose `toString` names a member is not a member either: handed to
+      // `Object.hasOwn` it was coerced to that member's key and built that member. Each is
+      // refused before any lookup, by the guard's own message, and the message never runs the
+      // value's own `toString`.
+      let converted = false;
+      const trap = {
+        toString: (): string => {
+          converted = true;
+          return "referralNote";
+        },
+      };
+      const values: readonly [string, unknown][] = [
+        ["null", null],
+        ['["dischargeSummary"]', ["dischargeSummary"]],
+        ['["ccd"]', ["ccd"]],
+        ["an object whose toString names a member", trap],
+        ["a number", 0],
+        ["a boolean", false],
+      ];
+      for (const [label, documentType] of values) {
+        const ask = (): unknown =>
+          buildCcda({ documentType, patient: { mrn: "M" } } as unknown as BuildCcdaInit);
+        expect(ask, label).toThrow(TypeError);
+        expect(ask, label).toThrow(/buildCcda: documentType of type \w+ is not supported yet/);
+      }
+      expect(converted).toBe(false);
+    });
+
+    it("S0352 AC-12: only an omitted document type defaults to a CCD", () => {
+      // The reading recorded in notes.md: `undefined` is the omission the published type offers
+      // ("omit for a CCD"), so it is not a value outside the enumeration. Stated so the line
+      // between an omission and a refused value is graded rather than assumed.
+      expect(buildCcda({ patient: { mrn: "M" } }).documentType).toBe("ccd");
+      // An explicit `undefined` is reachable from an untyped caller only (the published type
+      // is exact-optional), and it reads as the omission it is.
+      const explicit = { documentType: undefined, patient: { mrn: "M" } };
+      expect(buildCcda(explicit as unknown as BuildCcdaInit).documentType).toBe("ccd");
+    });
+
+    it("S0352 AC-4: a refused build emits no document at all", () => {
+      // "rather than emit a document resembling it": the throw has to be the whole outcome, so
+      // nothing is returned and nothing partially built escapes.
+      let emitted: unknown;
+      let refused = false;
+      try {
+        emitted = buildCcda({
+          documentType: "operativeNote",
+          patient: { mrn: "M" },
+        } as unknown as BuildCcdaInit);
+      } catch {
+        refused = true;
+      }
+      expect(refused).toBe(true);
+      expect(emitted).toBeUndefined();
+    });
+  });
+
+  describe("S0352 AC-5: a reparsed Discharge Summary reports its type and its obligation", () => {
+    it("S0352 AC-5: the reparse reports dischargeSummary, no missing section, and an evaluated obligation", () => {
+      const doc = buildCcda(POPULATED_SUMMARY);
+      expect(doc.documentType).toBe("dischargeSummary");
+      const present = new Set(
+        doc.sections
+          .map((section) => section.key)
+          .filter((key): key is string => key !== undefined),
+      );
+      expect(missingRequiredSections("dischargeSummary", present)).toStrictEqual([]);
+      expect(requiredSectionStatus("dischargeSummary").evaluation).toBe("evaluated");
+      // The document carries the R2.1 stamp on its document-level templateId, which is what puts
+      // it inside the stamp-scoped half of the table rather than the R1.1-origin reduction.
+      expect(serializeCcda(doc)).toContain(
+        `<templateId root="${DISCHARGE_SUMMARY_TEMPLATE}" extension="2015-08-01"/>`,
+      );
+      expect(doc.warnings.some((w) => w.code === "REQUIRED_SECTION_MISSING")).toBe(false);
+    });
+  });
+
+  describe("S0352 AC-6: the encounter frame is surfaced as supplied, never derived", () => {
+    it("S0352 AC-6: both bounds and the disposition read back at the supplied precision and coding", () => {
+      const encounter = buildCcda(POPULATED_SUMMARY).header.encompassingEncounter;
+      // `raw` is the bound exactly as the document stated it. A day-precision bound stays
+      // day-precision: completing it to a timestamp invents a fact (`clinical-safety` C3).
+      expect(encounter?.effectiveTime?.low?.raw).toBe("20240102");
+      expect(encounter?.effectiveTime?.high?.raw).toBe("20240108");
+      expect(encounter?.dischargeDispositionCode?.code).toBe("01");
+      expect(encounter?.dischargeDispositionCode?.displayName).toBe(
+        "Discharged to Home or Self Care",
+      );
+      // The code system defaults to the one every member of the value set the constraint names
+      // carries, read off the pinned vocabulary artifact rather than from memory.
+      expect(encounter?.dischargeDispositionCode?.codeSystem).toBe("2.16.840.1.113883.6.301.5");
+    });
+
+    it("S0352 AC-6: a caller-supplied code system is emitted verbatim rather than coerced", () => {
+      const encounter = buildCcda({
+        ...POPULATED_SUMMARY,
+        encompassingEncounter: {
+          period: { low: "20240102", high: "20240108" },
+          dischargeDisposition: {
+            code: "306689006",
+            codeSystem: "2.16.840.1.113883.6.96",
+            displayName: "Discharge to home",
+          },
+        },
+      }).header.encompassingEncounter;
+      expect(encounter?.dischargeDispositionCode?.codeSystem).toBe("2.16.840.1.113883.6.96");
+      expect(encounter?.dischargeDispositionCode?.code).toBe("306689006");
+    });
+
+    it("S0352 AC-6: no bound is derived from the document effectiveTime or a service event", () => {
+      // The document time is deliberately unlike either bound, so a copied value would show.
+      const doc = buildCcda({ ...POPULATED_SUMMARY, effectiveTime: "20991231235959+0000" });
+      const frame = componentOfXml(serializeCcda(doc));
+      expect(frame).not.toContain("20991231");
+      expect(doc.header.encompassingEncounter?.effectiveTime?.low?.raw).toBe("20240102");
+      // There is no documentationOf service event on this type at all, so nothing could have
+      // been taken from one either.
+      expect(serializeCcda(doc)).not.toContain("<documentationOf>");
+    });
+  });
+
+  describe("S0352 AC-11: an omitted encounter slot is an EXPLICIT unknown, never a fabricated value", () => {
+    // THE BRANCH TAKEN, ASSERTED EXACTLY. AC-11 admits either an explicit unknown or a typed
+    // refusal, and a criterion satisfied by whichever turned up grades neither. The branch taken
+    // here is the EXPLICIT UNKNOWN, for both the encounter bound and the disposition code: the
+    // normative Schematron requires only that those elements be PRESENT (CONF:1198-8473
+    // `count(cda:low)=1`, -8475 `count(cda:high)=1`, -8476 `count(cda:dischargeDispositionCode)=1`)
+    // and asserts nothing a `nullFlavor` form violates, so a `nullFlavor="UNK"` slot satisfies
+    // every one of them without stating a clinical fact. These tests assert that branch and would
+    // fail against the other one.
+
+    it("S0352 AC-11: an omitted encounter bound is nullFlavor UNK and the build does NOT throw", () => {
+      const doc = buildCcda({
+        ...MINIMAL,
+        encompassingEncounter: {
+          period: { low: "20240102" },
+          dischargeDisposition: { code: "01", displayName: "Discharged to Home or Self Care" },
+        },
+      });
+      const frame = componentOfXml(serializeCcda(doc));
+      expect(frame).toContain('<low value="20240102"/>');
+      expect(frame).toContain('<high nullFlavor="UNK"/>');
+      // Read back as an explicit unknown, NOT as a date, and never as the low copied across.
+      const high = doc.header.encompassingEncounter?.effectiveTime?.high;
+      expect(high?.nullFlavor).toBe("UNK");
+      expect(high?.raw).toBeUndefined();
+      expect(high?.date).toBeUndefined();
+    });
+
+    it("S0352 AC-11: an omitted low bound takes the same branch", () => {
+      const doc = buildCcda({
+        ...MINIMAL,
+        encompassingEncounter: { period: { high: "20240108" } },
+      });
+      expect(componentOfXml(serializeCcda(doc))).toContain('<low nullFlavor="UNK"/>');
+      const low = doc.header.encompassingEncounter?.effectiveTime?.low;
+      expect(low?.nullFlavor).toBe("UNK");
+      expect(low?.raw).toBeUndefined();
+    });
+
+    it("S0352 AC-11: an omitted discharge disposition is nullFlavor UNK and the build does NOT throw", () => {
+      const doc = buildCcda({
+        ...MINIMAL,
+        encompassingEncounter: { period: { low: "20240102", high: "20240108" } },
+      });
+      expect(componentOfXml(serializeCcda(doc))).toContain(
+        '<dischargeDispositionCode nullFlavor="UNK"/>',
+      );
+      const disposition = doc.header.encompassingEncounter?.dischargeDispositionCode;
+      expect(disposition?.nullFlavor).toBe("UNK");
+      expect(disposition?.code).toBeUndefined();
+      expect(disposition?.displayName).toBeUndefined();
+    });
+
+    it("S0352 AC-11: an init naming no encounter at all still emits the frame, wholly unknown", () => {
+      const frame = componentOfXml(serializeCcda(buildCcda(MINIMAL)));
+      expect(frame).toContain('<low nullFlavor="UNK"/>');
+      expect(frame).toContain('<high nullFlavor="UNK"/>');
+      expect(frame).toContain('<dischargeDispositionCode nullFlavor="UNK"/>');
+      // No `@value` and no `@code` anywhere in the frame beside a nullFlavor: a nullFlavor
+      // asserted beside a value is a contradiction, not a refinement.
+      expect(frame).not.toContain("value=");
+      expect(frame).not.toContain("code=");
+    });
+
+    it("S0352 AC-11: an omitted required section is an explicit no-information section", () => {
+      // The third slot AC-11 names. Same branch, same reason: the section is present so the
+      // document's SHALL is satisfied, and it says "no information" rather than inventing a
+      // hospital course or a diagnosis.
+      const xml = serializeCcda(buildCcda(MINIMAL));
+      const fromCourse = xml.slice(xml.indexOf(`<templateId root="${HOSPITAL_COURSE_ROOT}"/>`));
+      expect(fromCourse.slice(0, fromCourse.indexOf("</section>"))).toContain(
+        "<text>No information</text>",
+      );
+      expect(xml).not.toContain("<entry>");
+    });
+  });
+
+  describe("S0352 AC-10: the CCD and the Referral Note are byte-identical to the pre-change builder", () => {
+    /** Every conformance case that is not a Discharge Summary, which is what AC-10 freezes. */
+    const frozen = BUILT_DOCUMENT_CASES.filter(
+      (entry) => entry.documentType !== "dischargeSummary",
+    );
+
+    it("S0352 AC-10: every CCD and Referral Note conformance init emits its committed baseline bytes", () => {
+      // The baseline was captured from the builder BEFORE any edit under `src/builder/` and
+      // committed as `test/__fixtures__/builder-baseline.ts`. A baseline taken afterwards would
+      // compare the change to itself and pass unconditionally.
+      expect(frozen.length).toBeGreaterThan(0);
+      for (const entry of frozen) {
+        const baseline = BUILDER_BASELINE_DOCUMENTS[entry.name];
+        expect(baseline, `no committed baseline for ${entry.name}`).toBeDefined();
+        expect(serializeCcda(buildCcda(entry.init)), entry.name).toBe(baseline);
+      }
+    });
+
+    it("S0352 AC-10: the baseline covers every frozen case the harness builds, and no other", () => {
+      // A baseline that silently lost a case would make the comparison above vacuous for it.
+      expect(Object.keys(BUILDER_BASELINE_DOCUMENTS).sort()).toStrictEqual(
+        frozen.map((entry) => entry.name).sort(),
+      );
+    });
   });
 });

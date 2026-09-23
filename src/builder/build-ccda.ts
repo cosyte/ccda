@@ -222,7 +222,41 @@
  * always emitted, they appear only when the caller supplies content. Every
  * emitted section is one the parser recognizes, so a clean Referral Note build
  * round-trips through {@link parseCcda} with **zero warnings**, exactly like a
- * CCD. The remaining ten document types are not emitted.
+ * CCD.
+ *
+ * **A third document type: the inpatient Discharge Summary.** `buildCcda` emits
+ * one for `documentType: "dischargeSummary"`, with its own document `templateId`
+ * root (`…22.1.8`, the R2.1 `2015-08-01` stamp) and LOINC document `code`
+ * (`18842-5` "Discharge summary"), and the four-section SHALL set its rule
+ * names: **Allergies**, the narrative-only **Hospital Course**
+ * (`1.3.6.1.4.1.19376.1.5.3.1.3.5`, LOINC `8648-8`, an IHE PCC template with no
+ * version stamp), **Discharge Diagnosis** (V3, `…22.2.24`, LOINC `11535-2`,
+ * whose `code` carries a required `<translation>`), and **Plan of Treatment**.
+ * Neither Problems nor Medications is in that set, so unlike a CCD or a Referral
+ * Note a Discharge Summary emits them only when the caller supplies content, the
+ * medications in the Medications Section (never the Discharge Medications
+ * Section, which would assert they are discharge medications).
+ *
+ * It is also the only type carrying a `componentOf/encompassingEncounter`, the
+ * frame naming the stay: an encounter period with both bounds and a discharge
+ * disposition, each emitted verbatim when supplied and as an explicit
+ * `nullFlavor="UNK"` when not. An admission date, a discharge date and a
+ * discharge disposition are all facts a clinician acts on, so none of the three
+ * is ever derived from the document `effectiveTime` or from anything else in the
+ * document. See {@link BuildCcdaEncompassingEncounter}.
+ *
+ * **Supplied content is emitted or refused, never dropped.** The three
+ * Discharge-Summary-only inputs are refused with a `TypeError` on a CCD or a
+ * Referral Note, and the Referral Note's two narratives are refused on a
+ * Discharge Summary, rather than ignored.
+ *
+ * **The Hospital Course Section is framed by the parser and not asserted by
+ * it**, so a built Discharge Summary reparses with zero warnings, but a reparse
+ * will not report the section MISSING either: `pnpm conformance` is the only
+ * thing that catches an omission or a wrong identifier.
+ *
+ * The remaining nine document types are not emitted, and asking for one throws
+ * rather than producing a document that resembles it.
  *
  * **The bring-your-own terminology adapter (validation path).**
  * `buildCcda` (and `parseCcda`) accept an optional {@link TerminologyAdapter}
@@ -274,6 +308,7 @@ import type { TerminologyAdapter, TerminologyCoding } from "../model/terminology
 import type { PlannedItemKind } from "../model/entries/plan-of-treatment.js";
 import type { ProcedureKind } from "../model/entries/procedure.js";
 import { parseCcda } from "../parser/index.js";
+import type { DocumentType } from "../parser/templates.js";
 import {
   missingPlannedMedicationEffectiveTime,
   missingSelfCareActivity,
@@ -359,6 +394,81 @@ const REFERRAL_NOTE_TEMPLATE = "2.16.840.1.113883.10.20.22.1.14";
  * onc-healthit ToC certification sample). @internal
  */
 const REFERRAL_NOTE_DOC_CODE = { code: "57133-1", displayName: "Referral Note" } as const;
+/**
+ * The Discharge Summary document template OID (root); the R2.1 stamp lives in
+ * `@extension`. Read off the normative C-CDA R2.1 Schematron the conformance
+ * harness pins, rule
+ * `r-urn-hl7ii-2.16.840.1.113883.10.20.22.1.8-2015-08-01-errors`
+ * (CONF:1198-8463 / -10044 / -32517). @internal
+ */
+const DISCHARGE_SUMMARY_TEMPLATE = "2.16.840.1.113883.10.20.22.1.8";
+/**
+ * The LOINC document-type code + title for a Discharge Summary.
+ *
+ * The document's own rule requires a `code` (CONF:1198-17178) whose `@code` is
+ * selected from ValueSet `DischargeSummaryDocumentTypeCode`
+ * (`2.16.840.1.113883.11.20.4.1`, CONF:1198-17179). `18842-5` is that value
+ * set's general member, spelled here exactly as the pinned vocabulary artifact
+ * spells it; the set's other members are specialisations by discipline or
+ * author (Nurse, Psychiatry, Emergency department, …) that this builder has no
+ * input to choose between and will not guess. @internal
+ */
+const DISCHARGE_SUMMARY_DOC_CODE = { code: "18842-5", displayName: "Discharge summary" } as const;
+/**
+ * The Hospital Course Section. An IHE PCC template, so its OID is the IHE root
+ * and it is **unversioned**: the Discharge Summary rule matches it as
+ * `@root='1.3.6.1.4.1.19376.1.5.3.1.3.5' and not(@extension)` (CONF:1198-30522),
+ * and the section's own rule repeats the no-extension context (CONF:81-7852 /
+ * -10459). Narrative-only. The parser frames it by this root but keeps it out of
+ * its section catalog and does not assert it (`FRAMING_ONLY_SECTIONS` in
+ * `src/parser/templates.ts`), so the conformance harness is the only thing that
+ * can catch getting it wrong. @internal
+ */
+const HOSPITAL_COURSE_SECTION_BASE = "1.3.6.1.4.1.19376.1.5.3.1.3.5";
+/** The LOINC `code` + title for the Hospital Course Section (CONF:81-15488). @internal */
+const HOSPITAL_COURSE_CODE = { code: "8648-8", displayName: "Hospital Course" } as const;
+/**
+ * The Discharge Diagnosis Section (V3), `…22.2.24` stamped {@link R21}
+ * (CONF:1198-7979 / -10394 / -32549). Its entries are **optional**
+ * (CONF:1198-15489 reads "the entry, if present"), so an empty one is a
+ * spec-clean `nullFlavor="NI"` section. @internal
+ */
+const DISCHARGE_DIAGNOSIS_SECTION_BASE = "2.16.840.1.113883.10.20.22.2.24";
+/** The LOINC `code` + title for the Discharge Diagnosis Section (CONF:1198-15356). @internal */
+const DISCHARGE_DIAGNOSIS_CODE = {
+  code: "11535-2",
+  displayName: "Hospital Discharge Diagnosis",
+} as const;
+/**
+ * The `<translation>` the Discharge Diagnosis Section's `code` SHALL carry
+ * (CONF:1198-32834 / -32835 / -32836). It is the only section in this builder
+ * whose code is required to carry one, which is why {@link sectionElement} takes
+ * a translation at all. @internal
+ */
+const DISCHARGE_DIAGNOSIS_TRANSLATION = {
+  code: "78375-3",
+  codeSystem: LOINC,
+  displayName: "Discharge Diagnosis",
+  codeSystemName: "LOINC",
+} as const;
+/**
+ * The Hospital Discharge Diagnosis act (V3), `…22.4.33` stamped {@link R21}
+ * (CONF:1198-16764 / -16765 / -32534). `@classCode="ACT"` `@moodCode="EVN"`
+ * (CONF:1198-7663, -7664) carrying the section's LOINC code (CONF:1198-19148)
+ * and at least one `entryRelationship @typeCode="SUBJ"` holding exactly one
+ * Problem Observation (V3) (CONF:1198-7666, -15536, -7667). @internal
+ */
+const HOSPITAL_DISCHARGE_DIAGNOSIS_ACT = "2.16.840.1.113883.10.20.22.4.33";
+/**
+ * The code system of `NUBC UB-04 FL17 Patient Status`
+ * (`2.16.840.1.113883.3.88.12.80.33`), the value set the Discharge Summary's
+ * `dischargeDispositionCode` SHOULD be selected from (CONF:1198-8476). Read off
+ * the pinned vocabulary artifact the conformance harness fetches, where every
+ * member of that set carries this `@codeSystem`; it is only ever the DEFAULT, a
+ * caller coding the disposition in another system supplies its own
+ * `codeSystem`, because the binding is a SHOULD and not a SHALL. @internal
+ */
+const NUBC_PATIENT_DISCHARGE_STATUS = "2.16.840.1.113883.6.301.5";
 /**
  * The Assessment Section (`…22.2.8`, LOINC `51848-0`). Narrative-only. Note it
  * is **unversioned** in C-CDA R2.1, there is no R2.0/R2.1 revision, so the
@@ -1003,6 +1113,54 @@ export interface BuildCcdaEncounter {
    * when omitted.
    */
   readonly period?: { readonly low?: string; readonly high?: string };
+}
+
+/**
+ * The `componentOf/encompassingEncounter` frame a Discharge Summary SHALL carry
+ * (CONF:1198-8471, -8472): the inpatient stay the document summarises. Ignored
+ * for a document type whose rule does not require the frame, because emitting an
+ * encounter a CCD never claimed would be asserting one.
+ *
+ * **NOTHING HERE IS EVER FABRICATED, AND EVERY SLOT IS REQUIRED BY THE
+ * TEMPLATE.** The encounter's `effectiveTime` SHALL carry a `low` and a `high`
+ * (CONF:1198-8473, -8475) and the encounter SHALL carry a
+ * `dischargeDispositionCode` (CONF:1198-8476), so all three elements are always
+ * emitted. A bound or a disposition the caller did not supply is emitted as an
+ * **explicit** `nullFlavor="UNK"`, which satisfies the cardinality without
+ * stating a clinical fact and which {@link parseCcda} reads back as absent
+ * rather than as a date or a code. An admission date, a discharge date and a
+ * discharge disposition are each things a clinician acts on, and a guessed one
+ * is a wrong clinical fact on the wire.
+ *
+ * A supplied bound keeps exactly the precision it was given: a day-precision
+ * `"20240102"` stays day-precision and is never completed to a time.
+ *
+ * @example
+ * ```ts
+ * import type { BuildCcdaEncompassingEncounter } from "@cosyte/ccda";
+ * const stay: BuildCcdaEncompassingEncounter = {
+ *   period: { low: "20240102", high: "20240108" },
+ *   dischargeDisposition: { code: "01", displayName: "Discharged to Home or Self Care" },
+ * };
+ * ```
+ */
+export interface BuildCcdaEncompassingEncounter {
+  /**
+   * The encounter period as HL7 date strings (an `IVL_TS` low/high), the
+   * admission and discharge times. Either bound may be omitted and an omitted
+   * one is emitted `nullFlavor="UNK"`; the element itself is always emitted,
+   * because the template requires both bounds to be present.
+   */
+  readonly period?: { readonly low?: string; readonly high?: string };
+  /**
+   * The discharge disposition. `codeSystem` defaults to the NUBC UB-04 Patient
+   * Discharge Status code set, the system every member of the value set the
+   * template names carries; supply your own to code it elsewhere, since that
+   * binding is a SHOULD. Omitted entirely, the element is emitted
+   * `nullFlavor="UNK"`: the builder has no defensible default for where a
+   * patient went.
+   */
+  readonly dischargeDisposition?: BuildCode;
 }
 
 /**
@@ -1701,8 +1859,8 @@ export type BuildCcdaPlannedItem =
  * `vitalSigns`, `smokingStatus`) defaults to empty, in which case its section is
  * emitted as a spec-clean empty `nullFlavor="NI"` section. `immunizations` is optional, its section is emitted
  * only when populated (Immunizations is not a CCD SHALL section). `documentType`
- * is `"ccd"` (the default) or `"referralNote"`; the other ten C-CDA R2.1
- * document types are not implemented.
+ * is `"ccd"` (the default), `"referralNote"` or `"dischargeSummary"`; the other
+ * nine C-CDA R2.1 document types are not implemented.
  *
  * @example
  * ```ts
@@ -1716,11 +1874,13 @@ export type BuildCcdaPlannedItem =
  */
 export interface BuildCcdaInit {
   /**
-   * The document type, `"ccd"` (default) or `"referralNote"`. Each specializes
-   * the US Realm Header (its own document `templateId` + LOINC `code`) and its
-   * SHALL section set; the other ten C-CDA R2.1 document types are not emitted.
+   * The document type, `"ccd"` (default), `"referralNote"` or
+   * `"dischargeSummary"`. Each specializes the US Realm Header (its own document
+   * `templateId` + LOINC `code`) and its SHALL section set; the other nine C-CDA
+   * R2.1 document types are not emitted, and asking for one throws rather than
+   * emitting a document that merely resembles it.
    */
-  readonly documentType?: "ccd" | "referralNote";
+  readonly documentType?: BuildableDocumentType;
   /** The document `id`'s extension; a synthetic id is generated when omitted. */
   readonly documentId?: string;
   /** The document title; defaults to the CCD document-code display name. */
@@ -1735,11 +1895,22 @@ export interface BuildCcdaInit {
   readonly custodianName?: string;
   /** The single record-target patient (required). */
   readonly patient: BuildCcdaPatient;
-  /** Problem Concerns for the Problems section; empty section when omitted. */
+  /**
+   * Problem Concerns for the Problems section; an empty section when omitted
+   * for a CCD or a Referral Note, whose SHALL sets include it. A Discharge
+   * Summary's does not, so for that type the section is emitted only when this
+   * is non-empty.
+   */
   readonly problems?: readonly BuildCcdaProblem[];
   /** Allergy Concerns for the Allergies section; empty section when omitted. */
   readonly allergies?: readonly BuildCcdaAllergy[];
-  /** Medication Activities for the Medications section; empty section when omitted. */
+  /**
+   * Medication Activities for the Medications section; an empty section when
+   * omitted for a CCD or a Referral Note, whose SHALL sets include it. A
+   * Discharge Summary's does not, so for that type the section is emitted only
+   * when this is non-empty, and always as the Medications Section, never as the
+   * Discharge Medications Section.
+   */
   readonly medications?: readonly BuildCcdaMedication[];
   /** Result panels for the Results section; empty section when omitted. */
   readonly results?: readonly BuildCcdaResultPanel[];
@@ -1820,16 +1991,50 @@ export interface BuildCcdaInit {
    * Referral Note SHALL section). Narrative-only, so this is a free-text
    * clinician summary; when omitted the SHALL section is emitted as a spec-clean
    * empty `nullFlavor="NI"` section (never a fabricated assessment). Ignored for
-   * a CCD.
+   * a CCD; refused with a `TypeError` for a Discharge Summary, which carries no
+   * Assessment Section.
    */
   readonly assessment?: string;
   /**
    * The Reason for Referral Section narrative (`documentType: "referralNote"`
    * only, a Referral Note SHALL section). Narrative-only free text; when omitted
    * the SHALL section is emitted as an empty `nullFlavor="NI"` section (never a
-   * fabricated reason). Ignored for a CCD.
+   * fabricated reason). Ignored for a CCD; refused with a `TypeError` for a
+   * Discharge Summary, which carries no Reason for Referral Section.
    */
   readonly reasonForReferral?: string;
+  /**
+   * The Hospital Course Section narrative (`documentType: "dischargeSummary"`
+   * only, a Discharge Summary SHALL section, CONF:1198-30522). Narrative-only,
+   * so this is the free-text account of the stay; when omitted the SHALL section
+   * is emitted as a spec-clean empty `nullFlavor="NI"` section, never an
+   * invented course. Refused with a `TypeError` for the other document types,
+   * rather than dropped.
+   */
+  readonly hospitalCourse?: string;
+  /**
+   * The discharge diagnoses for the Discharge Diagnosis Section
+   * (`documentType: "dischargeSummary"` only, a Discharge Summary SHALL section,
+   * CONF:1198-30524). Each is emitted as a Problem Observation (V3) under the
+   * single Hospital Discharge Diagnosis act the section's entry requires; when
+   * omitted the SHALL section is emitted as an empty `nullFlavor="NI"` section,
+   * which is conformant because the section's entry is optional
+   * (CONF:1198-15489). Read back through `getProblems` is NOT how these surface:
+   * they are diagnoses of the stay, not the concern list. Refused with a
+   * `TypeError` for the other document types, rather than dropped.
+   */
+  readonly dischargeDiagnoses?: readonly BuildCcdaProblem[];
+  /**
+   * The `componentOf/encompassingEncounter` frame
+   * (`documentType: "dischargeSummary"` only, CONF:1198-8471). Supplies the
+   * encounter period's two bounds and the discharge disposition; each slot the
+   * caller omits is emitted as an explicit `nullFlavor="UNK"` rather than
+   * guessed. When the whole field is omitted the frame is still emitted, with
+   * every slot unknown, because the document type's rule requires it. Refused
+   * with a `TypeError` for the other document types, whose rules do not carry
+   * the frame, rather than dropped.
+   */
+  readonly encompassingEncounter?: BuildCcdaEncompassingEncounter;
 }
 
 /**
@@ -1837,7 +2042,9 @@ export interface BuildCcdaInit {
  * `"problems"`/`"allergies"`/`"medications"` are the entries-required clinical
  * sections; `"results"`/`"vitalSigns"`/`"socialHistory"` complete the CCD's
  * six-section SHALL set; `"assessment"`, `"reasonForReferral"`, and
- * `"planOfTreatment"` are the Referral Note's narrative SHALL sections.
+ * `"planOfTreatment"` are the Referral Note's narrative SHALL sections;
+ * `"hospitalCourse"` and `"dischargeDiagnosis"` are the two the Discharge
+ * Summary adds to a set it otherwise shares.
  * @internal
  */
 type ShallSectionKey =
@@ -1849,7 +2056,27 @@ type ShallSectionKey =
   | "socialHistory"
   | "reasonForReferral"
   | "assessment"
-  | "planOfTreatment";
+  | "planOfTreatment"
+  | "hospitalCourse"
+  | "dischargeDiagnosis";
+
+/**
+ * The document types {@link buildCcda} can emit, three of the twelve
+ * {@link DocumentType}s `parseCcda` recognizes.
+ *
+ * **Declared as a subset of the recognized enumeration rather than as its own
+ * union of strings.** `Extract` fails to compile if any member stops being a
+ * recognized document type, so the builder's surface cannot drift from the
+ * parser's: renaming a key in `DOCUMENT_TYPES` is already a breaking change and
+ * this makes it a compile error here too. The other nine are refused at run
+ * time by {@link buildCcda}, and the refusal is derived from
+ * {@link DOC_TYPE_SPECS} rather than from a second list, so a thirteenth
+ * recognized type is refused the moment it is recognized.
+ */
+export type BuildableDocumentType = Extract<
+  DocumentType,
+  "ccd" | "referralNote" | "dischargeSummary"
+>;
 
 /**
  * The header + SHALL-section specialization for one supported document type. The
@@ -1877,6 +2104,14 @@ interface DocTypeSpec {
    * CCD's does not.
    */
   readonly requiresInformationRecipient: boolean;
+  /**
+   * Whether this type's header rule requires `componentOf/encompassingEncounter`.
+   * The Discharge Summary's does (CONF:1198-8471, -8472), because the document
+   * summarises one inpatient stay; neither of the other two carries the frame,
+   * and emitting it for them would assert an encounter the document never
+   * claimed.
+   */
+  readonly requiresComponentOf: boolean;
 }
 
 /**
@@ -1906,9 +2141,34 @@ interface DocTypeSpec {
  * Assessment, and Plan of Treatment, the last three satisfying the document's
  * "Assessment (and Plan) + Plan of Treatment" narrative requirements. Results and
  * Vital Signs are not Referral Note SHALL sections, so they become optional
- * (emitted only when populated). @internal
+ * (emitted only when populated).
+ *
+ * **Discharge Summary** SHALL contain **four** sections, read off the same
+ * normative Schematron's Discharge Summary (`…22.1.8:2015-08-01`) *errors* rule,
+ * in that rule's own order: Allergies and Intolerances Section (entries
+ * optional) (V3) **CONF:1198-30520**, Hospital Course Section **-30522**,
+ * Discharge Diagnosis Section (V3) **-30524**, and Plan of Treatment Section
+ * (V2) **-30528**.
+ *
+ * Three things about that set are easy to get wrong, so they are stated rather
+ * than left to be rediscovered. **Discharge Medications is NOT in it**: the
+ * source puts it in the document's *warnings* rule as a SHOULD
+ * (CONF:1198-30525), so always emitting it would fabricate a section the
+ * document does not require. **Problems and Medications are not in it either**,
+ * unlike every other type this builder emits, so neither is forced here and a
+ * caller who supplies them gets them as ordinary optional sections. And the
+ * Allergies assert names the entries-**optional** identifier where the CCD's
+ * names the entries-required one; {@link allergiesSection} emits one shape for
+ * both, carrying both identifiers, which satisfies either assert.
+ *
+ * The Discharge Summary carries the only `componentOf` this builder emits
+ * ({@link DocTypeSpec.requiresComponentOf}) and is the only type whose rule
+ * requires neither `documentationOf` nor `informationRecipient`: both of those
+ * SHALLs live in the CCD's and the Referral Note's own rules (CONF:1198-8452,
+ * -31589) rather than in the shared US Realm Header rule all three extend.
+ * @internal
  */
-const DOC_TYPE_SPECS: Readonly<Record<"ccd" | "referralNote", DocTypeSpec>> = {
+const DOC_TYPE_SPECS: Readonly<Record<BuildableDocumentType, DocTypeSpec>> = {
   ccd: {
     documentTemplateRoot: CCD_TEMPLATE,
     documentCode: CCD_DOC_CODE,
@@ -1922,6 +2182,7 @@ const DOC_TYPE_SPECS: Readonly<Record<"ccd" | "referralNote", DocTypeSpec>> = {
     ],
     requiresDocumentationOf: true,
     requiresInformationRecipient: false,
+    requiresComponentOf: false,
   },
   referralNote: {
     documentTemplateRoot: REFERRAL_NOTE_TEMPLATE,
@@ -1936,8 +2197,123 @@ const DOC_TYPE_SPECS: Readonly<Record<"ccd" | "referralNote", DocTypeSpec>> = {
     ],
     requiresDocumentationOf: false,
     requiresInformationRecipient: true,
+    requiresComponentOf: false,
+  },
+  dischargeSummary: {
+    documentTemplateRoot: DISCHARGE_SUMMARY_TEMPLATE,
+    documentCode: DISCHARGE_SUMMARY_DOC_CODE,
+    shallSections: ["allergies", "hospitalCourse", "dischargeDiagnosis", "planOfTreatment"],
+    requiresDocumentationOf: false,
+    requiresInformationRecipient: false,
+    requiresComponentOf: true,
   },
 };
+
+/**
+ * Whether a caller-supplied `documentType` is one this builder specializes.
+ *
+ * The membership question is asked of {@link DOC_TYPE_SPECS} itself, so the set
+ * of refused types is whatever the spec table does not cover: the nine
+ * recognized C-CDA R2.1 types this builder does not emit today, a thirteenth
+ * type the parser starts recognizing tomorrow, and any string that is not a
+ * document type at all. A hand-written list of refused types would go stale on
+ * the day a thirteenth is added, and the fall-through would be a document
+ * silently emitted under the wrong document template.
+ *
+ * `Object.hasOwn` rather than `in`, because `in` walks the prototype chain: an
+ * untyped caller passing `"toString"` or `"constructor"` would otherwise pass
+ * the guard and index the table to a function. @internal
+ */
+function isBuildableDocumentType(value: string): value is BuildableDocumentType {
+  return Object.hasOwn(DOC_TYPE_SPECS, value);
+}
+
+/**
+ * The refusal {@link buildCcda} throws for a `documentType` it does not emit.
+ *
+ * A string is named in the message, because it is the caller's own argument
+ * and naming it tells them which request was refused. A value that is not a
+ * string is described by its kind and never converted: stringifying it would run
+ * a caller-supplied `toString`, and the whole point of refusing it before the
+ * lookup is that no such conversion decides anything here. @internal
+ */
+function unsupportedDocumentType(value: unknown): TypeError {
+  const named =
+    typeof value === "string"
+      ? `"${value}"`
+      : `of type ${value === null ? "null" : Array.isArray(value) ? "array" : typeof value}`;
+  return new TypeError(
+    `buildCcda: documentType ${named} is not supported yet, this builder emits ` +
+      `${Object.keys(DOC_TYPE_SPECS)
+        .map((type) => `"${type}"`)
+        .join(", ")} (omit for a CCD). It will not emit a document resembling a type it ` +
+      "does not implement.",
+  );
+}
+
+/**
+ * The {@link BuildCcdaInit} fields that belong to ONE document type: the type
+ * that carries each, and the types that refuse it. See
+ * {@link refuseContentTheTypeDoesNotCarry}. @internal
+ */
+const TYPE_SPECIFIC_INPUTS: readonly {
+  readonly field: keyof BuildCcdaInit;
+  readonly carriedBy: BuildableDocumentType;
+  readonly refusedFor: readonly BuildableDocumentType[];
+}[] = [
+  { field: "hospitalCourse", carriedBy: "dischargeSummary", refusedFor: ["ccd", "referralNote"] },
+  {
+    field: "dischargeDiagnoses",
+    carriedBy: "dischargeSummary",
+    refusedFor: ["ccd", "referralNote"],
+  },
+  {
+    field: "encompassingEncounter",
+    carriedBy: "dischargeSummary",
+    refusedFor: ["ccd", "referralNote"],
+  },
+  { field: "assessment", carriedBy: "referralNote", refusedFor: ["dischargeSummary"] },
+  { field: "reasonForReferral", carriedBy: "referralNote", refusedFor: ["dischargeSummary"] },
+];
+
+/**
+ * Refuse an init that supplies a type-specific input to a document type that
+ * does not carry it, rather than drop that content in silence.
+ *
+ * Supplied clinical content is either emitted or refused with a typed error; it
+ * is never discarded without a word (`clinical-safety` C1). The general clinical
+ * collections (`problems`, `medications`, `results`, ...) are emitted on every
+ * type that is handed them, each in its own section. The inputs listed in
+ * {@link TYPE_SPECIFIC_INPUTS} are not general: each names a section or a frame
+ * one document type carries, so a Discharge Summary's hospital course, discharge
+ * diagnoses or encounter frame is refused on a CCD or a Referral Note, and a
+ * Referral Note's assessment or reason for referral is refused on a Discharge
+ * Summary. Presence is the trigger, not content: a field the type does not carry
+ * is refused whenever it is supplied at all.
+ *
+ * **One silent drop remains, and it is older than this check.** A CCD handed
+ * `assessment` or `reasonForReferral` still ignores them, exactly as it always
+ * has: the CCD's emitted bytes for an init naming no Discharge Summary input are
+ * held identical to the pre-Discharge-Summary builder, and refusing there would
+ * move a published behaviour. That is why `refusedFor` is a list rather than
+ * "every type but the owner".
+ *
+ * The message names the field and the two document types, all constants of this
+ * module, and never any of the content supplied. @internal
+ */
+function refuseContentTheTypeDoesNotCarry(
+  documentType: BuildableDocumentType,
+  init: BuildCcdaInit,
+): void {
+  for (const { field, carriedBy, refusedFor } of TYPE_SPECIFIC_INPUTS) {
+    if (init[field] === undefined || !refusedFor.includes(documentType)) continue;
+    throw new TypeError(
+      `buildCcda: \`${field}\` is ${carriedBy} content and documentType "${documentType}" ` +
+        `does not carry it. The builder refuses rather than drop supplied content in silence: ` +
+        `pass documentType "${carriedBy}", or omit \`${field}\`.`,
+    );
+  }
+}
 
 /** A monotonic id generator scoped to one build, for stable act/content ids. @internal */
 function makeIdGen(): (prefix: string) => string {
@@ -2158,8 +2534,9 @@ export interface BuildCcdaOptions {
 
 /**
  * Build a spec-clean C-CDA R2.1 document from structured input and return the
- * parsed {@link CcdaDocument}. Emits a **CCD** by default, or a **Referral Note**
- * when `documentType: "referralNote"`, each with its own US Realm Header
+ * parsed {@link CcdaDocument}. Emits a **CCD** by default, a **Referral Note**
+ * when `documentType: "referralNote"`, or a **Discharge Summary** when
+ * `documentType: "dischargeSummary"`, each with its own US Realm Header
  * specialization (document `templateId` + LOINC `code`) and SHALL section set.
  * The emitted document round-trips through {@link parseCcda} by construction (see
  * the module doc); a clean build carries zero warnings.
@@ -2174,8 +2551,13 @@ export interface BuildCcdaOptions {
  * @returns The parsed document, the parse of the spec-clean XML just emitted,
  *   carrying the re-parse's warnings plus any build-time diagnostic about the
  *   input (today: `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, appended last).
- * @throws {TypeError} When `documentType` is anything other than `"ccd"` or
- *   `"referralNote"` (the only two types this builder supports), when an allergy
+ * @throws {TypeError} When `documentType` is anything other than a
+ *   {@link BuildableDocumentType} (the three types this builder supports; only an
+ *   omitted, `undefined` one defaults to a CCD, and `null` or a non-string is
+ *   refused), when a type-specific input is supplied to a type that does not
+ *   carry it (`hospitalCourse`, `dischargeDiagnoses` or `encompassingEncounter`
+ *   on anything but a Discharge Summary; `assessment` or `reasonForReferral` on a
+ *   Discharge Summary), when an allergy
  *   is neither an `allergen` nor `noKnownAllergy`, when a result does not carry
  *   exactly one value form (`quantity` / `codedValue` / `stringValue`), when a
  *   `"observation"`-variant procedure omits its SHALL `value`, when a
@@ -2196,15 +2578,35 @@ export interface BuildCcdaOptions {
  */
 export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): CcdaDocument {
   // Typed as a closed union so the compiler narrows an invalid value to `never`;
-  // widen to a string for the runtime guard that protects untyped (JS) callers.
-  const documentType: string = init.documentType ?? "ccd";
-  if (documentType !== "ccd" && documentType !== "referralNote") {
-    throw new TypeError(
-      `buildCcda: documentType "${documentType}" is not supported yet, this builder ` +
-        'emits a CCD or a Referral Note. Pass "ccd" or "referralNote" (or omit for a CCD).',
-    );
+  // widen to `unknown` for the runtime guard that protects untyped (JS) callers.
+  //
+  // THE GUARD ASKS THE SPEC TABLE, NOT A SECOND LIST OF STRINGS. A type this
+  // builder does not specialize has no entry here, so it is refused whether it
+  // is one of the nine recognized types this builder does not emit, a
+  // thirteenth type the parser starts recognizing tomorrow, or a string that is
+  // not a document type at all. A hand-written list of refused types would go
+  // stale on exactly the day a thirteenth is added, and the fall-through would
+  // be a document silently emitted under the wrong template.
+  //
+  // `Object.hasOwn` rather than `in`: `in` walks the prototype chain, so
+  // `documentType: "toString"` would pass the guard and then index the table to
+  // a function. That is reachable from an untyped caller and it is exactly the
+  // fall-through this guard exists to prevent.
+  //
+  // ONLY AN OMITTED FIELD DEFAULTS, AND ONLY A STRING IS LOOKED UP. `undefined` is
+  // the omission the published type offers ("omit for a CCD"). Every other value
+  // is a document type the caller asked for, so `null` is refused rather than
+  // read as an omission (`??` would read it as one and build a CCD), and a
+  // non-string is refused before the lookup, because `Object.hasOwn` coerces its
+  // key: `["dischargeSummary"]`, or an object whose `toString` names a member,
+  // would otherwise pass the guard and build that member.
+  const requested: unknown = init.documentType;
+  const documentType = requested === undefined ? "ccd" : requested;
+  if (typeof documentType !== "string" || !isBuildableDocumentType(documentType)) {
+    throw unsupportedDocumentType(documentType);
   }
   const spec = DOC_TYPE_SPECS[documentType];
+  refuseContentTheTypeDoesNotCarry(documentType, init);
 
   const { doc, root } = newCdaDocument();
   const id = makeIdGen();
@@ -2227,6 +2629,25 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
   const shall = new Set<ShallSectionKey>(spec.shallSections);
   for (const key of spec.shallSections) {
     structuredBody.appendChild(shallSection(key, doc, init, id, translate));
+  }
+
+  // Problems and Medications are SHALL sections for a CCD and a Referral Note,
+  // and are emitted by the loop above for both. A Discharge Summary's SHALL set
+  // names neither, so for that type they are emitted here, each in its own
+  // section and only when the caller supplied content: without these two
+  // branches a Discharge Summary handed problems or medications dropped them in
+  // silence. The `shall.has` guard is what keeps a CCD and a Referral Note from
+  // emitting either section twice, and so keeps their bytes unchanged.
+  //
+  // The medications go in the Medications Section, which is what the input
+  // names, and NOT in the Discharge Medications Section: nothing in the input
+  // says a medication is one the patient was discharged on, and placing it there
+  // would assert that it is.
+  if (!shall.has("problems") && (init.problems?.length ?? 0) > 0) {
+    structuredBody.appendChild(problemsSection(doc, init.problems ?? [], id, translate));
+  }
+  if (!shall.has("medications") && (init.medications?.length ?? 0) > 0) {
+    structuredBody.appendChild(medicationsSection(doc, init.medications ?? [], id, translate));
   }
 
   // Results / Vital Signs are always-on SHALL sections for a CCD but *optional*
@@ -2485,6 +2906,10 @@ function shallSection(
       return assessmentSection(doc, init.assessment);
     case "planOfTreatment":
       return planOfTreatmentSection(doc, init.planOfTreatment ?? [], id);
+    case "hospitalCourse":
+      return hospitalCourseSection(doc, init.hospitalCourse);
+    case "dischargeDiagnosis":
+      return dischargeDiagnosisSection(doc, init.dischargeDiagnoses ?? [], id, translate);
   }
 }
 
@@ -2522,6 +2947,108 @@ function appendHeader(
   // the wrong place is XSD-invalid rather than cosmetic.
   if (spec.requiresInformationRecipient) root.appendChild(informationRecipient(doc));
   if (spec.requiresDocumentationOf) root.appendChild(documentationOf(doc));
+  // ...and componentOf is the LAST element of that sequence before `component`
+  // (POCD_MT000040.ClinicalDocument: … documentationOf*, relatedDocument*,
+  // authorization*, componentOf?, component). `buildCcda` appends `component`
+  // after this call returns, so appending here is that position. Emitting it
+  // earlier, next to documentationOf where it reads as if it belonged, fails the
+  // core CDA R2 XSD before the Schematron is even reached.
+  if (spec.requiresComponentOf) {
+    root.appendChild(componentOfElement(doc, init.encompassingEncounter, id));
+  }
+}
+
+/**
+ * Build the `componentOf/encompassingEncounter`, the encounter a Discharge
+ * Summary SHALL frame itself with (CONF:1198-8471, -8472).
+ *
+ * **EVERY SLOT IS EMITTED AND NOTHING IS GUESSED.** The template makes the
+ * encounter's `effectiveTime` [1..1] (CONF:1198-32611) with a `low` [1..1]
+ * (-8473) and a `high` [1..1] (-8475), and the `dischargeDispositionCode` [1..1]
+ * (-8476). Where the caller supplied a value it is emitted verbatim, at exactly
+ * the precision given; where the caller supplied none the element is emitted
+ * with `nullFlavor="UNK"` and no `@value`/`@code`, which satisfies the
+ * cardinality, states that the fact is unknown rather than stating a fact, and
+ * is read back by {@link parseCcda} as an absent bound rather than as a date.
+ *
+ * Deriving any of the three would be the failure this shape exists to prevent:
+ * the document `effectiveTime` is when the summary was written and not when the
+ * patient was admitted, a `documentationOf` service event is a different act
+ * entirely, and there is no date anywhere in a document from which a discharge
+ * disposition follows. A wrong admission date, discharge date or disposition is
+ * a wrong clinical fact a clinician acts on.
+ *
+ * The encounter also SHALL carry at least one `id` (CONF:1198-9959), which is in
+ * the shared US Realm Header rule rather than in the Discharge Summary's own and
+ * is easy to read past. It is an identifier for the encounter, not a clinical
+ * fact about the patient, so a synthetic one under this builder's own assigning
+ * authority is the same answer already given for the document `id` and the act
+ * ids, rather than something that would have to be guessed.
+ *
+ * The element order inside the encounter is the CDA R2 one
+ * (POCD_MT000040.EncompassingEncounter: … id*, code?, effectiveTime,
+ * dischargeDispositionCode?, responsibleParty?, …), so the id precedes the
+ * period and the disposition follows it. @internal
+ */
+function componentOfElement(
+  doc: Document,
+  encounter: BuildCcdaEncompassingEncounter | undefined,
+  id: (prefix: string) => string,
+): Element {
+  const encompassing = el(
+    doc,
+    "encompassingEncounter",
+    undefined,
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("enc") }),
+    encompassingEncounterPeriod(doc, encounter?.period),
+    dischargeDispositionCode(doc, encounter?.dischargeDisposition),
+  );
+  return el(doc, "componentOf", undefined, encompassing);
+}
+
+/**
+ * The encompassing encounter's SHALL `<effectiveTime>`, with BOTH bounds always
+ * present. Unlike {@link encounterPeriod}, which omits a `high` the caller did
+ * not supply, this template requires the `high` element itself
+ * (CONF:1198-8475), so an unsupplied end is an explicit `nullFlavor="UNK"`
+ * rather than an absent element, and never the `low` copied across.
+ * @internal
+ */
+function encompassingEncounterPeriod(
+  doc: Document,
+  period: { readonly low?: string; readonly high?: string } | undefined,
+): Element {
+  const bound = (name: "low" | "high", value: string | undefined): Element =>
+    value === undefined
+      ? el(doc, name, { nullFlavor: "UNK" })
+      : el(doc, name, { value: assertHl7Ts(value, `encompassingEncounter.period.${name}`) });
+  return el(
+    doc,
+    "effectiveTime",
+    undefined,
+    bound("low", period?.low),
+    bound("high", period?.high),
+  );
+}
+
+/**
+ * The encompassing encounter's SHALL `<dischargeDispositionCode>`
+ * (CONF:1198-8476), or an explicit `nullFlavor="UNK"` when the caller supplied
+ * no disposition.
+ *
+ * The `@codeSystem` defaults to the NUBC UB-04 Patient Discharge Status code
+ * set, which is the system every member of the value set the constraint names
+ * carries. That binding is a **SHOULD**, not a SHALL, so a caller coding the
+ * disposition elsewhere supplies their own `codeSystem` and it is emitted
+ * verbatim; the default is a convenience for the bound set, never a coercion.
+ * @internal
+ */
+function dischargeDispositionCode(doc: Document, disposition: BuildCode | undefined): Element {
+  if (disposition === undefined) return el(doc, "dischargeDispositionCode", { nullFlavor: "UNK" });
+  return codeEl(doc, "dischargeDispositionCode", {
+    ...disposition,
+    codeSystem: disposition.codeSystem ?? NUBC_PATIENT_DISCHARGE_STATUS,
+  });
 }
 
 /**
@@ -2871,6 +3398,12 @@ function sectionTemplateIds(
  * Build a `<section>` shell (`templateId`s, `code`, `title`, `<text>`) ready for
  * entries to be appended. Returned unwrapped so the caller can append entries
  * before wrapping it in a `<component>`.
+ *
+ * `codeTranslation` is for the one section whose template requires its `code` to
+ * carry a `<translation>`: the Discharge Diagnosis Section (V3), CONF:1198-32834.
+ * It is a template's own fixed literal rather than anything read out of a
+ * document, and it is NOT the terminology adapter's `<translation>` path, which
+ * goes through {@link appendTranslations} at the clinical coded slots.
  * @internal
  */
 function sectionElement(
@@ -2882,19 +3415,22 @@ function sectionElement(
   entriesRequired: boolean,
   attrs?: Attrs,
   extension: string | null = R21,
+  codeTranslation?: BuildCode & { readonly codeSystem: string },
 ): Element {
   const section = el(doc, "section", attrs);
   for (const tid of sectionTemplateIds(doc, base, entriesRequired, extension)) {
     section.appendChild(tid);
   }
-  section.appendChild(
-    el(doc, "code", {
-      code: loinc,
-      codeSystem: LOINC,
-      displayName: title,
-      codeSystemName: "LOINC",
-    }),
-  );
+  const code = el(doc, "code", {
+    code: loinc,
+    codeSystem: LOINC,
+    displayName: title,
+    codeSystemName: "LOINC",
+  });
+  if (codeTranslation !== undefined) {
+    code.appendChild(codeEl(doc, "translation", codeTranslation));
+  }
+  section.appendChild(code);
   section.appendChild(textEl(doc, "title", title));
   section.appendChild(textNode);
   return section;
@@ -2920,6 +3456,7 @@ function emptySection(
   title: string,
   entriesRequired = false,
   extension: string | null = R21,
+  codeTranslation?: BuildCode & { readonly codeSystem: string },
 ): Element {
   const section = sectionElement(
     doc,
@@ -2930,6 +3467,7 @@ function emptySection(
     entriesRequired,
     { nullFlavor: "NI" },
     extension,
+    codeTranslation,
   );
   return el(doc, "component", undefined, section);
 }
@@ -4885,6 +5423,129 @@ function reasonForReferralSection(doc: Document, narrative: string | undefined):
     undefined,
     REASON_FOR_REFERRAL_EXT,
   );
+  return el(doc, "component", undefined, section);
+}
+
+/**
+ * Build the narrative-only Hospital Course Section
+ * (`1.3.6.1.4.1.19376.1.5.3.1.3.5`, LOINC `8648-8`), a Discharge Summary SHALL
+ * section (CONF:1198-30522). An IHE PCC template with **no** version stamp: the
+ * document rule matches it on `not(@extension)`, so it is emitted with a
+ * root-only `templateId`, like the Assessment Section and unlike the Reason for
+ * Referral Section, which is the other IHE template here and DOES carry one.
+ *
+ * When the caller supplies no `hospitalCourse` text it is emitted as a
+ * spec-clean empty `nullFlavor="NI"` section, never an invented account of a
+ * stay. The section has no entries-required variant, so declaring one would name
+ * a template that does not exist.
+ *
+ * **Nothing in `src/parser/` can check this one.** The parser frames the section
+ * by this root, so a reparse draws no warning about it, but it is outside the
+ * section catalog and is not asserted as required, so a reparse will not report
+ * it missing and the conformance harness is the only thing that catches an
+ * omission or a wrong root. @internal
+ */
+function hospitalCourseSection(doc: Document, narrative: string | undefined): Element {
+  if (narrative === undefined) {
+    return emptySection(
+      doc,
+      HOSPITAL_COURSE_SECTION_BASE,
+      HOSPITAL_COURSE_CODE.code,
+      HOSPITAL_COURSE_CODE.displayName,
+      false,
+      null,
+    );
+  }
+  const section = sectionElement(
+    doc,
+    HOSPITAL_COURSE_SECTION_BASE,
+    HOSPITAL_COURSE_CODE.code,
+    HOSPITAL_COURSE_CODE.displayName,
+    textEl(doc, "text", narrative),
+    false,
+    undefined,
+    null,
+  );
+  return el(doc, "component", undefined, section);
+}
+
+/**
+ * Build the Discharge Diagnosis Section (V3) (`…22.2.24`, LOINC `11535-2`), a
+ * Discharge Summary SHALL section (CONF:1198-30524).
+ *
+ * **Its entries are optional and its code translation is not.** CONF:1198-15489
+ * reads "the entry, if present", so a caller with no diagnoses gets a spec-clean
+ * empty `nullFlavor="NI"` section rather than a refusal or an invented
+ * diagnosis. CONF:1198-32834 makes the `<translation>` on the section `code`
+ * unconditional, so it is carried by the empty section too.
+ *
+ * **One act, many diagnoses.** The section's entry SHALL be a single Hospital
+ * Discharge Diagnosis act (`…22.4.33`), which SHALL carry at least one
+ * `entryRelationship @typeCode="SUBJ"` holding exactly one Problem Observation
+ * (V3) (CONF:1198-7666, -15536, -7667). So every supplied diagnosis becomes one
+ * `entryRelationship` under ONE act, rather than one act each: the act is the
+ * "these are the discharge diagnoses" assertion, not the diagnosis.
+ * @internal
+ */
+function dischargeDiagnosisSection(
+  doc: Document,
+  diagnoses: readonly BuildCcdaProblem[],
+  id: (prefix: string) => string,
+  translate?: Translate,
+): Element {
+  if (diagnoses.length === 0) {
+    return emptySection(
+      doc,
+      DISCHARGE_DIAGNOSIS_SECTION_BASE,
+      DISCHARGE_DIAGNOSIS_CODE.code,
+      DISCHARGE_DIAGNOSIS_CODE.displayName,
+      false,
+      R21,
+      DISCHARGE_DIAGNOSIS_TRANSLATION,
+    );
+  }
+  const text = el(doc, "text");
+  const act = el(
+    doc,
+    "act",
+    { classCode: "ACT", moodCode: "EVN" },
+    el(doc, "templateId", { root: HOSPITAL_DISCHARGE_DIAGNOSIS_ACT, extension: R21 }),
+    el(doc, "id", { root: SYNTH_ROOT, extension: id("dx-act") }),
+    el(doc, "code", {
+      code: DISCHARGE_DIAGNOSIS_CODE.code,
+      codeSystem: LOINC,
+      displayName: DISCHARGE_DIAGNOSIS_CODE.displayName,
+      codeSystemName: "LOINC",
+    }),
+  );
+  for (const diagnosis of diagnoses) {
+    const contentId = id("dx-txt");
+    text.appendChild(
+      textEl(doc, "content", narrativeLabel(diagnosis.problem, "dischargeDiagnoses[].problem"), {
+        ID: contentId,
+      }),
+    );
+    act.appendChild(
+      el(
+        doc,
+        "entryRelationship",
+        { typeCode: "SUBJ" },
+        problemObservation(doc, diagnosis, contentId, id, translate),
+      ),
+    );
+  }
+  const section = sectionElement(
+    doc,
+    DISCHARGE_DIAGNOSIS_SECTION_BASE,
+    DISCHARGE_DIAGNOSIS_CODE.code,
+    DISCHARGE_DIAGNOSIS_CODE.displayName,
+    text,
+    false,
+    undefined,
+    R21,
+    DISCHARGE_DIAGNOSIS_TRANSLATION,
+  );
+  section.appendChild(el(doc, "entry", undefined, act));
   return el(doc, "component", undefined, section);
 }
 

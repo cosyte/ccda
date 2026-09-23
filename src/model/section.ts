@@ -7,7 +7,12 @@
  * resolve `<reference value="#id">`.
  */
 
-import { sectionForLoinc, sectionForTemplateRoot, type SectionInfo } from "../parser/templates.js";
+import {
+  framingOnlySectionForTemplateRoot,
+  sectionForLoinc,
+  sectionForTemplateRoot,
+  type SectionInfo,
+} from "../parser/templates.js";
 import { safeDerivedToken } from "../parser/tokens.js";
 import type { CcdaPosition } from "../parser/types.js";
 import { sectionMatchedByLoincFallback, unknownSectionCode } from "../parser/warnings.js";
@@ -197,7 +202,13 @@ function readEntryAuthorship(
   return out;
 }
 
-/** Resolve section identity via templateId root then LOINC fallback. @internal */
+/**
+ * Resolve section identity via templateId root, then the LOINC fallback, then a
+ * framing-only root (`framingOnlySectionForTemplateRoot`). The framing-only
+ * table is asked LAST, and only for a section the first two left unresolved, so
+ * it can take a section from "unknown" to recognized and can move no section
+ * that already had a key. @internal
+ */
 function recognize(
   el: Element,
   templateIds: readonly II[],
@@ -211,8 +222,17 @@ function recognize(
   }
 
   const loinc = code?.code;
+  const loincInfo = loinc === undefined ? undefined : sectionForLoinc(loinc);
+  if (loincInfo === undefined) {
+    for (const tid of templateIds) {
+      if (tid.root === undefined) continue;
+      const info = framingOnlySectionForTemplateRoot(tid.root);
+      if (info !== undefined) return { info, by: "templateId" };
+    }
+  }
+
   if (loinc !== undefined) {
-    const info = sectionForLoinc(loinc);
+    const info = loincInfo;
     // `sectionCode` is echoed only when it has the shape of a LOINC part number.
     // `UNKNOWN_SECTION_CODE` fires precisely when the code is unrecognized, so
     // membership would always withhold here and a sender's arbitrary `@code`

@@ -111,7 +111,7 @@ describe("AC-8: the README conformance statement agrees with the tracked report"
     // been marketed around. The delimited block IS the capability, so the limits have to be
     // inside it, and each of the four the report's shape makes necessary has to be named.
     expect(statement).toMatch(/\bLimits\b/);
-    expect(statement).toMatch(/other ten/);
+    expect(statement).toMatch(/other nine/);
     expect(statement).toMatch(/warning phase/i);
     expect(statement).toMatch(/differential/i);
     expect(statement).toMatch(/network egress/i);

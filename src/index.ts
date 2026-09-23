@@ -80,9 +80,11 @@ export type {
 // same parse model.
 export { buildCcda } from "./builder/index.js";
 export type {
+  BuildableDocumentType,
   BuildCcdaInit,
   BuildCcdaOptions,
   BuildCcdaPatient,
+  BuildCcdaEncompassingEncounter,
   BuildCcdaProblem,
   BuildCcdaAllergy,
   BuildCcdaMedication,

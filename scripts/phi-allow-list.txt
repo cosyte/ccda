@@ -78,6 +78,16 @@ NAME HEALTH
 NAME ORGANIZATION
 NAME CARDIOLOGY
 NAME PRACTICE
+# The authoring device's own producer. `buildCcda` writes
+# `<representedOrganization><name>cosyte</name>` into the device `<author>` of
+# EVERY document it emits, because CONF:1198-8456 puts a device author on the arm
+# that also obliges an organization, and the builder names the software's producer
+# rather than a clinical organization it was never told about. It is a brand name,
+# never a patient, a provider or a care setting. Declared here because
+# `test/__fixtures__/builder-baseline.ts` is the first tracked fixture carrying
+# whole emitted documents rather than hand-written fragments, so it is the first
+# to put that element in front of the scan.
+NAME COSYTE
 
 # --- Synthetic dates of birth (`birthTime@value`), normalized YYYYMMDD / YYYY ---
 # The default synthetic patient DOB and the Family-History relative's birthTime.

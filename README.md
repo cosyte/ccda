@@ -58,9 +58,9 @@ claims is narrow and worth reading literally: the behaviour documented on this p
 and covered by tests, but the public API is **not settled**, and any release may change it, so pin an
 exact version rather than a range. These surfaces are named rather than implied:
 
-- **Building is partial.** `buildCcda` emits two of the twelve US Realm document types (CCD and
-  Referral Note); the other ten throw rather than emitting something that merely resembles the type
-  you asked for.
+- **Building is partial.** `buildCcda` emits three of the twelve US Realm document types (CCD,
+  Referral Note and inpatient Discharge Summary); the other nine throw rather than emitting
+  something that merely resembles the type you asked for.
 - **Editing is whole-section.** `editCcda` covers twelve section kinds. Functional Status, Mental
   Status and the Referral Note's narrative-only sections are buildable but not editable, and there is
   no entry-level append and no section removal.
@@ -697,9 +697,11 @@ data that _is_ present. `requiredSectionKeys(documentType)` and
 
 The table is **conservative**: it asserts only unconditional, in-catalog, high-confidence SHALL
 constraints and deliberately omits choice constraints (`SHALL contain A OR B`), SHOULD/MAY sections,
-and SHALL sections outside the recognized catalog (e.g. Hospital Course, Physical Exam). A document
+SHALL sections outside the recognized catalog (e.g. Physical Exam), and the one SHALL section the
+parser recognizes but does not yet assert (the Discharge Summary's Hospital Course, below). A document
 type with an empty table therefore means _"no unconditional in-catalog SHALL section is asserted yet"_,
-not _"this type has no requirements"_. Broadening a table is additive and safe.
+not _"this type has no requirements"_. Broadening a table is additive, and it makes the check stricter
+on documents that omit the section, which is why it is never done as a side effect.
 
 The **CCD** table is fully traced. It asserts **six** sections, read directly off the normative C-CDA
 R2.1 Schematron's CCD (V3) rule: **Allergies** (CONF:1198-30662), **Medications** (-30664),
@@ -740,9 +742,11 @@ A **Discharge Summary** asserts **Allergies** (CONF:1198-30520), **Discharge Dia
 and **Plan of Treatment** (-30528), the three sections its errors rule requires unconditionally that
 this parser recognizes. It does **not** assert **Discharge Medications**: the normative source puts
 that section in the document's _warnings_ rule as a SHOULD (-30525), so a conformant Discharge
-Summary that omits it draws no warning. **Hospital Course** (-30522) is an unconditional SHALL that
-this parser's catalog does not recognize, so it is reported as unasserted rather than silently
-dropped.
+Summary that omits it draws no warning. **Hospital Course** (-30522) is an unconditional SHALL, an
+IHE PCC template the parser recognizes by its root when a document carries it (so it draws no
+`UNKNOWN_SECTION_CODE`) but does **not** assert: asserting it would newly warn on, and under
+`strict: true` refuse, a Discharge Summary that omits it and parses clean today. It is reported as
+unasserted, with the reason `assertion-would-tighten-parse`, rather than silently dropped.
 
 A **History and Physical** asserts seven of the ten sections its errors rule names: Allergies
 (-30572), Family History (-30584), Past Medical History (-30588), Medications (-30596), Results
@@ -800,7 +804,7 @@ changes nothing does not move the date.
 | Unstructured Document     | `not-applicable`  | nothing                                                                                                                                                                                                       | nothing: its component SHALL be a `nonXMLBody` (-31086), so it carries no section to require                                                                                                                                                                                                 |
 | CCD                       | `traced-complete` | Allergies (-30662), Medications (-30664), Problems (-30666), Results (-30670), Social History (-30688), Vital Signs (-30690); the last two scoped to the R2.1 stamp                                           | nothing: all six of its SHALL sections are asserted. Procedures (-30668) and Plan of Treatment (-30686) are SHOULD, so they are not part of the obligation                                                                                                                                   |
 | Care Plan                 | `traced-complete` | Health Concerns (-28756), Goals (-28762)                                                                                                                                                                      | nothing: both of its SHALL sections are asserted                                                                                                                                                                                                                                             |
-| Discharge Summary         | `traced-partial`  | Allergies (-30520), Discharge Diagnosis (-30524), Plan of Treatment (-30528, scoped to the R2.1 stamp)                                                                                                        | Hospital Course (-30522), outside the recognized catalog. Discharge Medications is a SHOULD (-30525) and is therefore not required at all                                                                                                                                                    |
+| Discharge Summary         | `traced-partial`  | Allergies (-30520), Discharge Diagnosis (-30524), Plan of Treatment (-30528, scoped to the R2.1 stamp)                                                                                                        | Hospital Course (-30522), recognized but not asserted (`assertion-would-tighten-parse`). Discharge Medications is a SHOULD (-30525) and is therefore not required at all                                                                                                                     |
 | Referral Note             | `traced-partial`  | Allergies (-30912), Medications (-30923), Problems (-29087), Reason for Referral (-30925)                                                                                                                     | the Assessment/Plan choice (-29102)                                                                                                                                                                                                                                                          |
 | History and Physical      | `traced-partial`  | Allergies (-30572), Family History (-30584), Past Medical History (-30588), Medications (-30596), Results (-30606), Social History (-30610), Vital Signs (-30612); all but Allergies scoped to the R2.1 stamp | General Status (-30586), Physical Exam (-30598), Review of Systems (-30608), all outside the recognized catalog; the chief-complaint/reason-for-visit choice (-30613) and the Assessment/Plan choice (-30614)                                                                                |
 | Transfer Summary          | `traced-partial`  | Allergies (-28256), Medications (-28278), Problems (-28284), Results (-28288), Vital Signs (-28292), Reason for Referral (-31343); the last three scoped to the R2.1 stamp                                    | the Assessment/Plan choice (-31582)                                                                                                                                                                                                                                                          |
@@ -966,8 +970,9 @@ condition is resolved, per Problem Observation `…22.4.4`) is emitted only for 
 keeps the `nullFlavor="UNK"` high, never a fabricated date. Each CCD SHALL section for which no content
 is supplied is emitted as a spec-clean empty `nullFlavor="NI"` section; the non-required Immunizations /
 Procedures / Encounters / Functional Status / Mental Status / Past Medical History /
-Plan of Treatment / Family History sections are emitted only when populated. The builder emits two of
-the twelve document types (**CCD** and **Referral Note**); the other ten are **not implemented**, and any
+Plan of Treatment / Family History sections are emitted only when populated. The builder emits three of
+the twelve document types (**CCD**, **Referral Note** and inpatient **Discharge Summary**); the other
+nine are **not implemented**, and any
 other `documentType` throws a `TypeError` rather than emitting something that merely resembles the type
 you asked for. Any C-CDA section outside the set listed above cannot be built at all.
 `buildCcda(init, { terminology })` accepts an optional bring-your-own terminology adapter (see "Code
@@ -1314,16 +1319,31 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
   removal, and no `APND` / `XFRM` relationship: an edit stamps `RPLC` only.
 - **Serializer re-emits a parsed document; the builder constructs one**: `serializeCcda` / `toString()`
   faithfully re-emit a _parsed_ document (the spec-clean emit half of Postel's Law). To construct a
-  document from scratch, `buildCcda` emits a spec-clean **CCD** or **Referral Note**
-  (`documentType: "referralNote"`) with the US Realm header + the CCD's six SHALL sections
+  document from scratch, `buildCcda` emits a spec-clean **CCD**, **Referral Note**
+  (`documentType: "referralNote"`) or inpatient **Discharge Summary**
+  (`documentType: "dischargeSummary"`) with the US Realm header + the CCD's six SHALL sections
   (**Problems, Allergies, Medications, Results, Vital Signs, and Social History**), plus
   **Immunizations, Procedures, Encounters, Functional
   Status, Mental Status, Past Medical History, Plan of Treatment, and Family History** emitted only
   when populated (none is a CCD SHALL section); a Referral Note additionally
-  specializes the header and emits its own SHALL set (Reason for Referral, Assessment, Plan of Treatment).
-  To change a section of a document you already parsed, use `editCcda`. The remaining ten document
+  specializes the header and emits its own SHALL set (Reason for Referral, Assessment, Plan of Treatment);
+  and a Discharge Summary specializes the header with its own SHALL set (Allergies, Hospital Course,
+  Discharge Diagnosis, Plan of Treatment) plus the `componentOf/encompassingEncounter` frame its
+  template requires, an encounter period and a discharge disposition, each emitted verbatim when
+  supplied and as an explicit `nullFlavor="UNK"` when not, never derived from another date in the
+  document. A Discharge Summary emits Problems and Medications only when you supply them, the
+  medications in the Medications Section (it does not emit the Discharge Medications Section). Input
+  one type carries is **refused**, never dropped: `hospitalCourse`, `dischargeDiagnoses` and
+  `encompassingEncounter` throw on a CCD or a Referral Note, and `assessment` and `reasonForReferral`
+  throw on a Discharge Summary. (A CCD still ignores `assessment` and `reasonForReferral`, as it
+  always has.)
+  To change a section of a document you already parsed, use `editCcda`. The remaining nine document
   types are not implemented. "Spec-clean" here means well-formed,
-  correctly-templated, and **round-tripping** through `parseCcda` with zero warnings. Every entry
+  correctly-templated, and **round-tripping** through `parseCcda` with zero warnings, for all three
+  types. A Discharge Summary's **Hospital Course** section (CONF:1198-30522) is an IHE PCC template
+  the parser recognizes by its root but does not assert as required, so a reparse will not report it
+  missing: `pnpm conformance` is what checks that it is there.
+  Every entry
   emits the `SHALL`-cardinality `effectiveTime` its C-CDA R2.1 template requires: the Problems/Allergies
   concern acts + observations, the Medication Activity `IVL_TS` duration, and the Results/Vital Signs
   organizers + observations. When the caller supplied a time it is used; when a `SHALL` requires the
@@ -1352,13 +1372,13 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
   every run, and a run fails if the committed bytes disagree with what it just produced.
   **Measured against Schematron revision `6d3ed96160b45a111895da4df5510c7fad9de01f`**, the document
   types validated are
-  <!-- conformance-statement:document-types:start -->`ccd` and `referralNote`<!-- conformance-statement:document-types:end -->,
+  <!-- conformance-statement:document-types:start -->`ccd`, `dischargeSummary` and `referralNote`<!-- conformance-statement:document-types:end -->,
   with **0** error-severity results on the built side
   and **0** round-trip documents whose Schematron error set differed.
   **This is an assessment against a published artifact, not a certification**, and no accredited body
   has reviewed this software or this result.
   **Limits, and they sit here beside the capability rather than in a footer.** The measurement covers
-  the two document types `buildCcda` emits and says nothing about the other ten, which it does not
+  the three document types `buildCcda` emits and says nothing about the other nine, which it does not
   emit. It covers the error-severity phase; the Schematron's warning phase is not run and a clean
   result is not a claim about it. Value-set membership is checked only where the Schematron's own
   vocabulary file checks it, so a clean result is not a terminology verification. The round-trip half

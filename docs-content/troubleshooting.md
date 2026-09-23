@@ -96,10 +96,13 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   warning. A catalog section matched only by its LOINC code also gets its `key`, but raises
   `SECTION_MATCHED_BY_LOINC_FALLBACK`; Reason for Visit and Chief Complaint carry no recognized
   `templateId` at all, so they always take this path. A section the catalog does not recognize
-  (Hospital Course and Physical Exam among them) reads back with `key: undefined` and raises
-  `UNKNOWN_SECTION_CODE`, or, if it carries no section `code` to match on, silently. None of the
-  three drops anything: the narrative and the raw structure are preserved, and the document still
-  re-serializes faithfully.
+  (Physical Exam among them) reads back with `key: undefined` and raises `UNKNOWN_SECTION_CODE`, or,
+  if it carries no section `code` to match on, silently. None of the three drops anything: the
+  narrative and the raw structure are preserved, and the document still re-serializes faithfully.
+  The Hospital Course Section is the one exception to the third outcome: a section carrying its
+  root (`1.3.6.1.4.1.19376.1.5.3.1.3.5`) and matching nothing in the catalog gets
+  `key: "hospitalCourse"` and no warning. It is matched by that root only, never by its LOINC code
+  `8648-8`, so a section carrying the code without the root still raises `UNKNOWN_SECTION_CODE`.
 - **An entry another subject governs is withheld, not attributed.** CDA R2 makes `Section.subject` the
   "primary target of the entries recorded in a section" and C-CDA admits the same override on a
   clinical statement, so a document can carry a relative's or a donor's statement inside the patient's
@@ -451,21 +454,46 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   requiredSectionKeys("dischargeSummary").includes("planOfTreatment"); // => true
   requiredSectionKeys("dischargeSummary").includes("dischargeMedications"); // => false
   requiredSectionStatus("dischargeSummary").source?.revision; // => "2025-09-08"
+
+  // Hospital Course is recognized when present but not asserted, and says why.
+  requiredSectionKeys("dischargeSummary").includes("hospitalCourse"); // => false
+  requiredSectionStatus("dischargeSummary").unasserted[0]?.reason; // => "assertion-would-tighten-parse"
   ```
 
 ### Building a document
 
-- **`buildCcda` emits two of the twelve document types.** A **CCD** (the default) and a **Referral
-  Note** (`documentType: "referralNote"`). Any other value throws a `TypeError` rather than emitting
-  something that merely resembles the type you asked for. The other ten types are not implemented.
+- **`buildCcda` emits three of the twelve document types.** A **CCD** (the default), a **Referral
+  Note** (`documentType: "referralNote"`) and an inpatient **Discharge Summary**
+  (`documentType: "dischargeSummary"`). Any other value throws a `TypeError` rather than emitting
+  something that merely resembles the type you asked for. The other nine types are not implemented.
+  Only an omitted (`undefined`) `documentType` means a CCD: `null`, and any value that is not a
+  string, is refused.
+- **A clean Discharge Summary build reparses with zero warnings**, like the other two types. Its
+  SHALL set includes the Hospital Course Section (`1.3.6.1.4.1.19376.1.5.3.1.3.5`, LOINC `8648-8`),
+  an IHE PCC template the parser recognizes by its root, so `findSection("hospitalCourse")`
+  resolves. The parser does **not** assert it as required, though: a reparse of a Discharge Summary
+  that lacks it does not report it missing. `pnpm conformance` is the check on its presence.
+- **Content you supply is emitted or refused, never dropped.** A Discharge Summary emits the
+  `problems` and `medications` you hand it, the medications in the Medications Section (it never
+  emits the Discharge Medications Section, which would assert they are discharge medications).
+  `hospitalCourse`, `dischargeDiagnoses` and `encompassingEncounter` throw a `TypeError` on a CCD or
+  a Referral Note, and `assessment` and `reasonForReferral` throw on a Discharge Summary. A CCD
+  still ignores `assessment` and `reasonForReferral`, as it always has.
+- **A Discharge Summary's encounter frame is never guessed.** `componentOf/encompassingEncounter`
+  is always emitted for that type, because its template requires it, and each slot the caller did
+  not supply through `encompassingEncounter` (either period bound, the discharge disposition) is
+  emitted `nullFlavor="UNK"` and reparses as absent. None of the three is ever derived from the
+  document `effectiveTime` or from a `documentationOf` service event.
 - **Which sections a build can carry.** For a CCD, its six SHALL sections are always emitted, as
   spec-clean empty `nullFlavor="NI"` sections when you supply no content: Problems, Allergies,
   Medications, Results, Vital Signs, and Social History (smoking status). Immunizations, Procedures,
   Encounters, Functional Status, Mental Status, Past Medical History, Plan of Treatment, and Family
   History are emitted only when populated, so an empty one is never fabricated. A Referral Note
   instead always emits Problems, Allergies, Medications, Reason for Referral, Assessment, and Plan of
-  Treatment, and demotes Results, Vital Signs and Social History to populated-only. Any C-CDA section
-  outside that set cannot be built.
+  Treatment, and demotes Results, Vital Signs and Social History to populated-only. A Discharge
+  Summary always emits Allergies, Hospital Course, Discharge Diagnosis and Plan of Treatment, and
+  forces nothing else: neither Problems nor Medications is in its SHALL set, so both are
+  populated-only there. Any C-CDA section outside that set cannot be built.
 - **Every coded value that reaches the narrative needs a `displayName`, and a missing one is
   refused.** Each populated section regenerates its `<text>` narrative from the same
   `BuildCode.displayName` the coded entry carries, and links the two with a `<reference>`, so the
@@ -494,11 +522,12 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   `pnpm conformance` fetches the C-CDA R2.1 Schematron, its vocabulary file and the CDA R2 XML schema
   from pinned immutable references, validates every document `buildCcda` emits against the schema and
   then the Schematron's error-severity phase, and writes `documentation/conformance-report.md`. The
-  measured set is one document per optional section as well as the two populated documents, so a
+  measured set is one document per optional section as well as a minimal and a populated document
+  per document type, so a
   green run is not a green run over a subset of what the builder can emit. The current result is zero
   error-severity results.
   **What that does and does not tell you, stated here rather than left to be assumed.** It covers the
-  two document types the builder emits and says nothing about the other ten, which it does not emit.
+  three document types the builder emits and says nothing about the other nine, which it does not emit.
   It covers the error-severity phase; the warning phase is not run. It checks value-set membership
   only where the Schematron's own vocabulary file checks it, so it is not a terminology verification.
   It is an assessment against a published artifact, **not a certification**, and no accredited body

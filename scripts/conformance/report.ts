@@ -22,6 +22,8 @@
  * it, and the report says so in its own words rather than leaving a reader to assume.
  */
 
+import { DOCUMENT_TYPES } from "../../src/index.js";
+
 import type { SchemaFinding } from "./xsd.js";
 import type { Finding } from "./schematron.js";
 
@@ -173,7 +175,8 @@ export function renderReport(result: RunResult): string {
     "CDA R2 XML schema and then the error-severity phase of the C-CDA R2.1 Schematron, and it measures",
     "whether parsing and re-serializing a public sample changes that sample's Schematron error set. It",
     "does not measure value-set membership beyond what the Schematron's own vocabulary file asserts, it",
-    "does not measure the ten document types `buildCcda` does not emit, and it says nothing about",
+    `does not measure the ${String(DOCUMENT_TYPES.length - facts.documentTypes.length)} document ` +
+      "types `buildCcda` does not emit, and it says nothing about",
     "documents this library has not been pointed at.",
     "",
   );
