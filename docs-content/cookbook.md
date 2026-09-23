@@ -421,14 +421,21 @@ const summary = buildCcda({
 
 summary.header.encompassingEncounter?.effectiveTime?.low?.raw; // => "20240102"
 summary.header.encompassingEncounter?.dischargeDispositionCode?.code; // => "01"
+summary.warnings.length; // => 0
+summary.findSection("hospitalCourse")?.narrativeText; // => "Admitted for observation. Uneventful course, discharged home."
 ```
 
-> **A Discharge Summary reparses with exactly one warning, and it is expected.** Its SHALL Hospital
-> Course Section is an IHE PCC template this parser's section catalog does not recognize, so the
-> section is emitted (the document's normative rule requires it, and `pnpm conformance` fails
-> without it) and the parser raises one `UNKNOWN_SECTION_CODE` saying truthfully that it does not
-> know the template. `findSection("hospitalCourse")` does not resolve; the section is in
-> `doc.sections` with `key: undefined` and its narrative intact.
+> **A Discharge Summary reparses with zero warnings, and its Hospital Course is recognized but not
+> required.** The SHALL Hospital Course Section is an IHE PCC template the parser recognizes by its
+> root, so `findSection("hospitalCourse")` resolves. The parser does not assert it as a required
+> section, so a reparse will not report it MISSING from a document that lacks it: `pnpm conformance`
+> is the check on its presence.
+>
+> **What you supply is emitted or refused.** `problems` and `medications` are emitted when you pass
+> them (the medications in the Medications Section, not the Discharge Medications Section). Passing
+> `assessment` or `reasonForReferral`, which are Referral Note sections, throws a `TypeError`, as
+> does passing `hospitalCourse`, `dischargeDiagnoses` or `encompassingEncounter` to a CCD or a
+> Referral Note.
 
 ## 6. Edit a parsed document: add or replace a section, keep a revision trail
 

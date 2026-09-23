@@ -32,10 +32,13 @@ immutability + explicit mutation, and the profile system.
   reasoning closed none of them, and the 64 unresolvable `@example` imports below are still an open
   defect. Do not describe the package as more complete than these:
   - `buildCcda` emits **three of the twelve** document types (CCD, Referral Note, Discharge
-    Summary); parsing **recognizes** all twelve, only building is limited. **A Discharge Summary
-    reparses with one `UNKNOWN_SECTION_CODE`**, because its SHALL Hospital Course Section is an
-    IHE PCC template outside the section catalog: emitted because the document's rule requires it,
-    unrecognized because the parser does not know it. Do not answer that by deleting the section.
+    Summary); parsing **recognizes** all twelve, only building is limited. **All three reparse with
+    zero warnings.** The Discharge Summary's SHALL Hospital Course Section is an IHE PCC template the
+    parser FRAMES by root (`FRAMING_ONLY_SECTIONS`, consulted last, no LOINC fallback, invisible to
+    the entry layer) and does **not assert**: promoting it into the catalog or asserting it makes
+    third-party parses stricter, which is its own item. Never delete the section to go green.
+    **Supplied content is emitted or refused, never dropped** (a CCD ignoring `assessment` /
+    `reasonForReferral` is the one older exception, frozen byte-for-byte).
     Why: `documentation/agent-notes.md#what-buildccda-emits-and-what-it-does-not`
   - **A narrative label is REFUSED, never fabricated: `narrativeLabel()` THROWS when a PRESENT coded
     object carries no `displayName`. Never render a confident sentence the entry does not support.**

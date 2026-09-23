@@ -51,19 +51,44 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     under the wrong document template.
   - **`BuildableDocumentType` is `Extract<DocumentType, …>`**, so the builder's surface cannot
     drift from the parser's recognition enumeration without a compile error.
-  - **A Discharge Summary reparses with exactly one warning, and that is expected rather than a
-    defect to fix by changing what is emitted.** Its SHALL set includes the **Hospital Course
-    Section** (`1.3.6.1.4.1.19376.1.5.3.1.3.5`, LOINC `8648-8`, CONF:1198-30522), an IHE PCC
-    template that is **outside this parser's section catalog**, so every Discharge Summary the
-    builder emits raises one `UNKNOWN_SECTION_CODE` naming it on reparse. The section is emitted
-    because the document's normative errors rule requires it and `pnpm conformance` fails without
-    it; the warning is the parser stating truthfully that it does not know the template. **Never
-    answer that warning by dropping the section**, which trades a true diagnostic for a
-    non-conformant document. Recognizing the template in `SECTION_CATALOG` would close it, and
-    that is a **parser** change with its own blast radius (it moves the Discharge Summary row in
-    `required-sections.ts` from `unasserted` to asserted, so a Discharge Summary missing the
-    section would newly draw `REQUIRED_SECTION_MISSING`); it is filed rather than smuggled in
-    beside a builder change.
+  - **All three built types reparse with ZERO warnings, the Discharge Summary included.** Its SHALL
+    set includes the **Hospital Course Section** (`1.3.6.1.4.1.19376.1.5.3.1.3.5`, LOINC `8648-8`,
+    CONF:1198-30522), an IHE PCC template the section catalog does not carry. The parser FRAMES it
+    from `FRAMING_ONLY_SECTIONS` in `src/parser/templates.ts`, so the section the builder writes
+    draws no `UNKNOWN_SECTION_CODE`. **Never answer a warning on it by dropping the section**, which
+    trades a diagnostic for a non-conformant document.
+  - **Why framing-only and not a `SECTION_CATALOG` row: a catalog row makes third-party parses
+    stricter, and the S0352 scope forbade that.** Measured by mutation (S0352 notes): putting the
+    row in the catalog reds four tests, because a catalog row (1) gets a LOINC fallback, so a
+    section coding `8648-8` under another root trades `UNKNOWN_SECTION_CODE` for
+    `SECTION_MATCHED_BY_LOINC_FALLBACK`; (2) wins by root ORDER, so a section stamped with the IHE
+    root before a catalog root changes key and a required section it satisfied goes missing;
+    (3) is seen by the entry layer (`sectionKeyOf`), so a triad entry sitting in a Hospital Course
+    section is newly flagged `SECTION_PLACEMENT_SUSPECT`, which an unrecognized section never
+    drew. The framing-only table is therefore consulted LAST (after the LOINC fallback), has no
+    LOINC fallback, and is invisible to `sectionForTemplateRoot`, `sectionForLoinc`, `SECTION_KEYS`,
+    the entry layer and `editCcda`. The one thing it moves is the `UNKNOWN_SECTION_CODE` of a
+    section carrying the root and resolving by nothing else.
+  - **It is recognized and still NOT asserted.** Asserting it would put `REQUIRED_SECTION_MISSING`
+    on a Discharge Summary that omits it (and, under `strict: true`, refuse one) that parses clean
+    today. `required-sections.ts` names it under the third `UnassertedSectionReason`,
+    `assertion-would-tighten-parse`, the one reason that is a decision rather than a fact. So a
+    reparse will not report the section MISSING, and `pnpm conformance` is the only check on its
+    presence. Promoting it to the catalog or asserting it is its own item, with the three
+    consequences above as its blast radius.
+  - **Supplied content is emitted or refused, never dropped.** A Discharge Summary emits the
+    `problems` and `medications` it is handed (the medications in the Medications Section, never
+    the Discharge Medications Section, which would assert they are discharge medications). The
+    Discharge-Summary-only inputs (`hospitalCourse`, `dischargeDiagnoses`,
+    `encompassingEncounter`) throw on a CCD or a Referral Note, and the Referral Note narratives
+    (`assessment`, `reasonForReferral`) throw on a Discharge Summary. **One older silent drop
+    remains, deliberately:** a CCD ignores `assessment` / `reasonForReferral`, because a CCD built
+    from an init naming no Discharge Summary input is held byte-identical to the pre-S0352
+    builder. Refusing there is a published behaviour change and its own item.
+  - **Only an omitted `documentType` defaults to a CCD.** `undefined` is the omission; `null` and
+    every non-string are refused BEFORE the `Object.hasOwn` lookup, because `hasOwn` coerces its
+    key (`["dischargeSummary"]`, or an object whose `toString` names a member, built that member),
+    and the refusal describes a non-string by its kind without converting it.
   - **The Discharge Summary's SHALL set is not the CCD's minus a few.** It contains neither
     Problems nor Medications, so neither is forced for that type, and its Allergies assert names
     the entries-**optional** identifier where the CCD's names the entries-required one. Discharge
@@ -1826,8 +1851,10 @@ deleted; the imperative as it stood is reproduced here verbatim.
       Treatment (-30528), which the **errors** rule requires unconditionally and this catalog
       recognizes. **Withdrawing the SHOULD and adding the SHALL are the same fix with the sign
       flipped, and neither half is optional.** Hospital Course (-30522) is a third unconditional
-      SHALL, outside this catalog, so it is enumerated in `unasserted` rather than asserted or
-      dropped. **Do not re-add `dischargeMedications` as a key.**
+      SHALL. The parser frames it by root but it is outside this catalog and NOT asserted (reason
+      `assertion-would-tighten-parse`; see `#what-buildccda-emits-and-what-it-does-not`), so it is
+      enumerated in `unasserted` rather than asserted or dropped. **Do not re-add
+      `dischargeMedications` as a key.**
     - **History and Physical asserted ONE of the ten SHALL sections its errors rule names.** Six more
       are catalog keys and are asserted now (Family History -30584, Past Medical History -30588,
       Medications -30596, Results -30606, Social History -30610, Vital Signs -30612, beside the
@@ -2229,6 +2256,14 @@ encompassing encounter SHALL carry at least one `id`) on the first run, from the
 Header rule rather than the Discharge Summary's own, against identifiers that had otherwise been
 read correctly off the Schematron. Reading the document type's own rule and believing it is the
 same mistake the 86 results came from; the harness is what tells them apart.
+
+**AND IT STILL MISSED ONE THING: A FIELD A CASE SETS IS NOT A FIELD THE DOCUMENT CARRIES.** The
+populated Discharge Summary case spread the shared populated init, two problems and two
+medications included, and the builder had no emit path for either outside a type's SHALL set, so
+both were dropped in silence. The coverage test was green (every field set by some case), the
+harness was green (a valid document, just a shorter one), and the impl gate found it by counting
+what the case supplied against what the reparse returned. The builder now emits or refuses every
+input; the gap the coverage test cannot see is that it reads the INIT, not the emitted document.
 
 **THE COUNT IS ZERO NOW. DO NOT READ THAT AS "CONFORMANT".** What is measured is narrower than
 what a reader will assume, and each edge is real:

@@ -96,10 +96,13 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   warning. A catalog section matched only by its LOINC code also gets its `key`, but raises
   `SECTION_MATCHED_BY_LOINC_FALLBACK`; Reason for Visit and Chief Complaint carry no recognized
   `templateId` at all, so they always take this path. A section the catalog does not recognize
-  (Hospital Course and Physical Exam among them) reads back with `key: undefined` and raises
-  `UNKNOWN_SECTION_CODE`, or, if it carries no section `code` to match on, silently. None of the
-  three drops anything: the narrative and the raw structure are preserved, and the document still
-  re-serializes faithfully.
+  (Physical Exam among them) reads back with `key: undefined` and raises `UNKNOWN_SECTION_CODE`, or,
+  if it carries no section `code` to match on, silently. None of the three drops anything: the
+  narrative and the raw structure are preserved, and the document still re-serializes faithfully.
+  The Hospital Course Section is the one exception to the third outcome: a section carrying its
+  root (`1.3.6.1.4.1.19376.1.5.3.1.3.5`) and matching nothing in the catalog gets
+  `key: "hospitalCourse"` and no warning. It is matched by that root only, never by its LOINC code
+  `8648-8`, so a section carrying the code without the root still raises `UNKNOWN_SECTION_CODE`.
 - **An entry another subject governs is withheld, not attributed.** CDA R2 makes `Section.subject` the
   "primary target of the entries recorded in a section" and C-CDA admits the same override on a
   clinical statement, so a document can carry a relative's or a donor's statement inside the patient's
@@ -451,6 +454,10 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   requiredSectionKeys("dischargeSummary").includes("planOfTreatment"); // => true
   requiredSectionKeys("dischargeSummary").includes("dischargeMedications"); // => false
   requiredSectionStatus("dischargeSummary").source?.revision; // => "2025-09-08"
+
+  // Hospital Course is recognized when present but not asserted, and says why.
+  requiredSectionKeys("dischargeSummary").includes("hospitalCourse"); // => false
+  requiredSectionStatus("dischargeSummary").unasserted[0]?.reason; // => "assertion-would-tighten-parse"
   ```
 
 ### Building a document
@@ -459,13 +466,19 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   Note** (`documentType: "referralNote"`) and an inpatient **Discharge Summary**
   (`documentType: "dischargeSummary"`). Any other value throws a `TypeError` rather than emitting
   something that merely resembles the type you asked for. The other nine types are not implemented.
-- **A Discharge Summary reparses with exactly one `UNKNOWN_SECTION_CODE`, and that is expected.**
-  Its SHALL set includes the Hospital Course Section (`1.3.6.1.4.1.19376.1.5.3.1.3.5`, LOINC
-  `8648-8`), an IHE PCC template outside this parser's section catalog. The section is emitted
-  because the document's normative errors rule requires it; the warning is the parser saying it
-  does not know the template. `findSection("hospitalCourse")` does not resolve, and the section
-  sits in `doc.sections` with `key: undefined` and its narrative intact. Every other section of a
-  clean Discharge Summary build is recognized and the document carries no other warning.
+  Only an omitted (`undefined`) `documentType` means a CCD: `null`, and any value that is not a
+  string, is refused.
+- **A clean Discharge Summary build reparses with zero warnings**, like the other two types. Its
+  SHALL set includes the Hospital Course Section (`1.3.6.1.4.1.19376.1.5.3.1.3.5`, LOINC `8648-8`),
+  an IHE PCC template the parser recognizes by its root, so `findSection("hospitalCourse")`
+  resolves. The parser does **not** assert it as required, though: a reparse of a Discharge Summary
+  that lacks it does not report it missing. `pnpm conformance` is the check on its presence.
+- **Content you supply is emitted or refused, never dropped.** A Discharge Summary emits the
+  `problems` and `medications` you hand it, the medications in the Medications Section (it never
+  emits the Discharge Medications Section, which would assert they are discharge medications).
+  `hospitalCourse`, `dischargeDiagnoses` and `encompassingEncounter` throw a `TypeError` on a CCD or
+  a Referral Note, and `assessment` and `reasonForReferral` throw on a Discharge Summary. A CCD
+  still ignores `assessment` and `reasonForReferral`, as it always has.
 - **A Discharge Summary's encounter frame is never guessed.** `componentOf/encompassingEncounter`
   is always emitted for that type, because its template requires it, and each slot the caller did
   not supply through `encompassingEncounter` (either period bound, the discharge disposition) is

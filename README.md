@@ -697,9 +697,11 @@ data that _is_ present. `requiredSectionKeys(documentType)` and
 
 The table is **conservative**: it asserts only unconditional, in-catalog, high-confidence SHALL
 constraints and deliberately omits choice constraints (`SHALL contain A OR B`), SHOULD/MAY sections,
-and SHALL sections outside the recognized catalog (e.g. Hospital Course, Physical Exam). A document
+SHALL sections outside the recognized catalog (e.g. Physical Exam), and the one SHALL section the
+parser recognizes but does not yet assert (the Discharge Summary's Hospital Course, below). A document
 type with an empty table therefore means _"no unconditional in-catalog SHALL section is asserted yet"_,
-not _"this type has no requirements"_. Broadening a table is additive and safe.
+not _"this type has no requirements"_. Broadening a table is additive, and it makes the check stricter
+on documents that omit the section, which is why it is never done as a side effect.
 
 The **CCD** table is fully traced. It asserts **six** sections, read directly off the normative C-CDA
 R2.1 Schematron's CCD (V3) rule: **Allergies** (CONF:1198-30662), **Medications** (-30664),
@@ -740,9 +742,11 @@ A **Discharge Summary** asserts **Allergies** (CONF:1198-30520), **Discharge Dia
 and **Plan of Treatment** (-30528), the three sections its errors rule requires unconditionally that
 this parser recognizes. It does **not** assert **Discharge Medications**: the normative source puts
 that section in the document's _warnings_ rule as a SHOULD (-30525), so a conformant Discharge
-Summary that omits it draws no warning. **Hospital Course** (-30522) is an unconditional SHALL that
-this parser's catalog does not recognize, so it is reported as unasserted rather than silently
-dropped.
+Summary that omits it draws no warning. **Hospital Course** (-30522) is an unconditional SHALL, an
+IHE PCC template the parser recognizes by its root when a document carries it (so it draws no
+`UNKNOWN_SECTION_CODE`) but does **not** assert: asserting it would newly warn on, and under
+`strict: true` refuse, a Discharge Summary that omits it and parses clean today. It is reported as
+unasserted, with the reason `assertion-would-tighten-parse`, rather than silently dropped.
 
 A **History and Physical** asserts seven of the ten sections its errors rule names: Allergies
 (-30572), Family History (-30584), Past Medical History (-30588), Medications (-30596), Results
@@ -800,7 +804,7 @@ changes nothing does not move the date.
 | Unstructured Document     | `not-applicable`  | nothing                                                                                                                                                                                                       | nothing: its component SHALL be a `nonXMLBody` (-31086), so it carries no section to require                                                                                                                                                                                                 |
 | CCD                       | `traced-complete` | Allergies (-30662), Medications (-30664), Problems (-30666), Results (-30670), Social History (-30688), Vital Signs (-30690); the last two scoped to the R2.1 stamp                                           | nothing: all six of its SHALL sections are asserted. Procedures (-30668) and Plan of Treatment (-30686) are SHOULD, so they are not part of the obligation                                                                                                                                   |
 | Care Plan                 | `traced-complete` | Health Concerns (-28756), Goals (-28762)                                                                                                                                                                      | nothing: both of its SHALL sections are asserted                                                                                                                                                                                                                                             |
-| Discharge Summary         | `traced-partial`  | Allergies (-30520), Discharge Diagnosis (-30524), Plan of Treatment (-30528, scoped to the R2.1 stamp)                                                                                                        | Hospital Course (-30522), outside the recognized catalog. Discharge Medications is a SHOULD (-30525) and is therefore not required at all                                                                                                                                                    |
+| Discharge Summary         | `traced-partial`  | Allergies (-30520), Discharge Diagnosis (-30524), Plan of Treatment (-30528, scoped to the R2.1 stamp)                                                                                                        | Hospital Course (-30522), recognized but not asserted (`assertion-would-tighten-parse`). Discharge Medications is a SHOULD (-30525) and is therefore not required at all                                                                                                                     |
 | Referral Note             | `traced-partial`  | Allergies (-30912), Medications (-30923), Problems (-29087), Reason for Referral (-30925)                                                                                                                     | the Assessment/Plan choice (-29102)                                                                                                                                                                                                                                                          |
 | History and Physical      | `traced-partial`  | Allergies (-30572), Family History (-30584), Past Medical History (-30588), Medications (-30596), Results (-30606), Social History (-30610), Vital Signs (-30612); all but Allergies scoped to the R2.1 stamp | General Status (-30586), Physical Exam (-30598), Review of Systems (-30608), all outside the recognized catalog; the chief-complaint/reason-for-visit choice (-30613) and the Assessment/Plan choice (-30614)                                                                                |
 | Transfer Summary          | `traced-partial`  | Allergies (-28256), Medications (-28278), Problems (-28284), Results (-28288), Vital Signs (-28292), Reason for Referral (-31343); the last three scoped to the R2.1 stamp                                    | the Assessment/Plan choice (-31582)                                                                                                                                                                                                                                                          |
@@ -1327,15 +1331,18 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
   Discharge Diagnosis, Plan of Treatment) plus the `componentOf/encompassingEncounter` frame its
   template requires, an encounter period and a discharge disposition, each emitted verbatim when
   supplied and as an explicit `nullFlavor="UNK"` when not, never derived from another date in the
-  document.
+  document. A Discharge Summary emits Problems and Medications only when you supply them, the
+  medications in the Medications Section (it does not emit the Discharge Medications Section). Input
+  one type carries is **refused**, never dropped: `hospitalCourse`, `dischargeDiagnoses` and
+  `encompassingEncounter` throw on a CCD or a Referral Note, and `assessment` and `reasonForReferral`
+  throw on a Discharge Summary. (A CCD still ignores `assessment` and `reasonForReferral`, as it
+  always has.)
   To change a section of a document you already parsed, use `editCcda`. The remaining nine document
   types are not implemented. "Spec-clean" here means well-formed,
-  correctly-templated, and **round-tripping** through `parseCcda` with zero warnings, with one
-  named exception: a **Discharge Summary** SHALL contain a **Hospital Course** section
-  (CONF:1198-30522), that section is an IHE PCC template this parser's section catalog does not
-  recognize, so every Discharge Summary this builder emits reparses with exactly one
-  `UNKNOWN_SECTION_CODE` naming it. The section is emitted because the document's normative rule
-  requires it; the warning is the parser saying truthfully that it does not know the template.
+  correctly-templated, and **round-tripping** through `parseCcda` with zero warnings, for all three
+  types. A Discharge Summary's **Hospital Course** section (CONF:1198-30522) is an IHE PCC template
+  the parser recognizes by its root but does not assert as required, so a reparse will not report it
+  missing: `pnpm conformance` is what checks that it is there.
   Every entry
   emits the `SHALL`-cardinality `effectiveTime` its C-CDA R2.1 template requires: the Problems/Allergies
   concern acts + observations, the Medication Activity `IVL_TS` duration, and the Results/Vital Signs

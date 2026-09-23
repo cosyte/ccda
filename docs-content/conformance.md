@@ -258,9 +258,12 @@ Two readings that are easy to get backwards, and both are load-bearing:
   six). Treating a future release like an old one is how a document silently loses Social History and
   Vital Signs.
 - **`unasserted` is not a gap list.** It names SHALL sections the source states that this package
-  deliberately does not assert, each with one of two reasons: the section is outside the recognized
-  catalog, or the source requires it only conditionally. Asserting a SHOULD, or one half of a choice,
-  mis-flags a conformant document, which is the same defect as missing a SHALL with the sign flipped.
+  deliberately does not assert, each with one of three reasons: the section is outside the recognized
+  catalog (`outside-section-catalog`), the source requires it only conditionally
+  (`not-unconditionally-required`), or the parser recognizes it and asserting it would make the parse
+  of documents that omit it stricter (`assertion-would-tighten-parse`, today only the Discharge
+  Summary's Hospital Course). Asserting a SHOULD, or one half of a choice, mis-flags a conformant
+  document, which is the same defect as missing a SHALL with the sign flipped.
 
 `requiredSectionStatuses()` returns the status for every recognized document type at once, which is
 the call to make if you are building a conformance dashboard rather than checking one document.

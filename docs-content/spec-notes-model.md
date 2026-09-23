@@ -221,6 +221,9 @@ Every `<section>` is framed by `templateId` root (primary) with a LOINC `code` f
 
 - Recognized by `templateId` → `recognizedBy: "templateId"`.
 - Recognized only by LOINC code → `SECTION_MATCHED_BY_LOINC_FALLBACK`, `recognizedBy: "loinc"`.
+- Neither recognizes it, but it carries the Hospital Course root (`1.3.6.1.4.1.19376.1.5.3.1.3.5`) →
+  `key: "hospitalCourse"`, `recognizedBy: "templateId"`, no warning. Asked last and by that root
+  only, so it never changes a key the first two found and its LOINC code alone recognizes nothing.
 - Neither recognizes it → `UNKNOWN_SECTION_CODE`, retained as **narrative-only** (nothing is dropped).
 
 `findSection(key)` walks top-level sections then their subsections (depth-first); `allSections()`
