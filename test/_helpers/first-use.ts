@@ -1,6 +1,3 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join, relative } from "node:path";
-
 /**
  * Readers for the package's first-use path: the first fenced block of
  * `docs-content/quickstart.md`, the first fenced block under `## Usage` in `README.md`, and the
@@ -86,20 +83,6 @@ export function runnableTaggedFences(markdown: string): { line: number; lang: st
     if (tokens.slice(1).includes("runnable")) out.push({ line: index + 1, lang: tokens[0] ?? "" });
   });
   return out;
-}
-
-/** Every file under `dir`, keyed by its exact contents, mapped to its path from `root`. */
-export function fixturesByContent(root: string, dir: string): Map<string, string> {
-  const byText = new Map<string, string>();
-  const walk = (current: string): void => {
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const full = join(current, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else byText.set(readFileSync(full, "utf8"), relative(root, full));
-    }
-  };
-  walk(dir);
-  return byText;
 }
 
 /**

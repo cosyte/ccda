@@ -1,4 +1,10 @@
-<?xml version="1.0" encoding="UTF-8"?>
+/**
+ * The synthetic CCD the quickstart's first example parses, byte for byte. Every value is invented
+ * (the canonical synthetic patient "Jane Doe", fake OIDs and identifiers). It lives here, embedded
+ * in a `.ts` module like every other fixture in this repository, because no XML document is ever
+ * tracked as a file, and `pnpm phi-scan` reads the XML embedded under `test/__fixtures__/`.
+ */
+export const QUICKSTART_CCD = `<?xml version="1.0" encoding="UTF-8"?>
 <ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <realmCode code="US"/>
   <templateId root="2.16.840.1.113883.10.20.22.1.1" extension="2015-08-01"/>
@@ -140,4 +146,4 @@
       </substanceAdministration></entry>
     </section></component>
   </structuredBody></component>
-</ClinicalDocument>
+</ClinicalDocument>`;

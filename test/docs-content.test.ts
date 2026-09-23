@@ -10,13 +10,8 @@ import {
   runSnippet,
 } from "@cosyte/vitest-config/snippets";
 
-import {
-  documentLiterals,
-  fences,
-  fixturesByContent,
-  runnableTaggedFences,
-  section,
-} from "./_helpers/first-use.js";
+import { documentLiterals, fences, runnableTaggedFences, section } from "./_helpers/first-use.js";
+import * as firstUseFixtures from "./__fixtures__/first-use.js";
 
 /**
  * Doc/code-agreement gate. Every ```` ```ts runnable ```` block in `docs-content/` **and in
@@ -91,15 +86,16 @@ describe("README status section", () => {
  * The two FIRST-USE examples, the quickstart's first block and the first block under the README's
  * `## Usage`, are the ones a reader runs first. Each must be the block a sweep above executes, each
  * is run again here with a changed value to prove the run can go red, and every C-CDA document
- * literal either one prints must be a byte-for-byte copy of a committed fixture under
- * `test/__fixtures__`, which `pnpm phi-scan` reads as a document. Temp modules for these runs live
+ * literal either one prints must be a byte-for-byte copy of a fixture embedded in
+ * `test/__fixtures__/first-use.ts`, whose XML `pnpm phi-scan` reads. Temp modules for these runs live
  * in their own directory inside the root, as the harness requires, and are removed when the file is
  * done.
  */
 const resolveEntry = (specifier: string): string | undefined =>
   specifier === "@cosyte/ccda" ? ENTRY : undefined;
 const FIRST_USE_TMP = join(root, ".cosyte-first-use-snippets");
-const FIXTURE_DIR = join(root, "test", "__fixtures__");
+/** The embedded first-use fixtures, by value: a document literal must be exactly one of them. */
+const FIRST_USE_FIXTURES: ReadonlySet<string> = new Set(Object.values(firstUseFixtures));
 const QUICKSTART_TEXT = readFileSync(join(root, "docs-content", "quickstart.md"), "utf8");
 const README_TEXT = readFileSync(README, "utf8");
 const FIRST_USE = [
@@ -150,12 +146,11 @@ describe("the first-use examples", () => {
     });
 
     test(`AC-CC5: every document literal in the first block of ${example.doc} is a committed fixture`, () => {
-      const fixtures = fixturesByContent(root, FIXTURE_DIR);
       for (const literal of documentLiterals(example.fence?.body ?? "")) {
         expect(
-          fixtures.get(literal),
+          FIRST_USE_FIXTURES.has(literal),
           `${example.doc}: a document literal is no fixture`,
-        ).toBeDefined();
+        ).toBe(true);
       }
     });
   }
@@ -165,8 +160,7 @@ describe("the first-use examples", () => {
     expect(documentLiterals(code)).toHaveLength(1);
     expect(code.split('extension="MRN-00042"').length - 1).toBe(1);
     const mutated = code.replace('extension="MRN-00042"', 'extension="MRN-00043"');
-    const fixtures = fixturesByContent(root, FIXTURE_DIR);
-    expect(fixtures.get(documentLiterals(mutated)[0] ?? "")).toBeUndefined();
+    expect(FIRST_USE_FIXTURES.has(documentLiterals(mutated)[0] ?? "")).toBe(false);
     await expect(
       runSnippet(mutated, { resolve: resolveEntry, tmpDir: FIRST_USE_TMP }),
     ).rejects.toThrow();
