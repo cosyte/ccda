@@ -29,4 +29,20 @@ describe("the documented install specifier", () => {
       ["@cosyte/ccdb", "@cosyte/ccda"],
     );
   });
+
+  it("AC-CC7: every install command form a reader may copy is read, inline code included", () => {
+    const forms = [
+      "pnpm i @cosyte/ccdb",
+      "pnpm install @cosyte/ccdb",
+      "npm add @cosyte/ccdb",
+      "deno add npm:@cosyte/ccdb",
+      "run `npm install @cosyte/ccdb` first",
+      "then run npm install @cosyte/ccdb.",
+    ];
+    for (const form of forms) expect(installSpecifiers(form), form).toEqual(["@cosyte/ccdb"]);
+    expect(installSpecifiers("pnpm install\npnpm install --frozen-lockfile")).toEqual([]);
+    expect(
+      installSpecifiers("pnpm add file:../ccda\nnpm install git+https://x.test/ccda.git"),
+    ).toEqual([]);
+  });
 });

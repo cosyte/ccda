@@ -10,7 +10,13 @@ import {
   runSnippet,
 } from "@cosyte/vitest-config/snippets";
 
-import { documentLiterals, fences, runnableTaggedFences, section } from "./_helpers/first-use.js";
+import {
+  compileErrors,
+  documentLiterals,
+  fences,
+  runnableTaggedFences,
+  section,
+} from "./_helpers/first-use.js";
 import * as firstUseFixtures from "./__fixtures__/first-use.js";
 
 /**
@@ -94,6 +100,14 @@ describe("README status section", () => {
 const resolveEntry = (specifier: string): string | undefined =>
   specifier === "@cosyte/ccda" ? ENTRY : undefined;
 const FIRST_USE_TMP = join(root, ".cosyte-first-use-snippets");
+/**
+ * The snippet harness strips types without checking them, so compiling is checked separately, the
+ * way a reader's new TypeScript project compiles the block, against the source entry point the
+ * bundler compiles into the published types. A program over the source takes seconds to check, so
+ * these cases state their own budget.
+ */
+const SOURCE_PATHS = { "@cosyte/ccda": join(root, "src", "index.ts") };
+const COMPILE_TIMEOUT = 60_000;
 /** The embedded first-use fixtures, by value: a document literal must be exactly one of them. */
 const FIRST_USE_FIXTURES: ReadonlySet<string> = new Set(Object.values(firstUseFixtures));
 const QUICKSTART_TEXT = readFileSync(join(root, "docs-content", "quickstart.md"), "utf8");
@@ -135,6 +149,27 @@ describe("the first-use examples", () => {
       if (executed === undefined) return;
       await runSnippet(executed, { resolve: resolveEntry, tmpDir: FIRST_USE_TMP });
     });
+
+    test(
+      `${acRun}: the first block of ${example.doc} compiles in a new TypeScript project`,
+      () => {
+        expect(compileErrors(root, SOURCE_PATHS, example.fence?.body ?? "")).toEqual([]);
+      },
+      COMPILE_TIMEOUT,
+    );
+
+    test(
+      `${acRun}: a first block of ${example.doc} that does not compile is reported, so it turns this suite red`,
+      () => {
+        const code = example.fence?.body ?? "";
+        expect(code.split(example.claim).length - 1).toBe(1);
+        const broken = example.claim.replace("doc.getMrn()", "doc.getMrnn()");
+        expect(compileErrors(root, SOURCE_PATHS, code.replace(example.claim, broken))).toEqual([
+          expect.stringMatching(/TS2551|TS2339/),
+        ]);
+      },
+      COMPILE_TIMEOUT,
+    );
 
     test(`AC-CC4: a changed claimed value in the first block of ${example.doc} turns it red`, async () => {
       const code = example.fence?.body ?? "";
