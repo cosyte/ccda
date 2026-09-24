@@ -190,6 +190,15 @@ describe("the first-use examples", () => {
     });
   }
 
+  test("AC-CC4: a changed input value in the first block of README.md turns it red", async () => {
+    const code = FIRST_USE[1].fence?.body ?? "";
+    expect(code.split('mrn: "MRN001"').length - 1).toBe(1);
+    const mutated = code.replace('mrn: "MRN001"', 'mrn: "MRN002"');
+    await expect(
+      runSnippet(mutated, { resolve: resolveEntry, tmpDir: FIRST_USE_TMP }),
+    ).rejects.toThrow();
+  });
+
   test("AC-CC5: the quickstart's first block reads exactly one document, and a changed value leaves the corpus", async () => {
     const code = FIRST_USE[0].fence?.body ?? "";
     expect(documentLiterals(code)).toHaveLength(1);
