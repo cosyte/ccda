@@ -2,7 +2,7 @@
 "@cosyte/ccda": minor
 ---
 
-feat: read the header participations, so a parsed document can say who authored it
+A parsed document now says who authored it: the parser reads the header participations.
 
 A consumer could ask whose document it was and what was in it, but not who wrote it.
 `CcdaHeader` carried ten fields and not one of them was a participation. Every
