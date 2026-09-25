@@ -1,0 +1,148 @@
+/**
+ * A synthetic Continuity of Care Document: an invented patient, fake OIDs and identifiers. It is a
+ * byte-for-byte copy of the fixture the quickstart parses (`test/__fixtures__/first-use.ts`),
+ * embedded in a module because this repository never tracks an XML document as a file.
+ */
+export const SYNTHETIC_CCD = `<?xml version="1.0" encoding="UTF-8"?>
+<ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <realmCode code="US"/>
+  <templateId root="2.16.840.1.113883.10.20.22.1.1" extension="2015-08-01"/>
+  <templateId root="2.16.840.1.113883.10.20.22.1.2" extension="2015-08-01"/>
+  <id root="2.16.840.1.113883.19.5.99999.1" extension="DOC-0001"/>
+  <code code="34133-9" codeSystem="2.16.840.1.113883.6.1" displayName="Summarization of Episode Note"/>
+  <title>Synthetic Continuity of Care Document</title>
+  <effectiveTime value="20240101120000-0500"/>
+  <languageCode code="en-US"/>
+  <recordTarget><patientRole>
+    <id root="2.16.840.1.113883.19.5" extension="MRN-00042" assigningAuthorityName="Sample Hospital"/>
+    <patient>
+      <name><given>Jane</given><given>Q</given><family>Doe</family></name>
+      <administrativeGenderCode code="F" codeSystem="2.16.840.1.113883.5.1" displayName="Female"/>
+      <birthTime value="19800101"/>
+    </patient>
+  </patientRole></recordTarget>
+  <component><structuredBody>
+    <component><section>
+      <templateId root="2.16.840.1.113883.10.20.22.2.5.1" extension="2015-08-01"/>
+      <code code="11450-4" codeSystem="2.16.840.1.113883.6.1"/>
+      <title>Problems</title>
+      <text><content ID="prob1">Essential hypertension</content></text>
+      <entry><act classCode="ACT" moodCode="EVN">
+        <templateId root="2.16.840.1.113883.10.20.22.4.3" extension="2015-08-01"/>
+        <statusCode code="active"/>
+        <entryRelationship typeCode="SUBJ"><observation classCode="OBS" moodCode="EVN">
+          <templateId root="2.16.840.1.113883.10.20.22.4.4" extension="2015-08-01"/>
+          <code code="55607006" codeSystem="2.16.840.1.113883.6.96"/>
+          <value xsi:type="CD" code="59621000" codeSystem="2.16.840.1.113883.6.96" displayName="Essential hypertension"/>
+          <text><reference value="#prob1"/></text>
+        </observation></entryRelationship>
+      </act></entry>
+    </section></component>
+    <component><section>
+      <templateId root="2.16.840.1.113883.10.20.22.2.1.1" extension="2014-06-09"/>
+      <code code="10160-0" codeSystem="2.16.840.1.113883.6.1"/>
+      <title>Medications</title>
+      <text><content ID="med1">Lisinopril 10 MG Oral Tablet</content></text>
+      <entry><substanceAdministration classCode="SBADM" moodCode="EVN">
+        <templateId root="2.16.840.1.113883.10.20.22.4.16" extension="2014-06-09"/>
+        <statusCode code="active"/>
+        <routeCode code="C38288" codeSystem="2.16.840.1.113883.3.26.1.1" displayName="Oral"/>
+        <doseQuantity value="10" unit="mg"/>
+        <consumable><manufacturedProduct classCode="MANU">
+          <templateId root="2.16.840.1.113883.10.20.22.4.23" extension="2014-06-09"/>
+          <manufacturedMaterial>
+            <code code="314076" codeSystem="2.16.840.1.113883.6.88" displayName="Lisinopril 10 MG Oral Tablet"/>
+          </manufacturedMaterial>
+        </manufacturedProduct></consumable>
+        <text><reference value="#med1"/></text>
+      </substanceAdministration></entry>
+    </section></component>
+    <component><section>
+      <templateId root="2.16.840.1.113883.10.20.22.2.6.1" extension="2015-08-01"/>
+      <code code="48765-2" codeSystem="2.16.840.1.113883.6.1"/>
+      <title>Allergies</title>
+      <text>No known allergies.</text>
+      <entry><act classCode="ACT" moodCode="EVN">
+        <templateId root="2.16.840.1.113883.10.20.22.4.30" extension="2015-08-01"/>
+        <statusCode code="active"/>
+        <entryRelationship typeCode="SUBJ"><observation classCode="OBS" moodCode="EVN" negationInd="true">
+          <templateId root="2.16.840.1.113883.10.20.22.4.7" extension="2014-06-09"/>
+          <code code="ASSERTION" codeSystem="2.16.840.1.113883.5.4"/>
+          <value xsi:type="CD" code="419199007" codeSystem="2.16.840.1.113883.6.96" displayName="Allergy to substance"/>
+        </observation></entryRelationship>
+      </act></entry>
+    </section></component>
+    <component><section>
+      <templateId root="2.16.840.1.113883.10.20.22.2.3.1" extension="2015-08-01"/>
+      <code code="30954-2" codeSystem="2.16.840.1.113883.6.1"/>
+      <title>Results</title>
+      <text><content ID="res1">Hemoglobin 13.5 g/dL</content></text>
+      <entry><organizer classCode="BATTERY" moodCode="EVN">
+        <templateId root="2.16.840.1.113883.10.20.22.4.1" extension="2015-08-01"/>
+        <code code="58410-2" codeSystem="2.16.840.1.113883.6.1" displayName="CBC panel"/>
+        <statusCode code="completed"/>
+        <component><observation classCode="OBS" moodCode="EVN">
+          <templateId root="2.16.840.1.113883.10.20.22.4.2" extension="2015-08-01"/>
+          <code code="718-7" codeSystem="2.16.840.1.113883.6.1" displayName="Hemoglobin"/>
+          <statusCode code="completed"/>
+          <value xsi:type="PQ" value="13.5" unit="g/dL"/>
+          <interpretationCode code="N" codeSystem="2.16.840.1.113883.5.83"/>
+        </observation></component>
+      </organizer></entry>
+    </section></component>
+    <component><section>
+      <templateId root="2.16.840.1.113883.10.20.22.2.4" extension="2015-08-01"/>
+      <templateId root="2.16.840.1.113883.10.20.22.2.4.1" extension="2015-08-01"/>
+      <code code="8716-3" codeSystem="2.16.840.1.113883.6.1"/>
+      <title>Vital Signs</title>
+      <text><content ID="vit1">Heart rate: 72 /min</content></text>
+      <entry><organizer classCode="CLUSTER" moodCode="EVN">
+        <templateId root="2.16.840.1.113883.10.20.22.4.26" extension="2015-08-01"/>
+        <code code="46680005" codeSystem="2.16.840.1.113883.6.96" displayName="Vital signs"/>
+        <statusCode code="completed"/>
+        <effectiveTime value="20240101120000-0500"/>
+        <component><observation classCode="OBS" moodCode="EVN">
+          <templateId root="2.16.840.1.113883.10.20.22.4.27" extension="2014-06-09"/>
+          <code code="8867-4" codeSystem="2.16.840.1.113883.6.1" displayName="Heart rate"/>
+          <text><reference value="#vit1"/></text>
+          <statusCode code="completed"/>
+          <effectiveTime value="20240101120000-0500"/>
+          <value xsi:type="PQ" value="72" unit="/min"/>
+        </observation></component>
+      </organizer></entry>
+    </section></component>
+    <component><section>
+      <templateId root="2.16.840.1.113883.10.20.22.2.17" extension="2015-08-01"/>
+      <code code="29762-2" codeSystem="2.16.840.1.113883.6.1"/>
+      <title>Social History</title>
+      <text><content ID="soc1">Never smoker</content></text>
+      <entry><observation classCode="OBS" moodCode="EVN">
+        <templateId root="2.16.840.1.113883.10.20.22.4.78" extension="2014-06-09"/>
+        <code code="72166-2" codeSystem="2.16.840.1.113883.6.1" displayName="Tobacco smoking status"/>
+        <text><reference value="#soc1"/></text>
+        <statusCode code="completed"/>
+        <effectiveTime value="20240101"/>
+        <value xsi:type="CD" code="266919005" codeSystem="2.16.840.1.113883.6.96" displayName="Never smoker"/>
+      </observation></entry>
+    </section></component>
+    <component><section>
+      <templateId root="2.16.840.1.113883.10.20.22.2.2.1" extension="2015-08-01"/>
+      <code code="11369-6" codeSystem="2.16.840.1.113883.6.1"/>
+      <title>Immunizations</title>
+      <text><content ID="imm1">Influenza, split virus, trivalent, injectable, preservative free</content></text>
+      <entry><substanceAdministration classCode="SBADM" moodCode="EVN">
+        <templateId root="2.16.840.1.113883.10.20.22.4.52" extension="2015-08-01"/>
+        <statusCode code="completed"/>
+        <effectiveTime value="20240101"/>
+        <doseQuantity value="0.5" unit="mL"/>
+        <consumable><manufacturedProduct classCode="MANU">
+          <templateId root="2.16.840.1.113883.10.20.22.4.54" extension="2014-06-09"/>
+          <manufacturedMaterial>
+            <code code="140" codeSystem="2.16.840.1.113883.12.292" displayName="Influenza, split virus, trivalent, injectable, preservative free"/>
+          </manufacturedMaterial>
+        </manufacturedProduct></consumable>
+        <text><reference value="#imm1"/></text>
+      </substanceAdministration></entry>
+    </section></component>
+  </structuredBody></component>
+</ClinicalDocument>`;

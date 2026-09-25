@@ -53,10 +53,12 @@ silence.
 
 ## Status
 
-`package.json` declares **`0.0.15`**, on the pre-alpha `0.0.x` version ladder. What that version
-claims is narrow and worth reading literally: the behaviour documented on this page is implemented
-and covered by tests, but the public API is **not settled**, and any release may change it, so pin an
-exact version rather than a range. These surfaces are named rather than implied:
+`package.json` declares **`0.0.15`**. From `0.1.0` the public API is settled and safe to depend on:
+the behaviour documented on this page is implemented and covered by tests, the exported names,
+options, return shapes and warning codes are the surface we keep stable, and below 1.0 a breaking
+change bumps the minor version and is called out in the changelog with its migration. On a `0.0.x`
+version, pin an exact version rather than a range. Some surfaces are still partial, and they are
+named rather than implied:
 
 - **Building is partial.** `buildCcda` emits three of the twelve US Realm document types (CCD,
   Referral Note and inpatient Discharge Summary); the other nine throw rather than emitting
@@ -90,16 +92,16 @@ substrate for C-CDA's XML.
 
 ## Usage
 
-One example, end to end: build a complete, spec-clean CCD, read it back, and check what came out. The
-`// =>` comments are the values this code really produces. A test in this repository executes this
-block against the published entry point and fails if either side drifts, so a reader (or an agent)
-lifting it verbatim gets code that runs.
+One example, end to end: build a complete, spec-clean CCD, read it back, and print what came out.
+The `// =>` comments are the values this code really produces, and the output below is what it
+prints. Tests in this repository execute this block against the published entry point and fail if
+either side drifts, so a reader (or an agent) lifting it verbatim gets code that runs.
 
 ```ts runnable
 import { buildCcda, parseCcda } from "@cosyte/ccda";
 
-// A complete synthetic CCD, built here so the example stands on its own. In your
-// integration this is the document a sending system handed you.
+// A synthetic CCD, built here so the example stands on its own. In your integration this is the
+// document a sending system handed you.
 const xml = buildCcda({
   patient: { mrn: "MRN001", given: ["Jane"], family: "Doe", gender: "F", birthTime: "19800101" },
   problems: [{ problem: { code: "59621000", displayName: "Essential hypertension" } }],
@@ -116,37 +118,40 @@ const xml = buildCcda({
       reaction: { code: "247472004", displayName: "Hives" }, // SNOMED CT
     },
   ],
-  vitalSigns: [
-    {
-      vitals: [
-        {
-          code: { code: "8480-6", displayName: "Systolic blood pressure" }, // LOINC
-          quantity: { value: 120, unit: "mm[Hg]" }, // UCUM
-        },
-      ],
-    },
-  ],
 }).toString();
 
 const doc = parseCcda(xml);
+const problem = doc.getProblems()[0];
+const allergen = doc.getAllergies()[0]?.allergies[0]?.allergen;
 
-doc.documentType; // => "ccd"
-doc.getPatient()?.name?.family; // => "Doe"
-doc.getMrn(); // => "MRN001"
-doc.getProblems()[0]?.problems[0]?.value?.code; // => "59621000"
-doc.getProblems()[0]?.status; // => "active"
-doc.getMedications()[0]?.drug?.code; // => "314076"
-doc.getAllergies()[0]?.allergies[0]?.allergen?.code; // => "7980"
-doc.warnings; // => []
-
-// An observation value is a discriminated union; switch on `kind` to reach the
-// UCUM-checked quantity, with the document's own unit intact.
-const systolic = doc.getVitals()[0]?.vitals[0]?.value;
-systolic?.kind; // => "physicalQuantity"
-systolic?.kind === "physicalQuantity" ? systolic.quantity?.value : undefined; // => 120
-
+console.log(doc.documentType, doc.getMrn(), doc.getPatient()?.name?.family);
+console.log("problem", problem?.problems[0]?.value?.code, problem?.status);
+console.log("medication", doc.getMedications()[0]?.drug?.code);
+console.log("allergy", allergen?.code, allergen?.displayName);
+console.log("warnings", doc.warnings.length);
 // The emit half is a fixed point: re-parsing and re-serializing changes nothing.
+console.log("round trip unchanged", parseCcda(doc.toString()).toString() === xml);
+
+// The values printed above, which the test suite asserts on every run:
+doc.documentType; // => "ccd"
+doc.getMrn(); // => "MRN001"
+problem?.problems[0]?.value?.code; // => "59621000"
+problem?.status; // => "active"
+doc.getMedications()[0]?.drug?.code; // => "314076"
+allergen?.code; // => "7980"
+doc.warnings; // => []
 parseCcda(doc.toString()).toString() === xml; // => true
+```
+
+It prints:
+
+```text
+ccd MRN001 Doe
+problem 59621000 active
+medication 314076
+allergy 7980 Penicillin G
+warnings 0
+round trip unchanged true
 ```
 
 The parser is **lenient by default**: recoverable vendor quirks become stable-coded `CcdaWarning`s on

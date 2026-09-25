@@ -1,6 +1,7 @@
-import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync, rmSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
@@ -254,4 +255,62 @@ describe("a runnable tag is an execution that happens", () => {
     const planted = `# Page\n\n${fence}js runnable\nconst x = 1;\n${fence}\n\n${fence}ts runnable\nconst y = 2;\n${fence}\n`;
     expect(unexecutedRunnableFences("planted.md", planted)).toEqual(["planted.md:3"]);
   });
+});
+
+/**
+ * The README's `## Usage` block PRINTS its key results, and the page shows what it prints in a
+ * `text` block right after it. That output block is a claim too, so it is checked the way a reader
+ * would check it: the block is run as a program, as-is apart from the one specifier rewritten to
+ * the built entry point, and its stdout must be the output block byte for byte. A negative control
+ * changes the input MRN and the printed output has to change with it, so a runner that executed
+ * nothing could not pass.
+ */
+describe("the README usage example prints exactly what the page says it prints", () => {
+  const TSX = join(root, "node_modules", ".bin", "tsx");
+  const SPECIFIER = '"@cosyte/ccda"';
+  const USAGE_TMP = join(root, ".cosyte-usage-stdout");
+
+  afterAll(() => {
+    rmSync(USAGE_TMP, { recursive: true, force: true });
+  });
+
+  function runAsProgram(
+    code: string,
+    name: string,
+  ): { status: number | null; stdout: string; stderr: string } {
+    expect(code.split(SPECIFIER).length - 1, "the block imports @cosyte/ccda exactly once").toBe(1);
+    mkdirSync(USAGE_TMP, { recursive: true });
+    const file = join(USAGE_TMP, name);
+    writeFileSync(file, code.replace(SPECIFIER, JSON.stringify(pathToFileURL(ENTRY).href)), "utf8");
+    const run = spawnSync(TSX, [file], {
+      cwd: root,
+      encoding: "utf8",
+      shell: false,
+      timeout: 60_000,
+    });
+    return { status: run.status, stdout: run.stdout, stderr: run.stderr };
+  }
+
+  test("is followed by the text block holding its output", () => {
+    const blocks = fences(section(README_TEXT, "## Usage"));
+    expect(blocks.map((block) => block.lang).slice(0, 2)).toEqual(["ts", "text"]);
+  });
+
+  test("runs as a program and prints the text block byte for byte", () => {
+    const [code, shown] = fences(section(README_TEXT, "## Usage"));
+    const run = runAsProgram(code?.body ?? "", "usage-stdout.mts");
+    expect(run.stderr).toBe("");
+    expect(run.status).toBe(0);
+    expect(run.stdout).toBe(`${shown?.body ?? ""}\n`);
+  }, 60_000);
+
+  test("CONTROL: a changed input value changes what it prints", () => {
+    const [code, shown] = fences(section(README_TEXT, "## Usage"));
+    const body = code?.body ?? "";
+    expect(body.split('mrn: "MRN001"').length - 1).toBe(1);
+    const run = runAsProgram(body.replace('mrn: "MRN001"', 'mrn: "MRN002"'), "usage-control.mts");
+    expect(run.status).toBe(0);
+    expect(run.stdout).not.toBe(`${shown?.body ?? ""}\n`);
+    expect(run.stdout).toContain("ccd MRN002 Doe");
+  }, 60_000);
 });
