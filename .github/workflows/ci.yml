@@ -74,3 +74,25 @@ jobs:
       # bytes differ from what this run produced, so a behaviour that moved without its
       # published statement moving with it reds here.
       - run: pnpm conformance
+
+  # The runnable examples under examples/, checked the way a consumer meets them: each imports
+  # `@cosyte/ccda` by name, which resolves through package.json `exports` to the BUILT dist/, so
+  # the build runs first. Each example asserts its own output, so `pnpm examples` goes red when one
+  # drifts from the package. The PHI scan in the shared caller above already walks examples/.
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck:examples
+      - run: pnpm lint:examples
+      - run: pnpm examples
