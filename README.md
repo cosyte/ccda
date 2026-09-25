@@ -53,7 +53,7 @@ silence.
 
 ## Status
 
-`package.json` declares **`0.0.15`**. From `0.1.0` the public API is settled and safe to depend on:
+`package.json` declares **`0.1.0`**. From `0.1.0` the public API is settled and safe to depend on:
 the behaviour documented on this page is implemented and covered by tests, the exported names,
 options, return shapes and warning codes are the surface we keep stable, and below 1.0 a breaking
 change bumps the minor version and is called out in the changelog with its migration. On a `0.0.x`
