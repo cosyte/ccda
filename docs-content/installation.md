@@ -12,7 +12,7 @@ per-condition type declarations, so it works from either module system without c
 has a **single** exact-pinned runtime dependency: the hardened W3C-DOM substrate `@xmldom/xmldom`
 (C-CDA is XML, so a DOM is unavoidable).
 
-> **Status:** **published on npm** and **public**, still pre-alpha on the cosyte `0.0.x`
+> **Status:** **published on npm** and **public**, still pre-alpha on the Cosyte `0.0.x`
 > version ladder (`0.0.x` until first alpha). This page names no version number: run
 > `npm view @cosyte/ccda version` for the current one. The install command below is live.
 
