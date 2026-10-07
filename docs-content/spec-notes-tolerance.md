@@ -7,7 +7,7 @@ sidebar_position: 5
 
 # Tolerance tiers & the warning-code model
 
-`@cosyte/ccda` follows the cosyte parser archetype's **tiered tolerance** model. Real-world C-CDA is
+`@cosyte/ccda` follows the Cosyte parser archetype's **tiered tolerance** model. Real-world C-CDA is
 vendor-quirky; the parser is liberal on input (Postel's Law) so a deviation becomes a **warning you
 triage**, not an exception that halts your pipeline, while a genuinely unrecoverable or hostile
 document is a hard failure.

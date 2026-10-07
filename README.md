@@ -34,7 +34,7 @@ C-CDA parser, serializer, and builder for Node.js and TypeScript, lenient on par
 - [Edit a document](#edit-a-document)
 - [Code systems & provenance](#code-systems--provenance)
 - [Known limitations](#known-limitations)
-- [The cosyte parser archetype](#the-cosyte-parser-archetype)
+- [The Cosyte parser archetype](#the-cosyte-parser-archetype)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -1400,9 +1400,9 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
   (`ccdaProfiles.smartScorecard`, `ccdaProfiles.legacyR11`), each grounded in a cited public source;
   named per-vendor profiles await a real vendor-attributed grounding document.
 
-## The cosyte parser archetype
+## The Cosyte parser archetype
 
-`@cosyte/ccda` is a near-zero-dependency TypeScript toolkit that follows the cosyte parser archetype: a
+`@cosyte/ccda` is a near-zero-dependency TypeScript toolkit that follows the Cosyte parser archetype: a
 lenient parser that turns real-world, vendor-quirky input into **warnings** rather than failures
 (Postel's Law). It mirrors the API shape of the reference parser,
 [`@cosyte/hl7`](https://github.com/cosyte/hl7). Its single runtime dependency is
