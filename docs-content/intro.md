@@ -8,7 +8,7 @@ sidebar_position: 1
 # @cosyte/ccda
 
 Parse real-world, vendor-quirky C-CDA and pull fields out in one line, without reading the spec.
-`@cosyte/ccda` is a near-zero-dependency TypeScript toolkit following the cosyte parser archetype: a
+`@cosyte/ccda` is a near-zero-dependency TypeScript toolkit following the Cosyte parser archetype: a
 lenient parser (quirks become **warnings**, not failures: Postel's Law), an immutable model, and a
 spec-clean, round-trip serializer. It mirrors the API shape of the reference parser, `@cosyte/hl7`.
 Its single runtime dependency is the W3C-DOM substrate `@xmldom/xmldom` (exact-pinned),
