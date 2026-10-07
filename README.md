@@ -87,8 +87,8 @@ npm install @cosyte/ccda
 **Node `>=22.0.0`** is required, which is what `package.json` declares in `engines.node`. The package
 ships a **dual ESM and CJS** build with per-condition type declarations, so both `import` and
 `require` resolve to the right types. There is **one** runtime dependency,
-[`@xmldom/xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) (exact-pinned), the hardened W3C-DOM
-substrate for C-CDA's XML.
+[`@xmldom/xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) (exact-pinned), the W3C-DOM substrate
+for C-CDA's XML.
 
 ## Usage
 
@@ -157,8 +157,8 @@ round trip unchanged true
 The parser is **lenient by default**: recoverable vendor quirks become stable-coded `CcdaWarning`s on
 `doc.warnings` (also forwarded to `options.onWarning`), not failures. `{ strict: true }` escalates the
 first tolerated deviation to a thrown `CcdaParseError`. Unrecoverable or hostile input (DTD/XXE,
-billion-laughs entity expansion, oversized/over-deep/over-wide documents, malformed XML, a
-non-`ClinicalDocument` root) is always a thrown `CcdaParseError`.
+billion-laughs entity expansion, oversized/over-deep/over-wide documents, XML that does not
+parse, a non-`ClinicalDocument` root) is always a thrown `CcdaParseError`.
 
 ### The full read surface
 
@@ -1406,8 +1406,8 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
 lenient parser that turns real-world, vendor-quirky input into **warnings** rather than failures
 (Postel's Law). It mirrors the API shape of the reference parser,
 [`@cosyte/hl7`](https://github.com/cosyte/hl7). Its single runtime dependency is
-[`@xmldom/xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) (exact-pinned), the hardened W3C-DOM
-substrate for C-CDA's XML.
+[`@xmldom/xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) (exact-pinned), the W3C-DOM substrate
+for C-CDA's XML.
 
 - **Postel's Law**: liberal parser (lenient default + warnings), conservative serializer (always
   spec-clean), so quirks don't propagate downstream on round-trip.

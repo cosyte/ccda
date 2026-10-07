@@ -9,7 +9,7 @@ sidebar_position: 2
 
 `@cosyte/ccda` is a TypeScript C-CDA toolkit for Node.js. It ships dual **ESM + CJS** builds with
 per-condition type declarations, so it works from either module system without configuration, and it
-has a **single** exact-pinned runtime dependency: the hardened W3C-DOM substrate `@xmldom/xmldom`
+has a **single** exact-pinned runtime dependency: the W3C-DOM substrate `@xmldom/xmldom`
 (C-CDA is XML, so a DOM is unavoidable).
 
 > **Status:** **published on npm** and **public**, still pre-alpha on the Cosyte `0.0.x`
