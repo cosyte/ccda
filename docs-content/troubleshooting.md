@@ -579,10 +579,10 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
 - **C-CDA R2.1, US Realm.** Other CDA templates and realms are out of the current scope.
 - **A parser + serializer, not a transport or a validator suite.** No MLLP/XDS delivery, no Schematron
   conformance report: this reads and re-emits documents.
-- **Pre-alpha on the `0.0.x` ladder.** `@cosyte/ccda` is **published on npm** and **public**, but
-  still pre-alpha: on the `0.0.x`-until-first-alpha ladder, the API can still change. Run
-  `npm view @cosyte/ccda version` for the published version; no page here names it, because a
-  version written into prose is stale by the next release.
+- **Below 1.0.** `@cosyte/ccda` is at `0.1`, **published on npm** and **public**. Its exported
+  names, options, return shapes and warning codes are the surface we keep stable, and below 1.0 a
+  breaking change bumps the minor version and is called out in the changelog with its migration.
+  Run `npm view @cosyte/ccda version` for the published version.
 
 For the exact fields each accessor decodes, see [Core Concepts](./spec-notes-clinical); for every
 export and its signature, see the API reference, which is generated from the source rather than

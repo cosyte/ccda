@@ -14,10 +14,10 @@ spec-clean, round-trip serializer. It mirrors the API shape of the reference par
 Its single runtime dependency is the W3C-DOM substrate `@xmldom/xmldom` (exact-pinned),
 configured XXE-safe.
 
-> **Status:** **published on npm** and **public**, still pre-alpha on the Cosyte `0.0.x`
-> version ladder (`0.0.x` until first alpha). This page names no version number: run
-> `npm view @cosyte/ccda version` for the current one, which is the only answer that cannot go
-> stale between releases. The parser ships
+> **Status:** `0.1`, **published on npm** and **public**. The exported names, options, return
+> shapes and warning codes are the surface we keep stable, and below 1.0 a breaking change bumps
+> the minor version and is called out in the changelog with its migration. Run
+> `npm view @cosyte/ccda version` for the current version. The parser ships
 > document recognition (all 12 US Realm types), the US Realm header + patient demographics, section
 > framing, the reconciliation triad (Problems / Medications / Allergies), the discrete-data families
 > (Results / Vital Signs / Immunizations) with a computable UCUM unit check, Procedures / Encounters /
