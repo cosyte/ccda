@@ -272,8 +272,8 @@ typeof escalated; // => "string"
 
 ## Unrecoverable input throws: everything else is a warning
 
-Only unrecoverable structural / hostile input throws a typed `CcdaParseError`: malformed XML, a
-non-`ClinicalDocument` root, or a security tripwire (DTD/XXE, entity-expansion, or size/depth/node
+Only unrecoverable structural / hostile input throws a typed `CcdaParseError`: XML that does not parse,
+a non-`ClinicalDocument` root, or a security tripwire (DTD/XXE, entity-expansion, or size/depth/node
 limits). A well-formed document with vendor quirks never throws; the quirks collect on `.warnings`.
 
 ```ts runnable throws

@@ -11,7 +11,7 @@ Parse real-world, vendor-quirky C-CDA and pull fields out in one line, without r
 `@cosyte/ccda` is a near-zero-dependency TypeScript toolkit following the cosyte parser archetype: a
 lenient parser (quirks become **warnings**, not failures: Postel's Law), an immutable model, and a
 spec-clean, round-trip serializer. It mirrors the API shape of the reference parser, `@cosyte/hl7`.
-Its single runtime dependency is the hardened W3C-DOM substrate `@xmldom/xmldom` (exact-pinned),
+Its single runtime dependency is the W3C-DOM substrate `@xmldom/xmldom` (exact-pinned),
 configured XXE-safe.
 
 > **Status:** **published on npm** and **public**, still pre-alpha on the Cosyte `0.0.x`
@@ -111,8 +111,8 @@ doc.warnings.every((w) => w.code === "REQUIRED_SECTION_MISSING"); // => true
 The parser is **lenient by default**: recoverable vendor quirks become stable-coded warnings on
 `doc.warnings` (also delivered live to `options.onWarning`), not failures. `{ strict: true }` escalates
 the first tolerated deviation to a thrown `CcdaParseError`; unrecoverable or hostile input (DTD/XXE,
-billion-laughs entity expansion, oversized/over-deep/over-wide documents, malformed XML, a
-non-`ClinicalDocument` root) always throws.
+billion-laughs entity expansion, oversized/over-deep/over-wide documents, XML that does not
+parse, a non-`ClinicalDocument` root) always throws.
 
 ## What it extracts today
 

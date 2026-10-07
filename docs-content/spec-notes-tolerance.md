@@ -18,7 +18,7 @@ document is a hard failure.
 | --------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | **0 / 1** | Accepted silently: conformant or trivially recoverable.                                                                          | A section recognized by its `templateId`.                                                |
 | **2**     | **Warning** with a stable code + bounded structural position; recovery continues. Escalates to a throw under `{ strict: true }`. | An unrecognized section LOINC code, a missing `doseQuantity`, a code/narrative mismatch. |
-| **3**     | **Fatal**: a thrown `CcdaParseError`, always (even in lenient mode).                                                             | Malformed XML, a non-`ClinicalDocument` root, a security tripwire.                       |
+| **3**     | **Fatal**: a thrown `CcdaParseError`, always (even in lenient mode).                                                             | XML that does not parse, a non-`ClinicalDocument` root, a security tripwire.             |
 
 ## The warning-code model
 
@@ -139,7 +139,7 @@ conformant document parses identically in both modes.
 ## Fatal codes (always throw)
 
 Seven Tier-3 codes are unrecoverable and throw a `CcdaParseError` regardless of `strict`. The first
-five are **security fatals** raised by the hardened XML substrate before/while building the DOM, the
+five are **security fatals** raised by the XML substrate before/while building the DOM, the
 load-bearing defense against hostile XML:
 
 | Fatal code                     | Meaning                                                      |
