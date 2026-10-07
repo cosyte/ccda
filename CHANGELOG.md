@@ -1039,7 +1039,7 @@ section stubs that existed to receive the next hand-written entry. No entry was 
 
 The entries below follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the generated
 sections above use the format Changesets writes, which is a version heading and a list of the
-changes that release consumed. Versions follow the cosyte pre-alpha ladder, `0.0.x` until first
+changes that release consumed. Versions follow the Cosyte pre-alpha ladder, `0.0.x` until first
 alpha, rather than [Semantic Versioning](https://semver.org/spec/v2.0.0.html) alone.
 
 ### Fixed
@@ -1599,7 +1599,7 @@ commit` refuses an unmerged path BEFORE it runs the pre-commit hook (the hook do
   carries the non-default `edited` pull-request activity type, so retitling a PR re-checks it, which
   matters because this repo allows only squash merge and takes its subject from the PR title
   (`squash_merge_commit_title: COMMIT_OR_PR_TITLE`). The body that lands is the branch commit
-  messages (`COMMIT_MESSAGES`), not the PR body; the PR body is scanned anyway, as a cosyte surface
+  messages (`COMMIT_MESSAGES`), not the PR body; the PR body is scanned anyway, as a Cosyte surface
   in its own right. Its own workflow rather than a job in `ci.yml`, so a PR-description typo does
   not re-run the Node 22 + 24 matrix. **It reports; it does not yet block.** The job is not a
   required status check: `cosyte/ccda` is governed by org-level rulesets whose required contexts are
@@ -1782,14 +1782,14 @@ commit` refuses an unmerged path BEFORE it runs the pre-commit hook (the hook do
   and the builder is through Phase 7 (`buildCcda` emits a CCD **or** Referral Note, `editCcda` edits a
   parsed document, and a bring-your-own terminology adapter validates coded values). The status banners
   in `intro.md` / `installation.md` and the "Scope (non-goals)" note in `troubleshooting.md` now state
-  published on npm at `0.0.1`, public, still pre-alpha on the cosyte `0.0.x` ladder; the install command
+  published on npm at `0.0.1`, public, still pre-alpha on the Cosyte `0.0.x` ladder; the install command
   is live; and `intro.md`'s builder capability now mirrors the corrected README. No code, public-API, or
   warning-code change.
 - **README status banner refreshed to current reality (README-ORG-SWEEP).** The banner still read
   "pre-alpha (`0.0.x`), not yet published to npm. Through **Phase 5b** the parser ships …". Both halves
   stale: `@cosyte/ccda` is **published on npm at `0.0.1`** and **public**, and the package is well past
   Phase 5b (the Phase 7 builder / editor / terminology-adapter surface the same paragraph already
-  describes). The banner now states published on npm at `0.0.1`, public, still pre-alpha on the cosyte
+  describes). The banner now states published on npm at `0.0.1`, public, still pre-alpha on the Cosyte
   `0.0.x` ladder, with the parse → serialize → build → edit → BYO-terminology capability intact. No code,
   public-API, or warning-code change.
 - **`docs-content/` now ships the full canonical Diátaxis spine (DOCS-CONTENT-P5), gated hard to the

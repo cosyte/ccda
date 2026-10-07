@@ -2541,7 +2541,7 @@ deleted; the imperative as it stood is reproduced here verbatim.
   assumed: only squash merge is allowed, with `squash_merge_commit_title: COMMIT_OR_PR_TITLE` and
   `squash_merge_commit_message: COMMIT_MESSAGES`, so the subject comes from the PR title and the
   body comes from the branch commit messages. **The PR body does not land**; it is scanned anyway,
-  because it is a cosyte surface in its own right. When the gate goes red the fix is never to
+  because it is a Cosyte surface in its own right. When the gate goes red the fix is never to
   re-encode the character: rewrite with a period, colon, comma, or parentheses.
   - **It is the text-only script variant, and dropping `grep -I` is the load-bearing part here.**
     `src/profiles/merge.ts` uses two raw NULs as the separator in `toleranceKey`'s composite key.
@@ -3212,7 +3212,7 @@ lessons is not a substitute for it. `scripts/check-agent-notes-contract.mjs` and
 overclaim.** The split landed across the fleet, but the contract did not: measured over the
 meta-repo's submodules on 2026-08-06, **`config`, `hl7` and `workflow` have no
 `documentation/agent-notes.md` at all** (nor do the non-package repos `crew` and `knowledgebase`).
-A gate asserting "every cosyte repo carries one" is a universal that three package repos already
+A gate asserting "every Cosyte repo carries one" is a universal that three package repos already
 break. What this one asserts is what `ccda` itself promises, which is also why it lives in this
 repo's CI and costs the meta-repo's capped automation plane nothing. **Do not promote it to an
 umbrella script**, and do not restate it as a fleet rule.
