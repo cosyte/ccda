@@ -2304,6 +2304,13 @@ into `.conformance-artifacts/`, which `.gitignore` covers, and
 IGNORED rather than merely uncommitted. A set comparison of `git status --porcelain` alone passes
 happily over a visible working directory; that is why the second half of that test exists.
 
+**THAT TEST RUNS ALONE, AFTER EVERY OTHER TEST FILE.** Vitest runs files in parallel, and three of
+them write into the working tree for a moment: the README usage case, the `tsup` build it spawns,
+and the phi-scan override-gate case. A `git status` taken beside them compares their leftovers, not
+the run's, and the release Verify step on `d906bda` went red that way. `vitest.config.ts` gives the
+file a project of its own with a later `sequence.groupOrder` and says why there. Do not answer a red
+from it by loosening the set comparison.
+
 **SIZE IS THE SECOND REASON AND IT IS INDEPENDENT OF THE FIRST.** The Schematron is about 1 MB and
 its vocabulary file is about 65 MB. Neither belongs in an npm package, and the corpus is CC0 so
 licence is not what forbids vendoring it.
