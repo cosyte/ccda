@@ -26,7 +26,8 @@ ignores `pnpm.overrides` and refuses the frozen install, and `test/docs-content.
 
 Steps 1 to 9 are the shared `ci / verify` job (Node 22 and 24), 10 and 12 are jobs in
 `.github/workflows/ci.yml`, and 11 runs in two workflows of its own. CI alone also runs actionlint
-(installed by its action), an ESM/CJS import smoke of the build and a pack-and-install check.
+(installed by its action), an ESM/CJS import smoke of the build and the shared pre-publish checks
+(every dependency specifier resolves from a registry; the packed tarball installs cleanly).
 
 ## Hazard
 
