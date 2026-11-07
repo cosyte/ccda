@@ -13,5 +13,7 @@ Add a changeset for every meaningful change:
 pnpm changeset
 ```
 
-During pre-alpha, pick **patch**: that keeps the package on the `0.0.x` ladder until its first
-alpha. See the Cosyte version ladder in the meta-repo's `documentation/conventions.md`.
+The package is on the 0.1 line. Classify the bump from what the change does, as `CLAUDE.md` says:
+**minor** when it adds an export or a warning or fatal code, **patch** for everything else. The
+release standard behind this (a generated changelog, a `vX.Y.Z` tag and a GitHub release for every
+version) is ST35 in the umbrella's `plans/standards.md`.
