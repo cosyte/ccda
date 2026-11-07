@@ -8,7 +8,7 @@ description: Everything the parser reads out of a document, from the header and 
 
 # What it extracts
 
-## What it extracts: document type, header, and section framing
+## Document type, header, and section framing
 
 - **Document type**: all 12 US Realm document types resolved from the root `templateId` (CCD,
   Discharge Summary, Referral Note, Consultation Note, History & Physical, Progress Note, Procedure
@@ -23,7 +23,7 @@ description: Everything the parser reads out of a document, from the header and 
 - **HL7 v3 datatypes**: `II`, `ST`, `BL`, `CD`, `PQ`, `IVL_PQ`, `TS`, `IVL_TS`, `ED`, with
   variable-precision v3 datetime parsing and null-flavor handling.
 
-## What it extracts: the reconciliation triad
+## The reconciliation triad
 
 - **Problems**: Problem Concern Acts via `getProblems()`: the coded condition (`value`, SNOMED CT /
   ICD-10-CM), the concern `status` (active / resolved / inactive / unknown), and `effectiveTime`.
@@ -183,7 +183,7 @@ product at two granularities. Telling those apart is the terminology work this l
 guess at, so the choice is only which way to be wrong: over-firing costs a withheld product beside a
 loud safety-critical code, under-firing costs one of two strengths handed back in silence.
 
-## What it extracts: discrete clinical data
+## Discrete clinical data
 
 - **Results**: Result Organizers via `getResults()`: the LOINC-coded analyte, the polymorphic
   observation `value` as a discriminated `ObservationValue` (`physicalQuantity` / `coded` / `string` /
@@ -201,7 +201,7 @@ Every physical quantity is checked against a **computable, zero-dependency UCUM 
 letter-case slip caught (`UCUM_CASE_SUSPECT`), but the **raw unit is always preserved, never
 normalized away**. An unrecognized `value xsi:type` is kept as `unsupported`; nothing is dropped.
 
-## What it extracts: procedures, encounters, and social history
+## Procedures, encounters, and social history
 
 - **Procedures** via `getProcedures()`: the three Procedure Activity templates: an
   altering/operative `<procedure>` (`…22.4.14`), a non-altering `<act>` service (`…22.4.12`), and an
@@ -218,7 +218,7 @@ normalized away**. An unrecognized `value xsi:type` is kept as `unsupported`; no
   value outside the Current Smoking Status value set is preserved and flagged
   `SMOKING_STATUS_CODE_UNRECOGNIZED`.
 
-## What it extracts: plan of treatment, status, and history sections
+## Plan of treatment, status, and history sections
 
 - **Plan of Treatment** via `getPlannedItems()`: seven planned-entry templates, kept apart by a `kind`
   discriminant: Planned Act (`…22.4.39`), Encounter (`…22.4.40`), Procedure (`…22.4.41`), Medication

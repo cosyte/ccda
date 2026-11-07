@@ -8,7 +8,7 @@ description: Reading C-CDA timestamps honestly with toObject, toISO, and toDate,
 
 # Dates and times
 
-## Dates and times: `toObject`, `toISO`, `toDate`
+The conversion functions are `toObject`, `toISO`, and `toDate`.
 
 Every timestamp this parser reads is a `TS`, carrying the document's verbatim `raw` string and a
 derived `date`. `TS.date` is **eager**: a value stated to the day becomes the first instant of that
@@ -86,7 +86,7 @@ for `toObject` when the precision matters (a birth date stated to the month is n
 midnight on the first); for `toISO` when you are writing the value out or comparing it as text; and
 for `toDate` when you need an instant and can say which zone an offset-less value was written in.
 
-### Using two `@cosyte` parsers in one file
+## Using two `@cosyte` parsers in one file
 
 All six `@cosyte/*` standard parsers export these three names, so a file that consumes two of them has
 to alias the imports:
