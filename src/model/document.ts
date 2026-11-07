@@ -151,7 +151,7 @@ export interface ProfileAttribution {
  * ```ts
  * import { parseCcda } from "@cosyte/ccda";
  * const doc = parseCcda(xml);
- * console.log(doc.documentType, doc.getPatient()?.name?.text, doc.getMrn());
+ * console.log(doc.documentType, doc.getPatient()?.name?.family, doc.getMrn());
  * ```
  */
 export class CcdaDocument {
@@ -334,7 +334,7 @@ export class CcdaDocument {
    * @example
    * ```ts
    * const p = doc.getPatient();
-   * console.log(p?.name?.text ?? "unknown patient");
+   * console.log(p?.name?.family ?? "unknown patient");
    * ```
    */
   public getPatient(): CcdaPatient | undefined {

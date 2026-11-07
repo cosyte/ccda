@@ -591,9 +591,9 @@ normalized away**. An unrecognized `value xsi:type` is kept as `unsupported`; no
   leniently.
 - **Family History** via `getFamilyHistory()`: the Family History Organizer (`…22.4.45`) → Observation
   (`…22.4.46`) tree. The relative's identity (relationship, gender, birth time, `sdtc:deceasedInd`) is a
-  structured `relative` (not flattened into each condition); each condition carries its coded `value`,
-  an optional Age Observation (`…22.4.31`, age at onset), and a `causeOfDeath` flag from a Family History
-  Death Observation (`…22.4.47`).
+  structured `relative` (not flattened into each condition); each entry in `observations` carries the
+  coded `condition` (the observation's `<value>`), an optional `ageAtOnset` from an Age Observation
+  (`…22.4.31`), and a `causeOfDeath` flag from a Family History Death Observation (`…22.4.47`).
 - **Past Medical History** via `getPastMedicalHistory()`: the **bare** Problem Observations (`…22.4.4`)
   a Past Medical History section (`…22.2.20`) carries directly under each `<entry>` (not wrapped in a
   Problem Concern Act), reusing the Problems model, so a past problem never double-counts as an active
@@ -847,20 +847,22 @@ const out = serializeCcda(doc); // === doc.toString()
 ## Build a document
 
 `buildCcda(init)` is the emit _factory_ symmetric with `parseCcda`: from structured input it assembles
-a **spec-clean C-CDA R2.1** document and returns a real `CcdaDocument`. It emits either a **CCD**
-(default) or a **Referral Note** (`documentType: "referralNote"`): each with its own US Realm Header
-specialization (document `templateId` + LOINC `code`) and document-type-specific SHALL section set. It
+a **spec-clean C-CDA R2.1** document and returns a real `CcdaDocument`. It emits a **CCD** (default),
+a **Referral Note** (`documentType: "referralNote"`) or an inpatient **Discharge Summary**
+(`documentType: "dischargeSummary"`): each with its own US Realm Header specialization (document
+`templateId` + LOINC `code`) and document-type-specific section set. It
 emits through the same DOM the parser reads, so a built document round-trips by construction: it parses
 back to the same structured content, and `parseCcda(doc.toString()).toString() === doc.toString()`. A
 clean build carries zero warnings.
 
 A **Referral Note** carries the document `templateId` `2.16.840.1.113883.10.20.22.1.14` (R2.1
-`2015-08-01`) and LOINC document `code` `57133-1`, and always emits its SHALL section set: the
+`2015-08-01`) and LOINC document `code` `57133-1`, and always emits six sections: its SHALL
 entries-required **Problems**, **Allergies**, and **Medications** (empty `nullFlavor="NI"` when
-unpopulated), plus the narrative **Reason for Referral** (`1.3.6.1.4.1.19376.1.5.3.1.3.1`, LOINC
-`42349-1`, from the optional `reasonForReferral` string), **Assessment** (`…22.2.8`, LOINC `51848-0`,
-unversioned, a root-only `templateId` with no `@extension`, from the optional `assessment` string),
-and **Plan of Treatment** (`…22.2.10`, LOINC `18776-5`). Results, Vital Signs and Social History are
+unpopulated), the narrative SHALL **Reason for Referral** (`1.3.6.1.4.1.19376.1.5.3.1.3.1`, LOINC
+`42349-1`, from the optional `reasonForReferral` string), and **Assessment** (`…22.2.8`, LOINC
+`51848-0`, unversioned, a root-only `templateId` with no `@extension`, from the optional `assessment`
+string) with **Plan of Treatment** (`…22.2.10`, LOINC `18776-5`), the pair that satisfies its
+Assessment/Plan choice (CONF:1198-29102). Results, Vital Signs and Social History are
 not Referral Note SHALL sections, so, unlike in a CCD, they are emitted only when the caller supplies
 them.
 
@@ -952,9 +954,10 @@ returned document carries `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, appended 
 warnings. The field stays optional on purpose, because requiring it would break a published input
 type, and the builder still emits exactly what it was given: no date is fabricated, no `nullFlavor` is
 invented, and the emitted XML is byte-identical to what it was before the diagnostic existed. This is
-the one warning the **emit side** can raise that `parseCcda` cannot: re-parsing the same document says
-nothing. **`editCcda` raises it too**, on the sections that edit grafted, so a planned medication
-written in by an edit is no longer emitted short that element in silence.
+one of the two warnings only the **emit side** raises (the other is `MISSING_SELF_CARE_ACTIVITY`,
+under [Known limitations](#known-limitations)): re-parsing the same document says nothing.
+**`editCcda` raises it too**, on the sections that edit grafted, so a planned medication written in
+by an edit is no longer emitted short that element in silence.
 The five non-`substanceAdministration` variants are genuinely `[0..1]` and
 stay silent), and
 **Family History** (a Family History Organizer `…22.4.45` per relative,
@@ -1308,15 +1311,14 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
   apply to the slot's primary coding; alternate codings in `<translation>` are preserved but not
   slot-checked. A clean run means those five slots passed, **not** that the document was
   terminology-verified.
-- **Required-section (SHALL) validation under-warns, and every type says by how much**: five of the
-  twelve report `traced-partial` (Consultation Note, Progress Note, Procedure Note, Operative Note,
-  Diagnostic Imaging Report), naming the SHALL sections they do not assert and why; Unstructured
-  Document reports `not-applicable` because it carries no section; the remaining six report
-  `untraced`, so no claim is made that their sets are complete. Four of the five traced types assert
-  nothing, because every SHALL section their template names is either outside the recognized catalog
-  or a choice. A document of a `traced-partial` or `untraced` type can still be missing a section its
-  type requires and parse clean: read `requiredSectionStatus(documentType)` rather than treating a
-  quiet parse as a conformance result.
+- **Required-section (SHALL) validation under-warns, and every type says by how much**: CCD and Care
+  Plan report `traced-complete`; the other nine structured types report `traced-partial`, naming the
+  SHALL sections they do not assert and why; Unstructured Document reports `not-applicable` because it
+  carries no section; no type reports `untraced`. Progress Note, Procedure Note, Operative Note and
+  Diagnostic Imaging Report assert nothing, because every SHALL section their template names is either
+  outside the recognized catalog or a choice. A document of a `traced-partial` type can still be
+  missing a section its type requires and parse clean: read `requiredSectionStatus(documentType)`
+  rather than treating a quiet parse as a conformance result.
 - **Editing is whole-section, across twelve kinds**: Functional Status and Mental Status are buildable
   but **not editable** (each takes three separate content lists), as are the Referral Note's
   narrative-only Assessment and Reason for Referral sections. There is no entry-level append (a
@@ -1326,12 +1328,13 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
   faithfully re-emit a _parsed_ document (the spec-clean emit half of Postel's Law). To construct a
   document from scratch, `buildCcda` emits a spec-clean **CCD**, **Referral Note**
   (`documentType: "referralNote"`) or inpatient **Discharge Summary**
-  (`documentType: "dischargeSummary"`) with the US Realm header + the CCD's six SHALL sections
-  (**Problems, Allergies, Medications, Results, Vital Signs, and Social History**), plus
+  (`documentType: "dischargeSummary"`) with the US Realm header. A CCD always carries its six SHALL
+  sections (**Problems, Allergies, Medications, Results, Vital Signs, and Social History**), plus
   **Immunizations, Procedures, Encounters, Functional
   Status, Mental Status, Past Medical History, Plan of Treatment, and Family History** emitted only
-  when populated (none is a CCD SHALL section); a Referral Note additionally
-  specializes the header and emits its own SHALL set (Reason for Referral, Assessment, Plan of Treatment);
+  when populated (none is a CCD SHALL section); a Referral Note instead specializes the header and
+  always emits Problems, Allergies, Medications, Reason for Referral, Assessment and Plan of Treatment,
+  emitting Results, Vital Signs and Social History only when you supply them;
   and a Discharge Summary specializes the header with its own SHALL set (Allergies, Hospital Course,
   Discharge Diagnosis, Plan of Treatment) plus the `componentOf/encompassingEncounter` frame its
   template requires, an encounter period and a discharge disposition, each emitted verbatim when
@@ -1395,10 +1398,11 @@ wired for `<translation>` emission, and neither is the section-rebuild path `edi
 
 - **Vendor profiles tolerate, they never relax safety**: a `CcdaProfile` only downgrades the
   **non-safety-critical** deviations it expects (re-badged `PROFILE_QUIRK_APPLIED`, flagged
-  `expected`); it can never tolerate a dose/allergen/unit/identity/code-system warning (refused at
-  `defineCcdaProfile()` time) and never changes an extracted value. Two built-ins ship
-  (`ccdaProfiles.smartScorecard`, `ccdaProfiles.legacyR11`), each grounded in a cited public source;
-  named per-vendor profiles await a real vendor-attributed grounding document.
+  `expected`); it can never tolerate a dose, allergen, unit, identity, or wrong or missing code system
+  warning (refused at `defineCcdaProfile()` time) and never changes an extracted value. Besides
+  `ccdaProfiles.default`, which tolerates nothing, two built-ins ship (`ccdaProfiles.smartScorecard`,
+  `ccdaProfiles.legacyR11`), each grounded in a cited public source; named per-vendor profiles await a
+  real vendor-attributed grounding document.
 
 ## The Cosyte parser archetype
 

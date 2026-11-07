@@ -131,5 +131,7 @@ History of Present Illness (CONF:1198-28907), Allergies (-28911) and Problems (-
 the R2.1 stamp their constraints carry; Progress Note, Procedure Note, Operative Note and Diagnostic
 Imaging Report assert nothing, because every SHALL section their templates name is either outside the
 recognized catalog or a choice. Unstructured Document is `not-applicable`: its component SHALL be a
-`nonXMLBody` (-31086), so it has no section to require. The six types that already asserted keys stay
-`untraced`, sets and citations unchanged, because the source was not re-read for them.
+`nonXMLBody` (-31086), so it has no section to require. The six types that already asserted keys
+were re-read off the same source too: CCD and Care Plan report `traced-complete`, Discharge Summary,
+Referral Note, History and Physical and Transfer Summary report `traced-partial`, and no type reports
+`untraced`.

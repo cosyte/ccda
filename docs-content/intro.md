@@ -129,9 +129,10 @@ parse, a non-`ClinicalDocument` root) always throws.
   variable-precision v3 datetime parsing and null-flavor handling.
 - **Serialize**: `serializeCcda(doc)` / `doc.toString()` re-emits a **parsed** document as spec-clean
   XML (a fixed point), with no silent loss.
-- **Build**: `buildCcda(init)` constructs a spec-clean **CCD** or **Referral Note** from structured
-  input, round-tripping through the same parse model; `editCcda(doc, …)` re-emits a parsed document with a
-  section added or replaced, byte-preserving every untouched section.
+- **Build**: `buildCcda(init)` constructs a spec-clean **CCD**, **Referral Note** or inpatient
+  **Discharge Summary** from structured input, round-tripping through the same parse model;
+  `editCcda(doc, …)` re-emits a parsed document with a section added or replaced, byte-preserving
+  every untouched section.
 
 ## Next
 
