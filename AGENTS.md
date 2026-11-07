@@ -36,7 +36,7 @@ Run these from the repo root, in this order, before you push. CI runs steps 1 to
 ## Data
 
 Synthetic data only: real patient data never enters this repository, in a fixture, a test, an
-example, an issue or a log.
+example, an issue, or a log.
 
 ## Contributing
 
