@@ -68,14 +68,15 @@ docSnippetSuite({
 });
 
 /**
- * The README's `## Status` section states the version this package declares, and a version stated in
- * prose is exactly the fact that goes stale without anyone noticing: the section it replaced claimed
- * `0.0.3` while `package.json` was already twelve patches past it. The number is therefore checked
- * against `package.json` rather than trusted, so a release that moves the version and forgets the
- * page fails here instead of on npm, where a README is frozen at publish.
+ * The README's `## Status` section names the release line this package is on (`The 0.1 line` for any
+ * 0.1.x), and a version stated in prose is exactly the fact that goes stale without anyone noticing:
+ * the section it replaced claimed `0.0.3` while `package.json` was already twelve patches past it.
+ * The line is therefore checked against `package.json` rather than trusted, so a release that moves
+ * to a new minor line and forgets the page fails here instead of on npm, where a README is frozen at
+ * publish.
  */
 describe("README status section", () => {
-  test("states the version package.json declares", () => {
+  test("names the release line package.json is on", () => {
     const pkg: unknown = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
     const version =
       typeof pkg === "object" && pkg !== null && "version" in pkg && typeof pkg.version === "string"
@@ -85,7 +86,8 @@ describe("README status section", () => {
 
     const status = /^## Status\n([\s\S]*?)\n## /m.exec(readFileSync(README, "utf8"))?.[1];
     expect(status, "no `## Status` section found in README.md").toBeDefined();
-    expect(status).toContain(`\`${version ?? ""}\``);
+    const line = (version ?? "").split(".").slice(0, 2).join(".");
+    expect(status).toContain(`**The \`${line}\` line.**`);
   });
 });
 

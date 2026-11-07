@@ -13,24 +13,29 @@
     },
     {
       "type": "category",
-      "label": "Core Concepts",
+      "label": "Core concepts",
       "collapsed": false,
       "items": [
         "spec-notes-model",
+        "what-it-extracts",
         "spec-notes-tolerance",
         "spec-notes-clinical",
-        "spec-notes-datatypes"
+        "spec-notes-datatypes",
+        "dates-and-times",
+        "code-systems",
+        "validation",
+        "parser-archetype"
       ]
     },
     {
       "type": "category",
       "label": "Guides",
-      "items": ["cookbook", "conformance"]
+      "items": ["cookbook", "build-and-edit", "conformance"]
     },
     {
       "type": "category",
       "label": "Troubleshooting",
-      "items": ["troubleshooting"]
+      "items": ["troubleshooting", "limitations"]
     }
   ]
 }

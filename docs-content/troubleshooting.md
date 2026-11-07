@@ -1,11 +1,12 @@
 ---
 id: troubleshooting
-title: Troubleshooting & known limitations
+title: Troubleshooting and known limitations
 sidebar_label: Troubleshooting
-sidebar_position: 10
+sidebar_position: 16
+description: From symptom to cause, covering the error model, the warning codes, and the edges the package is honest about.
 ---
 
-# Troubleshooting & known limitations
+# Troubleshooting and known limitations
 
 `@cosyte/ccda` is built to be **correct and honest about its edges** rather than to claim more than it
 delivers. Mis-reading a dose, an allergy, a code system, or a patient identifier can cause real
@@ -67,7 +68,7 @@ it is one this parser navigates (`<withheld>` otherwise), its `sectionCode` is e
 has the shape of a LOINC part number, and its `templateId` only when it has the shape of an HL7 v3
 UID. `line` and `column` still locate the element exactly.
 
-So you can log the full `.warnings` array, and a thrown `CcdaParseError`'s `message`, `stack` and
+So you can log the full `.warnings` array, and a thrown `CcdaParseError`'s `message`, `stack`, and
 `position`, without leaking. Keep the same discipline in your own code: log the code and the position,
 not the field content. A `CcdaParseError` deliberately retains **no raw input snippet**, precisely
 because a C-CDA payload is a clinical document and any snippet would risk leaking PHI.
@@ -145,11 +146,11 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
 - **A `nullFlavor` beside a value is a contradiction, and the parser resolves it against the number.**
   `<doseQuantity nullFlavor="UNK" value="10" unit="mg"/>` asserts both "unknown" and "10 mg". Every v3
   datatype flags this `CONTRADICTORY_NULL_FLAVOR` (safety-critical, so no profile can quiet it),
-  including the `INT` and `ST` arms of an observation `<value>`, and on `PQ`, `TS` and an `integer`
+  including the `INT` and `ST` arms of an observation `<value>`, and on `PQ`, `TS`, and an `integer`
   observation value the derived reading is **withheld**: `dose.value` is `undefined`, while `dose.raw`
   (`"10"`), `dose.unit` and `dose.nullFlavor` are all preserved. If you were reading `.value` and now
   see `undefined`, that is the fix, and the document is telling you the value is unknown. On `CD`,
-  `II`, `ST`, `ED` and `BL` the field is the document's own text with no verbatim copy behind it, so it
+  `II`, `ST`, `ED`, and `BL` the field is the document's own text with no verbatim copy behind it, so it
   is **kept** and the warning is the signal, read `doc.warnings`. Metadata beside a `nullFlavor` (a
   `@unit` with no `@value`, an `@root` with no `@extension`, a `CD`'s `originalText` / `<translation>`)
   is coherent, not contradictory, and stays silent, and a `nullFlavor`-only coded slot is still checked
@@ -180,7 +181,7 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   third was missing from this list until `0.0.3`: it covered the shapes where _selection_ failed, not
   every shape where _identity_ is absent. So tolerating the presence warning can never buy silence
   about an absent or withheld drug. No arm yielding a code is
-  `MISSING_PRODUCT_CODE` and is safety-critical, because dose, route and timing all survive a
+  `MISSING_PRODUCT_CODE` and is safety-critical, because dose, route, and timing all survive a
   missing consumable and would otherwise make the record read as a complete medication with no drug.
   Both apply at every consumable call site: a performed Medication Activity, an Immunization
   Activity, a Planned Medication Activity, and a Planned Immunization Activity. A document whose arms name **different** products
@@ -297,7 +298,7 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   Immunization Activity; read `doc.toString()` if you need it.
   **The code-system and terminology checks reach it too, as of `0.0.3`.** Because that `code` is the
   drug, it is checked against the `medication` binding exactly as a performed Medication Activity's
-  `drug` is, so `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM` and (with a
+  `drug` is, so `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM`, and (with a
   `TerminologyAdapter`) `SEMANTIC_CODE_INVALID` fire on a planned drug, code for code with its
   performed twin. On `0.0.2` and earlier none of them could: a planned drug asserting a `@code` with
   no `@codeSystem`, an empty `<code/>`, or an OID outside RxNorm/NDC came back read and unremarked.
@@ -339,10 +340,10 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   (`…22.4.130`) and Goal Observation (`…22.4.121`); a Goal Observation is `moodCode="GOL"`, which this
   parser calls neither performed nor planned. Their narrative and structure are preserved and they
   re-serialize faithfully, and they are still not planned items. **Three of the four are no longer
-  silent**: Instruction, Handoff Communication Participants and Nutrition Recommendation each draw
+  silent**: Instruction, Handoff Communication Participants, and Nutrition Recommendation each draw
   `PLAN_ENTRY_NOT_MODELED` where planned items are read, once per matching root, so a consumer has a
   code to filter on instead of an entry that vanishes **in the places the report covers**.
-  Reporting is not modelling: nothing about the returned list changed. A direct entry is reported in
+  Reporting is not modeling: nothing about the returned list changed. A direct entry is reported in
   **two** sections, Plan of Treatment and the **Interventions Section (V3)** (`…21.2.3`, which admits
   a Handoff as a direct entry in as many words, CONF:1198-32402 / 1198-32403). That citation is V3's,
   while the matching is this library's usual section recognition and so is wider: templateId root
@@ -375,7 +376,7 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   reached, and the Intervention Act is still silent end to end. Read `doc.toString()` if your senders
   nest that way. A
   returned item does not say whether it was direct or nested, either: the intervention itself is not
-  modelled, so the grouping toward the goal is available only from `doc.toString()`.
+  modeled, so the grouping toward the goal is available only from `doc.toString()`.
 - **UCUM validation is grammatical, on a curated atom subset.** The validator checks well-formed UCUM
   against the prefixes/atoms that appear in lab Results and Vital Signs, not the full UCUM registry. A
   valid-but-uncurated atom may read as `NON_UCUM_UNIT`; the raw unit is always preserved. It does not
@@ -404,9 +405,9 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
     nothing left over.
   - **`traced-partial`** for the other nine structured types. Their SHALL sections were read off the
     normative C-CDA R2.1 source, and one or more of them cannot be asserted. Consultation Note
-    asserts History of Present Illness (CONF:1198-28907), Allergies (-28911) and Problems (-28929),
+    asserts History of Present Illness (CONF:1198-28907), Allergies (-28911), and Problems (-28929),
     each scoped to the R2.1 stamp its constraint carries. Progress Note, Procedure Note, Operative
-    Note and Diagnostic Imaging Report assert **nothing**, and that is a traced result rather than
+    Note, and Diagnostic Imaging Report assert **nothing**, and that is a traced result rather than
     an unread table: every SHALL section their templates name is either outside this parser's
     recognized catalog (Complications, Procedure Description, Anesthesia, Findings (DIR) and the
     rest) or a choice. Each one is listed by name in `status.unasserted` with the reason.
@@ -476,7 +477,7 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
 - **Content you supply is emitted or refused, never dropped.** A Discharge Summary emits the
   `problems` and `medications` you hand it, the medications in the Medications Section (it never
   emits the Discharge Medications Section, which would assert they are discharge medications).
-  `hospitalCourse`, `dischargeDiagnoses` and `encompassingEncounter` throw a `TypeError` on a CCD or
+  `hospitalCourse`, `dischargeDiagnoses`, and `encompassingEncounter` throw a `TypeError` on a CCD or
   a Referral Note, and `assessment` and `reasonForReferral` throw on a Discharge Summary. A CCD
   still ignores `assessment` and `reasonForReferral`, as it always has.
 - **A Discharge Summary's encounter frame is never guessed.** `componentOf/encompassingEncounter`
@@ -490,8 +491,8 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   Encounters, Functional Status, Mental Status, Past Medical History, Plan of Treatment, and Family
   History are emitted only when populated, so an empty one is never fabricated. A Referral Note
   instead always emits Problems, Allergies, Medications, Reason for Referral, Assessment, and Plan of
-  Treatment, and demotes Results, Vital Signs and Social History to populated-only. A Discharge
-  Summary always emits Allergies, Hospital Course, Discharge Diagnosis and Plan of Treatment, and
+  Treatment, and demotes Results, Vital Signs, and Social History to populated-only. A Discharge
+  Summary always emits Allergies, Hospital Course, Discharge Diagnosis, and Plan of Treatment, and
   forces nothing else: neither Problems nor Medications is in its SHALL set, so both are
   populated-only there. Any C-CDA section outside that set cannot be built.
 - **Every coded value that reaches the narrative needs a `displayName`, and a missing one is
@@ -519,7 +520,7 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   `translate`, or one returning no matches, leaves the output byte-identical: an unmapped code never
   produces a guessed alternate.
 - **A built document is validated against the normative artifacts, and the result is published.**
-  `pnpm conformance` fetches the C-CDA R2.1 Schematron, its vocabulary file and the CDA R2 XML schema
+  `pnpm conformance` fetches the C-CDA R2.1 Schematron, its vocabulary file, and the CDA R2 XML schema
   from pinned immutable references, validates every document `buildCcda` emits against the schema and
   then the Schematron's error-severity phase, and writes `documentation/conformance-report.md`. The
   measured set is one document per optional section as well as a minimal and a populated document
@@ -579,11 +580,11 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
 - **C-CDA R2.1, US Realm.** Other CDA templates and realms are out of the current scope.
 - **A parser + serializer, not a transport or a validator suite.** No MLLP/XDS delivery, no Schematron
   conformance report: this reads and re-emits documents.
-- **Below 1.0.** `@cosyte/ccda` is at `0.1`, **published on npm** and **public**. Its exported
-  names, options, return shapes and warning codes are the surface we keep stable, and below 1.0 a
+- **Below 1.0.** `@cosyte/ccda` is at `0.1`, **published on npm**, and **public**. Its exported
+  names, options, return shapes, and warning codes are the surface we keep stable, and below 1.0 a
   breaking change bumps the minor version and is called out in the changelog with its migration.
   Run `npm view @cosyte/ccda version` for the published version.
 
-For the exact fields each accessor decodes, see [Core Concepts](./spec-notes-clinical); for every
+For the exact fields each accessor decodes, see [Core concepts](./spec-notes-clinical); for every
 export and its signature, see the API reference, which is generated from the source rather than
 hand-written, so it cannot drift from the shipped code.

@@ -1,11 +1,12 @@
 ---
 id: spec-notes-datatypes
-title: Datatypes, codes & serialize
-sidebar_label: Datatypes & serialize
-sidebar_position: 7
+title: Datatypes, codes, and serialization
+sidebar_label: Datatypes and serialization
+sidebar_position: 8
+description: The HL7 v3 datatypes the parser reads, the code systems it recognizes, and how the serializer writes a document back.
 ---
 
-# HL7 v3 datatypes, code systems & the serializer
+# HL7 v3 datatypes, code systems, and the serializer
 
 ## HL7 v3 datatypes
 
@@ -40,7 +41,7 @@ Every v3 datatype flags it as `CONTRADICTORY_NULL_FLAVOR`, which is **safety-cri
 profile can tolerate it back into silence. That includes the `INT` and `ST` arms of an observation
 `<value>`, the slot carrying lab values and assessment-scale scores, which are parsed inline rather
 than through the datatype layer. The contradiction is then resolved **against the derived reading**:
-`PQ.value`, `TS.date` and an `integer` observation value's `value` are withheld, while `raw`, `unit`
+`PQ.value`, `TS.date`, and an `integer` observation value's `value` are withheld, while `raw`, `unit`,
 and the `nullFlavor` are all preserved. A caller reading `med.dose.value` gets `undefined` rather than
 `10`, and one reading a contradicted PHQ-9 score gets `undefined` rather than `12`. This is exactly
 what
@@ -48,9 +49,9 @@ what
 than a new rule, and it costs nothing because `value`/`date` are readings the parser manufactured from
 a `raw` that survives.
 
-Withholding stops there **at the datatype layer**, deliberately. `PQ`, `TS` and the `integer`
+Withholding stops there **at the datatype layer**, deliberately. `PQ`, `TS`, and the `integer`
 observation value are the only shapes in this model that keep both a verbatim string and a parsed
-interpretation. On `CD`, `II`, `ST`, `ED` and `BL` the value-bearing field **is** the document's own
+interpretation. On `CD`, `II`, `ST`, `ED`, and `BL` the value-bearing field **is** the document's own
 text, with no second copy, so it is kept and the warning plus the co-located `nullFlavor` is the
 signal.
 
@@ -100,7 +101,7 @@ to the day is resolved to the first instant of that day, and a value carrying no
 resolved **as if it had said UTC**. That is convenient, and on an offset-less date of birth read in
 any negative-offset zone it is a day out.
 
-`toObject`, `toISO` and `toDate` are the honest reading of the same bytes, and they are the same three
+`toObject`, `toISO`, and `toDate` are the honest reading of the same bytes, and they are the same three
 names, with the same return shapes and the same timezone rule, that every sibling `@cosyte/*` parser
 exports. They read `TS.raw`, the document's own `@value`, and never `TS.date`.
 
@@ -145,7 +146,7 @@ something and does not:
   exactly the components present in the document, so the precision survives the conversion:
   `Object.keys()` on a year-precision value is `["year"]` and nothing else. Nothing is zero-filled,
   `month` is the spec-native 1 to 12, the names are singular (`hour`, `minute`, `second`), and there is
-  no `raw`, `precision` or `valid` key. `millisecond` comes from the first three digits of the stated
+  no `raw`, `precision`, or `valid` key. `millisecond` comes from the first three digits of the stated
   fraction, taken verbatim and right-padded, so `.5` is 500 and `.0500` is 50. `offsetMinutes` is
   present **if and only if** the document wrote an offset, and a stated zero offset is present as `0`.
   Delete `offsetMinutes` and what is left is accepted, unchanged and unrenamed, by
@@ -171,8 +172,8 @@ something and does not:
   for `NaN`, and `toISOString()` on it throws. Every sibling `@cosyte/*` parser refuses the same
   inputs the same way.
 - **An offset the document itself states is bounded, at 23 hours 59 minutes.** `±ZZZZ` is four digits
-  wide in the v3 literal and constrains neither field, so a document may legally write `+2400`, `+9999`
-  or `-9999`. Those state 1440, 6039 and -6039 minutes: finite numbers, and none of them a zone. The
+  wide in the v3 literal and constrains neither field, so a document may legally write `+2400`, `+9999`,
+  or `-9999`. Those state 1440, 6039, and -6039 minutes: finite numbers, and none of them a zone. The
   shared rendering has one slot for an offset, `+HH:MM` or `-HH:MM` with a two-digit hour of the day,
   so 23:59 is the widest offset it can state at all and `new Date` reads back nothing beyond it. Past
   that bound the value is refused **whole**, by all three functions together, rather than `toObject`
@@ -184,7 +185,7 @@ something and does not:
 So there are values where `ts.date` is a populated `Date` and `toDate(ts)` is `undefined`, on the same
 object, and that divergence is deliberate. `TS.date` is unchanged and stays unchanged: code reading it
 today reads exactly what it read before. Reach for `TS.date` when you want the existing eager
-behaviour and know it assumes UTC. Reach for `toObject` when the precision matters (a birth date
+behavior and know it assumes UTC. Reach for `toObject` when the precision matters (a birth date
 stated to the month is not a birth date at midnight on the first), for `toISO` when you are writing
 the value out or comparing it as text, and for `toDate` when you need an instant and are willing to
 say which zone an offset-less value was written in.
@@ -301,6 +302,6 @@ serializeCcda(parseCcda(out)) === out; // => true
 
 > A hand-constructed `CcdaDocument` (not produced by `parseCcda` or `buildCcda`) retains no source XML,
 > so `toString()` throws. To construct a document from scratch, use `buildCcda`: it emits a spec-clean
-> CCD or Referral Note with a US Realm header and the clinical sections you supply. See
-> [Troubleshooting](./troubleshooting) for exactly what the parser, builder, and editor do and do not
-> do today.
+> CCD, Referral Note, or inpatient Discharge Summary with a US Realm header and the clinical sections
+> you supply. See [Troubleshooting](./troubleshooting) for exactly what the parser, builder, and
+> editor do and do not do today.

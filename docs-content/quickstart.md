@@ -3,6 +3,7 @@ id: quickstart
 title: Quickstart
 sidebar_label: Quickstart
 sidebar_position: 3
+description: Read a Continuity of Care Document and pull out the patient and the reconciliation triad of problems, medications, and allergies.
 ---
 
 # Quickstart
@@ -285,7 +286,7 @@ parseCcda("<Foo>not a clinical document</Foo>"); // throws CcdaParseError (NOT_A
 
 ## Next
 
-- [Core Concepts](./spec-notes-model): the document model, the tolerance tiers, the clinical entry
+- [Core concepts](./spec-notes-model): the document model, the tolerance tiers, the clinical entry
   layer, and the datatype/code-system machinery.
 - [Cookbook](./cookbook): recipes for active-problem filtering, the code/narrative fail-safe, the
   performed-vs-planned split, warning triage, and the round-trip serializer.

@@ -3,6 +3,7 @@ id: installation
 title: Installation
 sidebar_label: Installation
 sidebar_position: 2
+description: Install @cosyte/ccda, check it from ESM or CommonJS, and see its one runtime dependency.
 ---
 
 # Installation
@@ -12,13 +13,14 @@ per-condition type declarations, so it works from either module system without c
 has a **single** exact-pinned runtime dependency: the W3C-DOM substrate `@xmldom/xmldom`
 (C-CDA is XML, so a DOM is unavoidable).
 
-> **Status:** `0.1`, **published on npm** and **public**. Below 1.0 a breaking change bumps the
+> **Status:** `0.1`, **published on npm**, and **public**. Below 1.0 a breaking change bumps the
 > minor version and is called out in the changelog with its migration. Run
 > `npm view @cosyte/ccda version` for the current version. The install command below is live.
 
 ## Prerequisites
 
-- **Node.js >= 22.** The whole `@cosyte/*` suite targets ES2023 / Node 22+.
+- **Node.js 22 or later, tested on 22 and 24.** The whole `@cosyte/*` suite targets ES2023 and
+  Node.js 22 or later.
 - A package manager: `pnpm`, `npm`, or `yarn`.
 - **One runtime dependency.** `@xmldom/xmldom` (exact-pinned) is the only runtime dep; the parser
   caps itself at **≤ 3** justified deps. There is no native build and no
@@ -92,5 +94,5 @@ Every example in this documentation uses **synthetic** fixtures: an invented pat
 OIDs and MRNs. Do the same in your own tests: a C-CDA document is a clinical record, and a real one
 committed to a repository is a PHI leak the moment it publishes. The parser helps: every warning and
 error message comes **whole from a frozen registry** and interpolates nothing at all, so no attribute
-value, coded token or element name from your document can reach one. See
+value, coded token, or element name from your document can reach one. See
 [Troubleshooting](./troubleshooting) for the full posture, including what changed and when.

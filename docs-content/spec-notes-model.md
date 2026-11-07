@@ -3,6 +3,7 @@ id: spec-notes-model
 title: The document model
 sidebar_label: The document model
 sidebar_position: 4
+description: How a C-CDA document is recognized, how its US Realm header is read, and how its sections are framed.
 ---
 
 # The document model: recognition, header, sections
@@ -120,7 +121,7 @@ act's `ids` so you can join it to an extracted entry) carry an `inherited` flag:
 The distinction is the whole point. "The nearest enclosing author is Dr Lirio" and "this entry was
 authored by Dr Lirio" are different claims and only the first is one the document made. When no level
 carries an author, the reading is **absent** at every level: the record target, the custodian, a legal
-authenticator and an informant are never read as the author.
+authenticator, and an informant are never read as the author.
 
 An `<author>` whose `assignedAuthor` carries neither an `assignedPerson` nor an
 `assignedAuthoringDevice` is kept, marked `unidentified: true`, and reported with

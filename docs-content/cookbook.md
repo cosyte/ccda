@@ -2,7 +2,8 @@
 id: cookbook
 title: Cookbook
 sidebar_label: Cookbook
-sidebar_position: 8
+sidebar_position: 13
+description: Task-oriented recipes with runnable examples for the C-CDA jobs teams are handed most often.
 ---
 
 # Cookbook
@@ -374,7 +375,7 @@ doc.getSmokingStatus()[1]?.unknown; // => true
 > Current builder scope: `buildCcda` emits a **CCD** (the default), a **Referral Note**
 > (`documentType: "referralNote"`) or an inpatient **Discharge Summary**
 > (`documentType: "dischargeSummary"`). A CCD carries the US Realm header, the six CCD SHALL sections
-> (Problems, Allergies, Medications, Results, Vital Signs and **Social History** (Smoking Status),
+> (Problems, Allergies, Medications, Results, Vital Signs, and **Social History** (Smoking Status),
 > emitted empty as `nullFlavor="NI"` when no
 > content is supplied), and **Immunizations**, **Procedures**, **Encounters**,
 > **Functional Status**, **Mental Status** (each carrying standalone findings,
@@ -384,8 +385,8 @@ doc.getSmokingStatus()[1]?.unknown; // => true
 > History Organizer per relative, with conditions carrying optional age-at-onset + cause-of-death)
 > sections when populated. A Referral Note specializes the header and always emits Problems,
 > Allergies, Medications, **Reason for Referral**, **Assessment**, and Plan of Treatment, which makes
-> Results, Vital Signs and Social History populated-only. A Discharge Summary specializes it again
-> and always emits Allergies, **Hospital Course**, **Discharge Diagnosis** and Plan of Treatment,
+> Results, Vital Signs, and Social History populated-only. A Discharge Summary specializes it again
+> and always emits Allergies, **Hospital Course**, **Discharge Diagnosis**, and Plan of Treatment,
 > plus the `componentOf/encompassingEncounter` frame its template requires. All three accept an
 > optional bring-your-own `terminology`
 > adapter. The other nine C-CDA R2.1 document types are not implemented.
@@ -396,11 +397,11 @@ doc.getSmokingStatus()[1]?.unknown; // => true
 `"referralNote"`, `"dischargeSummary"`); ask for any of the other nine and you get a `TypeError`
 naming what you asked for, never a document that merely resembles it.
 
-A Discharge Summary carries one more thing than the other two types: the encounter it summarises.
+A Discharge Summary carries one more thing than the other two types: the encounter it summarizes.
 Supply the period and the discharge disposition through `encompassingEncounter`, a
 `BuildCcdaEncompassingEncounter`. Any slot you leave out is emitted as an explicit
 `nullFlavor="UNK"` and reparses as absent, never as a guessed date or a guessed disposition; an
-admission date, a discharge date and a discharge disposition are each facts a clinician acts on.
+admission date, a discharge date, and a discharge disposition are each facts a clinician acts on.
 
 ```ts
 import { buildCcda } from "@cosyte/ccda";
@@ -434,7 +435,7 @@ summary.findSection("hospitalCourse")?.narrativeText; // => "Admitted for observ
 > **What you supply is emitted or refused.** `problems` and `medications` are emitted when you pass
 > them (the medications in the Medications Section, not the Discharge Medications Section). Passing
 > `assessment` or `reasonForReferral`, which are Referral Note sections, throws a `TypeError`, as
-> does passing `hospitalCourse`, `dischargeDiagnoses` or `encompassingEncounter` to a CCD or a
+> does passing `hospitalCourse`, `dischargeDiagnoses`, or `encompassingEncounter` to a CCD or a
 > Referral Note.
 
 ## 6. Edit a parsed document: add or replace a section, keep a revision trail
@@ -450,10 +451,10 @@ same version-series `setId`, an incremented `versionNumber`, and a `relatedDocum
 naming the version it replaces.
 
 When the source carries no `setId`, one is **minted** (CDA R2 requires the replacement and its
-`parentDocument` to share one) and it is labelled as synthetic: `SYNTHETIC-SETID-…` under a synthetic
+`parentDocument` to share one) and it is labeled as synthetic: `SYNTHETIC-SETID-…` under a synthetic
 assigning-authority root. Call `isSyntheticSetId(doc.header.setId)` to tell a minted version series
 from one a source system asserted. Nothing forces a receiver to read that label, so treat it as a way
-to recognise a fabricated id, never as a guarantee anyone downstream will notice it.
+to recognize a fabricated id, never as a guarantee anyone downstream will notice it.
 
 Check `revised.warnings` after an edit, not just after a parse. An edit reports the conformance gaps
 in what **it** wrote: a grafted Plan of Treatment carrying a planned medication with no

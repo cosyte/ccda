@@ -25,10 +25,15 @@ import type { Element } from "@xmldom/xmldom";
  * `text` fallback (the element's full trimmed text) for senders that put the
  * whole name in a single node.
  *
+ * `text` is set whether or not the parts are, so on a structured name it is the
+ * parts' text run together with whatever whitespace the document put between
+ * them: `JaneDoe` from compact XML, including every document `buildCcda` emits.
+ * To display a structured name, join `prefix`, `given`, `family` and `suffix`.
+ *
  * @example
  * ```ts
  * import type { HumanName } from "@cosyte/ccda";
- * const n: HumanName = { given: ["Jane"], family: "Doe", text: "Jane Doe" };
+ * const n: HumanName = { given: ["Jane"], family: "Doe", text: "JaneDoe" };
  * ```
  */
 export interface HumanName {
@@ -48,7 +53,7 @@ export interface HumanName {
  * ```ts
  * import type { CcdaPatient } from "@cosyte/ccda";
  * function label(p: CcdaPatient): string {
- *   return p.name?.text ?? p.identifiers[0]?.extension ?? "unknown";
+ *   return p.name?.family ?? p.identifiers[0]?.extension ?? "unknown";
  * }
  * ```
  */
@@ -121,7 +126,7 @@ export interface CcdaAuthoringDevice {
  * import type { CcdaAuthor } from "@cosyte/ccda";
  * function who(a: CcdaAuthor): string {
  *   if (a.unidentified) return "author present, identity not stated";
- *   return a.person?.text ?? a.device?.softwareName ?? "unnamed author";
+ *   return a.person?.family ?? a.device?.softwareName ?? "unnamed author";
  * }
  * ```
  */
@@ -154,7 +159,7 @@ export interface CcdaAuthor {
  * ```ts
  * import type { CcdaAuthorship } from "@cosyte/ccda";
  * function provenance(a: CcdaAuthorship): string {
- *   const who = a.authors[0]?.person?.text ?? "an unnamed author";
+ *   const who = a.authors[0]?.person?.family ?? "an unnamed author";
  *   return a.inherited ? `inherited from an enclosing level: ${who}` : `stated here: ${who}`;
  * }
  * ```

@@ -1,8 +1,8 @@
 /**
- * `scripts/sync-readme-version.ts` keeps the version README.md's `## Status` declares equal to
- * `package.json` across a Changesets version commit, which is what lets that commit pass the README
- * status check in `test/docs-content.test.ts` before the release publishes it. Every case is driven
- * on README text built here, except the last, which reads this repository's own README.
+ * `scripts/sync-readme-version.ts` keeps the release line README.md's `## Status` names equal to the
+ * line `package.json` is on across a Changesets version commit, which is what lets that commit pass
+ * the README status check in `test/docs-content.test.ts` before the release publishes it. Every case
+ * is driven on README text built here, except the last, which reads this repository's own README.
  */
 
 import { readFileSync } from "node:fs";
@@ -17,29 +17,32 @@ const README = [
   "",
   "## Status",
   "",
-  "`package.json` declares **`0.0.15`**. From `0.1.0` the public API is settled.",
+  "**The `0.1` line.** From 0.1 the public API is settled.",
   "",
   "## Install",
   "",
-  "**`9.9.9`** outside the section is never touched.",
+  "**The `9.9` line.** outside the section is never touched.",
   "",
 ].join("\n");
 
-describe("syncing the README status version", () => {
-  it("rewrites the one marker in ## Status to the manifest version", () => {
-    const result = syncReadmeVersion(README, "0.1.0");
-    expect("text" in result && result.text).toBe(README.replace("**`0.0.15`**", "**`0.1.0`**"));
+describe("syncing the README status release line", () => {
+  it("rewrites the one marker in ## Status to the manifest's release line", () => {
+    const result = syncReadmeVersion(README, "0.2.0");
+    expect("text" in result && result.text).toBe(
+      README.replace("**The `0.1` line.**", "**The `0.2` line.**"),
+    );
   });
 
   it("leaves everything outside the marker byte for byte", () => {
-    const result = syncReadmeVersion(README, "0.1.0");
+    const result = syncReadmeVersion(README, "0.2.0");
     const text = "text" in result ? result.text : "";
-    expect(text).toContain("From `0.1.0` the public API is settled.");
-    expect(text).toContain("**`9.9.9`** outside the section is never touched.");
+    expect(text).toContain("From 0.1 the public API is settled.");
+    expect(text).toContain("**The `9.9` line.** outside the section is never touched.");
   });
 
-  it("is idempotent", () => {
-    expect(syncReadmeVersion(README, "0.0.15")).toEqual({ text: README });
+  it("is idempotent, and a patch release leaves the line alone", () => {
+    expect(syncReadmeVersion(README, "0.1.0")).toEqual({ text: README });
+    expect(syncReadmeVersion(README, "0.1.7")).toEqual({ text: README });
   });
 
   it("refuses a README with no ## Status section", () => {
@@ -47,14 +50,14 @@ describe("syncing the README status version", () => {
   });
 
   it("refuses a status with no marker, so a reworded line cannot stop being synced in silence", () => {
-    const reworded = README.replace("**`0.0.15`**", "`0.0.15`");
+    const reworded = README.replace("**The `0.1` line.**", "The 0.1 line.");
     expect(syncReadmeVersion(reworded, "0.1.0")).toHaveProperty("error");
   });
 
   it("refuses a status with two markers", () => {
     const doubled = README.replace(
-      "declares **`0.0.15`**",
-      "declares **`0.0.15`**, then **`0.0.14`**",
+      "**The `0.1` line.**",
+      "**The `0.1` line.** It follows **The `0.0` line.**",
     );
     expect(syncReadmeVersion(doubled, "0.1.0")).toHaveProperty("error");
   });

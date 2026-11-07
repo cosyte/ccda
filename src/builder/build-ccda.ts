@@ -14,15 +14,19 @@
  * `parseCcda(doc.toString()).toString() === doc.toString()` (the serializer
  * fixed-point) holds automatically. A clean build produces **zero warnings**.
  *
- * **"Clean" now has one build-time exception, and it is not a round-trip
+ * **"Clean" now has two build-time exceptions, and neither is a round-trip
  * failure.** The returned document's `warnings` are the re-parse's warnings plus
  * any diagnostic the builder raises about the *document it just wrote*: today
- * that is exactly one code, `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`,
- * appended after the parse warnings. It reports that a Planned Medication
+ * that is two codes, appended after the parse warnings.
+ * `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` reports that a Planned Medication
  * Activity was emitted without the `effectiveTime` its template makes a SHALL,
- * which the published input type still permits. A build carrying no such gap is
+ * which the published input type still permits, and `MISSING_SELF_CARE_ACTIVITY`
+ * reports a Functional Status Organizer written as standalone findings because
+ * it was given no self-care activity (see
+ * {@link BuildCcdaFunctionalStatusOrganizer}). A build carrying no such gap is
  * warning-free exactly as before. **`parseCcda` never raises it**, deliberately,
- * so it cannot appear on a third-party document that was merely read.
+ * nor `MISSING_SELF_CARE_ACTIVITY`, so neither can appear on a third-party
+ * document that was merely read.
  * **`editCcda` DOES raise it**, on the sections that edit grafted, through the
  * same shared check; see {@link BuildCcdaPlannedItemBase.effectiveTime}.
  *
@@ -42,9 +46,10 @@
  * never conflated with a `nullFlavor` "unknown", exactly as the parser reads it
  * back. Every section carries the entries-required templateId only when it has
  * entries; a CCD SHALL section (Problems, Allergies, Medications, Results, Vital
- * Signs) for which no content is supplied is emitted as a spec-clean empty
- * `nullFlavor="NI"` section so the document stays conformant. The Immunizations
- * section, not a CCD SHALL section, is emitted only when populated.
+ * Signs, Social History) for which no content is supplied is emitted as a
+ * spec-clean empty `nullFlavor="NI"` section so the document stays conformant.
+ * The Immunizations section, not a CCD SHALL section, is emitted only when
+ * populated.
  *
  * **Procedures and Encounters.** A **Procedures** section emits
  * one of the three Procedure Activity variants, an operative `<procedure>`
@@ -56,7 +61,7 @@
  * Encounter Activity (`…22.4.49`) with its SHALL `code` [1..1] (the encounter
  * type, CPT by default) and SHALL `effectiveTime` [1..1] visit period (an
  * `IVL_TS`; a `nullFlavor="UNK"` low when no period is known). Both, like
- * Immunizations, and unlike the four CCD SHALL sections, are emitted only when
+ * Immunizations, and unlike the six CCD SHALL sections, are emitted only when
  * populated; neither is a CCD SHALL section, so an empty one is never fabricated.
  * The Procedures section and its entry templates carry the R2.1 `2014-06-09`
  * stamp (not the `2015-08-01` stamp most other sections use). **Procedures is not
@@ -76,10 +81,10 @@
  * no `value` the SHALL `value` is emitted as `nullFlavor="UNK"`, an explicit
  * unknown the parser reads back as `unknown: true` and flags
  * `SMOKING_STATUS_UNKNOWN`, never invented as a "never smoker" (absent status ≠
- * non-smoker, the single safety rule this section turns on). Like Immunizations,
- * Procedures, and Encounters, and unlike the four CCD SHALL sections, Social
- * History is emitted only when populated; it is a CCD SHOULD section, so an empty
- * one is never fabricated.
+ * non-smoker, the single safety rule this section turns on). For a document type
+ * whose SHALL set does not include it (a Referral Note, a Discharge Summary),
+ * Social History is emitted only when populated, so an empty one is never
+ * fabricated there.
  *
  * **Functional Status.** A **Functional Status** section
  * (`…22.2.14`, LOINC `47420-5`, the `2014-06-09` stamp) emits one or more
@@ -204,12 +209,11 @@
  * dose/route are handled.
  *
  * **A second document type: the Referral Note.** `buildCcda`
- * emits either a **CCD** (default) or a **Referral Note**
- * (`documentType: "referralNote"`), establishing the multi-document-type pattern
- * in the builder. The Referral Note specializes the US Realm Header, its own
- * document `templateId` root (`…22.1.14`, the R2.1 `2015-08-01` stamp), LOINC
- * document `code` (`57133-1` "Referral Note"), and title, and its own SHALL
- * section set: the entries-required **Problems**, **Allergies**, and
+ * emits a **Referral Note** for `documentType: "referralNote"`, establishing the
+ * multi-document-type pattern in the builder. The Referral Note specializes the
+ * US Realm Header, its own document `templateId` root (`…22.1.14`, the R2.1
+ * `2015-08-01` stamp), LOINC document `code` (`57133-1` "Referral Note"), and
+ * title, and its own SHALL section set: the entries-required **Problems**, **Allergies**, and
  * **Medications** (each emitted empty as `nullFlavor="NI"` when the caller
  * supplies none), plus the narrative-only **Reason for Referral** (V2,
  * `1.3.6.1.4.1.19376.1.5.3.1.3.1`, LOINC `42349-1`), **Assessment** (`…22.2.8`,
@@ -1458,8 +1462,10 @@ export interface BuildCcdaMentalStatusOrganizer {
  *
  * @example
  * ```ts
- * import type { BuildCcdaAssessmentScaleItem } from "@cosyte/ccda";
- * const q1: BuildCcdaAssessmentScaleItem = {
+ * import type { BuildCcdaInit } from "@cosyte/ccda";
+ * // This type is not exported by name; reach it through the field that takes it.
+ * type Scale = NonNullable<BuildCcdaInit["mentalStatusScales"]>[number];
+ * const q1: NonNullable<Scale["supporting"]>[number] = {
  *   code: { code: "44250-9", displayName: "Little interest or pleasure in doing things" },
  *   score: 0,
  * };
@@ -1494,8 +1500,9 @@ export interface BuildCcdaAssessmentScaleItem {
  *
  * @example
  * ```ts
- * import type { BuildCcdaAssessmentScale } from "@cosyte/ccda";
- * const phq9: BuildCcdaAssessmentScale = {
+ * import type { BuildCcdaInit } from "@cosyte/ccda";
+ * // This type is not exported by name; reach it through the field that takes it.
+ * const phq9: NonNullable<BuildCcdaInit["mentalStatusScales"]>[number] = {
  *   code: { code: "44249-1", displayName: "PHQ-9 quick depression assessment panel" }, // LOINC
  *   score: 12,
  *   effectiveTime: "20240101",
@@ -1883,7 +1890,7 @@ export interface BuildCcdaInit {
   readonly documentType?: BuildableDocumentType;
   /** The document `id`'s extension; a synthetic id is generated when omitted. */
   readonly documentId?: string;
-  /** The document title; defaults to the CCD document-code display name. */
+  /** The document title; defaults to the document type's own title ("Summarization of Episode Note" for a CCD). */
   readonly title?: string;
   /** The document `effectiveTime` (a `Date` is formatted to UTC); defaults to now. */
   readonly effectiveTime?: Date | string;
@@ -1912,9 +1919,17 @@ export interface BuildCcdaInit {
    * Discharge Medications Section.
    */
   readonly medications?: readonly BuildCcdaMedication[];
-  /** Result panels for the Results section; empty section when omitted. */
+  /**
+   * Result panels for the Results section; an empty section when omitted for a
+   * CCD, whose SHALL set includes it. For a Referral Note or a Discharge Summary
+   * the section is emitted only when this is non-empty.
+   */
   readonly results?: readonly BuildCcdaResultPanel[];
-  /** Vital Signs panels for the Vital Signs section; empty section when omitted. */
+  /**
+   * Vital Signs panels for the Vital Signs section; an empty section when omitted
+   * for a CCD, whose SHALL set includes it. For a Referral Note or a Discharge
+   * Summary the section is emitted only when this is non-empty.
+   */
   readonly vitalSigns?: readonly BuildCcdaVitalsPanel[];
   /** Immunization Activities; the Immunizations section is emitted only when non-empty. */
   readonly immunizations?: readonly BuildCcdaImmunization[];
@@ -1987,9 +2002,10 @@ export interface BuildCcdaInit {
    */
   readonly familyHistory?: readonly BuildCcdaFamilyHistory[];
   /**
-   * The Assessment Section narrative (`documentType: "referralNote"` only, a
-   * Referral Note SHALL section). Narrative-only, so this is a free-text
-   * clinician summary; when omitted the SHALL section is emitted as a spec-clean
+   * The Assessment Section narrative (`documentType: "referralNote"` only; with
+   * Plan of Treatment it satisfies the Referral Note's Assessment/Plan choice,
+   * CONF:1198-29102). Narrative-only, so this is a free-text
+   * clinician summary; when omitted the section is emitted as a spec-clean
    * empty `nullFlavor="NI"` section (never a fabricated assessment). Ignored for
    * a CCD; refused with a `TypeError` for a Discharge Summary, which carries no
    * Assessment Section.
@@ -2550,7 +2566,8 @@ export interface BuildCcdaOptions {
  *   ever an additional alternate coding.
  * @returns The parsed document, the parse of the spec-clean XML just emitted,
  *   carrying the re-parse's warnings plus any build-time diagnostic about the
- *   input (today: `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, appended last).
+ *   input (today: `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` and
+ *   `MISSING_SELF_CARE_ACTIVITY`, appended last).
  * @throws {TypeError} When `documentType` is anything other than a
  *   {@link BuildableDocumentType} (the three types this builder supports; only an
  *   omitted, `undefined` one defaults to a CCD, and `null` or a non-string is
