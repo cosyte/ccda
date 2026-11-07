@@ -1462,8 +1462,10 @@ export interface BuildCcdaMentalStatusOrganizer {
  *
  * @example
  * ```ts
- * import type { BuildCcdaAssessmentScaleItem } from "@cosyte/ccda";
- * const q1: BuildCcdaAssessmentScaleItem = {
+ * import type { BuildCcdaInit } from "@cosyte/ccda";
+ * // This type is not exported by name; reach it through the field that takes it.
+ * type Scale = NonNullable<BuildCcdaInit["mentalStatusScales"]>[number];
+ * const q1: NonNullable<Scale["supporting"]>[number] = {
  *   code: { code: "44250-9", displayName: "Little interest or pleasure in doing things" },
  *   score: 0,
  * };
@@ -1498,8 +1500,9 @@ export interface BuildCcdaAssessmentScaleItem {
  *
  * @example
  * ```ts
- * import type { BuildCcdaAssessmentScale } from "@cosyte/ccda";
- * const phq9: BuildCcdaAssessmentScale = {
+ * import type { BuildCcdaInit } from "@cosyte/ccda";
+ * // This type is not exported by name; reach it through the field that takes it.
+ * const phq9: NonNullable<BuildCcdaInit["mentalStatusScales"]>[number] = {
  *   code: { code: "44249-1", displayName: "PHQ-9 quick depression assessment panel" }, // LOINC
  *   score: 12,
  *   effectiveTime: "20240101",
