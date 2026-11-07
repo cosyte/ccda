@@ -286,7 +286,7 @@ not only bind a slot to a code system, it binds it to a **value set**, and where
 still sit outside the bound value set, and a certifier and a receiving clinician both care about
 exactly that case.
 
-Member codes are licensed data (SNOMED CT, RxNorm and CVX expansions), so this is bring-your-own too:
+Member codes are licensed data (SNOMED CT, RxNorm, and CVX expansions), so this is bring-your-own too:
 this package declares the **value set identifiers** and their provenance, you hold the expansions, and
 `isMember` is the one question it asks you.
 

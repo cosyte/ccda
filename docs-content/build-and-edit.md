@@ -49,7 +49,7 @@ unpopulated), the narrative SHALL **Reason for Referral** (`1.3.6.1.4.1.19376.1.
 `42349-1`, from the optional `reasonForReferral` string), and **Assessment** (`…22.2.8`, LOINC
 `51848-0`, unversioned, a root-only `templateId` with no `@extension`, from the optional `assessment`
 string) with **Plan of Treatment** (`…22.2.10`, LOINC `18776-5`), the pair that satisfies its
-Assessment/Plan choice (CONF:1198-29102). Results, Vital Signs and Social History are
+Assessment/Plan choice (CONF:1198-29102). Results, Vital Signs, and Social History are
 not Referral Note SHALL sections, so, unlike in a CCD, they are emitted only when the caller supplies
 them.
 
@@ -166,7 +166,7 @@ keeps the `nullFlavor="UNK"` high, never a fabricated date. Each CCD SHALL secti
 is supplied is emitted as a spec-clean empty `nullFlavor="NI"` section; the non-required Immunizations /
 Procedures / Encounters / Functional Status / Mental Status / Past Medical History /
 Plan of Treatment / Family History sections are emitted only when populated. The builder emits three of
-the twelve document types (**CCD**, **Referral Note** and inpatient **Discharge Summary**); the other
+the twelve document types (**CCD**, **Referral Note**, and inpatient **Discharge Summary**); the other
 nine are **not implemented**, and any
 other `documentType` throws a `TypeError` rather than emitting something that merely resembles the type
 you asked for. Any C-CDA section outside the set listed above cannot be built at all.

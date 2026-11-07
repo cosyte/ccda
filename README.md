@@ -35,7 +35,7 @@ is usually choosing between an XML library that hands back a DOM and leaves ever
 to the caller, and a conformance validator that rejects the document and returns nothing. This
 package is neither: it reads a real, vendor-quirky document into typed clinical models and turns each
 deviation into a stable coded warning, so a document a validator would reject still yields the
-problems, medications and allergies it does carry. The nearest alternative most teams reach for is a
+problems, medications, and allergies it does carry. The nearest alternative most teams reach for is a
 generic XML parser plus hand-written XPath, which works until a vendor moves a `templateId` and never
 tells you when a reading was unsafe to make. This package will not make that reading: where a
 document contradicts itself, the derived value is withheld and flagged rather than resolved in
@@ -51,10 +51,10 @@ version, pin an exact version rather than a range. Some surfaces are still parti
 named rather than implied:
 
 - **Building is partial.** `buildCcda` emits three of the twelve US Realm document types (CCD,
-  Referral Note and inpatient Discharge Summary); the other nine throw rather than emitting
+  Referral Note, and inpatient Discharge Summary); the other nine throw rather than emitting
   something that merely resembles the type you asked for.
 - **Editing is whole-section.** `editCcda` covers twelve section kinds. Functional Status, Mental
-  Status and the Referral Note's narrative-only sections are buildable but not editable, and there is
+  Status, and the Referral Note's narrative-only sections are buildable but not editable, and there is
   no entry-level append and no section removal.
 - **Required-section validation under-warns**, and every document type reports how much of its
   obligation has been read off the normative source. A quiet parse is not a conformance result.
@@ -213,7 +213,7 @@ an invented patient and invented identifiers; keep it that way in anything you p
 <!-- conformance-statement:start -->
 
 **Conformance, measured rather than expected.** `pnpm conformance` fetches the normative C-CDA R2.1
-Schematron, its vocabulary file and the CDA R2 XML schema at run time from pinned immutable
+Schematron, its vocabulary file, and the CDA R2 XML schema at run time from pinned immutable
 references, validates every document `buildCcda` emits against the schema and then the
 error-severity phase of the Schematron, and re-runs the Schematron over a public sample corpus
 parsed and re-serialized through this library. The result is tracked at
@@ -284,7 +284,7 @@ most useful with the smallest document shape that reproduces it and the warning 
 **Unsolicited pull requests are accepted.** For anything that changes what a document parses to, adds
 or renames a warning code, or moves the public API, open an issue first so the behavior can be
 agreed before you write it: a warning code is public surface, so renaming one is a breaking change.
-Typo, link and test fixes can go straight to a pull request.
+Typo, link, and test fixes can go straight to a pull request.
 
 **What a contribution has to clear**, every one of them a script this package declares:
 

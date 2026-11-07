@@ -298,7 +298,7 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   Immunization Activity; read `doc.toString()` if you need it.
   **The code-system and terminology checks reach it too, as of `0.0.3`.** Because that `code` is the
   drug, it is checked against the `medication` binding exactly as a performed Medication Activity's
-  `drug` is, so `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM` and (with a
+  `drug` is, so `MISSING_CODE_VALUE`, `MISSING_CODE_SYSTEM`, `UNEXPECTED_CODE_SYSTEM`, and (with a
   `TerminologyAdapter`) `SEMANTIC_CODE_INVALID` fire on a planned drug, code for code with its
   performed twin. On `0.0.2` and earlier none of them could: a planned drug asserting a `@code` with
   no `@codeSystem`, an empty `<code/>`, or an OID outside RxNorm/NDC came back read and unremarked.
@@ -340,7 +340,7 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   (`…22.4.130`) and Goal Observation (`…22.4.121`); a Goal Observation is `moodCode="GOL"`, which this
   parser calls neither performed nor planned. Their narrative and structure are preserved and they
   re-serialize faithfully, and they are still not planned items. **Three of the four are no longer
-  silent**: Instruction, Handoff Communication Participants and Nutrition Recommendation each draw
+  silent**: Instruction, Handoff Communication Participants, and Nutrition Recommendation each draw
   `PLAN_ENTRY_NOT_MODELED` where planned items are read, once per matching root, so a consumer has a
   code to filter on instead of an entry that vanishes **in the places the report covers**.
   Reporting is not modeling: nothing about the returned list changed. A direct entry is reported in
@@ -405,7 +405,7 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
     nothing left over.
   - **`traced-partial`** for the other nine structured types. Their SHALL sections were read off the
     normative C-CDA R2.1 source, and one or more of them cannot be asserted. Consultation Note
-    asserts History of Present Illness (CONF:1198-28907), Allergies (-28911) and Problems (-28929),
+    asserts History of Present Illness (CONF:1198-28907), Allergies (-28911), and Problems (-28929),
     each scoped to the R2.1 stamp its constraint carries. Progress Note, Procedure Note, Operative
     Note, and Diagnostic Imaging Report assert **nothing**, and that is a traced result rather than
     an unread table: every SHALL section their templates name is either outside this parser's
@@ -520,7 +520,7 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   `translate`, or one returning no matches, leaves the output byte-identical: an unmapped code never
   produces a guessed alternate.
 - **A built document is validated against the normative artifacts, and the result is published.**
-  `pnpm conformance` fetches the C-CDA R2.1 Schematron, its vocabulary file and the CDA R2 XML schema
+  `pnpm conformance` fetches the C-CDA R2.1 Schematron, its vocabulary file, and the CDA R2 XML schema
   from pinned immutable references, validates every document `buildCcda` emits against the schema and
   then the Schematron's error-severity phase, and writes `documentation/conformance-report.md`. The
   measured set is one document per optional section as well as a minimal and a populated document
@@ -580,7 +580,7 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
 - **C-CDA R2.1, US Realm.** Other CDA templates and realms are out of the current scope.
 - **A parser + serializer, not a transport or a validator suite.** No MLLP/XDS delivery, no Schematron
   conformance report: this reads and re-emits documents.
-- **Below 1.0.** `@cosyte/ccda` is at `0.1`, **published on npm** and **public**. Its exported
+- **Below 1.0.** `@cosyte/ccda` is at `0.1`, **published on npm**, and **public**. Its exported
   names, options, return shapes, and warning codes are the surface we keep stable, and below 1.0 a
   breaking change bumps the minor version and is called out in the changelog with its migration.
   Run `npm view @cosyte/ccda version` for the published version.

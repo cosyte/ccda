@@ -113,7 +113,7 @@ sections, and SHALL sections outside the recognized catalog. `requiredSectionKey
 
 The **CCD** row is the one traced end to end. It asserts **six** sections, read off the normative
 C-CDA R2.1 Schematron's CCD (V3) errors rule: Allergies (CONF:1198-30662), Medications (-30664),
-Problems (-30666), Results (-30670), Social History (-30688) and Vital Signs (-30690). Procedures
+Problems (-30666), Results (-30670), Social History (-30688), and Vital Signs (-30690). Procedures
 (-30668) and Plan of Treatment (-30686) sit in that template's _warnings_ rule as SHOULD, so neither
 is asserted. `buildCcda` emits exactly this set for a CCD, so the two halves cannot drift.
 
@@ -128,7 +128,7 @@ verified.** `requiredSectionStatus(documentType)` returns the asserted `keys` wi
 of `traced-complete`, `traced-partial`, `untraced`, or `not-applicable`, the conformance id and the
 source's own section name behind each traced key, and every SHALL section left unasserted with its
 reason (outside the recognized catalog, or not unconditionally required). Consultation Note asserts
-History of Present Illness (CONF:1198-28907), Allergies (-28911) and Problems (-28929), all scoped to
+History of Present Illness (CONF:1198-28907), Allergies (-28911), and Problems (-28929), all scoped to
 the R2.1 stamp their constraints carry; Progress Note, Procedure Note, Operative Note, and Diagnostic
 Imaging Report assert nothing, because every SHALL section their templates name is either outside the
 recognized catalog or a choice. Unstructured Document is `not-applicable`: its component SHALL be a

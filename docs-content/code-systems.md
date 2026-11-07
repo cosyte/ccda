@@ -50,7 +50,7 @@ opinion" (silent).
 > family-history codes, the planned-item codes for the five variants whose `code` is the planned act
 > (the other two are exceptions: a planned **medication**'s `code` is the drug and a planned
 > **immunization**'s is the vaccine, so those are checked at the `medication` and `vaccine` slots
-> like any other), the smoking-status, functional-status and mental-status
+> like any other), the smoking-status, functional-status, and mental-status
 > observation values, the allergy propensity type, and the reaction, severity, and criticality
 > observations. Within the five, the checks apply to the slot's **primary** coding; alternate codings
 > carried in `<translation>` are preserved and re-serialized but are not themselves slot-checked.

@@ -101,7 +101,7 @@ normative R2.1 Schematron, CONF:1198-30925), so the SHALL check does not stay si
 Note omits it. Its Assessment/Plan requirement stays out (a choice constraint), as do its Results and
 Plan of Treatment sections (SHOULD, not SHALL).
 
-A **Discharge Summary** asserts **Allergies** (CONF:1198-30520), **Discharge Diagnosis** (-30524)
+A **Discharge Summary** asserts **Allergies** (CONF:1198-30520), **Discharge Diagnosis** (-30524),
 and **Plan of Treatment** (-30528), the three sections its errors rule requires unconditionally that
 this parser recognizes. It does **not** assert **Discharge Medications**: the normative source puts
 that section in the document's _warnings_ rule as a SHOULD (-30525), so a conformant Discharge
@@ -113,7 +113,7 @@ unasserted, with the reason `assertion-would-tighten-parse`, rather than silentl
 
 A **History and Physical** asserts seven of the ten sections its errors rule names: Allergies
 (-30572), Family History (-30584), Past Medical History (-30588), Medications (-30596), Results
-(-30606), Social History (-30610) and Vital Signs (-30612). General Status (-30586), Physical Exam
+(-30606), Social History (-30610), and Vital Signs (-30612). General Status (-30586), Physical Exam
 (-30598) and Review of Systems (-30608) are outside the recognized catalog, and its two choices
 (-30613, -30614) assert neither half. A **Transfer Summary** asserts all six of its named SHALL
 sections: Allergies (-28256), Medications (-28278), Problems (-28284), Results (-28288), Vital Signs

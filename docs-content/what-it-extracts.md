@@ -286,7 +286,7 @@ normalized away**. An unrecognized `value xsi:type` is kept as `unsupported`; no
 
 CDA R2 gives `Section.subject` cardinality `0..1` and defines it as the "Primary target of the entries
 recorded in a section"; C-CDA admits the same override on a clinical statement. So a conformant
-document can carry a relative's, a donor's or a contact's clinical statement inside the patient's
+document can carry a relative's, a donor's, or a contact's clinical statement inside the patient's
 document, and every read path documented above as the patient's own data must not hand one back.
 
 **An entry under a subject declaration is withheld from every record-target read path and flagged
@@ -328,7 +328,7 @@ none produces four, never three.
 
 **Withholding is read-side only.** The withheld entry is not dropped from the document: `toString()` /
 `serializeCcda()` reproduce it byte for byte (the round trip is unchanged), and the section's narrative
-is returned unredacted, unreordered and unannotated. Nothing new is modeled for third-party subjects:
+is returned unredacted, unreordered, and unannotated. Nothing new is modeled for third-party subjects:
 a withheld entry is reachable only through the re-serialized document. Under `{ strict: true }` the
 warning escalates like every other safety-critical Tier-2 code, so a document carrying an override now
 throws where it previously parsed.

@@ -386,7 +386,7 @@ doc.getSmokingStatus()[1]?.unknown; // => true
 > sections when populated. A Referral Note specializes the header and always emits Problems,
 > Allergies, Medications, **Reason for Referral**, **Assessment**, and Plan of Treatment, which makes
 > Results, Vital Signs, and Social History populated-only. A Discharge Summary specializes it again
-> and always emits Allergies, **Hospital Course**, **Discharge Diagnosis** and Plan of Treatment,
+> and always emits Allergies, **Hospital Course**, **Discharge Diagnosis**, and Plan of Treatment,
 > plus the `componentOf/encompassingEncounter` frame its template requires. All three accept an
 > optional bring-your-own `terminology`
 > adapter. The other nine C-CDA R2.1 document types are not implemented.
@@ -401,7 +401,7 @@ A Discharge Summary carries one more thing than the other two types: the encount
 Supply the period and the discharge disposition through `encompassingEncounter`, a
 `BuildCcdaEncompassingEncounter`. Any slot you leave out is emitted as an explicit
 `nullFlavor="UNK"` and reparses as absent, never as a guessed date or a guessed disposition; an
-admission date, a discharge date and a discharge disposition are each facts a clinician acts on.
+admission date, a discharge date, and a discharge disposition are each facts a clinician acts on.
 
 ```ts
 import { buildCcda } from "@cosyte/ccda";
