@@ -4,6 +4,8 @@ A parser, builder and editor for C-CDA clinical documents in Node.js and TypeScr
 npm as `@cosyte/ccda` under MIT. It is one of the Cosyte standard parsers and keeps the shape of
 `@cosyte/hl7`'s API. Parsing is lenient: vendor quirks become coded warnings, not errors.
 
+@AGENTS.md
+
 ## Gate
 
 Run these from the repo root, in this order, with the pinned pnpm 10.34.5 first on PATH: pnpm 12
