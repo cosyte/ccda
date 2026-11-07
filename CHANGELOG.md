@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.2
+
+### Patch Changes
+
+- 3f2fd43: docs: correct statements in the README and API documentation that disagreed with what the package does.
+
+  The README now says `buildCcda` emits three document types wherever it described two, gives every
+  document type its current required-section verification state, names the `condition` and
+  `ageAtOnset` fields a family history observation actually carries, names `MISSING_SELF_CARE_ACTIVITY`
+  as the second emit-side warning, and lists `ccdaProfiles.default` among the built-in profiles. The
+  API documentation no longer suggests `HumanName.text` as a display name: it is the whole `<name>`
+  element's text, so a structured name reads as its parts run together. Nothing the package parses,
+  builds or serializes changes.
+
+- 3f2fd43: The README is shorter, so npm shows all of it, and its reference sections moved to the documentation pages.
+
+  Nothing was dropped. What the parser extracts, dates and times, validation against C-CDA R2.1, building and editing, code systems and provenance, the known limitations, and the parser archetype each have a page on docs.cosyte.com, and the README links every one. The conformance statement stays in the README. The README's status names the release line, the 0.1 line, instead of an exact version, and the LICENSE names Cosyte LLC. No code changed.
+
 ## 0.1.1
 
 ### Patch Changes
