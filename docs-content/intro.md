@@ -3,6 +3,7 @@ id: intro
 title: Getting started
 sidebar_label: Getting started
 sidebar_position: 1
+description: What @cosyte/ccda is, the parser archetype it follows, and a first look at reading a C-CDA document.
 ---
 
 # @cosyte/ccda
@@ -15,7 +16,7 @@ Its single runtime dependency is the W3C-DOM substrate `@xmldom/xmldom` (exact-p
 configured XXE-safe.
 
 > **Status:** `0.1`, **published on npm** and **public**. The exported names, options, return
-> shapes and warning codes are the surface we keep stable, and below 1.0 a breaking change bumps
+> shapes, and warning codes are the surface we keep stable, and below 1.0 a breaking change bumps
 > the minor version and is called out in the changelog with its migration. Run
 > `npm view @cosyte/ccda version` for the current version. The parser ships
 > document recognition (all 12 US Realm types), the US Realm header + patient demographics, section
@@ -138,7 +139,7 @@ parse, a non-`ClinicalDocument` root) always throws.
 
 - **[Installation](./installation)**: prerequisites + a smoke test.
 - **[Quickstart](./quickstart)**: parse a CCD and pull demographics + the problem/med/allergy triad.
-- **[Core Concepts](./spec-notes-model)**: the document model, the tolerance tiers, the clinical entry
+- **[Core concepts](./spec-notes-model)**: the document model, the tolerance tiers, the clinical entry
   layer, and the datatype/code-system machinery.
 - **[Cookbook](./cookbook)**: task-oriented recipes.
 - **[Troubleshooting & known limitations](./troubleshooting)**: the error model and exactly what the

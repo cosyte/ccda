@@ -1,11 +1,12 @@
 ---
 id: spec-notes-tolerance
-title: Tolerance & the warning model
-sidebar_label: Tolerance & warnings
-sidebar_position: 5
+title: Tolerance and the warning model
+sidebar_label: Tolerance and warnings
+sidebar_position: 6
+description: The tolerance tiers and the warning-code model that turn a vendor deviation into a coded warning instead of a failure.
 ---
 
-# Tolerance tiers & the warning-code model
+# Tolerance tiers and the warning-code model
 
 `@cosyte/ccda` follows the Cosyte parser archetype's **tiered tolerance** model. Real-world C-CDA is
 vendor-quirky; the parser is liberal on input (Postel's Law) so a deviation becomes a **warning you
@@ -26,7 +27,7 @@ Every Tier-2 warning carries a **stable string code** (`WARNING_CODES.*`), a `me
 structural `position`. Consumers branch on `w.code`, so **renaming a code is a breaking change**.
 
 The `message` comes whole from a frozen registry and **interpolates nothing**: no warning factory takes
-a value parameter, so no attribute value, coded token or element name from the document can reach one.
+a value parameter, so no attribute value, coded token, or element name from the document can reach one.
 A handful of codes carry a variant per closed-set key (which `CodeSlot`, which catalog section), and
 those variants are generated from the parser's own tables. The `position` is bounded rather than
 copied: `path` is echoed only for an element name this parser navigates, `sectionCode` only for a
@@ -62,7 +63,7 @@ your own pipeline rather than a formality:
 Neither code is a refusal. A stamp this package does not model is a warning, the document is parsed
 leniently, and its clinical reading is unchanged; what stops is the R2.1-scoped conformance claim
 (`REQUIRED_SECTIONS_NOT_EVALUATED`). Under `{ strict: true }` both escalate to a throw exactly as
-every other Tier-2 warning does, which is the caller's own opt-in and not a new behaviour here.
+every other Tier-2 warning does, which is the caller's own opt-in and not a new behavior here.
 
 A stamp a message **names** always comes from this package's own closed table (`CCDA_RELEASE_STAMPS`),
 never from the document: a sender-controlled `@extension` selects the generic wording, which names no

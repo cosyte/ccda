@@ -1,11 +1,12 @@
 ---
 id: conformance
-title: Conformance, profiles & terminology
-sidebar_label: Conformance & profiles
-sidebar_position: 9
+title: Conformance, profiles, and terminology
+sidebar_label: Conformance and profiles
+sidebar_position: 15
+description: Vendor profiles, terminology adapters, value-set sources, and the conformance measurement against the published Schematron.
 ---
 
-# Conformance, profiles & terminology
+# Conformance, profiles, and terminology
 
 Four things you tune once, per deployment, and then stop thinking about: **which deviations your
 senders are allowed to make** (a vendor profile), **which codes you consider real** (a terminology
@@ -207,7 +208,7 @@ actually read off the normative source, and whether it evaluated the obligation 
 against the sections you framed. `requiredSectionStatus` is the honest surface behind both: it carries
 the keys **plus** the provenance of each one, plus two independent state axes.
 
-- **`verification`** is a claim about the _type_: `traced-complete`, `traced-partial`, `untraced` or
+- **`verification`** is a claim about the _type_: `traced-complete`, `traced-partial`, `untraced`, or
   `not-applicable`. How much of that type's obligation was read off the normative artifact.
 - **`evaluation`** is a claim about the _lookup_: `evaluated` or `not-evaluated`. Whether the version
   stamp you supplied put the document inside the tables at all.
@@ -290,7 +291,7 @@ this package declares the **value set identifiers** and their provenance, you ho
 `isMember` is the one question it asks you.
 
 `valueSetBinding` is the declaration, per checked slot. Every row says how strongly C-CDA R2.1 binds
-the value set, and names the conformance statement, the template and the artifact revision the
+the value set, and names the conformance statement, the template, and the artifact revision the
 reading was taken from, so no binding is asserted that the normative source was not read for:
 
 ```ts runnable
@@ -311,7 +312,7 @@ valueSetBinding("problem").strength; // => "preferred"
 valueSetBindings().filter((b) => b.strength === "required").length; // => 4
 ```
 
-Supply a `ValueSetSource` and the parser reports what you say. It never refuses, rewrites, reorders or
+Supply a `ValueSetSource` and the parser reports what you say. It never refuses, rewrites, reorders, or
 drops a value on a negative verdict, and it never asks about a Preferred row:
 
 ```ts runnable

@@ -1,16 +1,18 @@
 /**
- * Sync the version README.md's `## Status` section declares with `package.json`'s `version`.
+ * Sync the release line README.md's `## Status` section declares with `package.json`'s `version`.
  *
- * Why this exists: `test/docs-content.test.ts` requires `## Status` to state the version
- * `package.json` declares, and the release pipeline runs `pnpm test` on the "Version Packages"
- * commit before it publishes. Changesets rewrites `package.json` only, so without this step that
- * commit fails its own test and the publish stops. The `version` script runs this after
- * `changeset version` and `sync-version.mjs`, so the bump and the README line land in the same
- * commit, the same way the `VERSION` constant does.
+ * Why this exists: `test/docs-content.test.ts` requires `## Status` to name the release line
+ * `package.json` is on (`**The \`0.1\` line.**` for any 0.1.x), and the release pipeline runs
+ * `pnpm test` on the "Version Packages" commit before it publishes. Changesets rewrites
+ * `package.json` only, so without this step a commit that moves to a new minor line fails its own
+ * test and the publish stops. The `version` script runs this after `changeset version` and
+ * `sync-version.mjs`, so the bump and the README line land in the same commit, the same way the
+ * `VERSION` constant does. The README names the line rather than the exact version because a patch
+ * release does not change what the line promises, and prose that names an exact version goes stale.
  *
- * It rewrites exactly one thing: the bold, backticked version (`**`X.Y.Z`**`) in the `## Status`
- * section. It is idempotent, and it refuses (exit 1) when the section or the marker is missing or
- * appears more than once, so a reworded status cannot silently stop being synced.
+ * It rewrites exactly one thing: the bold release-line marker (`**The \`X.Y\` line.**`) in the
+ * `## Status` section. It is idempotent, and it refuses (exit 1) when the section or the marker is
+ * missing or appears more than once, so a reworded status cannot silently stop being synced.
  *
  *     tsx scripts/sync-readme-version.ts
  */
@@ -21,11 +23,11 @@ import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** The status marker: a bold, backticked semantic version. */
-const MARKER = /\*\*`(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)`\*\*/g;
+/** The status marker: the bold release line, `**The \`X.Y\` line.**`. */
+const MARKER = /\*\*The `(\d+\.\d+)` line\.\*\*/g;
 
 /**
- * The README with the `## Status` marker naming `version`, or an error message.
+ * The README with the `## Status` marker naming the release line of `version`, or an error message.
  *
  * @param readme - The whole README.md text.
  * @param version - `package.json` `version`.
@@ -47,12 +49,14 @@ export function syncReadmeVersion(
   if (markers.length !== 1) {
     return {
       error:
-        `README.md \`## Status\` carries ${String(markers.length)} bold backticked versions; ` +
+        `README.md \`## Status\` carries ${String(markers.length)} release-line markers; ` +
         "expected exactly one, so there is no single line to sync",
     };
   }
-  // A replacer function, so a version string is inserted literally and never read as a pattern.
-  const synced = section.replace(MARKER, () => `**\`${version}\`**`);
+  // The line is major.minor. A replacer function, so it is inserted literally and never read as a
+  // pattern.
+  const line = version.split(".").slice(0, 2).join(".");
+  const synced = section.replace(MARKER, () => `**The \`${line}\` line.**`);
   return { text: readme.slice(0, start) + synced + readme.slice(end) };
 }
 
@@ -70,11 +74,11 @@ function main(): void {
     process.exit(1);
   }
   if (result.text === readme) {
-    console.log(`sync-readme-version: README.md already declares ${String(version)}`);
+    console.log(`sync-readme-version: README.md already names the line of ${String(version)}`);
     return;
   }
   writeFileSync(readmePath, result.text);
-  console.log(`sync-readme-version: README.md -> ${String(version)}`);
+  console.log(`sync-readme-version: README.md -> the line of ${String(version)}`);
 }
 
 // Run only as a CLI, never on import (the test imports the function above).

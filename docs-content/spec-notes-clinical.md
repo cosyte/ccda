@@ -2,7 +2,8 @@
 id: spec-notes-clinical
 title: The clinical entry layer
 sidebar_label: Clinical entries
-sidebar_position: 6
+sidebar_position: 7
+description: The typed clinical entry accessors and the safety-critical distinctions each one keeps apart.
 ---
 
 # The clinical entry layer
@@ -124,14 +125,14 @@ because there is no R1.1 Schematron in hand and narrowing would be as unsourced 
 
 **Five more types were read off the same source, and every type now reports how far it was
 verified.** `requiredSectionStatus(documentType)` returns the asserted `keys` with a `verification`
-of `traced-complete`, `traced-partial`, `untraced` or `not-applicable`, the conformance id and the
+of `traced-complete`, `traced-partial`, `untraced`, or `not-applicable`, the conformance id and the
 source's own section name behind each traced key, and every SHALL section left unasserted with its
 reason (outside the recognized catalog, or not unconditionally required). Consultation Note asserts
 History of Present Illness (CONF:1198-28907), Allergies (-28911) and Problems (-28929), all scoped to
-the R2.1 stamp their constraints carry; Progress Note, Procedure Note, Operative Note and Diagnostic
+the R2.1 stamp their constraints carry; Progress Note, Procedure Note, Operative Note, and Diagnostic
 Imaging Report assert nothing, because every SHALL section their templates name is either outside the
 recognized catalog or a choice. Unstructured Document is `not-applicable`: its component SHALL be a
 `nonXMLBody` (-31086), so it has no section to require. The six types that already asserted keys
 were re-read off the same source too: CCD and Care Plan report `traced-complete`, Discharge Summary,
-Referral Note, History and Physical and Transfer Summary report `traced-partial`, and no type reports
+Referral Note, History and Physical, and Transfer Summary report `traced-partial`, and no type reports
 `untraced`.
