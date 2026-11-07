@@ -47,7 +47,7 @@ import { serializeDocument } from "../serialize/serialize-dom.js";
  * ```ts
  * import { parseCcda } from "@cosyte/ccda";
  * const doc = parseCcda(xml);
- * console.log(doc.documentType, doc.getPatient()?.name?.text);
+ * console.log(doc.documentType, doc.getPatient()?.name?.family);
  * for (const w of doc.warnings) console.warn(w.code, w.position);
  * ```
  */

@@ -14,7 +14,7 @@
  * ```ts
  * import { parseCcda } from "@cosyte/ccda";
  * const doc = parseCcda(xml);
- * console.log(doc.documentType, doc.getPatient()?.name?.text, doc.getMrn());
+ * console.log(doc.documentType, doc.getPatient()?.name?.family, doc.getMrn());
  * ```
  */
 
@@ -76,8 +76,8 @@ export type {
 } from "./edit/index.js";
 
 // Document builder (the emit *factory*, symmetric with parseCcda): construct a
-// spec-clean C-CDA R2.1 CCD from structured input, round-tripping through the
-// same parse model.
+// spec-clean C-CDA R2.1 CCD, Referral Note or Discharge Summary from structured
+// input, round-tripping through the same parse model.
 export { buildCcda } from "./builder/index.js";
 export type {
   BuildableDocumentType,
