@@ -18,7 +18,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { DOMParser } from "@xmldom/xmldom";
+import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 import type { Element } from "@xmldom/xmldom";
 
 import {
@@ -266,6 +266,82 @@ describe("editCcda, fail-safe", () => {
     } catch (err) {
       expect(err).toBeInstanceOf(CcdaEditError);
       expect((err as CcdaEditError).code).toBe("NO_SOURCE_DOCUMENT");
+    }
+  });
+});
+
+/**
+ * A CCD whose only Vital Signs section is nested inside its Problems section, with the CCD
+ * document-level `templateId` stamped `extension` (or unstamped, for `undefined`). Replacing
+ * Problems then removes Vital Signs, a key only the R2.1 stamp makes SHALL for a CCD.
+ */
+function ccdWithNestedVitals(extension: string | undefined): CcdaDocument {
+  const xml = sampleDoc().toString();
+  const dom = new DOMParser().parseFromString(xml, "text/xml");
+  const root = dom.documentElement as Element;
+  const sectionWithCode = (loinc: string): Element => {
+    const codes = Array.from(root.getElementsByTagName("code"));
+    const code = codes.find(
+      (c) => c.getAttribute("code") === loinc && (c.parentNode as Element).localName === "section",
+    );
+    expect(code).toBeDefined();
+    return code?.parentNode as Element;
+  };
+  const vitals = sectionWithCode("8716-3").parentNode as Element;
+  vitals.parentNode?.removeChild(vitals);
+  sectionWithCode("11450-4").appendChild(vitals);
+  const ccdTid = Array.from(root.getElementsByTagName("templateId")).find(
+    (t) => t.getAttribute("root") === "2.16.840.1.113883.10.20.22.1.2",
+  );
+  expect(ccdTid).toBeDefined();
+  if (extension === undefined) ccdTid?.removeAttribute("extension");
+  else ccdTid?.setAttribute("extension", extension);
+  return parseCcda(new XMLSerializer().serializeToString(dom));
+}
+
+const REPLACE_PROBLEMS = {
+  sections: [
+    { kind: "problems", mode: "replace", content: [{ problem: DIABETES, status: "active" }] },
+  ],
+  revision: false,
+} as const;
+
+describe("editCcda, edits under the rule set the document was parsed under", () => {
+  // Through 0.1.3 `editCcda` read the SHALL set under the default R2.1 stamp whatever the source
+  // carried, so the first two cases threw REQUIRED_SECTION_MISSING for Vital Signs on documents
+  // whose parse never asserted it. The third is the control: under the R2.1 stamp the same edit is
+  // still refused, so the first two pass because the rule set moved, not because the guard broke.
+  const missing = (doc: CcdaDocument): readonly string[] =>
+    doc.warnings.filter((w) => w.code === "REQUIRED_SECTION_MISSING").map((w) => w.message);
+
+  it("edits an R1.1-origin CCD (no stamp) under the reduced set its parse used", () => {
+    const doc = ccdWithNestedVitals(undefined);
+    expect(doc.sections.map((sec) => sec.key)).not.toContain("vitalSigns");
+    expect(doc.findSection("vitalSigns")).toBeDefined();
+    expect(missing(doc)).toEqual([]);
+    const revised = editCcda(doc, REPLACE_PROBLEMS);
+    expect(revised.getProblems().map((p) => p.problems[0]?.value?.code)).toEqual(["73211009"]);
+    expect(missing(revised)).toEqual([]);
+  });
+
+  it("does not evaluate the SHALL set for a CCD stamped for an unmodelled release", () => {
+    const doc = ccdWithNestedVitals("2024-05-01");
+    expect(doc.warnings.map((w) => w.code)).toContain("REQUIRED_SECTIONS_NOT_EVALUATED");
+    const revised = editCcda(doc, REPLACE_PROBLEMS);
+    expect(revised.warnings.map((w) => w.code)).toContain("REQUIRED_SECTIONS_NOT_EVALUATED");
+    expect(missing(revised)).toEqual([]);
+  });
+
+  it("still refuses the same edit on an R2.1-stamped CCD", () => {
+    const doc = ccdWithNestedVitals("2015-08-01");
+    expect(missing(doc)).toEqual([]);
+    try {
+      editCcda(doc, REPLACE_PROBLEMS);
+      throw new Error("expected throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(CcdaEditError);
+      expect((err as CcdaEditError).code).toBe("REQUIRED_SECTION_MISSING");
+      expect((err as CcdaEditError).message).toContain("vitalSigns");
     }
   });
 });

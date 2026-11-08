@@ -203,7 +203,7 @@ const PLANNED_MOODS: ReadonlySet<string> = new Set(["INT", "RQO", "PRMS", "PRP",
  *
  * @example
  * ```ts
- * import { classifyDisposition } from "@cosyte/ccda";
+ * import { classifyDisposition } from "./shared.js";
  * classifyDisposition("INT"); // "planned"
  * classifyDisposition("EVN"); // "performed"
  * classifyDisposition("GOL"); // undefined
@@ -360,7 +360,7 @@ export function sectionKeyOf(sectionEl: Element): string | undefined {
  *
  * @example
  * ```ts
- * import { templateRoots } from "@cosyte/ccda";
+ * import { templateRoots } from "./shared.js";
  * templateRoots(actEl).includes("2.16.840.1.113883.10.20.22.4.3");
  * ```
  */
@@ -379,7 +379,7 @@ export function templateRoots(el: Element): readonly string[] {
  *
  * @example
  * ```ts
- * import { hasTemplateRoot, PROBLEM_OBSERVATION } from "@cosyte/ccda";
+ * import { hasTemplateRoot, PROBLEM_OBSERVATION } from "./shared.js";
  * if (hasTemplateRoot(observationEl, PROBLEM_OBSERVATION)) { ... }
  * ```
  */
@@ -393,7 +393,7 @@ export function hasTemplateRoot(el: Element, root: string): boolean {
  *
  * @example
  * ```ts
- * import { chain } from "@cosyte/ccda";
+ * import { chain } from "./shared.js";
  * const drugCode = chain(sbadm, "consumable", "manufacturedProduct", "manufacturedMaterial", "code");
  * ```
  */
@@ -553,7 +553,7 @@ export function chain(el: Element | undefined, ...names: readonly string[]): Ele
  *
  * @example
  * ```ts
- * import { consumableProductCode } from "@cosyte/ccda";
+ * import { consumableProductCode } from "./shared.js";
  * const drugEl = consumableProductCode(sbadm, ctx);
  * ```
  */
@@ -1091,7 +1091,7 @@ function childElementsOf(el: Element): readonly Element[] {
  *
  * @example
  * ```ts
- * import { relatedObservations, PROBLEM_OBSERVATION } from "@cosyte/ccda";
+ * import { relatedObservations, PROBLEM_OBSERVATION } from "./shared.js";
  * const problems = relatedObservations(concernAct, PROBLEM_OBSERVATION);
  * ```
  */
@@ -1158,7 +1158,7 @@ export function relatedEntryActs(el: Element): readonly Element[] {
  *
  * @example
  * ```ts
- * import { componentObservations, RESULT_OBSERVATION } from "@cosyte/ccda";
+ * import { componentObservations, RESULT_OBSERVATION } from "./shared.js";
  * const results = componentObservations(organizer, RESULT_OBSERVATION);
  * ```
  */
@@ -1177,7 +1177,7 @@ export function componentObservations(el: Element, root: string): readonly Eleme
  *
  * @example
  * ```ts
- * import { statusCodeOf } from "@cosyte/ccda";
+ * import { statusCodeOf } from "./shared.js";
  * statusCodeOf(concernAct); // "active" | "completed" | ...
  * ```
  */
@@ -1196,7 +1196,7 @@ export function statusCodeOf(el: Element): string | undefined {
  *
  * @example
  * ```ts
- * import { readNegation } from "@cosyte/ccda";
+ * import { readNegation } from "./shared.js";
  * const { negated, nullFlavor } = readNegation(observationEl, ctx);
  * ```
  */
@@ -1224,7 +1224,7 @@ export function readNegation(
  *
  * @example
  * ```ts
- * import { resolveNarrative } from "@cosyte/ccda";
+ * import { resolveNarrative } from "./shared.js";
  * const narrative = resolveNarrative(observationEl, section.narrativeById, ctx);
  * ```
  */
@@ -1255,7 +1255,7 @@ export function resolveNarrative(
  *
  * @example
  * ```ts
- * import { reconcileCode } from "@cosyte/ccda";
+ * import { reconcileCode } from "./shared.js";
  * reconcileCode(problemValue, narrative, "problem", positionOf(valueEl), ctx);
  * ```
  */
@@ -1287,7 +1287,7 @@ export function reconcileCode(
  *
  * @example
  * ```ts
- * import { resolveConcernStatus } from "@cosyte/ccda";
+ * import { resolveConcernStatus } from "./shared.js";
  * const status = resolveConcernStatus(concernAct, ctx);
  * ```
  */
@@ -1314,7 +1314,7 @@ export function resolveConcernStatus(act: Element, ctx: ParseCtx): ConcernStatus
  *
  * @example
  * ```ts
- * import { typeOf } from "@cosyte/ccda";
+ * import { typeOf } from "./shared.js";
  * if (typeOf(effectiveTimeEl) === "PIVL_TS") { ... }
  * ```
  */
@@ -1327,7 +1327,7 @@ export function typeOf(el: Element): string | undefined {
  *
  * @example
  * ```ts
- * import { childEntries } from "@cosyte/ccda";
+ * import { childEntries } from "./shared.js";
  * for (const entry of childEntries(sectionEl)) { ... }
  * ```
  */
@@ -1342,7 +1342,7 @@ export function childEntries(sectionEl: Element): readonly Element[] {
  *
  * @example
  * ```ts
- * import { entryAct, PROBLEM_CONCERN_ACT } from "@cosyte/ccda";
+ * import { entryAct, PROBLEM_CONCERN_ACT } from "./shared.js";
  * const act = entryAct(entryEl, PROBLEM_CONCERN_ACT);
  * ```
  */
@@ -1361,7 +1361,7 @@ export function entryAct(entry: Element, root: string): Element | undefined {
  *
  * @example
  * ```ts
- * import { anyEntryAct } from "@cosyte/ccda";
+ * import { anyEntryAct } from "./shared.js";
  * const act = anyEntryAct(entryEl);
  * ```
  */
@@ -1389,7 +1389,7 @@ const ACT_NAMES = [
  *
  * @example
  * ```ts
- * import { idsOf } from "@cosyte/ccda";
+ * import { idsOf } from "./shared.js";
  * const ids = idsOf(actEl, ctx);
  * ```
  */
