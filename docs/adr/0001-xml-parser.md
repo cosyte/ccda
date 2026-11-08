@@ -8,8 +8,9 @@
 
 C-CDA is an XML format (HL7 CDA R2.1). Parsing it needs an XML reader, which the `@cosyte/*` parsers
 do **not** otherwise carry: the suite defaults to **zero runtime dependencies** as a supply-chain
-gate (see the meta-repo's `documentation/conventions.md` → "Zero (or near-zero) runtime
-dependencies"). The standard makes a **capped, ADR-justified exception** for `ccda`/`ncpdp`: an XML
+gate (the default every Cosyte parser is scaffolded with, from `scripts/parser-template/` in
+cosyte/config; the umbrella conventions file this ADR first cited has since been retired). The
+standard makes a **capped, ADR-justified exception** for `ccda`/`ncpdp`: an XML
 parser is allowed for their XML/EDI formats, decided per an ADR, with a ceiling of **≤ 3** runtime
 deps total.
 

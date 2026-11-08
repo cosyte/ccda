@@ -19,11 +19,16 @@ permissions:
 
 jobs:
   # Universal gates from the shared pipeline (typecheck, lint, format, test, coverage, build, attw,
-  # dual ESM/CJS smoke, actionlint) on the standard Node matrix. Repo-specific extra jobs (e.g. an
-  # examples smoke, a starter-kit build) are added on top of this caller, never instead of it.
-  # ccda ships a PHI scanner, so the shared pipeline's optional PHI-scan step is switched on.
+  # dual ESM/CJS smoke, actionlint) on the shared Node matrix, 22, 24, and 26. Repo-specific extra
+  # jobs (e.g. an examples smoke, a starter-kit build) are added on top of this caller, never
+  # instead of it. ccda ships a PHI scanner, so the shared pipeline's optional PHI-scan step is
+  # switched on.
+  #
+  # Every caller of cosyte/.github in this directory names the same published reference, and they
+  # move together. A reference is an immutable release there, so it names one commit for good;
+  # nothing reaches this pipeline until one of these `uses:` lines is edited here.
   ci:
-    uses: cosyte/.github/.github/workflows/ci.yml@main
+    uses: cosyte/.github/.github/workflows/ci.yml@workflows-2026-11-07-498c7c13c886
     with:
       run-phi-scan: true
 
@@ -38,16 +43,18 @@ jobs:
   # any machine behind an egress lockdown, and the pressure to soften that red is exactly how
   # a fail-safe like this one gets quietly reversed.
   #
-  # WHAT IT BLOCKS TODAY, said plainly rather than assumed. The required contexts on this
-  # repository are the org ruleset's, and this job's context is not among them, so a red here
-  # is VISIBLE on every pull request and does not by itself stop a merge. Adding it is a
-  # GitHub settings change, not a file change. The em-dash and public-surface gates sit behind
-  # the identical gap and their own workflows say so.
+  # WHAT IT BLOCKS, said plainly rather than assumed. On 2026-11-08 the required contexts on
+  # `main` were `ci / verify (22, ubuntu-latest)`, `ci / verify (24, ubuntu-latest)`,
+  # `ci / actionlint` and `no-emdash / tracked-files` (derive the current set with
+  # `gh api repos/cosyte/ccda/rules/branches/main`), and this job's context was not among them,
+  # so a red here is VISIBLE on every pull request and does not by itself stop a merge. Adding it
+  # is a GitHub settings change, not a file change. The public-surface gate sits behind the
+  # identical gap and its own workflow says so.
   #
   # ONE NODE VERSION, NOT THE MATRIX. The shared caller already runs the type checker, the
-  # linter and the suite on Node 22 and 24. What this job measures is a property of the
-  # DOCUMENTS the builder emits, which is the same on both, so a second run would buy a
-  # duplicate answer and a second 65 MB download.
+  # linter and the suite on Node 22, 24, and 26. What this job measures is a property of the
+  # DOCUMENTS the builder emits, which is the same on each, so another run would buy a
+  # duplicate answer and another 65 MB download.
   conformance:
     runs-on: ubuntu-latest
     timeout-minutes: 15
