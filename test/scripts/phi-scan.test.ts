@@ -645,7 +645,6 @@ describe("phi-scan: enumeration TOCTOU", () => {
     // An empty index would make every file untracked, which is the one state in
     // which the tracked-file bound stops existing AND the one that makes a
     // reconciliation vacuous rather than wrong, so it counts as no answer.
-    // `scripts/check-agent-notes-contract.mjs` refuses the same state.
     const repo = makeScanRepo({ git: true, track: false });
     const decoy = join(repo, BUNDLED);
     writeFileSync(decoy, "export default {};\n");
@@ -1180,9 +1179,8 @@ describe("phi-scan: a scan that could not run exits 2", () => {
  * This repo's walk was already rooted at the repo root, so the sibling form of
  * the defect (tracked files under `test/` reached by neither route) did not
  * exist here. Three other causes did, and each case below pins one of them with
- * a payload the base scanner demonstrably did not act on. The measured census
- * and the base/head grid live in `documentation/agent-notes.md`; what is pinned
- * here is the behaviour, so a later "simplification" of the scope rules reds.
+ * a payload the base scanner demonstrably did not act on. What is pinned here
+ * is the behaviour, so a later "simplification" of the scope rules reds.
  *
  * Every clean expectation in this block is paired with a positive the detector
  * DOES catch, in the same case. A `0` on its own proves nothing about whether

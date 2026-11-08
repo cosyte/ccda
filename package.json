@@ -79,8 +79,6 @@
     "typecheck": "tsc --noEmit",
     "check:no-emdash": "bash scripts/check-no-emdash.sh",
     "check:no-internal-refs": "bash scripts/check-no-internal-refs.sh",
-    "check:agent-notes": "cosyte-agent-notes",
-    "check:agent-notes-contract": "node scripts/check-agent-notes-contract.mjs",
     "check:catalog": "cosyte-catalog",
     "check:claude-card": "cosyte-claude-card",
     "check:readme": "cosyte-readme",

@@ -6,8 +6,7 @@ name: Public-surface gate
 # CHANGELOG.md, the commit, the PR and the roadmap, never in README.md, docs-content/, the
 # npm description, a JSDoc block a consumer's editor renders, or a warning message a
 # consumer reads in their logs. The rule is written out, and enforced, in
-# `scripts/check-no-internal-refs.sh`; the agent notes keep its history
-# (`documentation/agent-notes.md#the-public-surface-gate`).
+# `scripts/check-no-internal-refs.sh`.
 #
 # WHY A GATE AND NOT A NOTE. The founder, on the sweep that removed these across the
 # ecosystem: "it needs to not just be a memory note, but something that is addressed in the

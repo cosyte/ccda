@@ -110,7 +110,7 @@ jobs:
       - run: pnpm lint:examples
       - run: pnpm examples
 
-  # The house checks from @cosyte/script-utils: README, CLAUDE.md card, agent notes, and catalog.
+  # The house checks from @cosyte/script-utils: README, CLAUDE.md card, and catalog.
   standards:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -127,5 +127,4 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:readme
       - run: pnpm check:claude-card
-      - run: pnpm check:agent-notes
       - run: pnpm check:catalog

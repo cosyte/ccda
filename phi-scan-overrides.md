@@ -52,9 +52,7 @@ Enumeration + scope keep the scan honest and un-dodgeable:
   two:** `paths` (`pnpm phi-scan <file>`) already ran the structured scan over a
   marker-bearing `.md`, so a real C-CDA saved as `notes.md` went from nine hits
   to `OK, no hits` on it. The floor is also empty for that document class, which
-  carries its SSN as an undashed `id@extension` and carries no email. Full
-  measurement:
-  `documentation/agent-notes.md#the-corpus-every-phi-scan-route-read-past`.
+  carries its SSN as an undashed `id@extension` and carries no email.
 - **The scanner's own test is excluded, and the exclusion is a LITERAL PATH.**
   `test/scripts/phi-scan.test.ts` necessarily embeds real-looking violator
   strings as adversarial inputs (and writes its runtime violators to a throwaway
@@ -79,8 +77,8 @@ Enumeration + scope keep the scan honest and un-dodgeable:
   "Free-text names" limitation below: the predicate that gates it is
   `hasCdaMarker`, not prose-versus-markup.
 - **Writing documentation is now inside the gate, and this is a real authoring
-  constraint.** Markdown, the ADR, `documentation/agent-notes.md` and the
-  changesets became structurally scanned. **The predicate is `hasCdaMarker`, not
+  constraint.** Markdown, the ADR and the changesets became structurally
+  scanned. **The predicate is `hasCdaMarker`, not
   the extension, and no file list or count is written here: two drafts wrote one
   and both were wrong. Derive it.** The distinction is safety-relevant in the
   unsafe direction, so one instance is named: **`docs-content/troubleshooting.md`
@@ -92,8 +90,7 @@ Enumeration + scope keep the scan honest and un-dodgeable:
   `birthTime@value`, a bare-numeric 6+ digit `id@extension`, a
   `streetAddressLine` / `city` / `postalCode`, or a telecom without the `555`
   convention will now red a **blocking** gate at pre-commit. That is the gate
-  working, and it collides with the `agent-notes.md` contract, which requires
-  write-ups. **The two remedies, in order: reuse the declared synthetic tokens,
+  working. **The two remedies, in order: reuse the declared synthetic tokens,
   or describe the locus without reproducing it.** Never delete the write-up to
   get green. This is not hypothetical: the note for this very change was drafted
   quoting an entity-encoded name literal, and the gate caught it.
