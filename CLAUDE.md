@@ -47,6 +47,9 @@ Each names the failure that proved it.
   tracked files went unread (#103).
 - Keep a test that writes into the tree or spawns a build from racing the others: Vitest runs
   files in parallel, and the release Verify on `d906bda` went red that way (#146).
+- Every `@example` import resolves, and one on a public export imports only `@cosyte/ccda`:
+  0.1.3 carried 65 imports in 61 examples naming it for symbols it does not export.
+  `test/example-imports.test.ts` checks it with the TypeScript parser; never swap in a regex.
 - Never hand-edit `CHANGELOG.md`: a release writes it from the changesets, and a hand-kept
   `[Unreleased]` heading shipped in every tarball until #94.
 - Every changeset is `patch` (D56, 2026-11-07): one that adds an export or a warning or fatal code

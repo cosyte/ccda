@@ -241,7 +241,9 @@ re-reported: an edit is not a validator of a document its caller did not write.
 
 It is fail-safe: an unedited section is carried by reference (never dropped), an empty content list
 emits a spec-clean `nullFlavor="NI"` shell (never fabricated entries), and an edit that would drop a
-SHALL required section throws a typed `CcdaEditError`. `mode` is `"add"` (require absent), `"replace"`
+SHALL required section throws a typed `CcdaEditError`. The required set is the one the document was
+parsed under: an R1.1-origin document (no R2.1 `@extension` stamp) is edited under the reduced set,
+and a document stamped for a release we do not model is not evaluated. `mode` is `"add"` (require absent), `"replace"`
 (require present), or `"upsert"` (default: replace-or-add). `editCcda(doc, { terminology })` forwards an
 optional adapter to the final re-parse, so an adapter-rejected code in a grafted **or** untouched section
 is flagged; the edit still emits every code verbatim.

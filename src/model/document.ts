@@ -767,53 +767,98 @@ function recognizeDocumentType(
     return { documentType: undefined, stamp: "unstamped" };
   }
 
-  for (const tid of templateIds) {
-    if (tid.root === undefined) continue;
-    const documentType = documentTypeForOid(tid.root);
-    if (documentType !== undefined) {
-      // The R2.1 test is EXISTENTIAL, deliberately, because the Schematron context
-      // predicate it stands in for is:
-      //   cda:ClinicalDocument[cda:templateId[@root='…' and @extension='2015-08-01']]
-      // That matches when ANY templateId child carries both, in any order. Reading
-      // only THIS tid's extension would be first-match-wins, which is a different
-      // predicate: a document carrying the bare root first and the stamped root
-      // second is squarely inside the rule's context, yet would be read as
-      // unstamped and would silently DROP two safety-critical warnings on sibling
-      // ordering alone. That dual-stamp shape is the ordinary backward-compat
-      // form, not an exotic one, so the scan matches the XPath rather than the
-      // loop that happens to be here.
-      //
-      // It governs the THIRD state too, and that is the point worth stating: a
-      // document carrying the resolving root twice, once stamped `2015-08-01` and
-      // once stamped for a later release, is inside the rule's context and stays
-      // R2.1-scoped. Its obligations are evaluated, not reported unevaluated.
-      const r21Stamped = templateIds.some(
-        (t) => t.root === tid.root && t.extension === R21_EXTENSION,
-      );
-      // The per-templateId diagnostic reads THIS tid's own extension, and the two
-      // stamp codes keep their own narrow meanings: TEMPLATE_EXTENSION_ABSENT is
-      // "this tid carried no @extension" and is deliberately NOT re-pointed at the
-      // existential test (widening it is a separate, reviewable change to an
-      // established warning), while TEMPLATE_EXTENSION_UNMODELED_RELEASE is "this
-      // tid carried a stamp that is not the R2.1 one". So a dual-stamped document
-      // can legitimately raise either while still being R2.1-scoped.
-      const tidStamp = readTemplateStamp(tid.extension);
-      if (tidStamp === "unstamped") {
-        ctx.emit(templateExtensionAbsent(templateIdPosition(root, tid.root)));
-      } else if (tidStamp === "unmodeled-release") {
-        ctx.emit(
-          templateExtensionUnmodeledRelease(
-            templateIdPosition(root, tid.root),
-            tid.extension ?? "",
-          ),
-        );
-      }
-      return { documentType, stamp: r21Stamped ? "r21-stamped" : tidStamp };
-    }
+  const { documentType, stamp, matched } = readDocumentTemplate(templateIds);
+  if (matched === undefined) {
+    ctx.emit(unknownDocumentTemplate(positionOf(root)));
+    return { documentType, stamp };
   }
 
-  ctx.emit(unknownDocumentTemplate(positionOf(root)));
-  return { documentType: undefined, stamp: "unstamped" };
+  // The per-templateId diagnostic reads the MATCHED tid's own extension, and the
+  // two stamp codes keep their own narrow meanings: TEMPLATE_EXTENSION_ABSENT is
+  // "this tid carried no @extension" and is deliberately NOT re-pointed at the
+  // existential test (widening it is a separate, reviewable change to an
+  // established warning), while TEMPLATE_EXTENSION_UNMODELED_RELEASE is "this
+  // tid carried a stamp that is not the R2.1 one". So a dual-stamped document
+  // can legitimately raise either while still being R2.1-scoped.
+  const tidStamp = readTemplateStamp(matched.extension);
+  if (tidStamp === "unstamped") {
+    ctx.emit(templateExtensionAbsent(templateIdPosition(root, matched.root)));
+  } else if (tidStamp === "unmodeled-release") {
+    ctx.emit(
+      templateExtensionUnmodeledRelease(
+        templateIdPosition(root, matched.root),
+        matched.extension ?? "",
+      ),
+    );
+  }
+  return { documentType, stamp };
+}
+
+/**
+ * What {@link readDocumentTemplate} returns: a recognized type with the
+ * `templateId` that resolved it, or no type, no match and the `unstamped`
+ * reading. @internal
+ */
+type DocumentTemplateReading =
+  | {
+      readonly documentType: DocumentType;
+      readonly stamp: TemplateStampReading;
+      readonly matched: II & { readonly root: string };
+    }
+  | {
+      readonly documentType: undefined;
+      readonly stamp: "unstamped";
+      readonly matched: undefined;
+    };
+
+/**
+ * The {@link DocumentType} a document's `templateId` set resolves to, the
+ * `templateId` that resolved it, and the {@link TemplateStampReading} its SHALL
+ * required-section tables are read under. Pure: it emits nothing, so the parse
+ * and an edit can share it.
+ *
+ * **It is the one reading both `parseCcda` and `editCcda` take**, which is what
+ * keeps an edit checked under the rule set its document was parsed under.
+ * Through `0.1.3` `editCcda` took the default R2.1 reading, so an R1.1-origin
+ * document parsed under the reduced set was edited under the full one, and an
+ * edit that kept every section the parse asserted could still be refused for a
+ * section only the R2.1 stamp requires. It reads the `templateIds` a
+ * {@link CcdaDocument} already carries, so no new field was needed to thread it.
+ *
+ * The first `templateId` whose root names a recognized type resolves it. The
+ * R2.1 test is EXISTENTIAL, deliberately, because the Schematron context
+ * predicate it stands in for is:
+ *   `cda:ClinicalDocument[cda:templateId[@root='…' and @extension='2015-08-01']]`
+ * That matches when ANY templateId child carries both, in any order. Reading
+ * only the matched tid's extension would be first-match-wins, which is a
+ * different predicate: a document carrying the bare root first and the stamped
+ * root second is squarely inside the rule's context, yet would be read as
+ * unstamped and would silently DROP two safety-critical warnings on sibling
+ * ordering alone. That dual-stamp shape is the ordinary backward-compat form,
+ * not an exotic one, so the scan matches the XPath rather than the loop that
+ * happens to be here.
+ *
+ * It governs the THIRD state too, and that is the point worth stating: a
+ * document carrying the resolving root twice, once stamped `2015-08-01` and once
+ * stamped for a later release, is inside the rule's context and stays
+ * R2.1-scoped. Its obligations are evaluated, not reported unevaluated.
+ *
+ * @internal
+ */
+export function readDocumentTemplate(templateIds: readonly II[]): DocumentTemplateReading {
+  for (const tid of templateIds) {
+    const root = tid.root;
+    if (root === undefined) continue;
+    const documentType = documentTypeForOid(root);
+    if (documentType === undefined) continue;
+    const r21Stamped = templateIds.some((t) => t.root === root && t.extension === R21_EXTENSION);
+    return {
+      documentType,
+      stamp: r21Stamped ? "r21-stamped" : readTemplateStamp(tid.extension),
+      matched: { ...tid, root },
+    };
+  }
+  return { documentType: undefined, stamp: "unstamped", matched: undefined };
 }
 
 /**

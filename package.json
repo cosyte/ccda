@@ -92,6 +92,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "examples": "tsx scripts/run-examples.ts",
+    "check:example-imports": "tsx scripts/check-example-imports.ts",
     "typecheck:examples": "tsc -p examples/tsconfig.json",
     "lint:examples": "eslint examples --max-warnings=0",
     "clean": "rm -rf dist coverage",

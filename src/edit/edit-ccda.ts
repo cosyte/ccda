@@ -32,7 +32,10 @@
  * content list yields that section's spec-clean `nullFlavor="NI"` shell, never
  * invented entries), and never produces a document that newly violates a
  * per-document-type SHALL required-section rule, such an edit throws a typed
- * {@link CcdaEditError} instead of emitting an invalid document. Every builder
+ * {@link CcdaEditError} instead of emitting an invalid document. The rule set
+ * is the one the source was parsed under, read off its `templateIds` the way
+ * the parse reads them, so an R1.1-origin document is edited under the reduced
+ * set and a document stamped for an unmodelled release is not evaluated. Every builder
  * guard the section emitter enforces (a resolved-without-resolution
  * contradiction, an invalid HL7 timestamp) still throws.
  *
@@ -64,12 +67,15 @@ import {
 import type { EditableSectionKind, SectionInput } from "../builder/build-ccda.js";
 import { el } from "../builder/dom.js";
 import { LOINC } from "../model/code-systems.js";
-import type { CcdaDocument } from "../model/document.js";
+import { readDocumentTemplate, type CcdaDocument } from "../model/document.js";
 import { attr, child, childElements, children } from "../model/dom.js";
 import type { TerminologyAdapter } from "../model/terminology.js";
 import type { II } from "../model/types/ii.js";
 import { parseCcda } from "../parser/index.js";
-import { missingRequiredSections } from "../parser/required-sections.js";
+import {
+  missingRequiredSections,
+  type RequiredSectionOptions,
+} from "../parser/required-sections.js";
 import { DEFAULT_LIMITS, parseSecureXml } from "../parser/secure-xml.js";
 import { sectionForLoinc, sectionForTemplateRoot, type DocumentType } from "../parser/templates.js";
 import { serializeDocument } from "../serialize/serialize-dom.js";
@@ -378,7 +384,17 @@ export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): C
   }
 
   const edits = options.sections ?? [];
-  const grafted = edits.length > 0 ? applySectionEdits(dom, root, edits, source.documentType) : [];
+  // The SHALL required-section set is read under the stamp the source was PARSED
+  // under, from the same templateIds by the same function, so an R1.1-origin
+  // document is edited under the reduced set its parse used, and a document
+  // stamped for an unmodelled release is not evaluated here either.
+  const requiredOptions: RequiredSectionOptions = {
+    stamp: readDocumentTemplate(source.templateIds).stamp,
+  };
+  const grafted =
+    edits.length > 0
+      ? applySectionEdits(dom, root, edits, source.documentType, requiredOptions)
+      : [];
 
   if (options.revision !== false) {
     stampRevision(dom, root, options.revision, uniqueIdGen(root));
@@ -445,6 +461,7 @@ function applySectionEdits(
   root: Element,
   edits: readonly SectionEdit[],
   documentType: DocumentType | undefined,
+  requiredOptions: RequiredSectionOptions,
 ): readonly Element[] {
   const structuredBody = findStructuredBody(root);
   if (structuredBody === undefined) {
@@ -458,7 +475,9 @@ function applySectionEdits(
   const requiredBefore =
     documentType === undefined
       ? new Set<string>()
-      : new Set(missingRequiredSections(documentType, sectionKeys(structuredBody)));
+      : new Set(
+          missingRequiredSections(documentType, sectionKeys(structuredBody), requiredOptions),
+        );
 
   const id = uniqueIdGen(root);
   const grafted = new Set<Element>();
@@ -467,7 +486,11 @@ function applySectionEdits(
   }
 
   if (documentType !== undefined) {
-    const missingAfter = missingRequiredSections(documentType, sectionKeys(structuredBody));
+    const missingAfter = missingRequiredSections(
+      documentType,
+      sectionKeys(structuredBody),
+      requiredOptions,
+    );
     const newlyMissing = missingAfter.filter((key) => !requiredBefore.has(key));
     if (newlyMissing.length > 0) {
       throw new CcdaEditError(
