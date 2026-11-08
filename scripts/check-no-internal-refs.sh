@@ -7,8 +7,8 @@
 # the software does and what changed. It must never carry our internal bookkeeping: item
 # identifiers (`CCDA-P7`, `CCDA-PLANNED-CODE-SLOT`), "Phase 1" / "roadmap Phase K", sweep
 # and programme names, ADR numbers, internal repo paths, or process commentary about how
-# the artifact came to exist. Source of truth: the meta-repo's
-# `documentation/conventions.md`, "No internal project bookkeeping on a public surface".
+# the artifact came to exist. This script is where the rule is written and enforced; its
+# history is in `documentation/agent-notes.md#the-public-surface-gate`.
 # The founder's words: "The releases should also not speak on anything regarding phases,
 # etc. That has no relevance to the user consuming it. This goes for readmes and
 # documentation as well."
@@ -1036,8 +1036,8 @@ fail_with_hits() {
   echo "       When you strip an identifier off the FRONT of a line, repair the head too:" >&2
   echo "       drop a leading orphan parenthetical, strip leading punctuation, recapitalise." >&2
   echo "       Leaving the fragment behind is worse than the text it replaced." >&2
-  echo "       Rule: documentation/conventions.md, 'No internal project bookkeeping on a" >&2
-  echo "       public surface'." >&2
+  echo "       Rule: the header of scripts/check-no-internal-refs.sh; its history is in" >&2
+  echo "       documentation/agent-notes.md#the-public-surface-gate" >&2
   exit 1
 }
 

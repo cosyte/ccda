@@ -29,8 +29,12 @@ import { describe, expect, it } from "vitest";
 /** Path of the workflow under contract, relative to the repository root. Named in every message. */
 const WORKFLOW_PATH = ".github/workflows/release.yml";
 
-/** The shared release pipeline this caller exists to invoke. */
-const SHARED_RELEASE_WORKFLOW = "cosyte/.github/.github/workflows/release.yml@main";
+/**
+ * The shared release pipeline this caller exists to invoke, at the published reference every
+ * caller in `.github/workflows/` names. Moving the reference moves this constant in the same change.
+ */
+const SHARED_RELEASE_WORKFLOW =
+  "cosyte/.github/.github/workflows/release.yml@workflows-2026-11-07-498c7c13c886";
 
 const ROOT = join(import.meta.dirname, "..");
 
