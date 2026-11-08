@@ -15,16 +15,15 @@ name: Em-dash gate
 # release notes, em dashes included, and a gate that fails on someone else's clock becomes a
 # tax. The detection is the same either way; only what blocks is narrowed.
 #
-# WHAT ACTUALLY SCANS, AND WHERE THE RULE LIVES. `pnpm check:no-emdash`, which is this
-# repository's own gate script, `scripts/check-no-emdash.sh`. The jobs below delegate the
-# plumbing (checkout, pnpm, Node) to the shared gate workflow, which carries no pattern, no
-# allow-list and no file selection of its own: it prepares the tree, runs the command, and
-# lets the command's exit status decide the job. The script header records why the scan is
-# not a grep: two functional NUL bytes in `src/profiles/merge.ts` make grep classify that
-# first-party TypeScript as binary and skip it, which is how one live character survived the
-# sweep in #52. It stays this repository's script rather than the shared `cosyte-no-emdash`
-# because it reads CHANGELOG.md's frozen archive for em dashes only and the generated part in
-# full, and the shared gate can only exclude a whole file.
+# WHAT ACTUALLY SCANS, AND WHERE THE RULE LIVES. `pnpm check:no-emdash`, which runs
+# `cosyte-no-emdash`, the one dash gate every Cosyte repository shares, from the
+# `@cosyte/script-utils` devDependency (ST34). The jobs below delegate the plumbing
+# (checkout, pnpm, Node, and the install the gate needs) to the shared gate workflow, which
+# carries no pattern, no allow-list and no file selection of its own: it prepares the tree,
+# runs the command, and lets the command's exit status decide the job. What this repository
+# declares is `scripts/check-no-emdash.exclude`: CHANGELOG.md's frozen archive is read for em
+# dashes only, and the generated part in full. The shared gate reads `src/profiles/merge.ts`,
+# whose two functional NUL bytes once made a grep skip it (#52), and reports a hit there.
 #
 # THE JOB ID IS LOAD-BEARING. A called job's check run is named
 # `<caller job id> / <inner job id>`, so the job id `no-emdash` below publishes
@@ -69,7 +68,7 @@ jobs:
     # Named by its published reference, which ci.yml and every other caller here share. Each
     # reference is an immutable release in cosyte/.github, so its tag cannot be moved or
     # deleted and it names one commit for good.
-    uses: cosyte/.github/.github/workflows/gate-no-emdash.yml@498c7c13c8869bf11b67fa8324684ec2dc691ec6 # workflows-2026-11-07-498c7c13c886
+    uses: cosyte/.github/.github/workflows/gate-no-emdash-install.yml@498c7c13c8869bf11b67fa8324684ec2dc691ec6 # workflows-2026-11-07-498c7c13c886
     # No more than the scan needs. A called workflow's GITHUB_TOKEN can only be
     # downgraded by its caller, and this gate reads the tree and nothing else.
     permissions:

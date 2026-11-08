@@ -1,0 +1,10 @@
+# What the shared em and en dash gate (@cosyte/script-utils, `cosyte-no-emdash`, ST34) leaves out of
+# this repository. One entry per line, anchored at the repository root; an entry that matches no
+# tracked path is refused, and so is a boundary heading the file no longer carries.
+#
+# THE CHANGELOG ARCHIVE IS READ FOR EM DASHES ONLY. Everything above "Released before this file was
+# generated" is written by the release from a changeset and is scanned for both dashes like any
+# other file. Below that heading is the hand-written history from before changelog generation,
+# already in published tarballs; it holds one en dash (a template-id range), and an em dash there
+# still reds.
+CHANGELOG.md em-only below ## Released before this file was generated
