@@ -189,16 +189,17 @@ not grow `CLAUDE.md` with the prose, and do not delete a paragraph here to make 
     six: `#the-ccd-shall-set-settled-against-the-normative-schematron`.**
   - **PAID 2026-08-07: this trap now HAS its one-line imperative in `CLAUDE.md`.** It was owed and
     blocked when the fix landed, because that file measured **34,482 bytes against its 32,000-byte
-    budget** in the meta-repo's `.claude/hooks/doc-budget.mjs` and the hook refuses any write that
-    grows an over-budget file, including a pointer at this section. `CCDA-CLAUDE-MD-OVER-BUDGET`
-    closed it the way the debt said it had to be closed: **a measured relocation slice, not a budget
-    raise** (ADR 0023 requires a raise to name a feature, and "fitting one more trap" is not one, so
-    raising would have ratified the bypass that created the overage). **Nothing was deleted to pay
-    for it**; eight blocks were shortened in `CLAUDE.md` and each is reproduced verbatim in the
-    section of this file its pointer already named. **How the file got 2,482 bytes over a hook that
-    exists to refuse exactly that: `doc-budget.mjs` only sees `Write`/`Edit` tool calls, so a write
-    through `python`, `sed` or a shell redirect bypasses it silently. Edit these two files with the
-    editing tools and re-measure after every change.**
+    budget**, which a write hook in the meta-repo then enforced by refusing any write that grew an
+    over-budget file, including a pointer at this section. `CCDA-CLAUDE-MD-OVER-BUDGET` closed it
+    the way the debt said it had to be closed: **a measured relocation slice, not a budget raise**
+    (the meta-repo's rule then allowed a raise only for a feature, and "fitting one more trap" is
+    not one, so raising would have ratified the bypass that created the overage). **Nothing was
+    deleted to pay for it**; eight blocks were shortened in `CLAUDE.md` and each is reproduced
+    verbatim in the section of this file its pointer already named. **How the file got 2,482 bytes
+    over a hook that existed to refuse exactly that: the hook saw only `Write`/`Edit` tool calls, so
+    a write through `python`, `sed` or a shell redirect bypassed it silently.** That hook and its
+    rule were retired on 2026-11-07; the CLAUDE.md card spec in cosyte/config
+    (`documentation/claude-card.md`) sets the budget now, and `CLAUDE.md` is held to it.
 
 **The `CLAUDE.md` imperative for this trap, as it stood before the 2026-09-05 relocation**
 (`S0265-ccda-drift-check-phase-2`, which brought `CLAUDE.md` under the 300-line ceiling
@@ -1936,7 +1937,8 @@ deleted; the imperative as it stood is reproduced here verbatim.
 ## The published version line names no version
 
   - **Relocated out of `CLAUDE.md` 2026-08-10** to buy budget for the CCD SHALL-set trap below, per
-    ADR 0023's relocate-never-delete remedy. The narrative, kept verbatim: that Status bullet named
+    the meta-repo's relocate-never-delete rule of the time. The narrative, kept verbatim: that Status
+    bullet named
     `0.0.10` (re-derived from the registry 2026-08-04), where the line had said `0.0.4`, and `0.0.2`
     before that. **It has been stale every single time anyone checked it**, which is the whole reason
     the line now names no version and defers to `npm view @cosyte/ccda version`. The imperative
@@ -2300,13 +2302,6 @@ into `.conformance-artifacts/`, which `.gitignore` covers, and
 IGNORED rather than merely uncommitted. A set comparison of `git status --porcelain` alone passes
 happily over a visible working directory; that is why the second half of that test exists.
 
-**THAT TEST RUNS ALONE, AFTER EVERY OTHER TEST FILE.** Vitest runs files in parallel, and three of
-them write into the working tree for a moment: the README usage case, the `tsup` build it spawns,
-and the phi-scan override-gate case. A `git status` taken beside them compares their leftovers, not
-the run's, and the release Verify step on `d906bda` went red that way. `vitest.config.ts` gives the
-file a project of its own with a later `sequence.groupOrder` and says why there. Do not answer a red
-from it by loosening the set comparison.
-
 **SIZE IS THE SECOND REASON AND IT IS INDEPENDENT OF THE FIRST.** The Schematron is about 1 MB and
 its vocabulary file is about 65 MB. Neither belongs in an npm package, and the corpus is CC0 so
 licence is not what forbids vendoring it.
@@ -2333,6 +2328,16 @@ which would have removed a documented capability from the builder to make an art
 `schema/extensions/SDTC/processable/coreschemas/infrastructureRoot.xsd` is deliberately NOT in the
 file list: nothing in the entry point's include graph reaches it, and a pin list wider than the
 graph is a set of digests nobody verifies.
+
+### Tests that write the working tree run apart
+
+**`test/conformance/working-tree-is-clean.test.ts` RUNS ALONE, AFTER EVERY OTHER TEST FILE (#146).**
+Vitest runs files in parallel, and three of them write into the working tree for a moment: the
+README usage case, the `tsup` build it spawns, and the phi-scan override-gate case. A `git status`
+taken beside them compares their leftovers, not the run's, and the release Verify step on `d906bda`
+went red that way. `vitest.config.ts` gives the file a project of its own with a later
+`sequence.groupOrder` and says why there. Do not answer a red from it by loosening the set
+comparison.
 
 ## A Functional Status Organizer is not written without a Self-Care Activities observation
 

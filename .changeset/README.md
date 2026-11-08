@@ -14,6 +14,8 @@ pnpm changeset
 ```
 
 The package is on the 0.1 line. Classify the bump from what the change does, as `CLAUDE.md` says:
-**minor** when it adds an export or a warning or fatal code, **patch** for everything else. The
+**minor** when it adds an export or a warning or fatal code, **patch** for everything else. Since
+2026-11-07 every changeset we write is a **patch** (decision D56): one that would be a minor waits
+for the operator's okay. The
 release standard behind this (a generated changelog, a `vX.Y.Z` tag and a GitHub release for every
 version) is ST35 in the umbrella's `plans/standards.md`.
