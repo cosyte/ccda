@@ -1,0 +1,189 @@
+{
+  "$comment": "The public-surface gate's axes for @cosyte/ccda, read by `cosyte-internal-refs` (pnpm check:no-internal-refs), the shared gate in @cosyte/script-utils. This file adds detection and never subtracts. The three extra rules carry this repository's former phase, slice and roadmap-citation rules as they were, so the shared gate reads at least what the former scripts/check-no-internal-refs.sh read.",
+  "$prefixes": "Keyed on our own programme prefixes, never on a WORD-N shape: CONF:1098-30468, ICD-10-CM, CPT-4 and PHQ-9 are reference material here. SYNTH is deliberately absent: MRN-00042, DOC-0001 and SYNTH-9 are the synthetic example ids our docs use.",
+  "projectPrefixes": [
+    "PARSERS-PUBLIC",
+    "DOCS-CONTENT",
+    "KNOWLEDGEBASE",
+    "TERMINOLOGY",
+    "PATHWAYS",
+    "TRANSFORM",
+    "WEBSITE",
+    "STAGING",
+    "SUPPLY",
+    "NCPDP",
+    "ASSETS",
+    "EMDASH",
+    "README",
+    "CONFIG",
+    "DICOM",
+    "DEID",
+    "CCDA",
+    "ASTM",
+    "MLLP",
+    "FHIR",
+    "CREW",
+    "DOCS",
+    "PERF",
+    "SYNC",
+    "VERSION",
+    "PUBLIC",
+    "HL7",
+    "X12",
+    "IAC",
+    "CLI",
+    "KB",
+    "PW",
+    "PUB",
+    "CI",
+    "REAL",
+    "TERM",
+    "WF",
+    "VERIFY"
+  ],
+  "standardsDesignations": [
+    "NCPDP-(?:SCRIPT|TELECOM|D\\.\\d|F\\d)",
+    "HL7-(?:V2|V3|CDA|FHIR|OMG)",
+    "FHIR-R\\d[A-Z]?",
+    "DICOM-(?:SR|RT|SEG|DIR|PS\\d)",
+    "CCDA-R\\d(?:\\.\\d)?",
+    "ASTM-E\\d+"
+  ],
+  "$surface": "What a consumer reads: README.md, LICENSE, and docs-content/ (docs.cosyte.com). CHANGELOG.md is where identifiers belong, and dist/ is built from src/, whose doc comments and string literals are scanned below.",
+  "surfacePaths": [
+    "README.md",
+    "LICENSE",
+    "docs-content"
+  ],
+  "accountedTarballFiles": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "sourceDocComments": {
+    "enabled": true,
+    "paths": [
+      "src/*.ts",
+      "src/**/*.ts"
+    ]
+  },
+  "sourceStringLiterals": {
+    "enabled": true,
+    "paths": [
+      "src/*.ts",
+      "src/**/*.ts"
+    ]
+  },
+  "extraRules": [
+    {
+      "id": "ccda-phase",
+      "name": "phase or wave language",
+      "pattern": {
+        "source": "\\b(?:roadmap phases?\\b[ ]?[A-Za-z0-9]*|(?<!study )(?<!clinical )(?<!trial )(?<!acute )(?<!chronic )phases?[ -](?!of\\b|with\\b|in\\b|out\\b|the\\b|and\\b|is\\b|for\\b|to\\b|(?:I{1,3}|IV)\\b)[A-Za-z0-9]+[a-z]?\\b|wave \\d+\\b|the \\w+ and final phase\\b|documentation residual\\b|(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|twenty-first|twenty-second|twenty-third|twenty-fourth|\\d+(?:st|nd|rd|th)) (?:slice|wave)\\b)",
+        "flags": "i"
+      },
+      "positives": [
+        "Phase 5b closes it (Phase W, Phase-5 and the thirteenth slice landed earlier, in wave 2), and Phases 6 and 7 preceded it",
+        "roadmap phases",
+        "Phase 5b",
+        "Phase W",
+        "Phase-5",
+        "Phases 6",
+        "wave 2",
+        "the third and final phase",
+        "documentation residual",
+        "thirteenth slice",
+        "second wave",
+        "Added in Phase 9 and reworked in phase 10b",
+        "The connect-phase socket, the luteal phase 2 draft, and the phase was named"
+      ],
+      "negatives": [
+        "A Phase III oncology trial and a Phase II study; the clinical phases of a drug programme; the acute phase reactant; chronic phase disease; the phase of illness; the reader stays in phase with the source system and is out of phase",
+        "CcdaDocument.toString: no source document retained. Only documents produced by parseCcda can be serialized. A Phase III trial and the acute phase reactant are out of scope, and the reader stays in phase with the source system."
+      ]
+    },
+    {
+      "id": "ccda-slice",
+      "name": "internal jargon (\"slice\")",
+      "pattern": {
+        "source": "\\b(?:this|that|the|each|another|previous|next|final|current)\\s+(?:(?!(?:of|in|on|between|per|for|to|with|at)\\s)[\\w-]+\\s+){0,2}slices?\\b(?!\\s+(?:thickness|location|spacing|position|interval|order|number|index|gap|count|data|pixel|orientation|plane|direction|width|vector|sensitivity|progression|factor))",
+        "flags": "i"
+      },
+      "positives": [
+        "This slice adds the consumable helper and the final slice removes it",
+        "this slice",
+        "the final slice",
+        "another compatibility slice",
+        "each slice",
+        "Added by the final slice of the reader"
+      ],
+      "negatives": [
+        "The slice thickness and the number of slices are imaging attributes, each slice location is too; raw.slice(0, 56) and ids.slice(1) are TypeScript; and the phase of the clinical study, the phase of illness and each phase of the trial are the reader words this rule must not touch",
+        "Document carries 3 sections; only the first is decoded. The slice thickness and the number of slices are imaging attributes."
+      ]
+    },
+    {
+      "id": "ccda-roadmap-citation",
+      "name": "internal roadmap citation",
+      "pattern": {
+        "source": "\\b(?:ccda|hl7|fhir|mllp|dicom|x12|ncpdp|astm|cli|transform|terminology|synth|deid|pathways|docs|website|iac|crew|knowledgebase|config|the|this|our) roadmap(?:'s)?\\b|\\broadmaps?(?:'s)?[ ]?§",
+        "flags": "i"
+      },
+      "positives": [
+        "Grounded in the ccda roadmap §5, refined from the roadmap sketch, and the roadmap forbids it",
+        "ccda roadmap",
+        "the roadmap",
+        "roadmap's §4",
+        "roadmap §5",
+        "Not supported for this document type; see the ccda roadmap for when it lands"
+      ],
+      "negatives": [
+        "## Roadmap; a product roadmap and the vendor roadmap; roadmapping the migration; the roadmaps of other projects"
+      ]
+    }
+  ],
+  "extraSamples": {
+    "internal-identifier": {
+      "positives": [
+        "Item CCDA-P7 is done, and CCDA-PLANNED-CODE-SLOT with it",
+        "CCDA-P7 shipped this reader",
+        "P7 safety"
+      ],
+      "negatives": [
+        "C-CDA R2.1 and CDA R2 and the CCDA-R2.1 designation, C-CDA-Examples published by HL7, the code systems ICD-10-CM and ICD-10-PCS and ICD-9-CM and ICD-9 and CPT-4 and PHQ-9, conformance statements CONF:1098-30468 and CONF:81-14450, LOINC 62387-6, ONC 170.315(b)(1), the W3C-DOM substrate, UTF-8 encoding, the TOP-LEVEL element, the synthetic example ids MRN-00042 and MRN-0001 and DOC-0001 and DOC-1 and SYNTH-9, FHIR-bridge stability, docs-content/ layout, HL7-V3 and HL7-CDA, FHIR-R4, DICOM-SR",
+        "MEDICATION_PRODUCT_ARM_CONFLICT and MISSING_CODE_SYSTEM and UNEXPECTED_CODE_SYSTEM and REQUIRED_SECTION_MISSING, ./dom.js and ../model/code-systems.js, C-CDA R2.1 and CDA R2, CONF:1098-30468, LOINC 62387-6, ICD-10-CM and ICD-9-CM and CPT-4, urn:oid:2.16.840.1.113883.4.1, MRN-00042 and SYNTH-9, UTF-8"
+      ]
+    },
+    "adr-reference": {
+      "positives": [
+        "Decided in ADR 0018, restated in ADR-0001, and recorded in docs/adr/0001-xml-parser.md",
+        "Ratified in docs/adr/0001-xml-parser.md",
+        "Behaviour fixed by ADR 0018, recorded in docs/adr/0001-xml-parser.md"
+      ],
+      "negatives": [
+        "ADR is not a section identifier, and 0015 alone is a value"
+      ]
+    },
+    "internal-repo-path": {
+      "positives": [
+        "Roadmap operations/roadmaps/ccda.md and documentation/decisions/0015-x.md",
+        "operations/plans/one.md",
+        "documentation/conventions.md",
+        "documentation/ecosystem-map.md",
+        "BACKLOG.md",
+        "See operations/roadmaps/ccda.md"
+      ],
+      "negatives": [
+        "Parser operations are documented in the README, and documentation for the API is generated"
+      ]
+    },
+    "traceability-marker": {
+      "positives": [
+        "Repeating [S-SIG], and Open-question #12 resolves the direction",
+        "Traced as [S-SIG]"
+      ],
+      "negatives": [
+        "A character range like [S-Z], a value set written [SNOMED], and open questions about the feed"
+      ]
+    }
+  }
+}
