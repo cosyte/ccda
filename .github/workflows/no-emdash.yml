@@ -22,7 +22,9 @@ name: Em-dash gate
 # lets the command's exit status decide the job. The script header records why the scan is
 # not a grep: two functional NUL bytes in `src/profiles/merge.ts` make grep classify that
 # first-party TypeScript as binary and skip it, which is how one live character survived the
-# sweep in #52.
+# sweep in #52. It stays this repository's script rather than the shared `cosyte-no-emdash`
+# because it reads CHANGELOG.md's frozen archive for em dashes only and the generated part in
+# full, and the shared gate can only exclude a whole file.
 #
 # THE JOB ID IS LOAD-BEARING. A called job's check run is named
 # `<caller job id> / <inner job id>`, so the job id `no-emdash` below publishes

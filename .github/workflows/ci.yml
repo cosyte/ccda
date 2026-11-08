@@ -109,3 +109,23 @@ jobs:
       - run: pnpm typecheck:examples
       - run: pnpm lint:examples
       - run: pnpm examples
+
+  # The house checks from @cosyte/script-utils: README, CLAUDE.md card, agent notes, and catalog.
+  standards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:readme
+      - run: pnpm check:claude-card
+      - run: pnpm check:agent-notes
+      - run: pnpm check:catalog

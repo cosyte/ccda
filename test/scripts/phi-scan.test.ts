@@ -1242,11 +1242,11 @@ describe("phi-scan: the corpus both routes used to skip", () => {
     const excluded = runScannerIn(repo, null);
     expect(excluded.code, `stderr: ${excluded.stderr}`).toBe(0);
 
-    writeFileSync(join(repo, "test", "scripts", "attw-gate.test.ts"), violator);
-    gitIn(repo, ["add", "test/scripts/attw-gate.test.ts"]);
+    writeFileSync(join(repo, "test", "scripts", "changelog-generation.test.ts"), violator);
+    gitIn(repo, ["add", "test/scripts/changelog-generation.test.ts"]);
     const neighbour = runScannerIn(repo, null);
     expect(neighbour.code, `stderr: ${neighbour.stderr}`).toBe(1);
-    expect(neighbour.stderr).toContain("test/scripts/attw-gate.test.ts");
+    expect(neighbour.stderr).toContain("test/scripts/changelog-generation.test.ts");
     expect(neighbour.stderr).not.toContain("test/scripts/phi-scan.test.ts");
   });
 

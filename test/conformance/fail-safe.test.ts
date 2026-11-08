@@ -198,7 +198,7 @@ describe("AC-5: the refusal reaches the shell, not only the caller", () => {
    * THE LAST LINK, WHICH THE REFUSALS ABOVE DO NOT COVER. Every case above proves the harness
    * refuses; none of them proves `pnpm conformance` exits non-zero when it does. Delete the
    * exit-code assignment and all of them stay green while CI reports a pass over a failed run,
-   * which is the false-green shape `scripts/attw.mjs` exists to refuse. These drive the whole
+   * which is the false-green shape the attw gate (`pnpm attw`) exists to refuse. These drive the whole
    * command-line run, with only the network doubled, and assert the number it resolves to.
    *
    * The report path is a file in the per-test temporary directory, never the tracked one: a

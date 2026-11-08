@@ -30,9 +30,11 @@ and 26.
 7. `pnpm test:coverage`
 8. `pnpm build`
 9. `pnpm attw`
-10. `pnpm typecheck:examples`, `pnpm lint:examples`, `pnpm examples`
-11. `pnpm check:no-emdash`, `pnpm check:no-internal-refs`
-12. `pnpm conformance` (fetches its pinned artifacts, so it needs the network)
+10. `pnpm conformance` (fetches its pinned artifacts, so it needs the network)
+11. `pnpm typecheck:examples`, `pnpm lint:examples`, `pnpm examples`
+12. `pnpm check:readme`, `pnpm check:claude-card`, `pnpm check:agent-notes`, `pnpm check:catalog`
+    (the `standards` job)
+13. `pnpm check:no-emdash`, `pnpm check:no-internal-refs`
 
 ## Data
 
