@@ -36,7 +36,7 @@
  *
  * AN EXPRESSION THIS ENGINE CANNOT COMPILE FAILS THE RUN. It is never skipped and never
  * reported as a pass. A gate that quietly drops the assertions it could not read is the false
- * green `scripts/attw.mjs` exists to refuse, restated for this one.
+ * green the attw gate (`pnpm attw`) exists to refuse, restated for this one.
  */
 
 import { DOMParser } from "@xmldom/xmldom";

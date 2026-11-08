@@ -26,7 +26,7 @@
  * this file asserts is what `ccda` itself promises, in `ccda`'s own CI, which is also
  * why it costs the meta-repo's capped automation plane nothing.
  *
- * WHERE THE TEETH ARE. This script is invocable as `pnpm check:agent-notes`, but the
+ * WHERE THE TEETH ARE. This script is invocable as `pnpm check:agent-notes-contract`, but the
  * blocking path is `test/scripts/agent-notes-contract.test.ts`, which runs it. That is
  * a choice, not an accident: the org ruleset `parser-ci-required-checks` requires
  * `ci / verify (22, ubuntu-latest)`, `ci / verify (24, ubuntu-latest)` and
@@ -52,8 +52,8 @@
  *    phantom path cannot yield green here, because green requires having read them.
  *  - Finding ZERO pointers is a refusal. If the scanner stops matching (a pointer
  *    style changes, the path moves), an empty result set is indistinguishable from a
- *    clean run by any count. This is the same net `scripts/attw.mjs` carries for a tool
- *    that exits 0 having printed nothing.
+ *    clean run by any count. This is the same net the attw gate (`cosyte-attw`) carries
+ *    for a tool that exits 0 having printed nothing.
  *  - A heading carrying a non-ASCII character is a refusal rather than a guess. The
  *    slugifier below reproduces GitHub's ASCII behaviour; on anything else it would
  *    silently compute the wrong anchor, and a wrong anchor here reads as a broken

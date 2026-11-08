@@ -9,10 +9,10 @@
  * is exactly how the fail-safe gets quietly reversed. `pnpm test` reads the tracked report as a
  * file instead, and takes no network at all.
  *
- * THE FALSE-GREEN SHAPE, RESTATED FOR THIS GATE. `scripts/attw.mjs` exists in this repository
- * because a tool that read nothing exited 0 and its caller believed it. The same trap is open
- * here in two places and both are closed by an explicit refusal rather than by a count nobody
- * reads: a run that validated zero built documents fails with `NO_DOCUMENTS_VALIDATED`, and a
+ * THE FALSE-GREEN SHAPE, RESTATED FOR THIS GATE. The attw gate (`pnpm attw`) exists in this
+ * repository because a tool that read nothing exited 0 and its caller believed it. The same trap
+ * is open here in two places and both are closed by an explicit refusal rather than by a count
+ * nobody reads: a run that validated zero built documents fails with `NO_DOCUMENTS_VALIDATED`, and a
  * corpus that unpacked to nothing fails with `CORPUS_EMPTY`. They are separate codes because
  * they are separate faults and the remedy differs.
  *
@@ -356,8 +356,8 @@ export interface CliOptions {
  * The whole command-line run, INCLUDING the exit code it resolves to.
  *
  * THE EXIT CODE IS THE PRODUCT OF THIS FUNCTION, NOT A STATEMENT AT THE BOTTOM OF THE FILE.
- * `scripts/attw.mjs` exists in this repository because a tool that read nothing exited 0 and
- * its caller believed it, and a refusal that does not reach the shell is the same false green
+ * The attw gate (`pnpm attw`) exists in this repository because a tool that read nothing exited
+ * 0 and its caller believed it, and a refusal that does not reach the shell is the same false green
  * one level up: every fail-safe below can be correct and `pnpm conformance` still exit 0 in CI
  * if the last link is a line nothing exercises. So the exit code is computed here, where
  * `test/conformance/fail-safe.test.ts` drives it with the network boundary doubled, and the

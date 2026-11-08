@@ -9,17 +9,19 @@ vendor quirks become coded warnings, not errors.
 ## Gate
 
 Required on `main`: `ci / verify (22, ubuntu-latest)`, `ci / verify (24, ubuntu-latest)`,
-`ci / actionlint` and `no-emdash / tracked-files`. CI also runs `ci / verify` on Node 26 and the
-`examples`, `conformance` and `no-internal-refs / public-surface` jobs. From the repo root, with
-pnpm 10.34.5 first on PATH (pnpm 12 refuses the frozen install; a test runs a bare `pnpm build`):
+`ci / actionlint` and `no-emdash / tracked-files`. CI also runs `ci / verify` on Node 26, the
+`conformance`, `examples` and `standards` jobs, and `no-internal-refs / public-surface`. From the
+repo root, with pnpm 10.34.5 first on PATH (pnpm 12 refuses the frozen install; a test runs a bare
+`pnpm build`):
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm typecheck && pnpm lint && pnpm format:check && pnpm phi-scan
 pnpm test && pnpm test:coverage && pnpm build && pnpm attw
-pnpm typecheck:examples && pnpm lint:examples && pnpm examples
-pnpm check:no-emdash && pnpm check:no-internal-refs
 pnpm conformance # fetches its pinned artifacts, so it needs the network
+pnpm typecheck:examples && pnpm lint:examples && pnpm examples
+pnpm check:readme && pnpm check:claude-card && pnpm check:agent-notes && pnpm check:catalog
+pnpm check:no-emdash && pnpm check:no-internal-refs
 ```
 
 ## Hazard
@@ -40,7 +42,7 @@ Each names the failure that proved it. `pnpm test` fails if a pointer stops reso
 - Transcribe code systems, value sets and SHALL tables from the published source, never from
   memory: `NULL_FLAVORS` held 8 of the 17 v3 concepts (#78).
   documentation/agent-notes.md#the-v3-nullflavor-code-system-has-seventeen-concepts
-- Keep `pnpm attw` on its wrapper: `@arethetypeswrong/cli` alone exits 0 on a tarball with no
+- `pnpm attw` runs `cosyte-attw`, never the bare `attw` CLI, which exits 0 on a tarball with no
   type declarations (#82). documentation/agent-notes.md#the-attw-wrapper-script
 - Count dashes with `pnpm check:no-emdash`, not grep: NUL bytes in `src/profiles/merge.ts` make
   grep skip it as binary, and #52 left one there. documentation/agent-notes.md#the-em-dash-gate

@@ -2621,6 +2621,15 @@ deleted; the imperative as it stood is reproduced here verbatim.
 
 ## The attw wrapper script
 
+**Today (2026-11-08): `pnpm attw` runs `cosyte-attw`, the shared attw gate from
+`@cosyte/script-utils` 0.1.4, and `scripts/attw.mjs` and its test are gone.** The shared gate
+carries this wrapper's nets and two more (npm's own pack listing, and the manifest pnpm would
+publish), and it grades attw's default profile, as the wrapper did, so this repository needs no
+`scripts/attw.exclude`. Measured on adoption against this package's own build: it passes the good
+pack, and it exits 1 both with `dist/index.d.ts` and `dist/index.d.cts` removed and with no `dist/`
+at all. What follows is the history of the wrapper, kept for the measurements behind it; where it
+says `scripts/attw.mjs`, read the shared gate. Never swap in the bare `attw` CLI.
+
 - **`attw` SAYS "does not contain types" AND EXITS 0, SO THE `attw` SCRIPT IS A WRAPPER, NOT THE
   BARE CLI** (`ATTW-FALSE-GREEN-PORT`). `getExitCode.js` in this repo's pinned
   `@arethetypeswrong/cli@0.18.4` opens with `if (!analysis.types) return 0`. An untyped package is a
@@ -3234,7 +3243,8 @@ trust `CLAUDE.md`'s old line about it**: `no-emdash` IS required, via a separate
 repository-level `emdash-required-check` ruleset, active and scoped to the default branch. The
 settings change `CLAUDE.md` said was outstanding had already landed, so that trap was stale in the
 blocking direction and was corrected in the same commit as this section. **Re-read the rulesets;
-do not infer a gate's teeth from a prose line about it, including this one.** `pnpm check:agent-notes` runs it standalone; the meta-repo's `verify.sh` has a fixed
+do not infer a gate's teeth from a prose line about it, including this one.** `pnpm check:agent-notes-contract` runs it standalone (since 2026-11-08,
+`pnpm check:agent-notes` runs the shared checker, `cosyte-agent-notes`); the meta-repo's `verify.sh` has a fixed
 `LADDER` that does not name it, so it prints "gate-shaped script(s) this ladder does not know ... a
 green verify.sh therefore means LESS than a green CI". **That warning is correct in general and
 misleading here, and `verify.sh` must not be touched over it**: the ladder does not invoke the
