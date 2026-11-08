@@ -281,7 +281,11 @@ function readWorkflow(path: string = join(ROOT, WORKFLOW_PATH)): string {
  */
 function withoutKey(source: string, key: string): string {
   const raw = source.split("\n");
-  const start = raw.findIndex((line) => new RegExp(`^\\s*${key}:`).test(line));
+  // The calling job's keys, never the read-only workflow-level `permissions:` block above `jobs:`.
+  const jobs = raw.indexOf("jobs:");
+  const start = raw.findIndex(
+    (line, index) => index > jobs && new RegExp(`^\\s*${key}:`).test(line),
+  );
   if (start === -1) throw new Error(`fixture is stale: no \`${key}:\` line in ${WORKFLOW_PATH}`);
   const indent = (raw[start] ?? "").length - (raw[start] ?? "").trimStart().length;
   let end = start + 1;
