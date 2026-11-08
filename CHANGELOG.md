@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.3
+
+### Patch Changes
+
+- 34f1235: The README now names the Node.js versions we test on: 22, 24, and 26.
+
+  Its Node badge reads the `engines` range exactly (`>=22.0.0`), and the installation page says the
+  same. Nothing the package parses, builds, or serializes changes.
+
 ## 0.1.2
 
 ### Patch Changes
