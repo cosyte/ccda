@@ -471,8 +471,7 @@
  * as no answer for the reason `gitTracked` already gave: it would make every file
  * untracked, which is the one state in which the bound silently stops existing,
  * and it is what makes a reconciliation VACUOUS rather than wrong. This repo
- * always tracks files. `scripts/check-agent-notes-contract.mjs` refuses on the
- * same two states for the same reason, and this is deliberately the same shape.
+ * always tracks files.
  *
  * THE OTHER TWO ROUTES ARE UNCHANGED, AND THAT IS DERIVED RATHER THAN INHERITED.
  * `--staged` already reads stage-0 blobs (`git show :<path>`) for exactly the
@@ -559,9 +558,8 @@ const WALK_SKIP_DIRS = new Set<string>([
 // exclusion into a total one, which is a real hole rather than a tidy-up.
 //
 // LITERAL PATHS, NOT A DIRECTORY PREFIX. This was `test/scripts/`, which excluded
-// FOUR files where the reason above covers exactly one: the other three
-// (`agent-notes-contract`, `attw-gate`, `changelog-generation`) embed no violator
-// at all, and were unscanned by the two sweeping routes for no stated reason (the
+// FOUR files where the reason above covers exactly one: the other three embed no
+// violator at all, and were unscanned by the two sweeping routes for no stated reason (the
 // `paths` route always scanned them, as it always scanned every named file). An
 // exemption
 // written as a predicate always covers more than its argument does; write it as
@@ -1099,7 +1097,6 @@ function gitIndexEntries(): { entries: Map<string, IndexEntry>; unmerged: string
     // short list is the unscanned corpus this whole rule is about. Node throws
     // `ENOBUFS` rather than truncating, so the bound refuses either way; the
     // headroom keeps a legitimate repo from paying an opaque refusal for it.
-    // Same figure, same reason, as `scripts/check-agent-notes-contract.mjs`.
     const out = execFileSync("git", ["ls-files", "-s", "-z"], {
       stdio: ["ignore", "pipe", "ignore"],
       maxBuffer: 64 * 1024 * 1024,

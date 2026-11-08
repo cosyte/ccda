@@ -32,7 +32,7 @@ and 26.
 9. `pnpm attw`
 10. `pnpm conformance` (fetches its pinned artifacts, so it needs the network)
 11. `pnpm typecheck:examples`, `pnpm lint:examples`, `pnpm examples`
-12. `pnpm check:readme`, `pnpm check:claude-card`, `pnpm check:agent-notes`, `pnpm check:catalog`
+12. `pnpm check:readme`, `pnpm check:claude-card`, `pnpm check:catalog`
     (the `standards` job)
 13. `pnpm check:no-emdash`, `pnpm check:no-internal-refs`
 

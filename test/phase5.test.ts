@@ -445,8 +445,7 @@ describe("required-section (SHALL) validation", () => {
     // Note the exact scope of that claim: it means the six keys are PRESENT in
     // this parser's catalog framing, NOT that the document would pass a
     // validator. It would not: the empty entries-required shells drop their `.1`
-    // templates, so five of the six CONFs fail (see agent-notes,
-    // "THE RESIDUAL THIS SLICE DID NOT FIX").
+    // templates, so five of the six CONFs fail.
     // `buildCcda` returns an already-parsed CcdaDocument, so its `warnings` are
     // the parser's own reading of what the builder just emitted.
     const doc = buildRealCcda({ patient: { mrn: "M" } });

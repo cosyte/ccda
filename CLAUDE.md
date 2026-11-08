@@ -20,7 +20,7 @@ pnpm typecheck && pnpm lint && pnpm format:check && pnpm phi-scan
 pnpm test && pnpm test:coverage && pnpm build && pnpm attw
 pnpm conformance # fetches its pinned artifacts, so it needs the network
 pnpm typecheck:examples && pnpm lint:examples && pnpm examples
-pnpm check:readme && pnpm check:claude-card && pnpm check:agent-notes && pnpm check:catalog
+pnpm check:readme && pnpm check:claude-card && pnpm check:catalog
 pnpm check:no-emdash && pnpm check:no-internal-refs
 ```
 
@@ -31,27 +31,22 @@ carry a real patient's data into a warning message, a model field, a fixture, a 
 
 ## Rules that bind here
 
-Each names the failure that proved it. `pnpm test` fails if a pointer stops resolving.
+Each names the failure that proved it.
 
 - No document text in a warning, a fatal message or an unbounded model field: 0.0.4 returned a
   500,000-byte `templateId` root in a `.message` (#77).
-  documentation/agent-notes.md#no-warning-or-fatal-factory-takes-a-value-parameter
 - Refuse a narrative label when the coded entry has no `displayName`; never render a default:
   0.0.11 shipped "No known allergies" beside a positive allergy (#100).
-  documentation/agent-notes.md#a-narrative-label-is-refused-never-fabricated
 - Transcribe code systems, value sets and SHALL tables from the published source, never from
   memory: `NULL_FLAVORS` held 8 of the 17 v3 concepts (#78).
-  documentation/agent-notes.md#the-v3-nullflavor-code-system-has-seventeen-concepts
 - `pnpm attw` runs `cosyte-attw`, never the bare `attw` CLI, which exits 0 on a tarball with no
-  type declarations (#82). documentation/agent-notes.md#the-attw-wrapper-script
+  type declarations (#82).
 - Count dashes with `pnpm check:no-emdash`, not grep: NUL bytes in `src/profiles/merge.ts` make
-  grep skip it as binary, and #52 left one there. documentation/agent-notes.md#the-em-dash-gate
+  grep skip it as binary, and #52 left one there.
 - Add no path or file-type exemption to `scripts/phi-scan.ts`: it printed OK while 44 of 140
   tracked files went unread (#103).
-  documentation/agent-notes.md#the-corpus-every-phi-scan-route-read-past
 - Keep a test that writes into the tree or spawns a build from racing the others: Vitest runs
   files in parallel, and the release Verify on `d906bda` went red that way (#146).
-  documentation/agent-notes.md#tests-that-write-the-working-tree-run-apart
 - Never hand-edit `CHANGELOG.md`: a release writes it from the changesets, and a hand-kept
   `[Unreleased]` heading shipped in every tarball until #94.
 - Every changeset is `patch` (D56, 2026-11-07): one that adds an export or a warning or fatal code

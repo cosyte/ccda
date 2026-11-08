@@ -2142,8 +2142,7 @@ interface DocTypeSpec {
  * (entries required) (V3) **-30670**, Social History (V3) **-30688**, and Vital
  * Signs (entries required) (V3) **-30690**. Procedures (**-30668**) and Plan of
  * Treatment (**-30686**) sit in the *warnings* rule as SHOULD, so neither is in
- * this set. See `documentation/agent-notes.md` § "The CCD SHALL set, settled
- * against the normative Schematron".
+ * this set.
  *
  * **The six do not share one stamp.** Each assert names a `@root` *and* an
  * `@extension`, and Medications is the odd one out at `2014-06-09` where the
