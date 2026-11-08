@@ -121,9 +121,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
-import prettier from "prettier";
 import { describe, it, expect, afterAll } from "vitest";
+
+import { processToolDir } from "../_helpers/process-tools.js";
 
 const REPO_ROOT = process.cwd();
 const CHANGELOG_PATH = join(REPO_ROOT, "CHANGELOG.md");
@@ -176,6 +178,20 @@ const roots: string[] = [];
 afterAll(() => {
   for (const dir of roots) rmSync(dir, { recursive: true, force: true });
 });
+
+/** The two Prettier calls this file makes, typed here because Prettier is not a direct dependency. */
+interface PrettierApi {
+  resolveConfig(file: string): Promise<Record<string, unknown> | null>;
+  format(source: string, options: Record<string, unknown>): Promise<string>;
+}
+
+/**
+ * The Prettier `pnpm format` and `pnpm format:check` run: the copy `@cosyte/process` pins, loaded
+ * from that package, so this file measures the formatter CI uses and not a second copy.
+ */
+const prettier = (await import(
+  pathToFileURL(join(processToolDir(REPO_ROOT, "prettier"), "index.mjs")).href
+)) as PrettierApi;
 
 /**
  * Would `pnpm format:check` accept this text as the repo's `CHANGELOG.md`?
@@ -242,7 +258,7 @@ function runVersion(opts: {
   // exercise a formatter no release ever uses. Links rather than copies: pnpm's own
   // `node_modules` entries are links already.
   mkdirSync(join(dir, "node_modules", "@cosyte"), { recursive: true });
-  symlinkSync(join(REPO_ROOT, "node_modules", "prettier"), join(dir, "node_modules", "prettier"));
+  symlinkSync(processToolDir(REPO_ROOT, "prettier"), join(dir, "node_modules", "prettier"));
   symlinkSync(
     join(REPO_ROOT, "node_modules", "@cosyte", "prettier-config"),
     join(dir, "node_modules", "@cosyte", "prettier-config"),
@@ -385,7 +401,13 @@ describe("changelog generation is on", () => {
     // measurement rather than a preference.
     expect(config.prettier).toBeUndefined();
     expect(existsSync(join(REPO_ROOT, ".prettierignore"))).toBe(false);
-    expect(pkg.scripts?.["format:check"] ?? "").toContain('"*.{json,md,yml}"');
+    // `format:check` runs `cosyte-process format --check`, whose globs this repo sets in
+    // `cosyte-process.config.json`.
+    expect(pkg.scripts?.["format:check"]).toBe("cosyte-process format --check");
+    const processConfig = JSON.parse(
+      readFileSync(join(REPO_ROOT, "cosyte-process.config.json"), "utf8"),
+    ) as { format?: { globs?: string[] } };
+    expect(processConfig.format?.globs ?? []).toContain("*.{json,md,yml}");
   });
 
   it(

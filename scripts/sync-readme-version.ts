@@ -6,7 +6,7 @@
  * `pnpm test` on the "Version Packages" commit before it publishes. Changesets rewrites
  * `package.json` only, so without this step a commit that moves to a new minor line fails its own
  * test and the publish stops. The `version` script runs this after `changeset version` and
- * `sync-version.mjs`, so the bump and the README line land in the same commit, the same way the
+ * `cosyte-process sync-version`, so the bump and the README line land in the same commit, the same way the
  * `VERSION` constant does. The README names the line rather than the exact version because a patch
  * release does not change what the line promises, and prose that names an exact version goes stale.
  *

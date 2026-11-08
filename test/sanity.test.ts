@@ -33,7 +33,7 @@ describe("toolchain sanity", () => {
 
   it("package exports VERSION matching package.json", () => {
     // Compared against package.json, never a hardcoded literal. `changeset version` bumps
-    // package.json alone, so a release that skipped `scripts/sync-version.mjs` (wired into the
+    // package.json alone, so a release that skipped `cosyte-process sync-version` (wired into the
     // `version` script) would publish a VERSION export that lies about the release.
     //
     // This repo is not currently defective: the 0.0.8 release commit moved package.json and the

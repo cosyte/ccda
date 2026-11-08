@@ -6,9 +6,9 @@ repository.
 
 ## Build and test
 
-Use Node.js 22 or later and the pnpm that `packageManager` in `package.json` pins (10.34.5). If
-`pnpm --version` prints another version, run `corepack enable --install-directory <dir> pnpm` and
-put `<dir>` first on PATH.
+Use Node.js 22.22.2 or later (the floor of the tools `@cosyte/process` runs) and the pnpm that
+`packageManager` in `package.json` pins (10.34.5). If `pnpm --version` prints another version, run
+`corepack enable --install-directory <dir> pnpm` and put `<dir>` first on PATH.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -32,7 +32,7 @@ and 26.
 9. `pnpm attw`
 10. `pnpm conformance` (fetches its pinned artifacts, so it needs the network)
 11. `pnpm typecheck:examples`, `pnpm lint:examples`, `pnpm examples`
-12. `pnpm check:readme`, `pnpm check:claude-card`, `pnpm check:catalog`
+12. `pnpm check:readme`, `pnpm check:claude-card`, `pnpm check:catalog`, `pnpm check:process`
     (the `standards` job)
 13. `pnpm check:no-emdash`, `pnpm check:no-internal-refs`
 
