@@ -12,7 +12,7 @@
 [![npm version](https://img.shields.io/npm/v/@cosyte/ccda.svg)](https://www.npmjs.com/package/@cosyte/ccda)
 [![CI](https://img.shields.io/github/actions/workflow/status/cosyte/ccda/ci.yml?branch=main&label=CI)](https://github.com/cosyte/ccda/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/cosyte/ccda/blob/main/LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)](https://nodejs.org)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg)](https://nodejs.org)
 
 C-CDA parser, serializer, and builder for Node.js and TypeScript, lenient on parse, spec-clean on emit.
 
@@ -74,7 +74,7 @@ npm install @cosyte/ccda
 
 `pnpm add @cosyte/ccda` and `yarn add @cosyte/ccda` install the same package.
 
-**Node.js 22 or later, tested on 22 and 24.** `package.json` declares `>=22.0.0` in `engines.node`. The package
+**Node.js 22 or later, tested on 22, 24, and 26.** `package.json` declares `>=22.0.0` in `engines.node`. The package
 ships a **dual ESM and CJS** build with per-condition type declarations, so both `import` and
 `require` resolve to the right types. There is **one** runtime dependency,
 [`@xmldom/xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) (exact-pinned), the W3C-DOM substrate

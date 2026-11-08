@@ -19,8 +19,8 @@ has a **single** exact-pinned runtime dependency: the W3C-DOM substrate `@xmldom
 
 ## Prerequisites
 
-- **Node.js 22 or later, tested on 22 and 24.** The whole `@cosyte/*` suite targets ES2023 and
-  Node.js 22 or later.
+- **Node.js 22 or later, tested on 22, 24, and 26.** The whole `@cosyte/*` suite targets ES2023
+  and Node.js 22 or later.
 - A package manager: `pnpm`, `npm`, or `yarn`.
 - **One runtime dependency.** `@xmldom/xmldom` (exact-pinned) is the only runtime dep; the parser
   caps itself at **≤ 3** justified deps. There is no native build and no

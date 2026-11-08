@@ -74,7 +74,7 @@ const TSX_BIN = join(REPO_ROOT, "node_modules", ".bin", "tsx");
  *     so ONE case below spawns `tsx` and asserts the two runners AGREE. That case reds
  *     if either premise stops holding. Delete it and a tsx-only breakage ships green.
  *
- * `engines.node` is `>=22.0.0` while stripping is unflagged only from 22.18. CI's 22 + 24
+ * `engines.node` is `>=22.0.0` while stripping is unflagged only from 22.18. CI's 22, 24, and 26
  * matrix resolves above that; a developer on 22.0-22.17 gets a loud runner error here
  * rather than a wrong result, and the fix is a newer 22.
  */
