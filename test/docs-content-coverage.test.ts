@@ -552,14 +552,16 @@ describe("docs-content bundle: agreement with the shipped package", () => {
   });
 
   test("the repository formatter checks every docs-content page", () => {
-    for (const name of ["format", "format:check"]) {
-      const script = scripts?.[name];
-      expect(typeof script, `package.json has no \`${name}\` script`).toBe("string");
-      expect(
-        typeof script === "string" ? script : "",
-        `\`${name}\` does not cover docs-content/**/*.md, so the bundle can drift out of format`,
-      ).toContain("docs-content/**/*.md");
-    }
+    // `format` and `format:check` run `cosyte-process format`, whose globs this repo sets in
+    // `cosyte-process.config.json`: the baseline globs do not reach docs-content/.
+    expect(scripts?.["format"]).toBe("cosyte-process format");
+    expect(scripts?.["format:check"]).toBe("cosyte-process format --check");
+    const processConfig = asRecord(readJson(join(root, "cosyte-process.config.json")));
+    const globs = asRecord(processConfig?.["format"])?.["globs"];
+    expect(
+      Array.isArray(globs) ? globs : [],
+      "`cosyte-process.config.json` format globs do not cover docs-content/**/*.md, so the bundle can drift out of format",
+    ).toContain("docs-content/**/*.md");
   });
 });
 

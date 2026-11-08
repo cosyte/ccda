@@ -411,10 +411,7 @@ export function missingRequiredSections(
  * ```
  */
 export type RequiredSectionVerification =
-  | "traced-complete"
-  | "traced-partial"
-  | "untraced"
-  | "not-applicable";
+  "traced-complete" | "traced-partial" | "untraced" | "not-applicable";
 
 /**
  * One asserted SHALL section key together with the conformance statement it was
@@ -467,9 +464,7 @@ export interface TracedRequiredSection {
  * ```
  */
 export type UnassertedSectionReason =
-  | "outside-section-catalog"
-  | "not-unconditionally-required"
-  | "assertion-would-tighten-parse";
+  "outside-section-catalog" | "not-unconditionally-required" | "assertion-would-tighten-parse";
 
 /**
  * Whether a {@link RequiredSectionStatus}'s key set was **computed for this
