@@ -30,11 +30,13 @@ import { describe, expect, it } from "vitest";
 const WORKFLOW_PATH = ".github/workflows/release.yml";
 
 /**
- * The shared release pipeline this caller exists to invoke, at the published reference every
- * caller in `.github/workflows/` names. Moving the reference moves this constant in the same change.
+ * The shared release pipeline this caller exists to invoke, pinned to the commit of the published
+ * reference every caller in `.github/workflows/` names (`workflows-2026-11-07-498c7c13c886`, written
+ * beside it as a comment, which the reader below drops). Moving the reference moves this constant in
+ * the same change.
  */
 const SHARED_RELEASE_WORKFLOW =
-  "cosyte/.github/.github/workflows/release.yml@workflows-2026-11-07-498c7c13c886";
+  "cosyte/.github/.github/workflows/release.yml@498c7c13c8869bf11b67fa8324684ec2dc691ec6";
 
 const ROOT = join(import.meta.dirname, "..");
 
