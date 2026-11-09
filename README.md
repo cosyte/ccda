@@ -266,7 +266,7 @@ The full reference is on [docs.cosyte.com/ccda](https://docs.cosyte.com/ccda):
 
 Questions, bug reports, and quirks from the systems you receive documents from go in
 [GitHub issues](https://github.com/cosyte/ccda/issues). Use synthetic data only, never a real
-patient's. For help with a C-CDA integration, see our
+patient's. Need a C-CDA integration built, or hosted and run for you? See our
 [integration services](https://cosyte.com/integration-services).
 
 ## Security
