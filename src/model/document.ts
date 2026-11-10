@@ -143,6 +143,27 @@ export interface ProfileAttribution {
 }
 
 /**
+ * The mark every {@link CcdaDocument} carries on its prototype. It is a registered symbol, so a
+ * document made by the CommonJS build still reads as a document to the ES module build (and the
+ * reverse), where an `instanceof` check would refuse it. @internal
+ */
+const DOCUMENT_BRAND: unique symbol = Symbol.for("@cosyte/ccda.CcdaDocument");
+
+/**
+ * Whether `value` is a {@link CcdaDocument} made by this package, from either of its builds. A
+ * plain object with a `toString` is not one, whatever it returns.
+ *
+ * @internal
+ */
+export function isCcdaDocument(value: unknown): value is CcdaDocument {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { readonly [DOCUMENT_BRAND]?: unknown })[DOCUMENT_BRAND] === true
+  );
+}
+
+/**
  * The immutable parsed C-CDA document. Carries the recognized identity, the
  * header, the top-level sections (empty for an unstructured document, see
  * `nonXmlBody`), and the frozen lenient-parse warnings.
@@ -200,6 +221,11 @@ export class CcdaDocument {
 
   /** Spec-clean XML snapshot of the source DOM; `undefined` for a hand-constructed doc. @internal */
   readonly #serialized: string | undefined;
+
+  static {
+    // On the prototype rather than each instance, so a document's own keys stay its model fields.
+    Object.defineProperty(this.prototype, DOCUMENT_BRAND, { value: true });
+  }
 
   /**
    * Construct a `CcdaDocument`. Freezes the `warnings` array (after a `slice`)

@@ -14,6 +14,7 @@ import {
   type BuildCcdaInit,
   type BuildCcdaResult,
   type BuildCode,
+  type SectionEdit,
   type TerminologyAdapter,
   type TerminologyCoding,
 } from "../src/index.js";
@@ -293,5 +294,172 @@ describe("a null value form beside a real one, from an untyped caller", () => {
         ],
       }),
     ).toThrow(/must set exactly one of `quantity`, `codedValue`, or `stringValue`/u);
+  });
+});
+
+describe("a null or missing coded value from an untyped caller", () => {
+  // The types make each of these a `BuildCode`; a caller without them (a JSON row with an empty
+  // column) can pass `null`, or leave a required one out. Each reached the narrative builder and
+  // threw a raw "Cannot read properties of null" `TypeError`. A required code is now refused with a
+  // `TypeError` that names its field, and an optional one that is `null` reads as absent, the same
+  // as a missing key, in the narrative and in the entry alike.
+  const DOC = { documentId: "DOC-NULL-1", effectiveTime: "20240102030405+0000" } as const;
+  const untyped = (value: Record<string, unknown>): BuildCcdaInit => {
+    const init: unknown = { patient: PATIENT, ...DOC, ...value };
+    return init as BuildCcdaInit;
+  };
+  const code = (c: string, displayName: string): BuildCode => ({ code: c, displayName });
+
+  it("refuses an allergy whose allergen is null with the documented allergy error", () => {
+    expect(() => buildCcda(untyped({ allergies: [{ allergen: null }] }))).toThrow(
+      "buildCcda: each allergy must set either `allergen` or `noKnownAllergy: true`.",
+    );
+  });
+
+  it("still builds a no-known-allergies entry whose allergen is null", () => {
+    const doc = buildCcda(untyped({ allergies: [{ allergen: null, noKnownAllergy: true }] }));
+    expect(doc.getAllergies()[0]?.allergies[0]?.noKnownAllergy).toBe(true);
+  });
+
+  const required: readonly {
+    readonly field: string;
+    readonly init: (value: unknown) => Record<string, unknown>;
+  }[] = [
+    { field: "problems[].problem", init: (v) => ({ problems: [{ problem: v }] }) },
+    { field: "medications[].drug", init: (v) => ({ medications: [{ drug: v }] }) },
+    {
+      field: "results[].results[].test",
+      init: (v) => ({
+        results: [{ code: code("24323-8", "Panel"), results: [{ test: v, stringValue: "x" }] }],
+      }),
+    },
+    {
+      field: "vitalSigns[].vitals[].code",
+      init: (v) => ({
+        vitalSigns: [{ vitals: [{ code: v, quantity: { value: 1, unit: "kg" } }] }],
+      }),
+    },
+    { field: "immunizations[].vaccine", init: (v) => ({ immunizations: [{ vaccine: v }] }) },
+    { field: "procedures[].code", init: (v) => ({ procedures: [{ code: v }] }) },
+    { field: "encounters[].type", init: (v) => ({ encounters: [{ type: v }] }) },
+    {
+      field: "functionalStatusScales[].code",
+      init: (v) => ({ functionalStatusScales: [{ code: v, score: 1 }] }),
+    },
+    {
+      field: "mentalStatusScales[].code",
+      init: (v) => ({ mentalStatusScales: [{ code: v, score: 1 }] }),
+    },
+    {
+      field: "pastMedicalHistory[].problem",
+      init: (v) => ({ pastMedicalHistory: [{ problem: v }] }),
+    },
+    {
+      field: "dischargeDiagnoses[].problem",
+      init: (v) => ({ documentType: "dischargeSummary", dischargeDiagnoses: [{ problem: v }] }),
+    },
+    {
+      field: "planOfTreatment[].code",
+      init: (v) => ({ planOfTreatment: [{ kind: "procedure", code: v }] }),
+    },
+  ];
+
+  it.each(
+    required.flatMap((r) =>
+      [
+        { value: null, got: "null" },
+        { value: undefined, got: "missing" },
+        { value: "Essential hypertension", got: "of type string" },
+      ].map((v) => ({ ...r, ...v })),
+    ),
+  )(
+    "refuses $field set to $value with a TypeError naming the field",
+    ({ field, init, value, got }) => {
+      let thrown: unknown;
+      try {
+        buildCcda(untyped(init(value)));
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown).toBeInstanceOf(TypeError);
+      const message = (thrown as TypeError).message;
+      expect(message).toBe(
+        `buildCcda: \`${field}\` is required as a code with a \`displayName\`, and it was ${got}. ` +
+          "Supply the code.",
+      );
+      // A string where the code belongs may be document text, and is never echoed back.
+      expect(message).not.toContain("hypertension");
+    },
+  );
+
+  const optional: readonly {
+    readonly name: string;
+    readonly withNull: Record<string, unknown>;
+    readonly without: Record<string, unknown>;
+  }[] = [
+    {
+      name: "smokingStatus[].value",
+      withNull: { smokingStatus: [{ value: null }] },
+      without: { smokingStatus: [{}] },
+    },
+    {
+      name: "functionalStatus[].value",
+      withNull: { functionalStatus: [{ value: null }] },
+      without: { functionalStatus: [{}] },
+    },
+    {
+      name: "mentalStatus[].value",
+      withNull: { mentalStatus: [{ value: null }] },
+      without: { mentalStatus: [{}] },
+    },
+    {
+      name: "functionalStatusOrganizers[].findings[].value",
+      withNull: { functionalStatusOrganizers: [{ findings: [{ value: null }] }] },
+      without: { functionalStatusOrganizers: [{ findings: [{}] }] },
+    },
+    {
+      name: "mentalStatusOrganizers[].findings[].value",
+      withNull: { mentalStatusOrganizers: [{ findings: [{ value: null }] }] },
+      without: { mentalStatusOrganizers: [{ findings: [{}] }] },
+    },
+    {
+      name: "functionalStatusOrganizers[].selfCareActivities[].code and .value",
+      withNull: {
+        functionalStatusOrganizers: [
+          { findings: [{}], selfCareActivities: [{ code: null, value: null }] },
+        ],
+      },
+      without: { functionalStatusOrganizers: [{ findings: [{}], selfCareActivities: [{}] }] },
+    },
+    {
+      name: "familyHistory[].relative.relationship and observations[].condition",
+      withNull: {
+        familyHistory: [{ relative: { relationship: null }, observations: [{ condition: null }] }],
+      },
+      without: { familyHistory: [{ relative: {}, observations: [{}] }] },
+    },
+  ];
+
+  it.each(optional)("reads $name set to null as absent", ({ withNull, without }) => {
+    const expected = buildCcda(untyped(without));
+    const actual = buildCcda(untyped(withNull));
+    expect(serializeCcda(actual)).toBe(serializeCcda(expected));
+    expect(actual.warnings).toStrictEqual(expected.warnings);
+  });
+
+  it("treats the same shapes the same way through editCcda", () => {
+    const source = buildCcda({ patient: PATIENT });
+    const edit = (kind: string, content: unknown): SectionEdit => {
+      const section: unknown = { kind, content };
+      return section as SectionEdit;
+    };
+    expect(() => editCcda(source, { sections: [edit("problems", [{ problem: null }])] })).toThrow(
+      "buildCcda: `problems[].problem` is required",
+    );
+    expect(() => editCcda(source, { sections: [edit("allergies", [{ allergen: null }])] })).toThrow(
+      "buildCcda: each allergy must set either `allergen` or `noKnownAllergy: true`.",
+    );
+    const edited = editCcda(source, { sections: [edit("socialHistory", [{ value: null }])] });
+    expect(serializeCcda(edited)).toContain("Smoking status unknown");
   });
 });

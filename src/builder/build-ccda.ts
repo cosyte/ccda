@@ -2455,9 +2455,22 @@ function assertResolutionConsistent(
  * @internal
  */
 function narrativeLabel(code: BuildCode, field: string): string {
-  // Widened to `unknown`: `displayName` is a required `string` in the type, so
-  // the runtime guard exists for untyped (JS) callers, exactly as the
-  // `documentType` guard in `buildCcda` does.
+  // Widened to `unknown`: the code and its `displayName` are required in the
+  // type, so the runtime guards exist for untyped (JS) callers, exactly as the
+  // `documentType` guard in `buildCcda` does. A code that is missing or `null`
+  // is refused by name here, before any of it is read; reading `displayName`
+  // off it threw a bare "Cannot read properties of null" that named no field.
+  const value: unknown = code;
+  if (typeof value !== "object" || value === null) {
+    // The message names the field and the JavaScript type, never the value: a
+    // string passed where the code belongs may be document text.
+    const got =
+      value === null ? "null" : value === undefined ? "missing" : `of type ${typeof value}`;
+    throw new TypeError(
+      `buildCcda: \`${field}\` is required as a code with a \`displayName\`, and it was ` +
+        `${got}. Supply the code.`,
+    );
+  }
   const displayName: unknown = code.displayName;
   if (typeof displayName !== "string" || displayName.trim() === "") {
     throw new TypeError(
@@ -2468,6 +2481,18 @@ function narrativeLabel(code: BuildCode, field: string): string {
     );
   }
   return displayName;
+}
+
+/**
+ * Whether an optional input is supplied. `null` counts as absent, the same as
+ * `undefined`: the field types admit neither, so an untyped caller passing
+ * `null` (a JSON row with an empty column, say) supplied nothing there. Every
+ * optional coded value that has a fallback reads through this in its narrative
+ * and its entry alike, so the two cannot disagree about whether it was given.
+ * @internal
+ */
+function isSupplied<T>(v: T | null | undefined): v is T {
+  return v !== undefined && v !== null;
 }
 
 function concernEffectiveTime(
@@ -3658,7 +3683,7 @@ function allergiesSection(
     let label: string;
     if (a.noKnownAllergy === true) {
       label = NO_KNOWN_ALLERGY_NARRATIVE;
-    } else if (a.allergen === undefined) {
+    } else if (!isSupplied(a.allergen)) {
       throw new TypeError(
         "buildCcda: each allergy must set either `allergen` or `noKnownAllergy: true`.",
       );
@@ -3713,7 +3738,7 @@ function allergyEntry(
   obs.appendChild(
     cdValue(doc, a.type ?? { code: "419199007", displayName: "Allergy to substance" }, SNOMED_CT),
   );
-  if (!nka && a.allergen !== undefined) {
+  if (!nka && isSupplied(a.allergen)) {
     obs.appendChild(allergenParticipant(doc, a.allergen, translate));
   } else {
     /* v8 ignore else -- allergiesSection throws for an allergy with neither allergen nor noKnownAllergy */
@@ -4060,38 +4085,28 @@ function resultObservation(
 }
 
 /**
- * Whether a result value form is set. `null` counts as absent, the same as
- * `undefined`: the field types admit neither, so an untyped caller passing
- * `null` (a JSON row with an empty column, say) set no value in that form.
- * @internal
- */
-function isValueForm<T>(v: T | null | undefined): v is T {
-  return v !== undefined && v !== null;
-}
-
-/**
  * Build a result's typed `<value>`, enforcing **exactly one** value form. A UCUM
  * `quantity` → `xsi:type="PQ"`; a `codedValue` → `xsi:type="CD"` (SNOMED CT by
  * default); a `stringValue` → `xsi:type="ST"`. Throws when none (or more than
  * one) is set, a result value is never dropped or invented. A `null` form is
- * absent ({@link isValueForm}), in the count and in the choice of form alike.
+ * absent ({@link isSupplied}), in the count and in the choice of form alike.
  * @internal
  */
 function observationValue(doc: Document, testCode: BuildCode, r: BuildCcdaResult): Element {
   // The count and every branch below use the same test, so a `null` form is absent in both: a
   // branch that read `!== undefined` would take `{ quantity: null, stringValue: "high" }` past the
   // count and into `null.value`.
-  const forms = [r.quantity, r.codedValue, r.stringValue].filter(isValueForm).length;
+  const forms = [r.quantity, r.codedValue, r.stringValue].filter(isSupplied).length;
   if (forms !== 1) {
     throw new TypeError(
       `buildCcda: result "${testCode.displayName}" must set exactly one of ` +
         "`quantity`, `codedValue`, or `stringValue`.",
     );
   }
-  if (isValueForm(r.quantity)) {
+  if (isSupplied(r.quantity)) {
     return typedValue(doc, "PQ", { value: r.quantity.value.toString(), unit: r.quantity.unit });
   }
-  if (isValueForm(r.codedValue)) {
+  if (isSupplied(r.codedValue)) {
     return typedValue(doc, "CD", {
       code: r.codedValue.code,
       codeSystem: r.codedValue.codeSystem ?? SNOMED_CT,
@@ -4108,10 +4123,10 @@ function observationValue(doc: Document, testCode: BuildCode, r: BuildCcdaResult
 /** A human-readable narrative line for a result/vital observation. @internal */
 function observationNarrative(code: BuildCode, r: BuildCcdaResult): string {
   const test = narrativeLabel(code, "results[].results[].test");
-  if (isValueForm(r.quantity)) {
+  if (isSupplied(r.quantity)) {
     return `${test}: ${r.quantity.value.toString()} ${r.quantity.unit}`;
   }
-  if (isValueForm(r.codedValue)) {
+  if (isSupplied(r.codedValue)) {
     return `${test}: ${narrativeLabel(r.codedValue, "results[].results[].codedValue")}`;
   }
   /* v8 ignore next -- resultObservation calls observationValue first, which admits exactly one non-null form, and quantity and codedValue are not it, so stringValue is neither null nor undefined */
@@ -4580,7 +4595,7 @@ function smokingStatusLabel(s: BuildCcdaSmokingStatus): string {
   // An ABSENT `value` is genuinely an unknown status and keeps its fallback; a
   // `value` that is PRESENT but carries no `displayName` is refused, because
   // "unknown" beside a coded status is a narrative the entry contradicts.
-  return s.value === undefined
+  return !isSupplied(s.value)
     ? "Smoking status unknown"
     : narrativeLabel(s.value, "smokingStatus[].value");
 }
@@ -4664,7 +4679,7 @@ function smokingStatusEntry(
   // flagged SMOKING_STATUS_UNKNOWN, NEVER defaulted to a real reading such as
   // "never smoker" (absent status ≠ non-smoker; the single safety rule here).
   obs.appendChild(
-    s.value === undefined
+    !isSupplied(s.value)
       ? typedValue(doc, "CD", { nullFlavor: "UNK" })
       : cdValue(doc, s.value, SNOMED_CT),
   );
@@ -4684,7 +4699,7 @@ function functionalStatusLabel(s: BuildCcdaFunctionalStatus, field: string): str
   // passed in rather than fixed here because this finding shape reaches the
   // narrative from TWO input paths, and a refusal naming the one the caller did
   // not use is a diagnostic about a field they never set.
-  const value = s.value === undefined ? "unknown" : narrativeLabel(s.value, field);
+  const value = isSupplied(s.value) ? narrativeLabel(s.value, field) : "unknown";
   return `${FUNCTIONAL_STATUS_CODE.displayName}: ${value}`;
 }
 
@@ -4786,7 +4801,7 @@ function functionalStatusObservation(
   // SHALL value [1..1] (CONF:1098-13932; SHOULD be SNOMED CT for a CD). An omitted
   // finding is an EXPLICIT nullFlavor="UNK", never defaulted to a real finding.
   obs.appendChild(
-    s.value === undefined
+    !isSupplied(s.value)
       ? typedValue(doc, "CD", { nullFlavor: "UNK" })
       : cdValue(doc, s.value, SNOMED_CT),
   );
@@ -4803,14 +4818,12 @@ function functionalStatusObservation(
  * own code. @internal
  */
 function selfCareActivityLabel(activity: BuildCcdaSelfCareActivity): string {
-  const what =
-    activity.code === undefined
-      ? "Self-care activity"
-      : narrativeLabel(activity.code, "functionalStatusOrganizers[].selfCareActivities[].code");
-  const ability =
-    activity.value === undefined
-      ? "unknown"
-      : narrativeLabel(activity.value, "functionalStatusOrganizers[].selfCareActivities[].value");
+  const what = !isSupplied(activity.code)
+    ? "Self-care activity"
+    : narrativeLabel(activity.code, "functionalStatusOrganizers[].selfCareActivities[].code");
+  const ability = !isSupplied(activity.value)
+    ? "unknown"
+    : narrativeLabel(activity.value, "functionalStatusOrganizers[].selfCareActivities[].value");
   return `${what}: ${ability}`;
 }
 
@@ -4841,7 +4854,7 @@ function selfCareActivityObservation(
     el(doc, "id", { root: SYNTH_ROOT, extension: id("adl") }),
     // SHALL code [1..1] (SHOULD be ADL Result Type, CONF:1098-28153). An omitted
     // activity is an EXPLICIT nullFlavor="UNK", never a fabricated activity.
-    activity.code === undefined
+    !isSupplied(activity.code)
       ? el(doc, "code", { nullFlavor: "UNK" })
       : codeEl(doc, "code", { ...activity.code, codeSystem: activity.code.codeSystem ?? LOINC }),
     el(doc, "text", undefined, el(doc, "reference", { value: `#${contentId}` })),
@@ -4860,7 +4873,7 @@ function selfCareActivityObservation(
   // SHALL value [1..1] with xsi:type="CD" (CONF:1098-28042). An omitted ability
   // is an EXPLICIT nullFlavor="UNK", never defaulted to a real ability.
   obs.appendChild(
-    activity.value === undefined
+    !isSupplied(activity.value)
       ? typedValue(doc, "CD", { nullFlavor: "UNK" })
       : cdValue(doc, activity.value, SNOMED_CT),
   );
@@ -4971,7 +4984,7 @@ function functionalStatusOrganizerEntries(
 function mentalStatusLabel(s: BuildCcdaMentalStatus, field: string): string {
   // See `functionalStatusLabel` for why `field` is a parameter: this finding shape
   // reaches the narrative from two input paths.
-  const value = s.value === undefined ? "unknown" : narrativeLabel(s.value, field);
+  const value = isSupplied(s.value) ? narrativeLabel(s.value, field) : "unknown";
   return `${MENTAL_STATUS_CODE.displayName}: ${value}`;
 }
 
@@ -5093,7 +5106,7 @@ function mentalStatusObservation(
   // SHALL value [1..1] (SHOULD be SNOMED CT for a CD). An omitted finding is an
   // EXPLICIT nullFlavor="UNK", never defaulted to a real finding.
   obs.appendChild(
-    s.value === undefined
+    !isSupplied(s.value)
       ? typedValue(doc, "CD", { nullFlavor: "UNK" })
       : cdValue(doc, s.value, SNOMED_CT),
   );
@@ -5726,14 +5739,12 @@ function familyHistoryLabel(
   // fallback (the caller stated nothing), one supplied without a `displayName` is
   // refused rather than narrated as "Relative"/"unknown condition" beside a code
   // the entry does carry.
-  const who =
-    relative.relationship === undefined
-      ? "Relative"
-      : narrativeLabel(relative.relationship, "familyHistory[].relative.relationship");
-  const what =
-    obs.condition === undefined
-      ? "unknown condition"
-      : narrativeLabel(obs.condition, "familyHistory[].observations[].condition");
+  const who = !isSupplied(relative.relationship)
+    ? "Relative"
+    : narrativeLabel(relative.relationship, "familyHistory[].relative.relationship");
+  const what = !isSupplied(obs.condition)
+    ? "unknown condition"
+    : narrativeLabel(obs.condition, "familyHistory[].observations[].condition");
   return `${who}: ${what}`;
 }
 
@@ -5830,7 +5841,7 @@ function familyMemberSubject(doc: Document, relative: BuildCcdaFamilyMember): El
   // SHALL code [1..1], the coded relation. An omitted relationship is an
   // EXPLICIT nullFlavor="UNK", never defaulted to a real relation.
   relatedSubject.appendChild(
-    relative.relationship === undefined
+    !isSupplied(relative.relationship)
       ? el(doc, "code", { nullFlavor: "UNK" })
       : codeEl(doc, "code", {
           ...relative.relationship,
@@ -5938,7 +5949,7 @@ function familyHistoryObservation(
   // SHALL value [1..1], the coded condition. An omitted condition is an EXPLICIT
   // nullFlavor="UNK", never defaulted to a real illness.
   observation.appendChild(
-    obs.condition === undefined
+    !isSupplied(obs.condition)
       ? typedValue(doc, "CD", { nullFlavor: "UNK" })
       : cdValue(doc, obs.condition, SNOMED_CT),
   );
