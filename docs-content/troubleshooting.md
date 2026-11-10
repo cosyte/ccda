@@ -563,13 +563,14 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
   plus `setId` / `versionNumber`), or no revision at all with `revision: false`. The `APND` (append)
   and `XFRM` (transform) document relationships are not emitted.
 - **An edit needs a parsed source, and a section edit needs a `structuredBody`.** A hand-constructed
-  document throws `CcdaEditError` (`NO_SOURCE_DOCUMENT`). A document with no `structuredBody`, such
-  as an Unstructured Document, throws `NO_STRUCTURED_BODY` **only when you actually pass a section
-  edit**: with no `sections`, `editCcda` just stamps the revision and returns, so a revision-only
-  edit of an Unstructured Document succeeds. A revision of a source carrying no `ClinicalDocument.id`
-  throws `SOURCE_MISSING_ID` rather than inventing the id the `RPLC` link has to name, and an edit
-  that would drop a SHALL required section throws `REQUIRED_SECTION_MISSING` instead of emitting a
-  non-conformant document.
+  document throws `CcdaEditError` (`NO_SOURCE_DOCUMENT`), and so does any value that is not a
+  `CcdaDocument`, such as a plain object or the XML text itself. A document with no
+  `structuredBody`, such as an Unstructured Document, throws `NO_STRUCTURED_BODY` **only when you
+  actually pass a section edit**: with no `sections`, `editCcda` just stamps the revision and
+  returns, so a revision-only edit of an Unstructured Document succeeds. A revision of a source
+  carrying no `ClinicalDocument.id` throws `SOURCE_MISSING_ID` rather than inventing the id the
+  `RPLC` link has to name, and an edit that would drop a SHALL required section throws
+  `REQUIRED_SECTION_MISSING` instead of emitting a non-conformant document.
 - **On this path the terminology adapter validates but does not translate.** `editCcda` forwards a
   supplied adapter to its final re-parse, so a rejected code in the edited document is still flagged
   `SEMANTIC_CODE_INVALID`. It does not emit `<translation>` alternates into the section it rebuilds;

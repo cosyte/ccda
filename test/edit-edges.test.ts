@@ -5,13 +5,14 @@
  * sibling to sit before. Every document here is synthetic.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DOMParser } from "@xmldom/xmldom";
 import type { Element } from "@xmldom/xmldom";
 
 import {
   buildCcda,
-  CcdaParseError,
+  CcdaDocument as CcdaDocumentClass,
+  CcdaEditError,
   editCcda,
   parseCcda,
   type CcdaDocument,
@@ -208,22 +209,56 @@ describe("editCcda on a header-only source", () => {
   });
 });
 
-describe("editCcda on a forged source whose XML has no root element", () => {
-  // An untyped caller can hand editCcda any object with a `toString`. When that string has no root
-  // element, the re-parse refuses it with the parse fatal, so no edit runs and no document is made.
+describe("editCcda on a source that is not a CcdaDocument", () => {
+  // An untyped caller can hand editCcda anything. Only a document from parseCcda or buildCcda
+  // carries XML to edit, so anything else is refused with the error the signature documents, before
+  // any of it is read as XML. Before this, a plain object reached the re-parse as "[object Object]"
+  // and surfaced as a parse fatal the signature does not name.
+  const xml = buildCcda({ patient: PATIENT }).toString();
   it.each([
-    { name: "an empty string", xml: "" },
-    { name: "only a comment", xml: "<!-- synthetic -->" },
-    { name: "only an XML declaration", xml: '<?xml version="1.0"?>' },
-  ])("refuses $name with NOT_WELL_FORMED_XML", ({ xml }) => {
-    const forged = { toString: () => xml, templateIds: [] } as unknown as CcdaDocument;
+    { name: "an empty object", source: {} },
+    { name: "null", source: null },
+    { name: "undefined", source: undefined },
+    { name: "a number", source: 42 },
+    { name: "the XML text itself", source: xml },
+    { name: "an object with a templateIds array", source: { templateIds: [] } },
+    {
+      name: "a forged object with an empty toString",
+      source: { toString: () => "", templateIds: [] },
+    },
+    {
+      name: "a forged object returning real XML",
+      source: { toString: () => xml, templateIds: [] },
+    },
+    {
+      name: "a forged object with only a comment",
+      source: { toString: () => "<!-- synthetic -->" },
+    },
+  ])("refuses $name with CcdaEditError NO_SOURCE_DOCUMENT", ({ source }) => {
     let thrown: unknown;
     try {
-      editCcda(forged);
+      editCcda(source as unknown as CcdaDocument);
     } catch (err) {
       thrown = err;
     }
-    expect(thrown).toBeInstanceOf(CcdaParseError);
-    expect((thrown as CcdaParseError).code).toBe("NOT_WELL_FORMED_XML");
+    expect(thrown).toBeInstanceOf(CcdaEditError);
+    expect((thrown as CcdaEditError).code).toBe("NO_SOURCE_DOCUMENT");
+    expect((thrown as CcdaEditError).message).not.toContain("ClinicalDocument");
+  });
+
+  it("still edits a document from parseCcda and one from buildCcda", () => {
+    expect(editCcda(parseCcda(xml)).header.versionNumber).toBe(2);
+    expect(editCcda(buildCcda({ patient: PATIENT })).header.versionNumber).toBe(2);
+  });
+
+  it("edits a document made by a second copy of the package", async () => {
+    // The CommonJS and ES module builds each carry their own CcdaDocument class, so an application
+    // that loads both can hand one build's document to the other's editCcda. A fresh module graph
+    // stands in for the second build: its class is a different one, as `instanceof` shows.
+    vi.resetModules();
+    const other = await import("../src/index.js");
+    const foreign = other.parseCcda(xml);
+    expect(foreign).not.toBeInstanceOf(CcdaDocumentClass);
+    expect(editCcda(foreign).header.versionNumber).toBe(2);
   });
 });

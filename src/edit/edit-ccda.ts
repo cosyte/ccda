@@ -67,7 +67,7 @@ import {
 import type { EditableSectionKind, SectionInput } from "../builder/build-ccda.js";
 import { el } from "../builder/dom.js";
 import { LOINC } from "../model/code-systems.js";
-import { readDocumentTemplate, type CcdaDocument } from "../model/document.js";
+import { isCcdaDocument, readDocumentTemplate, type CcdaDocument } from "../model/document.js";
 import { attr, child, childElements, children } from "../model/dom.js";
 import type { TerminologyAdapter } from "../model/terminology.js";
 import type { II } from "../model/types/ii.js";
@@ -340,8 +340,9 @@ export class CcdaEditError extends Error {
  * revision that supersedes the source. See the module overview for the full
  * contract.
  *
- * @param source - A document produced by {@link parseCcda} (it must retain its
- *   source XML, a hand-constructed document throws `NO_SOURCE_DOCUMENT`).
+ * @param source - A document produced by {@link parseCcda} or `buildCcda`
+ *   (it must retain its source XML: a hand-constructed document, or a value that
+ *   is not a `CcdaDocument` at all, throws `NO_SOURCE_DOCUMENT`).
  * @param options - The section edits to apply, the revision behavior, and an
  *   optional bring-your-own `terminology` adapter forwarded to the final re-parse
  *   so the edited document flags adapter-rejected codes (`SEMANTIC_CODE_INVALID`).
@@ -349,7 +350,8 @@ export class CcdaEditError extends Error {
  *   emit-time diagnostic about what this call grafted (today only
  *   `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME`, appended last). The `source` is
  *   never mutated.
- * @throws {@link CcdaEditError} when the source has no retained XML, has no
+ * @throws {@link CcdaEditError} when the source is not a `CcdaDocument` or has
+ *   no retained XML, has no
  *   `structuredBody` to edit, violates an add/replace precondition, would drop a
  *   SHALL required section, or (when stamping a revision) has no usable
  *   `ClinicalDocument.id` for the RPLC link to name, absent or `nullFlavor`-marked
@@ -378,10 +380,11 @@ export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): C
   // carries no Tier-2 deviations to record, and any Tier-3 fatal is impossible.
   const dom = parseSecureXml(xml, DEFAULT_LIMITS, () => undefined);
   const root = dom.documentElement;
-  /* v8 ignore if -- parseSecureXml throws NOT_WELL_FORMED_XML for XML with no root element, so a re-parse that returns has one */
+  /* v8 ignore if -- a CcdaDocument retains only XML this package emitted, which always has a root element */
   if (root === null) {
-    // Unreachable: a source from parseCcda re-parses to its ClinicalDocument, and a forged source
-    // whose XML has no root element is refused by parseSecureXml above with NOT_WELL_FORMED_XML.
+    // Unreachable: sourceXml refuses anything that is not a CcdaDocument, a CcdaDocument retains the
+    // XML its parse read (which had a root element), and parseSecureXml throws NOT_WELL_FORMED_XML
+    // for XML with none in any case.
     throw new CcdaEditError("NO_SOURCE_DOCUMENT", "editCcda: source produced no document element.");
   }
 
@@ -433,8 +436,21 @@ export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): C
   return diagnostics.length === 0 ? parsed : parsed.withWarnings(diagnostics);
 }
 
-/** Recover the source XML a parsed document retains, or throw `NO_SOURCE_DOCUMENT`. @internal */
+/**
+ * Recover the source XML a parsed document retains, or throw `NO_SOURCE_DOCUMENT`. Anything that is
+ * not a {@link CcdaDocument} is refused before it is read: its `toString` is not this package's, so
+ * what it returns is not XML this package emitted (a plain object gives `"[object Object]"`). @internal
+ */
 function sourceXml(source: CcdaDocument): string {
+  // Widened to `unknown`: the parameter is typed, so this guard exists for untyped (JS) callers.
+  const value: unknown = source;
+  if (!isCcdaDocument(value)) {
+    throw new CcdaEditError(
+      "NO_SOURCE_DOCUMENT",
+      "editCcda: the source is not a CcdaDocument. Pass a document produced by parseCcda or " +
+        "buildCcda.",
+    );
+  }
   try {
     return source.toString();
   } catch {
