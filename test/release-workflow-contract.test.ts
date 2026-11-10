@@ -31,12 +31,12 @@ const WORKFLOW_PATH = ".github/workflows/release.yml";
 
 /**
  * The shared release pipeline this caller exists to invoke, pinned to the commit of the published
- * reference every caller in `.github/workflows/` names (`workflows-2026-11-08-c0db8d8e5927`, written
+ * reference every caller in `.github/workflows/` names (`workflows-2026-11-10-0be6757a7738`, written
  * beside it as a comment, which the reader below drops). Moving the reference moves this constant in
  * the same change.
  */
 const SHARED_RELEASE_WORKFLOW =
-  "cosyte/.github/.github/workflows/release.yml@c0db8d8e5927269820de4401b3b5ad6141854b76";
+  "cosyte/.github/.github/workflows/release.yml@0be6757a773885cbd5165dbfa0f93772d907b3e8";
 
 const ROOT = join(import.meta.dirname, "..");
 
