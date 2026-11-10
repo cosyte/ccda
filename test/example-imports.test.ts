@@ -53,26 +53,33 @@ describe("the @example import check", () => {
     expect(report.imports).toBe(4);
   });
 
-  it("reads a subpath entry point as public, and checks imports of it against its exports", () => {
-    const options = {
-      root: FIXTURE,
-      files: [join(FIXTURE, "subpath.ts")],
-      selfName: "@cosyte/ccda",
-      selfEntry: join(FIXTURE, "index.ts"),
-    };
-    const withSubpath = checkExampleImports({
-      ...options,
-      selfSubpaths: { "@cosyte/ccda/extra": join(FIXTURE, "subpath.ts") },
-    });
-    expect(withSubpath.findings.map((f) => [f.line, f.specifier, f.name ?? null])).toEqual([
-      [6, "@cosyte/ccda/extra", "notOnTheSubpath"],
-      [19, "./subpath.js", null],
-    ]);
-    // Without the subpath named, the package's own subpath is not a module the check can read.
-    expect(checkExampleImports(options).findings.map((f) => [f.line, f.specifier])).toEqual([
-      [6, "@cosyte/ccda/extra"],
-    ]);
-  });
+  it(
+    "reads a subpath entry point as public, and checks imports of it against its exports",
+    {
+      timeout: 30_000,
+    },
+    () => {
+      // Two programs are type-checked, each a few seconds on a loaded runner under coverage.
+      const options = {
+        root: FIXTURE,
+        files: [join(FIXTURE, "subpath.ts")],
+        selfName: "@cosyte/ccda",
+        selfEntry: join(FIXTURE, "index.ts"),
+      };
+      const withSubpath = checkExampleImports({
+        ...options,
+        selfSubpaths: { "@cosyte/ccda/extra": join(FIXTURE, "subpath.ts") },
+      });
+      expect(withSubpath.findings.map((f) => [f.line, f.specifier, f.name ?? null])).toEqual([
+        [6, "@cosyte/ccda/extra", "notOnTheSubpath"],
+        [19, "./subpath.js", null],
+      ]);
+      // Without the subpath named, the package's own subpath is not a module the check can read.
+      expect(checkExampleImports(options).findings.map((f) => [f.line, f.specifier])).toEqual([
+        [6, "@cosyte/ccda/extra"],
+      ]);
+    },
+  );
 
   it("fails on each form of an import that does not resolve", () => {
     const report = fixture("broken.ts");

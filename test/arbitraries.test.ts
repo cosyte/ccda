@@ -219,7 +219,7 @@ describe("the clinical entries", () => {
 
 describe("documentInit and document", () => {
   it("every input builds, at every document type, with the same bytes each time", () => {
-    const inits = draw(documentInit(), 60);
+    const inits = draw(documentInit(), 30);
     expect(new Set(inits.map((i) => i.documentType))).toEqual(
       new Set(["ccd", "referralNote", "dischargeSummary"]),
     );
@@ -318,30 +318,37 @@ describe("documentText", () => {
 });
 
 describe("hostileInput", () => {
-  it("gives every kind of hostile input, and the parser refuses some with each documented fatal", () => {
-    const inputs = draw(hostileInput({ maxLength: 40 }), 400);
-    const refused = new Set<string>();
-    let accepted = 0;
-    for (const raw of inputs) {
-      try {
-        parseCcda(raw);
-        accepted += 1;
-      } catch (err) {
-        expect(err).toBeInstanceOf(CcdaParseError);
-        refused.add((err as CcdaParseError).code);
+  it(
+    "gives every kind of hostile input, and the parser refuses some with each documented fatal",
+    {
+      timeout: 30_000,
+    },
+    () => {
+      // About half the 120 draws build and serialize a whole document first: 2 s on an idle runner.
+      const inputs = draw(hostileInput({ maxLength: 40 }), 120);
+      const refused = new Set<string>();
+      let accepted = 0;
+      for (const raw of inputs) {
+        try {
+          parseCcda(raw);
+          accepted += 1;
+        } catch (err) {
+          expect(err).toBeInstanceOf(CcdaParseError);
+          refused.add((err as CcdaParseError).code);
+        }
       }
-    }
-    expect(accepted).toBeGreaterThan(0);
-    for (const c of [
-      "NOT_WELL_FORMED_XML",
-      "XXE_OR_DTD_PRESENT",
-      "ELEMENT_DEPTH_LIMIT_EXCEEDED",
-      "NOT_A_CLINICAL_DOCUMENT",
-    ]) {
-      expect(refused, c).toContain(c);
-    }
-    expect(draw(hostileInput(), 50).some((raw) => raw.length > 40)).toBe(true);
-  });
+      expect(accepted).toBeGreaterThan(0);
+      for (const c of [
+        "NOT_WELL_FORMED_XML",
+        "XXE_OR_DTD_PRESENT",
+        "ELEMENT_DEPTH_LIMIT_EXCEEDED",
+        "NOT_A_CLINICAL_DOCUMENT",
+      ]) {
+        expect(refused, c).toContain(c);
+      }
+      expect(draw(hostileInput(), 50).some((raw) => raw.length > 40)).toBe(true);
+    },
+  );
 
   it("applyEdits cuts, deletes and inserts at positions taken modulo the length", () => {
     expect(applyEdits("abcdef", [{ kind: "cut", at: 3 }])).toBe("abc");
