@@ -9,7 +9,14 @@ import { describe, expect, it } from "vitest";
 import { DOMParser } from "@xmldom/xmldom";
 import type { Element } from "@xmldom/xmldom";
 
-import { buildCcda, editCcda, parseCcda, type SectionEdit } from "../src/index.js";
+import {
+  buildCcda,
+  CcdaParseError,
+  editCcda,
+  parseCcda,
+  type CcdaDocument,
+  type SectionEdit,
+} from "../src/index.js";
 import {
   buildCcda as fixtureCcda,
   PROBLEMS_SECTION,
@@ -198,5 +205,25 @@ describe("editCcda on a header-only source", () => {
     expect(edited.header.versionNumber).toBe(2);
     expect(edited.header.relatedDocuments[0]?.typeCode).toBe("RPLC");
     expect(edited.header.relatedDocuments[0]?.parentDocument.ids[0]?.extension).toBe("DOC123");
+  });
+});
+
+describe("editCcda on a forged source whose XML has no root element", () => {
+  // An untyped caller can hand editCcda any object with a `toString`. When that string has no root
+  // element, the re-parse refuses it with the parse fatal, so no edit runs and no document is made.
+  it.each([
+    { name: "an empty string", xml: "" },
+    { name: "only a comment", xml: "<!-- synthetic -->" },
+    { name: "only an XML declaration", xml: '<?xml version="1.0"?>' },
+  ])("refuses $name with NOT_WELL_FORMED_XML", ({ xml }) => {
+    const forged = { toString: () => xml, templateIds: [] } as unknown as CcdaDocument;
+    let thrown: unknown;
+    try {
+      editCcda(forged);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(CcdaParseError);
+    expect((thrown as CcdaParseError).code).toBe("NOT_WELL_FORMED_XML");
   });
 });
