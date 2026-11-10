@@ -2659,42 +2659,50 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
   // names, and NOT in the Discharge Medications Section: nothing in the input
   // says a medication is one the patient was discharged on, and placing it there
   // would assert that it is.
-  if (!shall.has("problems") && (init.problems?.length ?? 0) > 0) {
-    structuredBody.appendChild(problemsSection(doc, init.problems ?? [], id, translate));
+  const problems = init.problems ?? [];
+  if (!shall.has("problems") && problems.length > 0) {
+    structuredBody.appendChild(problemsSection(doc, problems, id, translate));
   }
-  if (!shall.has("medications") && (init.medications?.length ?? 0) > 0) {
-    structuredBody.appendChild(medicationsSection(doc, init.medications ?? [], id, translate));
+  const medications = init.medications ?? [];
+  if (!shall.has("medications") && medications.length > 0) {
+    structuredBody.appendChild(medicationsSection(doc, medications, id, translate));
   }
 
   // Results / Vital Signs are always-on SHALL sections for a CCD but *optional*
   // for a Referral Note, emit them here only when they are not this type's SHALL
   // section AND the caller supplied content (never a fabricated empty one).
-  if (!shall.has("results") && (init.results?.length ?? 0) > 0) {
-    structuredBody.appendChild(resultsSection(doc, init.results ?? [], id));
+  const results = init.results ?? [];
+  if (!shall.has("results") && results.length > 0) {
+    structuredBody.appendChild(resultsSection(doc, results, id));
   }
-  if (!shall.has("vitalSigns") && (init.vitalSigns?.length ?? 0) > 0) {
-    structuredBody.appendChild(vitalsSection(doc, init.vitalSigns ?? [], id));
+  const vitalSigns = init.vitalSigns ?? [];
+  if (!shall.has("vitalSigns") && vitalSigns.length > 0) {
+    structuredBody.appendChild(vitalsSection(doc, vitalSigns, id));
   }
 
   // Immunizations, Procedures, and Encounters are not CCD SHALL sections, each is
   // emitted only when populated, rather than fabricating an empty section the
   // caller did not ask for.
-  if ((init.immunizations?.length ?? 0) > 0) {
-    structuredBody.appendChild(immunizationsSection(doc, init.immunizations ?? [], id, translate));
+  const immunizations = init.immunizations ?? [];
+  if (immunizations.length > 0) {
+    structuredBody.appendChild(immunizationsSection(doc, immunizations, id, translate));
   }
-  if ((init.procedures?.length ?? 0) > 0) {
-    structuredBody.appendChild(proceduresSection(doc, init.procedures ?? [], id));
+  const procedures = init.procedures ?? [];
+  if (procedures.length > 0) {
+    structuredBody.appendChild(proceduresSection(doc, procedures, id));
   }
-  if ((init.encounters?.length ?? 0) > 0) {
-    structuredBody.appendChild(encountersSection(doc, init.encounters ?? [], id));
+  const encounters = init.encounters ?? [];
+  if (encounters.length > 0) {
+    structuredBody.appendChild(encountersSection(doc, encounters, id));
   }
   // Social History is a CCD SHALL section (CONF:1198-30688) and so is emitted by
   // the loop above for a CCD; this conditional covers the document types whose
   // SHALL set does not include it (e.g. Referral Note), where it is emitted only
   // when populated. Without the `shall.has` guard a CCD carrying a smoking status
   // would emit the section TWICE.
-  if (!shall.has("socialHistory") && (init.smokingStatus?.length ?? 0) > 0) {
-    structuredBody.appendChild(socialHistorySection(doc, init.smokingStatus ?? [], id));
+  const smokingStatus = init.smokingStatus ?? [];
+  if (!shall.has("socialHistory") && smokingStatus.length > 0) {
+    structuredBody.appendChild(socialHistorySection(doc, smokingStatus, id));
   }
   if (
     (init.functionalStatus?.length ?? 0) > 0 ||
@@ -2726,18 +2734,19 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
       ),
     );
   }
-  if ((init.pastMedicalHistory?.length ?? 0) > 0) {
-    structuredBody.appendChild(
-      pastMedicalHistorySection(doc, init.pastMedicalHistory ?? [], id, translate),
-    );
+  const pastMedicalHistory = init.pastMedicalHistory ?? [];
+  if (pastMedicalHistory.length > 0) {
+    structuredBody.appendChild(pastMedicalHistorySection(doc, pastMedicalHistory, id, translate));
   }
   // Plan of Treatment is a Referral Note SHALL section (emitted above); for a CCD
   // it is optional, emitted here only when the caller supplied planned items.
-  if (!shall.has("planOfTreatment") && (init.planOfTreatment?.length ?? 0) > 0) {
-    structuredBody.appendChild(planOfTreatmentSection(doc, init.planOfTreatment ?? [], id));
+  const planOfTreatment = init.planOfTreatment ?? [];
+  if (!shall.has("planOfTreatment") && planOfTreatment.length > 0) {
+    structuredBody.appendChild(planOfTreatmentSection(doc, planOfTreatment, id));
   }
-  if ((init.familyHistory?.length ?? 0) > 0) {
-    structuredBody.appendChild(familyHistorySection(doc, init.familyHistory ?? [], id));
+  const familyHistory = init.familyHistory ?? [];
+  if (familyHistory.length > 0) {
+    structuredBody.appendChild(familyHistorySection(doc, familyHistory, id));
   }
   root.appendChild(el(doc, "component", undefined, structuredBody));
 
@@ -3301,6 +3310,7 @@ function appendTranslations(
   const coding: TerminologyCoding = {
     system: primary.codeSystem,
     code: primary.code,
+    /* v8 ignore next -- every translated slot passes narrativeLabel first, which refuses a missing displayName */
     ...(primary.displayName !== undefined ? { display: primary.displayName } : {}),
   };
   const result = translate(coding);
@@ -3705,14 +3715,17 @@ function allergyEntry(
   );
   if (!nka && a.allergen !== undefined) {
     obs.appendChild(allergenParticipant(doc, a.allergen, translate));
-  } else if (nka) {
-    // CONF:1098-7402: the Allergy-Intolerance Observation SHALL carry exactly one
-    // participant/participantRole/playingEntity/code, on the negated form too.
-    // "No known allergies" has no substance to name, so the playing entity's code
-    // is nullFlavor="NA": not applicable, which is the fact, rather than UNK
-    // (a substance exists and is unknown) and rather than a stand-in code, which
-    // would put a substance into a negation that asserts there is none.
-    obs.appendChild(negatedAllergenParticipant(doc));
+  } else {
+    /* v8 ignore else -- allergiesSection throws for an allergy with neither allergen nor noKnownAllergy */
+    if (nka) {
+      // CONF:1098-7402: the Allergy-Intolerance Observation SHALL carry exactly one
+      // participant/participantRole/playingEntity/code, on the negated form too.
+      // "No known allergies" has no substance to name, so the playing entity's code
+      // is nullFlavor="NA": not applicable, which is the fact, rather than UNK
+      // (a substance exists and is unknown) and rather than a stand-in code, which
+      // would put a substance into a negation that asserts there is none.
+      obs.appendChild(negatedAllergenParticipant(doc));
+    }
   }
   if (a.reaction !== undefined) {
     obs.appendChild(reactionRelationship(doc, a.reaction, a.severity, id));
@@ -4073,6 +4086,7 @@ function observationValue(doc: Document, testCode: BuildCode, r: BuildCcdaResult
     });
   }
   const st = typedValue(doc, "ST");
+  /* v8 ignore next -- the check above admits exactly one form, so stringValue is set here */
   st.appendChild(doc.createTextNode(r.stringValue ?? ""));
   return st;
 }
@@ -4086,6 +4100,7 @@ function observationNarrative(code: BuildCode, r: BuildCcdaResult): string {
   if (r.codedValue !== undefined) {
     return `${test}: ${narrativeLabel(r.codedValue, "results[].results[].codedValue")}`;
   }
+  /* v8 ignore next -- resultObservation calls observationValue first, which admits exactly one form */
   return `${test}: ${r.stringValue ?? ""}`;
 }
 

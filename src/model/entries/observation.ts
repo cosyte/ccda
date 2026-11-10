@@ -135,6 +135,7 @@ export function readObservationValue(
   switch (t) {
     case "PQ": {
       const quantity = parsePq(valueEl, ctx);
+      /* v8 ignore next -- parsePq returns undefined only for an absent element, and valueEl is present */
       if (quantity === undefined) return undefined;
       checkUcumUnit(quantity, position, ctx);
       return { kind: "physicalQuantity", quantity };
@@ -142,6 +143,7 @@ export function readObservationValue(
     case "CD":
     case "CE": {
       const code = parseCd(valueEl, ctx);
+      /* v8 ignore next -- parseCd returns undefined only for an absent element, and valueEl is present */
       return code === undefined ? undefined : { kind: "coded", code };
     }
     case "ST": {
@@ -199,6 +201,7 @@ export function readObservationValue(
     }
     case "IVL_PQ": {
       const range = parseIvlPq(valueEl, ctx);
+      /* v8 ignore next -- parseIvlPq returns undefined only for an absent element, and valueEl is present */
       if (range === undefined) return undefined;
       if (range.low !== undefined) checkUcumUnit(range.low, position, ctx);
       if (range.high !== undefined) checkUcumUnit(range.high, position, ctx);

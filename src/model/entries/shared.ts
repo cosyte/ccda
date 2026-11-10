@@ -891,6 +891,7 @@ function codingsAgree(a: ProductCoding, b: ProductCoding): boolean {
  * @internal
  */
 function namesConflictingProducts(a: ArmCodings, b: ArmCodings): boolean {
+  /* v8 ignore next -- offersConflictingProducts passes only arms that name at least one coding */
   if (a.codings.length === 0 || b.codings.length === 0) return false;
   if (!a.codings.some((x) => b.codings.some((y) => codingsAgree(x, y)))) return true;
   if (!a.fromTranslation || !b.fromTranslation) return false;

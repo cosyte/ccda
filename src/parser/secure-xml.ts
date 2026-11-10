@@ -212,6 +212,7 @@ function buildDom(source: string): Document {
   try {
     return parser.parseFromString(source, "application/xml");
   } catch (err) {
+    /* v8 ignore next -- @xmldom/xmldom wraps an error thrown from onError in its own ParseError, so no CcdaParseError reaches this catch; kept so one would pass through unchanged */
     if (err instanceof CcdaParseError) throw err;
     throw new CcdaParseError(
       FATAL_CODES.NOT_WELL_FORMED_XML,
@@ -260,6 +261,7 @@ function enforceStructureLimits(
   reportForeignNamespace: (warning: CcdaWarning) => void,
 ): void {
   const root = doc.documentElement;
+  /* v8 ignore next -- buildDom has already thrown NOT_WELL_FORMED_XML for a source with no root element */
   if (root === null) return;
 
   let nodeCount = 0;

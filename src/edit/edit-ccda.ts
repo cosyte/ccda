@@ -378,6 +378,7 @@ export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): C
   // carries no Tier-2 deviations to record, and any Tier-3 fatal is impossible.
   const dom = parseSecureXml(xml, DEFAULT_LIMITS, () => undefined);
   const root = dom.documentElement;
+  /* v8 ignore if -- the source already parsed as a ClinicalDocument, so its re-parse has a root */
   if (root === null) {
     // Unreachable: the source already parsed as a ClinicalDocument.
     throw new CcdaEditError("NO_SOURCE_DOCUMENT", "editCcda: source produced no document element.");
