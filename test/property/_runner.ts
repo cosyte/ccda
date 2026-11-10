@@ -134,9 +134,9 @@ export function assertProperty<Ts>(
 /**
  * A test's time budget for a property at the resolved depth: 60 s, the budget the other property
  * files here set, or 100 ms a case, whichever is longer. A case here builds, serializes and parses
- * whole documents: at 1,000 cases the slowest standard property took 13 ms a case on a 16-core
- * machine running other work, so a 100-case run needs a few seconds and a deep run
- * (`COSYTE_PROPERTY_RUNS=10000`) is not cut off by the budget a 100-case run needs. This repository sets no global test timeout (see `vitest.config.ts`).
+ * whole documents: the slowest standard property took 13 ms a case at 1,000 cases and 16 ms at
+ * 10,000, on a 16-core machine running other work, so a 100-case run needs a few seconds and a
+ * deep run (`COSYTE_PROPERTY_RUNS=10000`) is not cut off by the budget a 100-case run needs. This repository sets no global test timeout (see `vitest.config.ts`).
  */
 export function propertyTimeout(
   env: Readonly<Record<string, string | undefined>> = process.env,
