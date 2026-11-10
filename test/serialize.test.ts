@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { parseCcda, serializeCcda, CcdaDocument, type CcdaWarning } from "../src/index.js";
+import {
+  parseCcda,
+  serializeCcda,
+  buildCcda as buildDocument,
+  CcdaDocument,
+  type CcdaWarning,
+} from "../src/index.js";
 import { serializeDocument } from "../src/serialize/serialize-dom.js";
 import { parseSecureXml, resolveLimits } from "../src/parser/secure-xml.js";
 import {
@@ -76,6 +82,47 @@ describe("serializeCcda, declaration handling", () => {
     const dom = parseSecureXml(buildCcda({ xmlDecl: false }), limits, () => {});
     const xml = serializeDocument(dom);
     expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n')).toBe(true);
+  });
+});
+
+describe("serializeCcda, carriage returns in text", () => {
+  it("writes a carriage return in text as a reference, so a parse of the output keeps it", () => {
+    const source = buildCcda({ sections: TRIAD_SECTIONS }).replace(
+      "<title>Problems</title>",
+      "<title>Pro&#13;blems</title>",
+    );
+    const once = serializeCcda(parseCcda(source));
+    expect(once).toContain("<title>Pro&#13;blems</title>");
+    expect(parseCcda(once).findSection("problems")?.title).toBe("Pro\rblems");
+    expect(serializeCcda(parseCcda(once))).toBe(once);
+  });
+
+  it("escapes the markup characters beside it in the same text", () => {
+    const source = buildCcda({ sections: TRIAD_SECTIONS }).replace(
+      "<title>Problems</title>",
+      "<title>a &lt;b&gt; &amp;&#13;</title>",
+    );
+    const once = serializeCcda(parseCcda(source));
+    expect(once).toContain("<title>a &lt;b&gt; &amp;&#13;</title>");
+    expect(serializeCcda(parseCcda(once))).toBe(once);
+  });
+
+  it("builds a narrative from a displayName with a carriage return that still matches it", () => {
+    const doc = buildDocument({
+      patient: {},
+      documentId: "ZCR1",
+      effectiveTime: "20260101",
+      problems: [{ problem: { code: "1", displayName: "a\rb\r\nc" } }],
+    });
+    expect(doc.warnings).toEqual([]);
+    expect(doc.getProblems()[0]?.problems[0]?.value?.displayName).toBe("a\rb\r\nc");
+    expect(doc.toString()).toContain(">a&#13;b&#13;\nc<");
+  });
+
+  it("writes text with no carriage return exactly as the serializer always has", () => {
+    const source = buildCcda({ sections: TRIAD_SECTIONS });
+    const dom = parseSecureXml(source, resolveLimits(undefined), () => {});
+    expect(serializeDocument(dom)).not.toContain("&#13;");
   });
 });
 
