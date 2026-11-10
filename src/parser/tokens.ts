@@ -15,7 +15,7 @@
  * registry cannot reach, the structural fields of a {@link CcdaPosition} and
  * the structural identifiers on the model.
  *
- * ## Why a shape or membership test rather than a length cap
+ * **Why a shape or membership test rather than a length cap.**
  *
  * Truncating to N characters still emits the first N characters of a patient
  * name, and C-CDA has no length below which a fragment stops being clinical.
@@ -26,7 +26,7 @@
  * tokens are returned unchanged, so a well-formed document sees no change at
  * all.
  *
- * ## Where a shape test is the wrong instrument, stated rather than papered over
+ * **Where a shape test is the wrong instrument, stated rather than papered over.**
  *
  * A shape test is only safe where the shape is narrow enough that a forged
  * match carries little. Two of these tokens fail that test and are bounded on

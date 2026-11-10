@@ -5,6 +5,7 @@
       "test/**/*.ts",
       "scripts/**/*.{ts,mjs}",
       "docs-content/**/*.md",
+      "!docs-content/api/**",
       "examples/**/*.{ts,js,json,md}",
       "*.{json,md,yml}"
     ]

@@ -245,8 +245,16 @@ The full reference is on [docs.cosyte.com/ccda](https://docs.cosyte.com/ccda):
 
 - [Installation](https://docs.cosyte.com/ccda/installation) and the
   [quickstart](https://docs.cosyte.com/ccda/quickstart).
-- Core concepts: the [document model](https://docs.cosyte.com/ccda/spec-notes-model),
-  [what it extracts](https://docs.cosyte.com/ccda/what-it-extracts),
+- How-to guides: [read the active problem list](https://docs.cosyte.com/ccda/read-the-problem-list),
+  [triage warnings](https://docs.cosyte.com/ccda/triage-warnings),
+  [build a document](https://docs.cosyte.com/ccda/build-a-document),
+  [edit a document](https://docs.cosyte.com/ccda/edit-a-document),
+  [serialize a document](https://docs.cosyte.com/ccda/serialize-a-document),
+  [apply a vendor profile](https://docs.cosyte.com/ccda/apply-a-vendor-profile),
+  [check codes with your own terminology service](https://docs.cosyte.com/ccda/check-codes-with-your-terminology),
+  [check value-set membership](https://docs.cosyte.com/ccda/check-value-set-membership), and
+  [check required sections](https://docs.cosyte.com/ccda/check-required-sections).
+- Explanation: the [document model](https://docs.cosyte.com/ccda/spec-notes-model),
   [tolerance and warnings](https://docs.cosyte.com/ccda/spec-notes-tolerance),
   [clinical entries](https://docs.cosyte.com/ccda/spec-notes-clinical),
   [datatypes](https://docs.cosyte.com/ccda/spec-notes-datatypes),
@@ -254,12 +262,13 @@ The full reference is on [docs.cosyte.com/ccda](https://docs.cosyte.com/ccda):
   [code systems and provenance](https://docs.cosyte.com/ccda/code-systems),
   [validation against C-CDA R2.1](https://docs.cosyte.com/ccda/validation), and
   [the parser archetype](https://docs.cosyte.com/ccda/parser-archetype).
-- Guides: the [cookbook](https://docs.cosyte.com/ccda/cookbook),
-  [build, edit, and serialize](https://docs.cosyte.com/ccda/build-and-edit), and
-  [conformance and profiles](https://docs.cosyte.com/ccda/conformance).
-- [Troubleshooting](https://docs.cosyte.com/ccda/troubleshooting) and the
-  [known limitations](https://docs.cosyte.com/ccda/limitations). Read the limitations before you
-  point this at real data.
+- Reference: [what it extracts](https://docs.cosyte.com/ccda/what-it-extracts), the
+  [known limitations](https://docs.cosyte.com/ccda/limitations), and the API reference, generated
+  from the TSDoc comments in the source.
+- [Testing and quality](https://docs.cosyte.com/ccda/testing-and-quality) and
+  [performance](https://docs.cosyte.com/ccda/performance).
+- [Troubleshooting](https://docs.cosyte.com/ccda/troubleshooting). Read the
+  [known limitations](https://docs.cosyte.com/ccda/limitations) before you point this at real data.
 - [`CHANGELOG.md`](https://github.com/cosyte/ccda/blob/main/CHANGELOG.md): every release.
 
 ## Support

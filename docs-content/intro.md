@@ -1,9 +1,8 @@
 ---
 id: intro
-title: Getting started
-sidebar_label: Getting started
-sidebar_position: 1
-description: What @cosyte/ccda is, the parser archetype it follows, and a first look at reading a C-CDA document.
+title: Overview
+sidebar_label: Overview
+description: "What @cosyte/ccda does, who it is for and what it is not: a lenient C-CDA parser with a spec-clean serializer, builder and editor."
 ---
 
 # @cosyte/ccda
@@ -31,7 +30,7 @@ configured XXE-safe.
 > re-emits a parsed document with a section added or replaced (every untouched section byte-preserved),
 > and a **bring-your-own terminology adapter** semantically validates coded values against your own
 > licensed service. The builder emits three of the twelve document types; the other nine are not
-> implemented. See [Troubleshooting](./troubleshooting) for exactly what the parser, builder, and
+> implemented. See [Known limitations](./limitations.md) for exactly what the parser, builder, and
 > editor do and do not do today.
 
 ## Install
@@ -135,14 +134,32 @@ parse, a non-`ClinicalDocument` root) always throws.
   `editCcda(doc, …)` re-emits a parsed document with a section added or replaced, byte-preserving
   every untouched section.
 
+## Who it is for, and what it is not
+
+It is for teams that receive or send C-CDA documents in Node.js or TypeScript: reading a CCD,
+Referral Note or Discharge Summary that arrived on a transition of care, building one to send, or
+correcting one section of a document and sending the revision.
+
+It is not a transport (no MLLP or XDS delivery), not a terminology service (it recognizes
+code systems and asks your own service about membership), and not a certified validator (the
+required-section and value-set checks are stated with how far each was traced, and a quiet parse is
+not a conformance result). It reads C-CDA R2.1, US Realm; other CDA templates and realms are out of
+scope.
+
 ## Next
 
-- **[Installation](./installation)**: prerequisites + a smoke test.
-- **[Quickstart](./quickstart)**: parse a CCD and pull demographics + the problem/med/allergy triad.
-- **[Core concepts](./spec-notes-model)**: the document model, the tolerance tiers, the clinical entry
-  layer, and the datatype/code-system machinery.
-- **[Cookbook](./cookbook)**: task-oriented recipes.
-- **[Troubleshooting & known limitations](./troubleshooting)**: the error model and exactly what the
-  parser, builder, and editor do and do not do today.
-- The **API reference** for every export is generated from source by the docs site (TypeDoc), not
-  hand-authored here.
+- **[Installation](./installation.md)**: prerequisites and a smoke test.
+- **[Quickstart](./quickstart.md)**: parse a CCD and pull the patient and the problem, medication and
+  allergy lists.
+- **How-to guides**: [read the active problem list](./read-the-problem-list.md),
+  [triage warnings](./triage-warnings.md), [build a document](./build-a-document.md),
+  [edit a document](./edit-a-document.md), [serialize a document](./serialize-a-document.md),
+  [apply a vendor profile](./apply-a-vendor-profile.md), and the conformance checks.
+- **Explanation**: [the document model](./spec-notes-model.md),
+  [tolerance and the warning model](./spec-notes-tolerance.md),
+  [the clinical entry layer](./spec-notes-clinical.md) and
+  [the parser archetype](./parser-archetype.md).
+- **Reference**: [what it extracts](./what-it-extracts.md), [known limitations](./limitations.md), and
+  the [API reference](./api/README.md), generated from the TSDoc comments in the source.
+- **[Troubleshooting](./troubleshooting.md)**: when it throws, when it warns, and the common
+  symptoms.

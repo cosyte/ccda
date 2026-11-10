@@ -160,8 +160,9 @@ function makeEmitter(
     }
     warnings.push(warning);
     // A throw in the caller's handler must not bubble out of the parser and
-    // defeat lenient parsing, swallow it (mirrors the sibling `@cosyte/hl7`
-    // D-22 contract). The warning is already recorded on `warnings`.
+    // defeat lenient parsing, swallow it (the same contract the sibling
+    // `@cosyte/hl7` keeps for its warning handler). The warning is already
+    // recorded on `warnings`.
     if (options.onWarning !== undefined) {
       try {
         options.onWarning(warning);

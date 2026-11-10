@@ -2,8 +2,7 @@
 id: spec-notes-model
 title: The document model
 sidebar_label: The document model
-sidebar_position: 4
-description: How a C-CDA document is recognized, how its US Realm header is read, and how its sections are framed.
+description: "How a C-CDA document is recognized, how its US Realm header is read, and how its sections are framed."
 ---
 
 # The document model: recognition, header, sections
@@ -284,3 +283,9 @@ callers cannot mutate parser output. The one sanctioned copy-with is `doc.withWa
 returns a **new** document with extra warnings appended, sharing every parsed field by reference and
 leaving the original untouched. `buildCcda` and `editCcda` follow the same discipline: neither mutates
 a document in place, each returns a new one.
+
+## How-to guides that apply this
+
+- [Read the active problem list](./read-the-problem-list.md).
+- [Check a document type's required sections](./check-required-sections.md).
+- [Serialize a document](./serialize-a-document.md).

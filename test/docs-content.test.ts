@@ -12,20 +12,29 @@ import {
 } from "@cosyte/vitest-config/snippets";
 
 import {
+  compileEach,
   compileErrors,
   documentLiterals,
   fences,
+  pageBlocks,
   runnableTaggedFences,
   section,
 } from "./_helpers/first-use.js";
 import * as firstUseFixtures from "./__fixtures__/first-use.js";
 
 /**
- * Doc/code-agreement gate. Every ```` ```ts runnable ```` block in `docs-content/` **and in
- * `README.md`** is extracted, compiled, and executed, and its inline `// =>` assertions are checked,
- * so a documented example can never silently drift from the shipped code (the documentation analog of
- * the parser conformance runners). Blocks tagged ` ```ts runnable throws ` must throw; plain
- * ` ```ts ` blocks are illustrative and are not executed.
+ * Doc/code-agreement gate. Every TypeScript and JavaScript sample on a hand-written page of
+ * `docs-content/` **and** every ```` ```ts runnable ```` block in `README.md` is extracted and
+ * executed, and its inline `// =>` assertions are checked, so a documented example can never
+ * silently drift from the shipped code (the documentation analog of the parser conformance
+ * runners). Blocks tagged ` ```ts runnable throws ` must throw. A sample that cannot run says why in
+ * its fence (` ```ts no-run <reason> `), and a test below refuses a sample that does neither. The
+ * harness strips types without checking them, so a second test below compiles every TypeScript
+ * sample against the package's types.
+ *
+ * The pages under `docs-content/api/` are generated from the TSDoc comments in `src/`, and their
+ * `@example` blocks are fragments written for an editor's tooltip, so only the top-level pages are
+ * passed to the sweep.
  *
  * `README.md` is covered **here rather than in a file of its own** on purpose. The hook below spawns
  * `pnpm build` to provision `dist/`, Vitest runs test FILES in parallel, and two files each spawning
@@ -55,10 +64,27 @@ beforeAll(() => {
   execFileSync("pnpm", ["build"], { cwd: root, stdio: "inherit" });
 }, 180_000);
 
-docSnippetSuite({
-  docsDir: join(root, "docs-content"),
-  resolve: (specifier) => (specifier === "@cosyte/ccda" ? ENTRY : undefined),
-});
+const DOCS_DIR = join(root, "docs-content");
+
+/** The hand-written pages: every `.md` file at the top of `docs-content/`, not the generated `api/`. */
+const PAGES = readdirSync(DOCS_DIR)
+  .filter((name) => name.endsWith(".md"))
+  .sort()
+  .map((name) => join(DOCS_DIR, name));
+
+/**
+ * `every` runs each TypeScript and JavaScript sample whether or not it is tagged `runnable`, and
+ * lists a `no-run` sample as skipped with its reason. It reaches the runner as a variable rather
+ * than a literal so the line compiles against a `@cosyte/vitest-config` that predates the option;
+ * such a runner ignores it and runs the `runnable` blocks, which is every sample here that can run,
+ * as the test below holds.
+ */
+const pageSuite = {
+  files: PAGES,
+  every: true,
+  resolve: (specifier: string) => (specifier === "@cosyte/ccda" ? ENTRY : undefined),
+};
+docSnippetSuite(pageSuite);
 
 docSnippetSuite({
   name: "doc/code agreement (README)",
@@ -315,4 +341,100 @@ describe("the README usage example prints exactly what the page says it prints",
     expect(run.stdout).not.toBe(`${shown?.body ?? ""}\n`);
     expect(run.stdout).toContain("ccd MRN002 Doe");
   }, 60_000);
+});
+
+/** The fence languages that make a block a code sample. */
+const SAMPLE_LANGS = new Set(["ts", "typescript", "tsx", "js", "javascript", "mjs"]);
+
+/** Every code sample on the hand-written pages, labelled `page.md:line`. */
+const PAGE_SAMPLES = PAGES.flatMap((path) =>
+  pageBlocks(readFileSync(path, "utf8"))
+    .filter((block) => SAMPLE_LANGS.has(block.lang))
+    .map((block) => ({ ...block, label: `${relative(DOCS_DIR, path)}:${String(block.line)}` })),
+);
+
+/** The words after `no-run` in a fence, or undefined when the fence carries no `no-run`. */
+function noRunReason(tags: readonly string[]): string | undefined {
+  const at = tags.indexOf("no-run");
+  return at === -1 ? undefined : tags.slice(at + 1).join(" ");
+}
+
+/**
+ * A sample that runs and a sample that says why it cannot are the only two kinds. Each label names
+ * a sample that is neither: untagged (so today's runner skips it), tagged `runnable` and `no-run`
+ * at once, or `no-run` with no reason.
+ */
+export function unaccountedSamples(
+  samples: readonly { label: string; tags: readonly string[] }[],
+): string[] {
+  return samples
+    .filter((sample) => {
+      const reason = noRunReason(sample.tags);
+      return sample.tags.includes("runnable") ? reason !== undefined : !reason;
+    })
+    .map((sample) => sample.label);
+}
+
+describe("every sample on a hand-written page", () => {
+  test("there are samples to check", () => {
+    expect(PAGE_SAMPLES.length).toBeGreaterThan(40);
+  });
+
+  test("runs, or names in its fence why it cannot", () => {
+    expect(unaccountedSamples(PAGE_SAMPLES)).toEqual([]);
+  });
+
+  test("an untagged sample, a runnable no-run and a no-run with no reason are each named", () => {
+    expect(
+      unaccountedSamples([
+        { label: "a.md:1", tags: [] },
+        { label: "b.md:1", tags: ["runnable"] },
+        { label: "c.md:1", tags: ["runnable", "no-run", "why"] },
+        { label: "d.md:1", tags: ["no-run"] },
+        { label: "e.md:1", tags: ["no-run", "it", "opens", "a", "socket"] },
+        { label: "f.md:1", tags: ["runnable", "throws"] },
+      ]),
+    ).toEqual(["a.md:1", "c.md:1", "d.md:1"]);
+  });
+
+  test(
+    "compiles in a new TypeScript project against the package's types, when it runs",
+    () => {
+      const typed = PAGE_SAMPLES.filter(
+        (sample) =>
+          ["ts", "typescript", "tsx"].includes(sample.lang) &&
+          noRunReason(sample.tags) === undefined,
+      );
+      expect(typed.length).toBeGreaterThan(40);
+      const errors = compileEach(
+        root,
+        SOURCE_PATHS,
+        typed.map((_, index) => `docs-sample-${String(index)}`),
+        typed.map((sample) => sample.body),
+      );
+      const failing = typed.flatMap((sample, index) =>
+        (errors[index] ?? []).map((error) => `${sample.label}: ${error}`),
+      );
+      expect(failing).toEqual([]);
+    },
+    COMPILE_TIMEOUT,
+  );
+
+  test(
+    "a sample that does not compile is named with its error",
+    () => {
+      const errors = compileEach(
+        root,
+        SOURCE_PATHS,
+        ["docs-sample-good", "docs-sample-bad"],
+        [
+          'import { parseCcda } from "@cosyte/ccda";\nparseCcda("<x/>").documentType;',
+          'import { parseCcda } from "@cosyte/ccda";\nparseCcda("<x/>").documentTypo;',
+        ],
+      );
+      expect(errors[0]).toEqual([]);
+      expect(errors[1]).toEqual([expect.stringMatching(/^line 2: TS(2551|2339)/)]);
+    },
+    COMPILE_TIMEOUT,
+  );
 });

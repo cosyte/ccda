@@ -19,7 +19,7 @@
  * `model/section.ts` and `model/document.ts`.
  */
 
-/** The CDA R2 ClinicalDocument root class code (`POCD_MT000040`). @internal */
+/** The US Realm Header `templateId` root, which every C-CDA R2.1 document carries beside its document-type template. */
 export const CDA_DOCUMENT_OID = "2.16.840.1.113883.10.20.22.1.1";
 
 /** The C-CDA R2.1 version stamp carried in a recognized `templateId/@extension`. */
