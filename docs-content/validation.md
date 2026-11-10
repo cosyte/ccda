@@ -2,8 +2,7 @@
 id: validation
 title: Validation against C-CDA R2.1
 sidebar_label: Validation
-sidebar_position: 11
-description: Which C-CDA release the package validates against and how required-section validation reports what a document lacks.
+description: "Which C-CDA release the package validates against and how required-section validation reports what a document lacks."
 ---
 
 # Validation against C-CDA R2.1
@@ -12,10 +11,10 @@ description: Which C-CDA release the package validates against and how required-
 
 **C-CDA R2.1**, and that is an exported value rather than only this sentence:
 
-```ts
+```ts runnable
 import { CCDA_CONFORMANCE_RELEASE } from "@cosyte/ccda";
 
-CCDA_CONFORMANCE_RELEASE; // "R2.1"
+CCDA_CONFORMANCE_RELEASE; // => "R2.1"
 ```
 
 Every conformance table here (the required-section SHALL sets, the recognition catalogs) is written
@@ -178,3 +177,8 @@ requires and still parse clean. A `traced-complete` type is checking every secti
 document-level rule names, which is still not the whole of conformance: nothing here validates what a
 section or an entry contains. **A quiet parse is not a conformance result.** If your pipeline needs
 IG conformance, validate the document with an external validator.
+
+## How-to guides that apply this
+
+- [Check a document type's required sections](./check-required-sections.md).
+- [Apply a vendor profile](./apply-a-vendor-profile.md), including the built-in profile for R1.1-origin documents.

@@ -2,8 +2,7 @@
 id: installation
 title: Installation
 sidebar_label: Installation
-sidebar_position: 2
-description: Install @cosyte/ccda, check it from ESM or CommonJS, and see its one runtime dependency.
+description: "Install @cosyte/ccda, check that it loads from ESM or CommonJS, and see its one runtime dependency."
 ---
 
 # Installation
@@ -67,19 +66,22 @@ doc.getPatient()?.name?.family; // => "Doe"
 Array.isArray(doc.warnings); // => true
 ```
 
-If that resolves and returns, the install is good. Head to the [Quickstart](./quickstart).
+If that resolves and returns, the install is good. Head to the [Quickstart](./quickstart.md).
 
 ## Module systems
 
 `@cosyte/ccda` is `"type": "module"` and exposes both conditions, so both of these resolve to the
 right build without extra configuration:
 
-```ts
+```ts runnable
 // ESM / TypeScript
 import { parseCcda, serializeCcda } from "@cosyte/ccda";
+
+typeof parseCcda; // => "function"
+typeof serializeCcda; // => "function"
 ```
 
-```js
+```js no-run CommonJS, and the test suite loads every sample as an ES module
 // CommonJS
 const { parseCcda, serializeCcda } = require("@cosyte/ccda");
 ```
@@ -95,4 +97,4 @@ OIDs and MRNs. Do the same in your own tests: a C-CDA document is a clinical rec
 committed to a repository is a PHI leak the moment it publishes. The parser helps: every warning and
 error message comes **whole from a frozen registry** and interpolates nothing at all, so no attribute
 value, coded token, or element name from your document can reach one. See
-[Troubleshooting](./troubleshooting) for the full posture, including what changed and when.
+[Troubleshooting](./troubleshooting.md#keeping-phi-out-of-logs) for the full posture, including what changed and when.

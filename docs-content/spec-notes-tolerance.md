@@ -2,8 +2,7 @@
 id: spec-notes-tolerance
 title: Tolerance and the warning model
 sidebar_label: Tolerance and warnings
-sidebar_position: 6
-description: The tolerance tiers and the warning-code model that turn a vendor deviation into a coded warning instead of a failure.
+description: "The tolerance tiers and the warning-code model that turn a vendor deviation into a coded warning instead of a failure."
 ---
 
 # Tolerance tiers and the warning-code model
@@ -171,3 +170,9 @@ code === FATAL_CODES.NOT_A_CLINICAL_DOCUMENT; // => true
 
 The safety caps (`maxInputBytes`, `maxDepth`, `maxNodeCount`, `maxEntityExpansions`) have library
 defaults; tighten them (or, at your own risk, loosen them) via `ParseCcdaOptions.limits`.
+
+## How-to guides that apply this
+
+- [Triage warnings](./triage-warnings.md).
+- [Apply a vendor profile](./apply-a-vendor-profile.md).
+- [Handle a code that disagrees with its narrative](./handle-code-narrative-conflicts.md).

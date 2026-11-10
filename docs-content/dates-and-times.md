@@ -2,8 +2,7 @@
 id: dates-and-times
 title: Dates and times
 sidebar_label: Dates and times
-sidebar_position: 9
-description: Reading C-CDA timestamps honestly with toObject, toISO, and toDate, and using them beside another Cosyte parser.
+description: "Reading C-CDA timestamps honestly with toObject, toISO, and toDate, and using them beside another Cosyte parser."
 ---
 
 # Dates and times
@@ -19,18 +18,30 @@ date of birth read in any negative-offset zone, that is a day out.
 names, with the same return shapes and the same timezone rule, that every sibling `@cosyte/*` parser
 exports, and they read `raw` rather than `date`.
 
-```ts
-import { toDate, toISO, toObject } from "@cosyte/ccda";
+```ts runnable
+import { buildCcda, toDate, toISO, toObject } from "@cosyte/ccda";
 
-const onset = doc.getProblems()[0]?.problems[0]?.effectiveTime?.low; // a TS: { raw: "20260628" }
+const doc = buildCcda({
+  patient: { mrn: "MRN-00042" },
+  problems: [
+    { problem: { code: "59621000", displayName: "Essential hypertension" }, onset: "20260628" },
+  ],
+});
 
-toObject(onset); // { year: 2026, month: 6, day: 28 } and no other key
-toISO(onset); // "2026-06-28", with no trailing Z
-toDate(onset); // undefined: the document stated no timezone
+const onset = doc.getProblems()[0]?.problems[0]?.effectiveTime?.low; // a TS
+onset?.raw; // => "20260628"
 
-toDate(onset, { assumeOffsetMinutes: 0 }); // 2026-06-28T00:00:00.000Z, read as UTC because you said so
-toDate(onset, { assumeOffsetMinutes: -300 }); // 2026-06-28T05:00:00.000Z
+toObject(onset); // => { year: 2026, month: 6, day: 28 }
+toISO(onset); // => "2026-06-28"
+toDate(onset); // => undefined
+
+toDate(onset, { assumeOffsetMinutes: 0 })?.toISOString(); // => "2026-06-28T00:00:00.000Z"
+toDate(onset, { assumeOffsetMinutes: -300 })?.toISOString(); // => "2026-06-28T05:00:00.000Z"
 ```
+
+`toObject` gives back only the stated components and no other key, `toISO` adds no trailing `Z`,
+and `toDate` answers `undefined` because the document stated no timezone. Read as UTC, or five
+hours west of it, it is an instant only because you said which zone.
 
 - **`toObject` reports only the components the value stated**, as a frozen `DateParts`. Nothing is
   zero-filled, so `Object.keys()` on a year-precision value is `["year"]` and the precision survives
@@ -60,10 +71,16 @@ toDate(onset, { assumeOffsetMinutes: -300 }); // 2026-06-28T05:00:00.000Z
   point, because a caller cannot tell one from a real `Date` without testing `getTime()` for `NaN`,
   and calling `toISOString()` on it throws.
 
-  ```ts
-  toDate(onset, { assumeOffsetMinutes: Number.NaN }); // undefined, not an Invalid Date
-  toDate(onset, { assumeOffsetMinutes: 1e15 }); // undefined: finite, but off the end of time
+  ```ts runnable
+  import { toDate } from "@cosyte/ccda";
+
+  const onset = { raw: "20260628" };
+  toDate(onset, { assumeOffsetMinutes: Number.NaN }); // => undefined
+  toDate(onset, { assumeOffsetMinutes: 1e15 }); // => undefined
   ```
+
+  The first is not a number of minutes; the second is finite, but off the end of time. Neither comes
+  back as an Invalid Date.
 
 - **An offset the DOCUMENT states is bounded too, at 23 hours 59 minutes, and past it the value is
   refused whole.** The v3 `TS` literal's `±ZZZZ` token is four digits wide and constrains neither
@@ -74,10 +91,15 @@ toDate(onset, { assumeOffsetMinutes: -300 }); // 2026-06-28T05:00:00.000Z
   the same bound `@cosyte/hl7` applies; `@cosyte/dicom` bounds tighter, at 14:59, because its own wire
   cannot write a wider one.
 
-  ```ts
-  toObject({ raw: "20240229120000+2359" }); // { ..., offsetMinutes: 1439 }: the widest statable zone
-  toISO({ raw: "20240229120000+9999" }); // undefined, never "2024-02-29T12:00:00+100:39"
+  ```ts runnable
+  import { toISO, toObject } from "@cosyte/ccda";
+
+  toObject({ raw: "20240229120000+2359" })?.offsetMinutes; // => 1439
+  toISO({ raw: "20240229120000+9999" }); // => undefined
   ```
+
+  The first is the widest zone the slot can state; the second is refused whole, never rendered as
+  `"2024-02-29T12:00:00+100:39"`.
 
 So there are values where `ts.date` is a populated `Date` and `toDate(ts)` is `undefined`, on the same
 object. That divergence is deliberate, and `TS.date` is unchanged: code reading it today reads exactly
@@ -91,7 +113,7 @@ for `toDate` when you need an instant and can say which zone an offset-less valu
 All six `@cosyte/*` standard parsers export these three names, so a file that consumes two of them has
 to alias the imports:
 
-```ts
+```ts no-run it imports @cosyte/hl7, a second package these docs do not install
 import { parseCcda, toISO as ccdaToISO } from "@cosyte/ccda";
 import { parseDtm, toISO as hl7ToISO } from "@cosyte/hl7";
 
@@ -107,10 +129,15 @@ const observedAt = hl7ToISO(parseDtm("20260628153045-0500"));
 Namespace imports are the alternative, and read better when a file uses several conversions from each
 package:
 
-```ts
+```ts no-run it imports @cosyte/hl7, a second package these docs do not install
 import * as ccda from "@cosyte/ccda";
 import * as hl7 from "@cosyte/hl7";
 
 ccda.toObject(effectiveTime);
 hl7.toObject(dtm);
 ```
+
+## How-to guides that apply this
+
+- [Read the active problem list](./read-the-problem-list.md), whose problems carry the dates read here.
+- [Build a document](./build-a-document.md), which writes them.

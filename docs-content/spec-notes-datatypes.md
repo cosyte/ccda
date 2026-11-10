@@ -2,8 +2,7 @@
 id: spec-notes-datatypes
 title: Datatypes, codes, and serialization
 sidebar_label: Datatypes and serialization
-sidebar_position: 8
-description: The HL7 v3 datatypes the parser reads, the code systems it recognizes, and how the serializer writes a document back.
+description: "The HL7 v3 datatypes the parser reads, the code systems it recognizes, and how the serializer writes a document back."
 ---
 
 # HL7 v3 datatypes, code systems, and the serializer
@@ -193,7 +192,7 @@ say which zone an offset-less value was written in.
 Because all six `@cosyte/*` parsers export these three names, a file consuming two of them has to
 alias the imports or namespace them:
 
-```ts
+```ts no-run it imports @cosyte/hl7, a second package these docs do not install
 import { parseCcda, toISO as ccdaToISO } from "@cosyte/ccda";
 import { parseDtm, toISO as hl7ToISO } from "@cosyte/hl7";
 
@@ -209,7 +208,7 @@ const observedAt = hl7ToISO(parseDtm("20260628153045-0500"));
 The namespace form is the alternative, and reads better when a file uses several of the conversions
 from each package:
 
-```ts
+```ts no-run it imports @cosyte/hl7, a second package these docs do not install
 import * as ccda from "@cosyte/ccda";
 import * as hl7 from "@cosyte/hl7";
 
@@ -303,5 +302,10 @@ serializeCcda(parseCcda(out)) === out; // => true
 > A hand-constructed `CcdaDocument` (not produced by `parseCcda` or `buildCcda`) retains no source XML,
 > so `toString()` throws. To construct a document from scratch, use `buildCcda`: it emits a spec-clean
 > CCD, Referral Note, or inpatient Discharge Summary with a US Realm header and the clinical sections
-> you supply. See [Troubleshooting](./troubleshooting) for exactly what the parser, builder, and
+> you supply. See [Known limitations](./limitations.md) for exactly what the parser, builder, and
 > editor do and do not do today.
+
+## How-to guides that apply this
+
+- [Serialize a document](./serialize-a-document.md).
+- [Check codes with your own terminology service](./check-codes-with-your-terminology.md).

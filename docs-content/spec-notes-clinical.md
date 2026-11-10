@@ -2,8 +2,7 @@
 id: spec-notes-clinical
 title: The clinical entry layer
 sidebar_label: Clinical entries
-sidebar_position: 7
-description: The typed clinical entry accessors and the safety-critical distinctions each one keeps apart.
+description: "The typed clinical entry accessors and the safety-critical distinctions each one keeps apart."
 ---
 
 # The clinical entry layer
@@ -136,3 +135,9 @@ recognized catalog or a choice. Unstructured Document is `not-applicable`: its c
 were re-read off the same source too: CCD and Care Plan report `traced-complete`, Discharge Summary,
 Referral Note, History and Physical, and Transfer Summary report `traced-partial`, and no type reports
 `untraced`.
+
+## How-to guides that apply this
+
+- [Read the active problem list](./read-the-problem-list.md).
+- [Handle a code that disagrees with its narrative](./handle-code-narrative-conflicts.md).
+- [Check a document type's required sections](./check-required-sections.md).

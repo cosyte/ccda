@@ -2,8 +2,7 @@
 id: parser-archetype
 title: The Cosyte parser archetype
 sidebar_label: The parser archetype
-sidebar_position: 12
-description: The API shape every Cosyte parser shares, and how @cosyte/ccda follows it.
+description: "The API shape every Cosyte parser shares, and how @cosyte/ccda follows it."
 ---
 
 # The Cosyte parser archetype
@@ -31,3 +30,9 @@ for C-CDA's XML.
 - **Profile system**: a `defineCcdaProfile()` API for vendor/conformance quirks, with a
   provenance-backed registry (`ccdaProfiles`) of built-ins authored through the same public API. A
   safety gate refuses any profile that tries to tolerate a safety-critical warning code.
+
+## How-to guides that apply this
+
+- [Triage warnings](./triage-warnings.md).
+- [Apply a vendor profile](./apply-a-vendor-profile.md).
+- [Serialize a document](./serialize-a-document.md).

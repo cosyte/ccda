@@ -2,8 +2,7 @@
 id: what-it-extracts
 title: What it extracts
 sidebar_label: What it extracts
-sidebar_position: 5
-description: Everything the parser reads out of a document, from the header and sections to clinical entries, and whose data each entry is about.
+description: "Everything the parser reads out of a document, from the header and sections to clinical entries, and whose data each entry is about."
 ---
 
 # What it extracts

@@ -2,8 +2,7 @@
 id: code-systems
 title: Code systems and provenance
 sidebar_label: Code systems
-sidebar_position: 10
-description: How codes are read with their code system and provenance, how value-set bindings work, and what a nullFlavor beside a value means.
+description: "How codes are read with their code system and provenance, how value-set bindings work, and what a nullFlavor beside a value means."
 ---
 
 # Code systems and provenance
@@ -23,8 +22,11 @@ no terminology library; it only calls the adapter you supply, and only when supp
 recognize-only behavior above). Its shape mirrors the FHIR Terminology Module (`$validate-code`,
 `$translate`) and the sibling `@cosyte/terminology` engine, so you can wire that in behind it:
 
-```ts
-import { parseCcda, type TerminologyAdapter } from "@cosyte/ccda";
+```ts runnable
+import type { TerminologyAdapter } from "@cosyte/ccda";
+
+// Stands in for your own licensed SNOMED CT service.
+const mySnomedService = new Set(["59621000"]);
 
 const adapter: TerminologyAdapter = {
   // system is the C-CDA @codeSystem OID exactly as the document carries it.
@@ -34,10 +36,15 @@ const adapter: TerminologyAdapter = {
       : undefined, // no opinion on other systems → no warning
 };
 
-const doc = parseCcda(xml, { terminology: adapter });
-// A structurally-valid but non-member code now carries SEMANTIC_CODE_INVALID,
-// surfaced verbatim, never rewritten to a "corrected" value.
+adapter.validateCode({ system: "2.16.840.1.113883.6.96", code: "59621000" }); // => { result: true }
+adapter.validateCode({ system: "2.16.840.1.113883.6.96", code: "99999999" }); // => { result: false }
+adapter.validateCode({ system: "2.16.840.1.113883.6.1", code: "2345-7" }); // => undefined
 ```
+
+Pass it as `parseCcda(xml, { terminology: adapter })`. A structurally valid but non-member code then
+carries `SEMANTIC_CODE_INVALID`, surfaced verbatim, never rewritten to a "corrected" value;
+[Check codes with your own terminology service](./check-codes-with-your-terminology.md) runs an
+adapter like this one over a document.
 
 The adapter can only ever **report**: a `validateCode` verdict of `{ result: false }` raises
 `SEMANTIC_CODE_INVALID` with the code preserved verbatim (never coerced); `undefined` means "no
@@ -84,12 +91,15 @@ from, so no binding is asserted that the normative source was not read for. Four
 Required; the problem slot's is Preferred, because the Problem Observation's value only **SHOULD**
 be selected from its value set:
 
-```ts
-import { parseCcda, valueSetBinding, WARNING_CODES, type ValueSetSource } from "@cosyte/ccda";
+```ts runnable
+import { valueSetBinding, type ValueSetSource } from "@cosyte/ccda";
 
-valueSetBinding("medication").valueSet; // "2.16.840.1.113762.1.4.1010.4"
-valueSetBinding("medication").strength; // "required"
-valueSetBinding("problem").strength; // "preferred"
+valueSetBinding("medication").valueSet; // => "2.16.840.1.113762.1.4.1010.4"
+valueSetBinding("medication").strength; // => "required"
+valueSetBinding("problem").strength; // => "preferred"
+
+// Stands in for the value-set package you hold: one expansion, the route value set.
+const myPackage = new Map([["2.16.840.1.113883.3.88.12.3221.8.7", new Set(["C38288"])]]);
 
 const valueSets: ValueSetSource = {
   release: "my-value-set-package-2026.1", // rides on every finding
@@ -100,12 +110,16 @@ const valueSets: ValueSetSource = {
   },
 };
 
-const doc = parseCcda(xml, { valueSets });
-// A non-member at a Required binding now carries VALUE_SET_BINDING_VIOLATED, with the
-// value set OID on `valueSet` and your declared release on `valueSetRelease`. The
-// document's own code is preserved verbatim, exactly as with the adapter.
-doc.warnings.some((w) => w.code === WARNING_CODES.VALUE_SET_BINDING_VIOLATED);
+const route = "2.16.840.1.113883.3.88.12.3221.8.7";
+valueSets.isMember({ valueSet: route, coding: { code: "C38288" } }); // => { membership: "member" }
+valueSets.isMember({ valueSet: route, coding: { code: "C38276" } }); // => { membership: "not-a-member" }
 ```
+
+Pass it as `parseCcda(xml, { valueSets })`. A non-member at a Required binding then carries
+`VALUE_SET_BINDING_VIOLATED`, with the value set OID on `valueSet` and your declared release on
+`valueSetRelease`, and the document's own code is preserved verbatim, exactly as with the adapter.
+[Check a coded value against its value set](./check-value-set-membership.md) runs a source like this
+one over a document.
 
 Member codes are licensed data, so this package ships **identifiers only** and never an expansion.
 Three answers are possible and the third is why this is not a boolean: `no-expansion` says the
@@ -120,13 +134,58 @@ never inferred from the code system alone.
 unknown, and this quantity is 10 mg. The parser flags it `CONTRADICTORY_NULL_FLAVOR` (safety-critical,
 so no profile can tolerate it) and **resolves the contradiction against the number**:
 
-```ts
+```ts runnable
+import { parseCcda, WARNING_CODES } from "@cosyte/ccda";
+
+// Synthetic progress note: invented patient, fake OIDs and ids.
+const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <realmCode code="US"/>
+  <templateId root="2.16.840.1.113883.10.20.22.1.1" extension="2015-08-01"/>
+  <templateId root="2.16.840.1.113883.10.20.22.1.9" extension="2015-08-01"/>
+  <id root="2.16.840.1.113883.19.5.99999.1" extension="DOC-0014"/>
+  <code code="11506-3" codeSystem="2.16.840.1.113883.6.1"/>
+  <title>Synthetic progress note</title>
+  <effectiveTime value="20240101"/>
+  <recordTarget><patientRole>
+    <id root="2.16.840.1.113883.19.5" extension="MRN-00042" assigningAuthorityName="Sample Hospital"/>
+    <patient><name><given>Jane</given><family>Doe</family></name>
+    <administrativeGenderCode code="F" codeSystem="2.16.840.1.113883.5.1"/></patient>
+  </patientRole></recordTarget>
+  <component><structuredBody>
+    <component><section>
+      <templateId root="2.16.840.1.113883.10.20.22.2.1.1" extension="2014-06-09"/>
+      <code code="10160-0" codeSystem="2.16.840.1.113883.6.1"/>
+      <title>Medications</title>
+      <text><content ID="m1">Lisinopril</content></text>
+      <entry><substanceAdministration classCode="SBADM" moodCode="EVN">
+        <templateId root="2.16.840.1.113883.10.20.22.4.16" extension="2014-06-09"/>
+        <id root="2.16.840.1.113883.19.5.99999.2" extension="MED-1"/>
+        <statusCode code="active"/>
+        <effectiveTime xsi:type="IVL_TS"><low value="20240101"/></effectiveTime>
+        <routeCode code="C38288" codeSystem="2.16.840.1.113883.3.26.1.1"/>
+        <doseQuantity nullFlavor="UNK" value="10" unit="mg"/>
+        <consumable><manufacturedProduct classCode="MANU">
+          <templateId root="2.16.840.1.113883.10.20.22.4.23" extension="2014-06-09"/>
+          <manufacturedMaterial>
+            <code code="314076" codeSystem="2.16.840.1.113883.6.88" displayName="Lisinopril 10 MG Oral Tablet"/>
+          </manufacturedMaterial>
+        </manufacturedProduct></consumable>
+      </substanceAdministration></entry>
+    </section></component>
+  </structuredBody></component>
+</ClinicalDocument>`;
+
+const doc = parseCcda(xml);
 const dose = doc.getMedications()[0]?.dose;
-dose?.value; // undefined  ← not 10
-dose?.raw; // "10"
-dose?.unit; // "mg"
-dose?.nullFlavor; // "UNK"
+dose?.value; // => undefined
+dose?.raw; // => "10"
+dose?.unit; // => "mg"
+dose?.nullFlavor; // => "UNK"
+doc.warnings.some((w) => w.code === WARNING_CODES.CONTRADICTORY_NULL_FLAVOR); // => true
 ```
+
+`dose.value` is `undefined`, not 10.
 
 Nothing the document said is lost. What is withheld is the reading the parser would have
 _manufactured_ from it: `value` is a `number` derived from `raw`, and `raw` is still right there. This
@@ -152,10 +211,34 @@ this model manufactures an identifier out of an `II` is `pickMrn` (behind `getMr
 _selects_ one `<id>` from a list and flattens it to a bare `string` with the `nullFlavor` gone. So
 `getMrn()` withholds when the first `patientRole/id` is null-marked:
 
-```ts
-doc.getMrn(); // undefined  ← the document marked that <id> unknown
-doc.getPatient()?.identifiers[0]; // { root, extension: "MRN001", nullFlavor: "UNK" }
+```ts runnable
+import { parseCcda } from "@cosyte/ccda";
+
+// Synthetic header-only CCD: invented patient, fake OIDs and ids.
+const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <realmCode code="US"/>
+  <templateId root="2.16.840.1.113883.10.20.22.1.1" extension="2015-08-01"/>
+  <templateId root="2.16.840.1.113883.10.20.22.1.2" extension="2015-08-01"/>
+  <id root="2.16.840.1.113883.19.5.99999.1" extension="DOC-0015"/>
+  <code code="34133-9" codeSystem="2.16.840.1.113883.6.1"/>
+  <title>Synthetic CCD</title>
+  <effectiveTime value="20240101"/>
+  <recordTarget><patientRole>
+    <id nullFlavor="UNK" root="2.16.840.1.113883.19.5" extension="MRN001"/>
+    <patient><name><given>Jane</given><family>Doe</family></name>
+    <administrativeGenderCode code="F" codeSystem="2.16.840.1.113883.5.1"/></patient>
+  </patientRole></recordTarget>
+</ClinicalDocument>`;
+
+const doc = parseCcda(xml);
+doc.getMrn(); // => undefined
+doc.getPatient()?.identifiers[0]?.extension; // => "MRN001"
+doc.getPatient()?.identifiers[0]?.nullFlavor; // => "UNK"
 ```
+
+The document marked that `<id>` unknown, so `getMrn()` gives no MRN, while the identifier itself is
+still there in full.
 
 It withholds rather than falling through to the next `<id>`. CDA R2 makes `patientRole/id` `1..*`
 and nothing in the document ranks the entries, so the second id is not another MRN, it is whatever
@@ -190,7 +273,7 @@ the same five slots (problem value, allergen, medication drug and route, and vac
 any returned coding as a spec-clean CDA R2 `<translation>` alternate **beside** the primary code, an
 _additional_ coding, never a substitution:
 
-```ts
+```ts runnable
 import { buildCcda, type TerminologyAdapter } from "@cosyte/ccda";
 
 const adapter: TerminologyAdapter = {
@@ -206,9 +289,17 @@ const adapter: TerminologyAdapter = {
       : { matches: [] },
 };
 
+const init = {
+  patient: { mrn: "MRN-00042" },
+  problems: [{ problem: { code: "38341003", displayName: "Hypertension" } }],
+};
 const doc = buildCcda(init, { terminology: adapter });
+
 // The problem <value> now carries a <translation> alongside its verbatim SNOMED code;
-// parseCcda reads the primary code unchanged and surfaces the alternate in CD.translation.
+// the parse reads the primary code unchanged and surfaces the alternate in CD.translation.
+const value = doc.getProblems()[0]?.problems[0]?.value;
+value?.code; // => "38341003"
+value?.translation?.[0]?.code; // => "I10"
 ```
 
 Here too the adapter can only ever **add**: `translate` returning `undefined` (no opinion) or an empty
@@ -216,3 +307,8 @@ Here too the adapter can only ever **add**: `translate` returning `undefined` (n
 never rewritten to satisfy it. The Results and Vital Signs LOINC codes, the reaction / severity /
 criticality observations, and the procedure, encounter, planned-item and family-history codes are **not**
 wired for `<translation>` emission, and neither is the section-rebuild path `editCcda` uses.
+
+## How-to guides that apply this
+
+- [Check codes with your own terminology service](./check-codes-with-your-terminology.md).
+- [Check a coded value against its value set](./check-value-set-membership.md).

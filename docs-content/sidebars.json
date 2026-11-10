@@ -1,23 +1,29 @@
 {
   "docs": [
     "intro",
+    { "type": "category", "label": "Installation", "items": ["installation"] },
+    { "type": "category", "label": "Quickstart", "items": ["quickstart"] },
     {
       "type": "category",
-      "label": "Installation",
-      "items": ["installation"]
+      "label": "How-to guides",
+      "items": [
+        "read-the-problem-list",
+        "handle-code-narrative-conflicts",
+        "triage-warnings",
+        "build-a-document",
+        "edit-a-document",
+        "serialize-a-document",
+        "apply-a-vendor-profile",
+        "check-codes-with-your-terminology",
+        "check-value-set-membership",
+        "check-required-sections"
+      ]
     },
     {
       "type": "category",
-      "label": "Quickstart",
-      "items": ["quickstart"]
-    },
-    {
-      "type": "category",
-      "label": "Core concepts",
-      "collapsed": false,
+      "label": "Explanation",
       "items": [
         "spec-notes-model",
-        "what-it-extracts",
         "spec-notes-tolerance",
         "spec-notes-clinical",
         "spec-notes-datatypes",
@@ -29,13 +35,11 @@
     },
     {
       "type": "category",
-      "label": "Guides",
-      "items": ["cookbook", "build-and-edit", "conformance"]
+      "label": "Reference",
+      "items": ["what-it-extracts", "limitations"]
     },
-    {
-      "type": "category",
-      "label": "Troubleshooting",
-      "items": ["troubleshooting", "limitations"]
-    }
+    { "type": "category", "label": "Troubleshooting", "items": ["troubleshooting"] },
+    "testing-and-quality",
+    "performance"
   ]
 }

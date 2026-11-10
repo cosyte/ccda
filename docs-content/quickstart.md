@@ -2,8 +2,7 @@
 id: quickstart
 title: Quickstart
 sidebar_label: Quickstart
-sidebar_position: 3
-description: Read a Continuity of Care Document and pull out the patient and the reconciliation triad of problems, medications, and allergies.
+description: "Read a Continuity of Care Document and pull out the patient and the reconciliation triad of problems, medications, and allergies."
 ---
 
 # Quickstart
@@ -286,14 +285,16 @@ parseCcda("<Foo>not a clinical document</Foo>"); // throws CcdaParseError (NOT_A
 
 ## Next
 
-- [Core concepts](./spec-notes-model): the document model, the tolerance tiers, the clinical entry
-  layer, and the datatype/code-system machinery.
-- [Cookbook](./cookbook): recipes for active-problem filtering, the code/narrative fail-safe, the
-  performed-vs-planned split, warning triage, and the round-trip serializer.
-- [Troubleshooting & known limitations](./troubleshooting): the fatal codes, the fail-safe rules, and
-  exactly what the parser, builder, and editor do and do not do today.
+- How-to guides: [read the active problem list](./read-the-problem-list.md),
+  [handle a code that disagrees with its narrative](./handle-code-narrative-conflicts.md),
+  [triage warnings](./triage-warnings.md), [build a document](./build-a-document.md),
+  [edit a document](./edit-a-document.md) and [serialize a document](./serialize-a-document.md).
+- [The document model](./spec-notes-model.md) and [the clinical entry layer](./spec-notes-clinical.md)
+  explain what the accessors above read and the distinctions they keep apart.
+- [Troubleshooting](./troubleshooting.md) covers the fatal codes and the common symptoms, and
+  [Known limitations](./limitations.md) says exactly what the parser, builder, and editor do and do
+  not do today.
 
-> **About runnable examples.** The blocks tagged ` ```ts runnable ` above are extracted by the test
-> suite, executed against the built package, and their `// =>` results asserted, so a documented
-> example can never silently drift from the code (`docSnippetSuite()`, the documentation analog of the
-> parser conformance runners). Blocks shown as plain ` ```ts ` are illustrative.
+> **About the samples.** Every sample on these pages is extracted by our test suite, run against the
+> built package, and its `// =>` results asserted, so a documented example cannot silently drift from
+> the code. A sample that cannot run in a test says why in its fence.
