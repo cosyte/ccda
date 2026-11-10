@@ -146,10 +146,7 @@ function writtenDocuments(): OutputDocument[] {
     docs.push({ name: `written:${name}`, text });
   };
   const titled = (title: string): string =>
-    fixtureDocument().replace(
-      "<title>Synthetic Test Document</title>",
-      `<title>${title}</title>`,
-    );
+    fixtureDocument().replace("<title>Synthetic Test Document</title>", `<title>${title}</title>`);
 
   // Entity references: predefined in any case, numeric, custom, and the two non-ASCII letters a
   // case-insensitive Unicode pattern folds onto ASCII ones.
@@ -159,27 +156,39 @@ function writtenDocuments(): OutputDocument[] {
     ["numeric", "&#65; &#x42; &#8232; &#x2029; &#133; &#13;"],
     ["custom-one", "&custom;"],
     ["custom-many", "&a; &b.c; &d-e; &_f; &g1;"],
-    ["custom-unicode", "&ſx; &Ky; &xſ; &été;"],
+    ["custom-unicode", "&\u017Fx; &\u212Ay; &x\u017F; &\u00E9t\u00E9;"],
     ["broken-refs", "& amp; &amp &a b; &&a; &;"],
   ] as const) {
     add(`entities-${name}`, titled(title));
   }
-  add("entities-at-limit", titled(Array.from({ length: 1000 }, (_v, i) => `&e${String(i)};`).join("")));
-  add("entities-over-limit", titled(Array.from({ length: 1001 }, (_v, i) => `&e${String(i)};`).join("")));
-  add("entities-in-attribute", fixtureDocument().replace('extension="DOC123"', 'extension="&x;&y;"'));
+  add(
+    "entities-at-limit",
+    titled(Array.from({ length: 1000 }, (_v, i) => `&e${String(i)};`).join("")),
+  );
+  add(
+    "entities-over-limit",
+    titled(Array.from({ length: 1001 }, (_v, i) => `&e${String(i)};`).join("")),
+  );
+  add(
+    "entities-in-attribute",
+    fixtureDocument().replace('extension="DOC123"', 'extension="&x;&y;"'),
+  );
 
   // Line endings: every form the XML end-of-line rule folds, in text and between tags.
   const base = fixtureDocument();
   add("crlf", base.replace(/\n/gu, "\r\n"));
   add("cr", base.replace(/\n/gu, "\r"));
   add("nel", base.replace(/\n/gu, "\u0085"));
-  add("ls", base.replace(/\n/gu, " "));
-  add("ps", base.replace(/\n/gu, " "));
+  add("ls", base.replace(/\n/gu, "\u2028"));
+  add("ps", base.replace(/\n/gu, "\u2029"));
   add("cr-nel", base.replace(/\n/gu, "\r\u0085"));
-  add("mixed-endings", titled("a\r\nb\rc\u0085d e f"));
-  add("line-endings-in-attribute", base.replace('extension="DOC123"', 'extension="a\r\nb\tc d"'));
-  add("bom", `﻿${base}`);
-  add("bom-only", "﻿");
+  add("mixed-endings", titled("a\r\nb\rc\u0085d\u2028e\u2029f"));
+  add(
+    "line-endings-in-attribute",
+    base.replace('extension="DOC123"', 'extension="a\r\nb\tc\u2028d"'),
+  );
+  add("bom", `\uFEFF${base}`);
+  add("bom-only", "\uFEFF");
   add("empty", "");
   add("long-line", titled("x".repeat(20_000)));
 
@@ -188,7 +197,10 @@ function writtenDocuments(): OutputDocument[] {
   add("entity-decl", `<!ENTITY x "y">${base}`);
   add("deep", base.replace("<title>", `${"<a>".repeat(30)}${"</a>".repeat(30)}<title>`));
   add("wide", base.replace("<title>", `${"<b/>".repeat(400)}<title>`));
-  add("foreign-namespace", base.replace("<title>", '<v:ext xmlns:v="urn:example:vendor"><v:x/></v:ext><title>'));
+  add(
+    "foreign-namespace",
+    base.replace("<title>", '<v:ext xmlns:v="urn:example:vendor"><v:x/></v:ext><title>'),
+  );
   add("no-namespace", base.replace("<title>", '<plain xmlns=""/><title>'));
   add("not-clinical", '<?xml version="1.0"?><Other xmlns="urn:hl7-org:v3"/>');
   add("wrong-namespace", '<ClinicalDocument xmlns="urn:example:other"/>');
@@ -203,16 +215,16 @@ function writtenDocuments(): OutputDocument[] {
     ["subject-section", problemsSection(RELATIVE_SUBJECT, problemEntry(1) + problemEntry(2))],
     ["subject-section-empty", problemsSection(RELATIVE_SUBJECT, "")],
     ["subject-act", problemsSection("", problemEntry(1, RELATIVE_SUBJECT) + problemEntry(2))],
-    ["subject-observation", problemsSection("", problemEntry(1) + problemEntry(2, "", RELATIVE_SUBJECT))],
+    [
+      "subject-observation",
+      problemsSection("", problemEntry(1) + problemEntry(2, "", RELATIVE_SUBJECT)),
+    ],
     ["subject-null", problemsSection("", problemEntry(1, '<subject nullFlavor="UNK"/>'))],
     [
       "subject-subsection",
       problemsSection(RELATIVE_SUBJECT, "", problemsSection("", problemEntry(3))),
     ],
-    [
-      "subject-subsection-empty",
-      problemsSection(RELATIVE_SUBJECT, "", problemsSection("", "")),
-    ],
+    ["subject-subsection-empty", problemsSection(RELATIVE_SUBJECT, "", problemsSection("", ""))],
     [
       "subject-inner-subsection",
       problemsSection("", problemEntry(1), problemsSection(RELATIVE_SUBJECT, problemEntry(2))),
@@ -455,10 +467,7 @@ export function recordOf(api: OutputApi, doc: OutputDocument): Record<string, un
   const structured = parsed.sections.length > 0;
   out["reparse"] = outcome(() => api.parseCcda(parsed.toString()), asDoc);
   out["withWarnings"] = outcome(
-    () =>
-      parsed.withWarnings([
-        { code: "SECTION_PLACEMENT_SUSPECT", message: "m", position: {} } as Ccda.CcdaWarning,
-      ]),
+    () => parsed.withWarnings([{ code: "SECTION_PLACEMENT_SUSPECT", message: "m", position: {} }]),
     asDoc,
   );
   out["revision"] = outcome(() => api.editCcda(parsed), asDoc);
@@ -471,7 +480,7 @@ export function recordOf(api: OutputApi, doc: OutputDocument): Record<string, un
     () =>
       api.editCcda(parsed, {
         ...editOptions(structured),
-        terminology: validationOptions().terminology,
+        terminology: validationOptions().terminology as Ccda.TerminologyAdapter,
       }),
     asDoc,
   );
@@ -493,7 +502,7 @@ export function recordOf(api: OutputApi, doc: OutputDocument): Record<string, un
             ],
           },
         ],
-      } as Ccda.EditCcdaOptions),
+      }),
     asDoc,
   );
   out["editTwice"] = outcome(

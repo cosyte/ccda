@@ -37,6 +37,7 @@ import {
 } from "./functional-mental-status.js";
 import { extractFamilyHistory, type FamilyHistory } from "./family-history.js";
 import { extractPastMedicalHistory } from "./past-medical-history.js";
+import { withPartitionMemo } from "./subject.js";
 import type { Problem } from "./problem.js";
 import type { Element } from "@xmldom/xmldom";
 
@@ -87,6 +88,13 @@ export interface ClinicalEntries {
  * ```
  */
 export function extractClinical(structuredBody: Element, ctx: ParseCtx): ClinicalEntries {
+  // Every family's extractor reads each section's subject partition; it is worked out once per
+  // section for this walk instead of once per family.
+  return withPartitionMemo(() => extractAll(structuredBody, ctx));
+}
+
+/** {@link extractClinical}'s walk, under the partition memo. @internal */
+function extractAll(structuredBody: Element, ctx: ParseCtx): ClinicalEntries {
   const problems: ProblemConcern[] = [];
   const medications: Medication[] = [];
   const allergies: AllergyConcern[] = [];

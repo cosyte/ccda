@@ -112,6 +112,44 @@ const CLINICAL_STATEMENT_NAMES: ReadonlySet<string> = new Set([
  */
 const REPORTED_SECTIONS = new WeakMap<ParseCtx, WeakSet<Element>>();
 
+/** A section's top-level entries, split by {@link partitionEntries}. @internal */
+interface Partition {
+  readonly readable: readonly Element[];
+  readonly governed: readonly Element[];
+}
+
+/**
+ * The partitions worked out during the whole-document walk ({@link withPartitionMemo}), by
+ * section; `undefined` outside it. The walk runs every family's extractor over every section, and
+ * each asks for the same section's partition, which walks every entry's whole subtree: fourteen
+ * times the same answer for one parse. The answer depends on the DOM alone (the section's
+ * entries, their subtrees and the section's ancestors), and nothing writes to the DOM during the
+ * walk, so it is worked out once per section.
+ *
+ * Scoped to the walk rather than kept per parse context, so an extractor a caller invokes on its
+ * own, on a tree it may have changed since, still works its answer out afresh, as it always has.
+ *
+ * @internal
+ */
+let walkPartitions: WeakMap<Element, Partition> | undefined;
+
+/**
+ * Run `walk` with section partitions remembered for its duration (see {@link walkPartitions}).
+ * The memo in force before is put back afterwards, whatever `walk` does, so a parse started from
+ * inside another (a terminology adapter that parses) keeps its own and leaves the outer one's.
+ *
+ * @internal
+ */
+export function withPartitionMemo<T>(walk: () => T): T {
+  const outer = walkPartitions;
+  walkPartitions = new WeakMap<Element, Partition>();
+  try {
+    return walk();
+  } finally {
+    walkPartitions = outer;
+  }
+}
+
 /** True when an element carries a direct `<subject>` child (v3 namespace). @internal */
 function declaresSubject(el: Element): boolean {
   return child(el, "subject") !== undefined;
@@ -174,7 +212,12 @@ function governedStatementInside(
   inherited: boolean,
   carveOut: Element | undefined,
 ): boolean {
-  for (const kid of childElements(el)) {
+  // The children are walked in place, in document order, rather than copied into an array at
+  // every element of every entry: this runs over each entry's whole subtree, so the copies were
+  // most of what a parse allocated here.
+  for (let node = el.firstChild; node !== null; node = node.nextSibling) {
+    if (node.nodeType !== ELEMENT_NODE) continue;
+    const kid = node as Element;
     if (kid.namespaceURI === V3_NS && kid.localName === "subject") continue;
     const scope = declaresSubject(kid) ? kid !== carveOut : inherited;
     if (scope && isClinicalStatement(kid)) return true;
@@ -385,10 +428,19 @@ export function reportSubjectOverrides(sectionEl: Element, ctx: ParseCtx): void 
  *
  * @internal
  */
-function partitionEntries(sectionEl: Element): {
-  readonly readable: readonly Element[];
-  readonly governed: readonly Element[];
-} {
+function partitionEntries(sectionEl: Element): Partition {
+  const memo = walkPartitions;
+  if (memo === undefined) return partitionOf(sectionEl);
+  let partition = memo.get(sectionEl);
+  if (partition === undefined) {
+    partition = partitionOf(sectionEl);
+    memo.set(sectionEl, partition);
+  }
+  return partition;
+}
+
+/** {@link partitionEntries}, worked out. @internal */
+function partitionOf(sectionEl: Element): Partition {
   const sectionGoverned = sectionUnderSubjectDeclaration(sectionEl);
   const readable: Element[] = [];
   const governed: Element[] = [];

@@ -20,6 +20,12 @@ import type { Element, Node } from "@xmldom/xmldom";
 /** Element node type per the DOM spec (`Node.ELEMENT_NODE`). @internal */
 const ELEMENT_NODE = 1 as const;
 
+/** Processing instruction node type per the DOM spec (`Node.PROCESSING_INSTRUCTION_NODE`). @internal */
+const PROCESSING_INSTRUCTION_NODE = 7 as const;
+
+/** Comment node type per the DOM spec (`Node.COMMENT_NODE`). @internal */
+const COMMENT_NODE = 8 as const;
+
 /**
  * Read an unprefixed attribute, returning `undefined` (never `null` or `""`)
  * when the attribute is absent or empty, matches the
@@ -125,11 +131,65 @@ export function childElements(el: Element): readonly Element[] {
  * ```
  */
 export function text(el: Element): string | undefined {
-  const raw = el.textContent;
-  /* v8 ignore next -- an element's textContent is always a string in @xmldom/xmldom */
+  const raw = el.nodeType === ELEMENT_NODE ? textContentOf(el) : el.textContent;
   if (raw === null) return undefined;
   const trimmed = raw.trim();
   return trimmed === "" ? undefined : trimmed;
+}
+
+/**
+ * An element's `textContent`, read without the copies `@xmldom/xmldom` makes for it. Its getter
+ * walks the subtree with a frame object per node and joins an array of the parts; this walks the
+ * same nodes in the same order through the sibling and parent links, and returns the one text
+ * node of an element that has only one (a title, a code's original text, most narrative cells)
+ * as it is.
+ *
+ * The same rule as the getter: every descendant's `nodeValue` in document order, elements
+ * entered, processing instructions and comments left out. What is left is a text or CDATA node,
+ * whose value is always a string: `@xmldom/xmldom` refuses any other kind of node as an element's
+ * child.
+ *
+ * @internal
+ */
+function textContentOf(el: Element): string {
+  const first = el.firstChild;
+  if (first !== null && first.nextSibling === null && contributesText(first.nodeType)) {
+    return first.nodeValue as string;
+  }
+  let out = "";
+  let node: Node | null = first;
+  while (node !== null) {
+    const type = node.nodeType;
+    if (type === ELEMENT_NODE) {
+      const inner: Node | null = node.firstChild;
+      if (inner !== null) {
+        node = inner;
+        continue;
+      }
+    } else if (contributesText(type)) {
+      out += node.nodeValue as string;
+    }
+    // The next node in document order inside `el`: the next sibling, else the next sibling of
+    // the nearest ancestor that has one, stopping at `el`.
+    let next: Node | null = node.nextSibling;
+    let up: Node | null = node;
+    while (next === null) {
+      up = up.parentNode;
+      if (up === null || up === el) break;
+      next = up.nextSibling;
+    }
+    node = next;
+  }
+  return out;
+}
+
+/** Whether a node of this type adds its value to an element's text: not an element, comment or processing instruction. @internal */
+function contributesText(nodeType: number): boolean {
+  return (
+    nodeType !== ELEMENT_NODE &&
+    nodeType !== COMMENT_NODE &&
+    nodeType !== PROCESSING_INSTRUCTION_NODE
+  );
 }
 
 /**
@@ -162,9 +222,16 @@ export function positionOf(el: Element): CcdaPosition {
   return pos;
 }
 
-/** True when a node is an element in the HL7 v3 namespace with the given local name. @internal */
+/**
+ * True when a node is an element in the HL7 v3 namespace with the given local name. The local
+ * name is compared before the namespace: nearly every sibling a lookup passes over has another
+ * name, and a name that differs (in length, or in its first characters) is told apart sooner
+ * than a namespace that matches, which has to be read to its end. Only text nodes lack a
+ * `localName` of their own (it is `undefined` or `null`), and neither equals a name.
+ *
+ * @internal
+ */
 function isV3Element(node: Node, localName: string): node is Element {
-  if (node.nodeType !== ELEMENT_NODE) return false;
   const el = node as Element;
-  return el.namespaceURI === V3_NS && el.localName === localName;
+  return el.localName === localName && el.nodeType === ELEMENT_NODE && el.namespaceURI === V3_NS;
 }
