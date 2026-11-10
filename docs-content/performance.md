@@ -2,27 +2,50 @@
 id: performance
 title: Performance
 sidebar_label: Performance
-description: "What we measure on @cosyte/ccda and how: the limits that bound what a document can cost, the guards against slow hostile input, and what is not yet measured."
+description: "What we measure on @cosyte/ccda and how: the benchmark suite and scaling gate, the limits that bound what a document can cost, and the guards against slow hostile input."
 ---
 
 # Performance
 
-This page describes what we measure on `@cosyte/ccda`, how we measure it, and what is not measured
-yet. The shared method every Cosyte package follows (throughput, latency percentiles, memory, import
-time and bundle size, and how a pull request is compared with `main`) is written down in the
-performance standard in
+This page describes what we measure on `@cosyte/ccda` and how we measure it. The shared method every
+Cosyte package follows (throughput, latency percentiles, memory, import time and bundle size, and
+how a pull request is compared with `main`) is written down in the performance standard in
 [cosyte/config's decision records](https://github.com/cosyte/config/tree/main/documentation/decisions).
 The numbers for the current release are in [Current numbers](#current-numbers) below.
 
 ## What is measured today
 
-**No throughput or memory benchmark runs on this package yet.** Throughput by document size,
-latency percentiles, peak heap, import time and bundle size are what the performance standard asks
-for, and until a benchmark is added the numbers below say "not measured" for each of them, with the
-reason.
+**A benchmark suite and a scaling gate.** `bench/ccda.bench.mjs` runs on
+[`@cosyte/bench`](https://www.npmjs.com/package/@cosyte/bench) against the built package, the way a
+consumer loads it. Its inputs are synthetic documents built in code by `bench/shapes.mjs`, in three
+shapes real traffic has:
 
-What runs today is a set of guards against the slow paths that matter most for a parser of
-untrusted XML:
+- **a Referral Note** of about 23 KiB, the small document a referral feed carries all day;
+- **a Continuity of Care Document** of 100, 1,000 and 4,000 entries spread over Problems,
+  Medications, Results and Encounters, each section with its narrative table, the shape a full chart
+  export returns;
+- **an Unstructured Document** whose `nonXMLBody` carries a base64 PDF of 64 KiB or 4 MiB, the large
+  opaque payload.
+
+Each shape is measured three ways: `parseCcda`; `parseCcda` with a terminology adapter and a value set
+source, both answering from memory; and `editCcda` replacing a section, then `toString`. A reading
+reports throughput, latency p50, p95 and p99, allocations per call, the peak heap of one call, whether
+the heap stays flat over a long run, and the cold import time with every file it loads and its gzip
+size. `@cosyte/bench` cannot finish warming up a case of about 1 MiB or more, so a reading skips the
+timings of those cases and still reports their peak heap; `bench/profile.mjs` times every size the
+simpler way and profiles the hottest paths.
+
+`test/perf/scaling-gate.perf.ts` is the scaling gate from `@cosyte/test-utils/perf`: it fails when
+parse cost grows faster than its input, on 4 times the referral notes and on documents with 4 times
+the entries, and its self-check proves those sizes are large enough to catch a parse that has become
+quadratic.
+
+On a pull request, CI runs the scaling gate, and times the referral note and the 100 entry CCD on the
+base build against the head build, interleaved on one runner. That comparison is advisory: it posts
+its numbers and fails nothing. The `Bench reading` workflow takes a full reading, the budgets and a
+profile on a GitHub-hosted runner when the bench changes, or when it is run by hand.
+
+It also runs a set of guards against the slow paths that matter most for a parser of untrusted XML:
 
 - **Hostile input stays linear.** Three tests in the suite parse inputs built from published
   denial-of-service advisories against the XML parser this package uses (an unterminated processing
@@ -48,11 +71,17 @@ untrusted XML:
 
 ```bash
 pnpm install --frozen-lockfile
+pnpm build
+pnpm bench:reading --out bench-results/reading.json --summary bench-results/reading.md
+node bench/budgets.mjs bench-results/reading.json
+node --enable-source-maps bench/profile.mjs dist/index.mjs --out bench-results/profiles
+pnpm test:perf
 pnpm exec vitest run test/security.test.ts test/parse.test.ts
 ```
 
-`test/security.test.ts` holds the hostile-input guards and the depth and entity-expansion caps;
-`test/parse.test.ts` holds the byte, depth and node-count caps among the parser's other tests.
+A full reading takes many minutes; `--only <benchmark>` narrows it. `test/security.test.ts` holds the
+hostile-input guards and the depth and entity-expansion caps; `test/parse.test.ts` holds the byte,
+depth and node-count caps among the parser's other tests.
 
 ## Current numbers
 
