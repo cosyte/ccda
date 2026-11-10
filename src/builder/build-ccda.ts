@@ -4067,7 +4067,11 @@ function resultObservation(
  * @internal
  */
 function observationValue(doc: Document, testCode: BuildCode, r: BuildCcdaResult): Element {
-  const forms = [r.quantity, r.codedValue, r.stringValue].filter((v) => v !== undefined).length;
+  // `null` counts as absent: an untyped caller passing `stringValue: null` set no value, and
+  // counting it as one emitted an empty `ST` value under an empty narrative line.
+  const forms = [r.quantity, r.codedValue, r.stringValue].filter(
+    (v) => v !== undefined && v !== null,
+  ).length;
   if (forms !== 1) {
     throw new TypeError(
       `buildCcda: result "${testCode.displayName}" must set exactly one of ` +
@@ -4086,7 +4090,7 @@ function observationValue(doc: Document, testCode: BuildCode, r: BuildCcdaResult
     });
   }
   const st = typedValue(doc, "ST");
-  /* v8 ignore next -- the check above admits exactly one form, so stringValue is set here */
+  /* v8 ignore next -- the check above admits exactly one non-null form, so stringValue is set here */
   st.appendChild(doc.createTextNode(r.stringValue ?? ""));
   return st;
 }
@@ -4100,7 +4104,7 @@ function observationNarrative(code: BuildCode, r: BuildCcdaResult): string {
   if (r.codedValue !== undefined) {
     return `${test}: ${narrativeLabel(r.codedValue, "results[].results[].codedValue")}`;
   }
-  /* v8 ignore next -- resultObservation calls observationValue first, which admits exactly one form */
+  /* v8 ignore next -- resultObservation calls observationValue first, which admits exactly one non-null form */
   return `${test}: ${r.stringValue ?? ""}`;
 }
 

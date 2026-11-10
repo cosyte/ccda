@@ -11,6 +11,7 @@ import {
   buildCcda,
   serializeCcda,
   type BuildCcdaInit,
+  type BuildCcdaResult,
   type BuildCode,
   type TerminologyAdapter,
   type TerminologyCoding,
@@ -160,5 +161,27 @@ describe("terminology translation of a coding with no symbol", () => {
     );
     expect(seen).toStrictEqual([]);
     expect(serializeCcda(doc)).not.toContain("<translation");
+  });
+});
+
+describe("result value forms from an untyped caller", () => {
+  it("refuses a result whose only value form is null, rather than emitting an empty value", () => {
+    // `stringValue` is `string | undefined` in the type; an untyped caller can pass `null`. That
+    // is no value at all, so the exactly-one-form rule refuses it like any other missing value.
+    const result = {
+      test: { code: "2345-7", displayName: "Glucose" },
+      stringValue: null,
+    } as unknown as BuildCcdaResult;
+    expect(() =>
+      buildCcda({
+        patient: PATIENT,
+        results: [
+          {
+            code: { code: "24323-8", displayName: "Comprehensive metabolic panel" },
+            results: [result],
+          },
+        ],
+      }),
+    ).toThrow(/must set exactly one of `quantity`, `codedValue`, or `stringValue`/u);
   });
 });
