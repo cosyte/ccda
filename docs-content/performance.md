@@ -48,8 +48,11 @@ untrusted XML:
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm test test/security.test.ts   # the hostile-input guards and the parse limits
+pnpm exec vitest run test/security.test.ts test/parse.test.ts
 ```
+
+`test/security.test.ts` holds the hostile-input guards and the depth and entity-expansion caps;
+`test/parse.test.ts` holds the byte, depth and node-count caps among the parser's other tests.
 
 ## Current numbers
 
