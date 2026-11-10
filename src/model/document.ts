@@ -787,6 +787,7 @@ function recognizeDocumentType(
     ctx.emit(
       templateExtensionUnmodeledRelease(
         templateIdPosition(root, matched.root),
+        /* v8 ignore next -- an unmodeled-release reading is made only from a present extension */
         matched.extension ?? "",
       ),
     );

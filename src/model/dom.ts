@@ -126,6 +126,7 @@ export function childElements(el: Element): readonly Element[] {
  */
 export function text(el: Element): string | undefined {
   const raw = el.textContent;
+  /* v8 ignore next -- an element's textContent is always a string in @xmldom/xmldom */
   if (raw === null) return undefined;
   const trimmed = raw.trim();
   return trimmed === "" ? undefined : trimmed;
@@ -152,6 +153,7 @@ export function text(el: Element): string | undefined {
 export function positionOf(el: Element): CcdaPosition {
   const withLoc = el as Element & { lineNumber?: number; columnNumber?: number };
   const pos: { path?: string; line?: number; column?: number } = {};
+  /* v8 ignore else -- every element @xmldom/xmldom builds has a non-empty local name */
   if (typeof el.localName === "string" && el.localName.length > 0) {
     pos.path = safeElementName(el.localName);
   }

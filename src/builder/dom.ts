@@ -31,6 +31,7 @@ export type Attrs = Readonly<Record<string, string | undefined>>;
 export function newCdaDocument(): { readonly doc: Document; readonly root: Element } {
   const doc = new DOMImplementation().createDocument(V3_NS, "ClinicalDocument", null);
   const root = doc.documentElement;
+  /* v8 ignore if -- createDocument with a qualified name always yields a root */
   if (root === null) {
     // Unreachable: createDocument with a qualified name always yields a root.
     throw new Error("buildCcda: failed to create ClinicalDocument root.");

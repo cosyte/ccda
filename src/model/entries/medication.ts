@@ -181,9 +181,11 @@ function readDose(
   // scalar PQ on the element itself.
   if (child(doseEl, "low") !== undefined || child(doseEl, "high") !== undefined) {
     const doseRange = parseIvlPq(doseEl, ctx);
+    /* v8 ignore next -- parseIvlPq returns undefined only for an absent element, and doseEl is present */
     return doseRange === undefined ? {} : { doseRange };
   }
   const dose = parsePq(doseEl, ctx);
+  /* v8 ignore next -- parsePq returns undefined only for an absent element, and doseEl is present */
   return dose === undefined ? {} : { dose };
 }
 
@@ -222,6 +224,7 @@ function readTiming(
       unresolved += 1;
     } else if (isDuration && duration === undefined) {
       const parsed = parseIvlTs(et, ctx);
+      /* v8 ignore else -- parseIvlTs returns undefined only for an absent element, and et is present */
       if (parsed !== undefined) duration = parsed;
     } else if (isFrequency && frequency === undefined) {
       frequency = readFrequency(et, periodEl, ctx);

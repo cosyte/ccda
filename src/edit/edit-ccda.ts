@@ -378,8 +378,10 @@ export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): C
   // carries no Tier-2 deviations to record, and any Tier-3 fatal is impossible.
   const dom = parseSecureXml(xml, DEFAULT_LIMITS, () => undefined);
   const root = dom.documentElement;
+  /* v8 ignore if -- parseSecureXml throws NOT_WELL_FORMED_XML for XML with no root element, so a re-parse that returns has one */
   if (root === null) {
-    // Unreachable: the source already parsed as a ClinicalDocument.
+    // Unreachable: a source from parseCcda re-parses to its ClinicalDocument, and a forged source
+    // whose XML has no root element is refused by parseSecureXml above with NOT_WELL_FORMED_XML.
     throw new CcdaEditError("NO_SOURCE_DOCUMENT", "editCcda: source produced no document element.");
   }
 

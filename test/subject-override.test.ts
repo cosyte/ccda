@@ -1385,3 +1385,53 @@ describe("the override warning is the only code that says whose data it is", () 
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Declaration shapes at the edges: on the entry wrapper, under subsections that
+// govern nothing, and on a section whose code carries no symbol
+// ---------------------------------------------------------------------------
+
+describe("SUBJECT_CONTEXT_OVERRIDE, edge shapes", () => {
+  it("a declaration on the <entry> wrapper itself governs the entry", () => {
+    const entries = problemEntry(1).replace("<entry>", `<entry>${RELATIVE_SUBJECT}`);
+    const parsed = parse(doc(problemsSection({ entries })));
+    const found = overrides(parsed);
+
+    expect(found).toHaveLength(1);
+    expect(found[0]?.position.path).toBe("act");
+    expect(parsed.problems).toHaveLength(0);
+  });
+
+  it("a declaring section whose subsections hold only empty entries gets one section-level instance", () => {
+    const innermost = problemsSection({});
+    const middle = problemsSection({ entries: "\n          <entry/>", subsections: innermost });
+    const parsed = parse(
+      doc(
+        problemsSection({
+          subject: RELATIVE_SUBJECT,
+          subsections: `\n          <component/>${middle}`,
+        }),
+      ),
+    );
+    const found = overrides(parsed);
+
+    expect(found).toHaveLength(1);
+    expect(found[0]?.position.path).toBe("section");
+    expect(found[0]?.position.sectionCode).toBe("11450-4");
+  });
+
+  it("a declaring section whose code carries no symbol is reported with no sectionCode", () => {
+    const xml = doc(
+      problemsSection({ subject: RELATIVE_SUBJECT }).replace(
+        `<code code="11450-4" codeSystem="${LOINC}"/>`,
+        `<code nullFlavor="NI"/>`,
+      ),
+    );
+    expect(xml).toContain(`<code nullFlavor="NI"/>`);
+    const found = overrides(parse(xml));
+
+    expect(found).toHaveLength(1);
+    expect(found[0]?.position.path).toBe("section");
+    expect(found[0]?.position.sectionCode).toBeUndefined();
+  });
+});

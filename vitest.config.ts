@@ -4,7 +4,8 @@ import { configDefaults } from "vitest/config";
 /**
  * Vitest config for @cosyte/ccda from the shared @cosyte/vitest-config standard.
  *
- * Per-directory >= 90 coverage gates on the core dir(s). Add directories to `coverageDirs` as the
+ * Per-directory >= 90 coverage gates on the core dir(s), under a repo-wide 100 floor on all four
+ * metrics (`coverageThresholds` below). Add directories to `coverageDirs` as the
  * parser grows (e.g. "model", "serialize", "helpers", "builder"), mirror @cosyte/hl7's layout once
  * the corresponding source lands.
  *
@@ -58,6 +59,11 @@ const WORKING_TREE_SNAPSHOT = "test/conformance/working-tree-is-clean.test.ts";
 
 export default cosyteVitest({
   coverageDirs: ["parser", "model", "model/types", "helpers", "serialize", "profiles", "builder", "edit"],
+  // The repo-wide floor sits above the shared 90 gate: every metric is at 100, so a change that
+  // leaves a line, branch, function or statement unexercised fails here. A line no input can reach
+  // carries an inline `v8 ignore` comment naming why, rather than a lower number. The floor only
+  // rises; when the shared coverage ratchet lands in `@cosyte/vitest-config`, it starts from these.
+  coverageThresholds: { lines: 100, branches: 100, functions: 100, statements: 100 },
   test: {
     globals: false,
     environment: "node",
