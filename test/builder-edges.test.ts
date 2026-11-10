@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCcda,
+  editCcda,
   serializeCcda,
   type BuildCcdaInit,
   type BuildCcdaResult,
@@ -179,6 +180,115 @@ describe("result value forms from an untyped caller", () => {
           {
             code: { code: "24323-8", displayName: "Comprehensive metabolic panel" },
             results: [result],
+          },
+        ],
+      }),
+    ).toThrow(/must set exactly one of `quantity`, `codedValue`, or `stringValue`/u);
+  });
+});
+
+describe("a null value form beside a real one, from an untyped caller", () => {
+  // `null` is absent in the exactly-one count, so it is absent in the choice of form too: the real
+  // form is emitted, as if the `null` key were not there. A JSON row with empty columns has this
+  // shape. Every case is checked in the emitted XML and in the re-parsed model.
+  const panelOf = (result: BuildCcdaResult): NonNullable<BuildCcdaInit["results"]> => [
+    { code: { code: "24323-8", displayName: "Comprehensive metabolic panel" }, results: [result] },
+  ];
+  const untyped = (forms: Record<string, unknown>): BuildCcdaResult => {
+    // The types admit no `null` form; an untyped caller's object reaches the builder as is.
+    const result: unknown = { test: { code: "2345-7", displayName: "Glucose" }, ...forms };
+    return result as BuildCcdaResult;
+  };
+
+  it.each([
+    { name: "quantity: null", forms: { quantity: null, stringValue: "high" } },
+    { name: "codedValue: null", forms: { codedValue: null, stringValue: "high" } },
+    { name: "both null", forms: { quantity: null, codedValue: null, stringValue: "high" } },
+  ])("emits the string value when $name sits beside it", ({ forms }) => {
+    const doc = buildCcda({ patient: PATIENT, results: panelOf(untyped(forms)) });
+    const xml = serializeCcda(doc);
+    expect(xml).toContain('<value xsi:type="ST">high</value>');
+    expect(xml).toMatch(/<content ID="[^"]+">Glucose: high<\/content>/u);
+    expect(xml).not.toContain('xsi:type="PQ"');
+    expect(xml).not.toContain('xsi:type="CD"');
+    const value = doc.getResults()[0]?.results[0]?.value;
+    expect(value).toMatchObject({ kind: "string", value: "high" });
+  });
+
+  it("emits the coded value when quantity: null sits beside it", () => {
+    const doc = buildCcda({
+      patient: PATIENT,
+      results: panelOf(
+        untyped({ quantity: null, codedValue: { code: "260385009", displayName: "Negative" } }),
+      ),
+    });
+    const xml = serializeCcda(doc);
+    expect(xml).toMatch(/<value code="260385009"[^>]*displayName="Negative"[^>]*xsi:type="CD"\/>/u);
+    expect(xml).toMatch(/<content ID="[^"]+">Glucose: Negative<\/content>/u);
+    const value = doc.getResults()[0]?.results[0]?.value;
+    expect(value?.kind).toBe("coded");
+    if (value?.kind === "coded") expect(value.code.code).toBe("260385009");
+  });
+
+  it("emits the quantity when stringValue: null sits beside it, with no empty ST", () => {
+    const doc = buildCcda({
+      patient: PATIENT,
+      results: panelOf(untyped({ stringValue: null, quantity: { value: 5, unit: "mg/dL" } })),
+    });
+    const xml = serializeCcda(doc);
+    expect(xml).toContain('<value value="5" unit="mg/dL" xsi:type="PQ"/>');
+    expect(xml).toMatch(/<content ID="[^"]+">Glucose: 5 mg\/dL<\/content>/u);
+    expect(xml).not.toContain('xsi:type="ST"');
+    const value = doc.getResults()[0]?.results[0]?.value;
+    expect(value?.kind).toBe("physicalQuantity");
+    if (value?.kind === "physicalQuantity") expect(value.quantity).toMatchObject({ value: 5 });
+  });
+
+  it("still refuses two real forms when a third is null", () => {
+    expect(() =>
+      buildCcda({
+        patient: PATIENT,
+        results: panelOf(
+          untyped({
+            quantity: { value: 5, unit: "mg/dL" },
+            codedValue: { code: "260385009", displayName: "Negative" },
+            stringValue: null,
+          }),
+        ),
+      }),
+    ).toThrow(/must set exactly one of `quantity`, `codedValue`, or `stringValue`/u);
+  });
+
+  it("refuses a result whose every form is null", () => {
+    expect(() =>
+      buildCcda({
+        patient: PATIENT,
+        results: panelOf(untyped({ quantity: null, codedValue: null, stringValue: null })),
+      }),
+    ).toThrow(/must set exactly one of `quantity`, `codedValue`, or `stringValue`/u);
+  });
+
+  it("treats the same shapes the same way through editCcda", () => {
+    const source = buildCcda({ patient: PATIENT });
+    const edited = editCcda(source, {
+      sections: [
+        {
+          kind: "results",
+          content: panelOf(untyped({ quantity: null, stringValue: "high" })),
+        },
+      ],
+    });
+    expect(serializeCcda(edited)).toContain('<value xsi:type="ST">high</value>');
+    expect(edited.getResults()[0]?.results[0]?.value).toMatchObject({
+      kind: "string",
+      value: "high",
+    });
+    expect(() =>
+      editCcda(source, {
+        sections: [
+          {
+            kind: "results",
+            content: panelOf(untyped({ quantity: null, codedValue: null, stringValue: null })),
           },
         ],
       }),

@@ -4060,28 +4060,38 @@ function resultObservation(
 }
 
 /**
+ * Whether a result value form is set. `null` counts as absent, the same as
+ * `undefined`: the field types admit neither, so an untyped caller passing
+ * `null` (a JSON row with an empty column, say) set no value in that form.
+ * @internal
+ */
+function isValueForm<T>(v: T | null | undefined): v is T {
+  return v !== undefined && v !== null;
+}
+
+/**
  * Build a result's typed `<value>`, enforcing **exactly one** value form. A UCUM
  * `quantity` → `xsi:type="PQ"`; a `codedValue` → `xsi:type="CD"` (SNOMED CT by
  * default); a `stringValue` → `xsi:type="ST"`. Throws when none (or more than
- * one) is set, a result value is never dropped or invented.
+ * one) is set, a result value is never dropped or invented. A `null` form is
+ * absent ({@link isValueForm}), in the count and in the choice of form alike.
  * @internal
  */
 function observationValue(doc: Document, testCode: BuildCode, r: BuildCcdaResult): Element {
-  // `null` counts as absent: an untyped caller passing `stringValue: null` set no value, and
-  // counting it as one emitted an empty `ST` value under an empty narrative line.
-  const forms = [r.quantity, r.codedValue, r.stringValue].filter(
-    (v) => v !== undefined && v !== null,
-  ).length;
+  // The count and every branch below use the same test, so a `null` form is absent in both: a
+  // branch that read `!== undefined` would take `{ quantity: null, stringValue: "high" }` past the
+  // count and into `null.value`.
+  const forms = [r.quantity, r.codedValue, r.stringValue].filter(isValueForm).length;
   if (forms !== 1) {
     throw new TypeError(
       `buildCcda: result "${testCode.displayName}" must set exactly one of ` +
         "`quantity`, `codedValue`, or `stringValue`.",
     );
   }
-  if (r.quantity !== undefined) {
+  if (isValueForm(r.quantity)) {
     return typedValue(doc, "PQ", { value: r.quantity.value.toString(), unit: r.quantity.unit });
   }
-  if (r.codedValue !== undefined) {
+  if (isValueForm(r.codedValue)) {
     return typedValue(doc, "CD", {
       code: r.codedValue.code,
       codeSystem: r.codedValue.codeSystem ?? SNOMED_CT,
@@ -4090,7 +4100,7 @@ function observationValue(doc: Document, testCode: BuildCode, r: BuildCcdaResult
     });
   }
   const st = typedValue(doc, "ST");
-  /* v8 ignore next -- the check above admits exactly one non-null form, so stringValue is set here */
+  /* v8 ignore next -- the check above admits exactly one non-null form and quantity and codedValue are not it, so stringValue is neither null nor undefined here */
   st.appendChild(doc.createTextNode(r.stringValue ?? ""));
   return st;
 }
@@ -4098,13 +4108,13 @@ function observationValue(doc: Document, testCode: BuildCode, r: BuildCcdaResult
 /** A human-readable narrative line for a result/vital observation. @internal */
 function observationNarrative(code: BuildCode, r: BuildCcdaResult): string {
   const test = narrativeLabel(code, "results[].results[].test");
-  if (r.quantity !== undefined) {
+  if (isValueForm(r.quantity)) {
     return `${test}: ${r.quantity.value.toString()} ${r.quantity.unit}`;
   }
-  if (r.codedValue !== undefined) {
+  if (isValueForm(r.codedValue)) {
     return `${test}: ${narrativeLabel(r.codedValue, "results[].results[].codedValue")}`;
   }
-  /* v8 ignore next -- resultObservation calls observationValue first, which admits exactly one non-null form */
+  /* v8 ignore next -- resultObservation calls observationValue first, which admits exactly one non-null form, and quantity and codedValue are not it, so stringValue is neither null nor undefined */
   return `${test}: ${r.stringValue ?? ""}`;
 }
 
