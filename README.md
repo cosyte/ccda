@@ -78,7 +78,9 @@ npm install @cosyte/ccda
 ships a **dual ESM and CJS** build with per-condition type declarations, so both `import` and
 `require` resolve to the right types. There is **one** runtime dependency,
 [`@xmldom/xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) (exact-pinned), the W3C-DOM substrate
-for C-CDA's XML.
+for C-CDA's XML. The optional `@cosyte/ccda/arbitraries` entry point, fast-check generators for
+[property-testing your own code](https://github.com/cosyte/ccda/blob/main/docs-content/property-test-your-code.md),
+needs `fast-check` installed beside it; the main entry point never loads it.
 
 ## Usage
 
