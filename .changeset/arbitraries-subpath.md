@@ -1,5 +1,0 @@
----
-"@cosyte/ccda": patch
----
-
-New `@cosyte/ccda/arbitraries` entry point: fast-check generators for C-CDA, so you can property-test your own code on generated documents. `document()` gives parsed, spec-clean documents (a CCD, a Referral Note or a Discharge Summary that `buildCcda` builds, with every clinical section it emits); `documentInit()` gives the `buildCcda` input behind them; `documentText()` gives messy document text a real sender might produce, which the parser always accepts; `hostileInput()` gives random strings and markup, broken documents, document type declarations, nesting past the depth limit and roots that are not a `ClinicalDocument`; and `patient()`, `problem()`, `allergy()`, `medication()`, `resultPanel()`, `vitalsPanel()`, `immunization()`, `procedure()`, `encounter()`, `code()`, `quantity()`, `timestamp()` and `text()` give the parts. Every generated value is synthetic and random. `fast-check` (4.x) is an optional peer dependency: install it to use this entry point. The main entry point never loads it, so nothing changes for code that only imports `@cosyte/ccda`.

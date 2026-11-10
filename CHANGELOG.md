@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.7
+
+### Patch Changes
+
+- dc7dc2a: New `@cosyte/ccda/arbitraries` entry point: fast-check generators for C-CDA, so you can property-test your own code on generated documents. `document()` gives parsed, spec-clean documents (a CCD, a Referral Note or a Discharge Summary that `buildCcda` builds, with every clinical section it emits); `documentInit()` gives the `buildCcda` input behind them; `documentText()` gives messy document text a real sender might produce, which the parser always accepts; `hostileInput()` gives random strings and markup, broken documents, document type declarations, nesting past the depth limit and roots that are not a `ClinicalDocument`; and `patient()`, `problem()`, `allergy()`, `medication()`, `resultPanel()`, `vitalsPanel()`, `immunization()`, `procedure()`, `encounter()`, `code()`, `quantity()`, `timestamp()` and `text()` give the parts. Every generated value is synthetic and random. `fast-check` (4.x) is an optional peer dependency: install it to use this entry point. The main entry point never loads it, so nothing changes for code that only imports `@cosyte/ccda`.
+- dc7dc2a: A carriage return in text now survives serializing. `serializeCcda` and `doc.toString()` write it as `&#13;`, where they wrote it raw and a parse of the output read it back as a line feed. A document whose narrative held `&#13;` changed its text on the first round trip, and `buildCcda` with a `displayName` holding a carriage return built a narrative that no longer matched it, so the built document carried a `CODE_NARRATIVE_MISMATCH` warning. Text without a carriage return serializes exactly as before.
+
 ## 0.1.6
 
 ### Patch Changes
