@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.1.6
+
+### Patch Changes
+
+- f756401: `buildCcda` and `editCcda` now refuse a `null` or missing coded value with a `TypeError` that names
+  the field, where they threw a bare "Cannot read properties of null". A caller without the TypeScript
+  types could pass `allergies: [{ allergen: null }]`: that allergy now throws the documented "each
+  allergy must set either `allergen` or `noKnownAllergy: true`" error. A required code that is `null`,
+  missing, or not an object (a problem, a drug, a result test, a vital sign, a vaccine, a procedure, an
+  encounter type, an assessment scale, a past or discharge diagnosis, a planned item) throws a
+  `TypeError` naming its field path and never the value. An optional coded value that has a fallback
+  (a smoking status, a functional or mental status finding, a self-care activity or its ability, a
+  family member's relationship or condition) set to `null` now reads as absent, the same as leaving it
+  out, in both the narrative and the entry.
+- f756401: `editCcda` now refuses a source that is not a `CcdaDocument` with `CcdaEditError`
+  (`NO_SOURCE_DOCUMENT`), the error its signature documents. A caller without the TypeScript types
+  could pass a plain object such as `{}`: its default `toString` gave `"[object Object]"`, the edit
+  tried to read that as XML, and it threw `CcdaParseError` (`NOT_WELL_FORMED_XML`) instead. An object
+  with a `toString` of its own, the XML text itself, and a number are refused the same way. A
+  document from `parseCcda` or `buildCcda` edits as before, including one made by the CommonJS build
+  and passed to the ES module build.
+- 6dc0b92: `BuildCcdaAssessmentScale` and `BuildCcdaAssessmentScaleItem` are now exported from the package
+  root. They type the `functionalStatusScales` and `mentalStatusScales` fields of `buildCcda` and each
+  scale's `supporting` items, but a TypeScript caller could not import them by name and had to reach
+  them through `NonNullable<BuildCcdaInit["mentalStatusScales"]>[number]`. What `buildCcda` emits is
+  unchanged.
+- cf3dc6a: Document comments only, no behavior change. `ResolvedLimits`, `EditableSectionKind` and
+  `CDA_DOCUMENT_OID` are public exports and no longer carry an internal tag in their comments, so the
+  generated API reference shows them like any other export. The comment on `CDA_DOCUMENT_OID` now says
+  what the value is, the US Realm Header `templateId` root; it called it the ClinicalDocument class
+  code before.
+- c43af47: `buildCcda` and `editCcda` now treat a `null` result value form as absent, the same as a missing
+  one. A caller without the TypeScript types could pass `stringValue: null`; the builder counted that
+  as the one value form and emitted an empty `ST` value under a narrative line with nothing after the
+  test name, with no warning. Such a result now throws the same `TypeError` as a result with no value
+  form, and so does one whose every form is `null`. A `null` form beside one real form is skipped: the
+  real form is emitted, so `{ quantity: null, stringValue: "high" }` emits `ST` "high" and
+  `{ stringValue: null, quantity: { value: 5, unit: "mg/dL" } }` emits the `PQ`. Two real forms still
+  throw, with or without a `null` third.
+
 ## 0.1.5
 
 ### Patch Changes
