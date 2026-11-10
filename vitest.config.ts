@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import { cosyteVitest } from "@cosyte/vitest-config";
 import { configDefaults } from "vitest/config";
 
@@ -57,8 +59,18 @@ import { configDefaults } from "vitest/config";
  */
 const WORKING_TREE_SNAPSHOT = "test/conformance/working-tree-is-clean.test.ts";
 
-export default cosyteVitest({
-  coverageDirs: ["parser", "model", "model/types", "helpers", "serialize", "profiles", "builder", "edit"],
+const config = cosyteVitest({
+  coverageDirs: [
+    "parser",
+    "model",
+    "model/types",
+    "helpers",
+    "serialize",
+    "profiles",
+    "builder",
+    "edit",
+    "arbitraries",
+  ],
   // The repo-wide floor sits above the shared 90 gate: every metric is at 100, so a change that
   // leaves a line, branch, function or statement unexercised fails here. A line no input can reach
   // carries an inline `v8 ignore` comment naming why, rather than a lower number. The floor only
@@ -90,3 +102,24 @@ export default cosyteVitest({
     ],
   },
 });
+
+const srcEntry = fileURLToPath(new URL("src/index.ts", import.meta.url));
+const distDir = fileURLToPath(new URL("dist/", import.meta.url));
+
+/**
+ * `src/arbitraries/` imports the library by its package name, as the published subpath must (see
+ * `tsup.config.ts`). Under test that name resolves to the source entry point, the mapping `paths`
+ * gives the type checker, so the tests and coverage run against `src/`. Imported from the built
+ * subpath (`dist/arbitraries.mjs`, which the docs samples load), it resolves to the built entry
+ * point beside it, as it does for a consumer, so a sample never mixes built and source classes.
+ */
+const ownPackageName = {
+  name: "cosyte-ccda-own-package-name",
+  enforce: "pre" as const,
+  resolveId(source: string, importer: string | undefined): string | null {
+    if (source !== "@cosyte/ccda") return null;
+    return importer?.startsWith(distDir) === true ? `${distDir}index.mjs` : srcEntry;
+  },
+};
+
+export default { ...config, plugins: [ownPackageName] };
