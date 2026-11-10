@@ -28,10 +28,9 @@ permissions:
 jobs:
   reading:
     runs-on: ubuntu-latest
-    # A full reading of 21 cases, 6 of them documents of 2 MiB or more, takes well over half an hour;
-    # the bound is for a case that hangs. Advisory and never required, so its length holds up no
-    # pull request.
-    timeout-minutes: 120
+    # The whole job, a reading of its 21 cases and the profile, took about 13 minutes on a 4-CPU
+    # GitHub-hosted runner; the bound is for a case that hangs.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
