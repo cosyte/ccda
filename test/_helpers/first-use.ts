@@ -45,7 +45,24 @@ export function compileErrors(
   paths: Readonly<Record<string, string>>,
   code: string,
 ): string[] {
-  const file = join(root, "first-use-example.mts");
+  return compileEach(root, paths, ["first-use-example"], [code])[0] ?? [];
+}
+
+/**
+ * The TypeScript errors for each of several examples, compiled together in one program so the
+ * package's own source is checked once rather than once per example. Each example is its own ES
+ * module, `<name>.mts` in the repository root, so two examples never see each other's names. The
+ * result holds one list per example, in the order given, each as {@link compileErrors} reports it.
+ */
+export function compileEach(
+  root: string,
+  paths: Readonly<Record<string, string>>,
+  names: readonly string[],
+  codes: readonly string[],
+): string[][] {
+  const files = new Map(
+    names.map((name, index) => [join(root, `${name}.mts`), codes[index] ?? ""]),
+  );
   const options: ts.CompilerOptions = {
     ...READER_OPTIONS,
     typeRoots: [join(root, "node_modules", "@types")],
@@ -53,23 +70,27 @@ export function compileErrors(
   };
   const host = ts.createCompilerHost(options, true);
   const getSourceFile = host.getSourceFile.bind(host);
-  host.getSourceFile = (name, language, onError, create) =>
-    name === file
-      ? ts.createSourceFile(name, code, language, true)
-      : getSourceFile(name, language, onError, create);
+  host.getSourceFile = (name, language, onError, create) => {
+    const code = files.get(name);
+    return code === undefined
+      ? getSourceFile(name, language, onError, create)
+      : ts.createSourceFile(name, code, language, true);
+  };
   const fileExists = host.fileExists.bind(host);
-  host.fileExists = (name) => name === file || fileExists(name);
+  host.fileExists = (name) => files.has(name) || fileExists(name);
   const readFile = host.readFile.bind(host);
-  host.readFile = (name) => (name === file ? code : readFile(name));
-  const program = ts.createProgram([file], options, host);
-  return ts
-    .getPreEmitDiagnostics(program, program.getSourceFile(file))
-    .filter((d) => d.file?.fileName === file)
-    .map((d) => {
-      const line = d.file?.getLineAndCharacterOfPosition(d.start ?? 0).line ?? 0;
-      const text = ts.flattenDiagnosticMessageText(d.messageText, " ");
-      return `line ${String(line + 1)}: TS${String(d.code)} ${text}`;
-    });
+  host.readFile = (name) => files.get(name) ?? readFile(name);
+  const program = ts.createProgram([...files.keys()], options, host);
+  return [...files.keys()].map((file) =>
+    ts
+      .getPreEmitDiagnostics(program, program.getSourceFile(file))
+      .filter((d) => d.file?.fileName === file)
+      .map((d) => {
+        const line = d.file?.getLineAndCharacterOfPosition(d.start ?? 0).line ?? 0;
+        const text = ts.flattenDiagnosticMessageText(d.messageText, " ");
+        return `line ${String(line + 1)}: TS${String(d.code)} ${text}`;
+      }),
+  );
 }
 
 /** One fenced code block: its info string split into language and tags, and its body. */
@@ -149,6 +170,50 @@ export function runnableTaggedFences(markdown: string): { line: number; lang: st
     const tokens = (opened[3] ?? "").trim().split(/\s+/).filter(Boolean);
     if (tokens.slice(1).includes("runnable")) out.push({ line: index + 1, lang: tokens[0] ?? "" });
   });
+  return out;
+}
+
+/** One code block on a page, read the way the sample runner reads it. */
+export interface PageBlock {
+  /** The 1-based line of the opening fence. */
+  readonly line: number;
+  readonly lang: string;
+  readonly tags: readonly string[];
+  /** The block's lines, with the fence's own indentation taken off each. */
+  readonly body: string;
+}
+
+/**
+ * Every fenced block on a page, indented ones (inside a list item) included, in document order. A
+ * block closes on the same marker at the same indentation, and its body loses that indentation,
+ * which is how the snippet harness extracts a sample.
+ */
+export function pageBlocks(markdown: string): PageBlock[] {
+  const out: PageBlock[] = [];
+  let open: { line: number; indent: string; marker: string; tokens: string[] } | undefined;
+  let buf: string[] = [];
+  markdown.split("\n").forEach((text, index) => {
+    if (open === undefined) {
+      const opened = /^(\s*)(`{3,}|~{3,})\s*(.*)$/.exec(text);
+      if (opened === null) return;
+      const tokens = (opened[3] ?? "").trim().split(/\s+/).filter(Boolean);
+      open = { line: index + 1, indent: opened[1] ?? "", marker: opened[2] ?? "```", tokens };
+      buf = [];
+      return;
+    }
+    if (text.trimEnd() === `${open.indent}${open.marker}`) {
+      out.push({
+        line: open.line,
+        lang: open.tokens[0] ?? "",
+        tags: open.tokens.slice(1),
+        body: buf.join("\n"),
+      });
+      open = undefined;
+      return;
+    }
+    buf.push(text.startsWith(open.indent) ? text.slice(open.indent.length) : text);
+  });
+  if (open !== undefined) throw new Error("unterminated code fence");
   return out;
 }
 

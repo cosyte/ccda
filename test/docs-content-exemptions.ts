@@ -3,7 +3,7 @@
  * (`test/docs-content-coverage.test.ts`).
  *
  * **WHAT AN EXEMPTION MEANS, AND WHAT IT DOES NOT.** The narrative bundle is not the API
- * reference. The docs site generates a per-symbol TypeDoc reference from `source.tar.gz`, so
+ * reference. `docs-content/api/` is generated from the TSDoc comments in `src/`, so
  * every symbol below IS documented to a reader: its signature, its fields and its own JSDoc
  * (with an `@example`, which the JSDoc lint rule makes mandatory on a public export) are all
  * published. An entry here says only that the symbol needs no NARRATIVE page: a reader does not
@@ -12,8 +12,8 @@
  *
  * A symbol that carries a **behaviour a reader must know to avoid getting it wrong** does not
  * belong here, and moving one in rather than writing the page is the failure mode this record
- * makes visible. Three surfaces were exempt-shaped until `docs-content/conformance.md` was
- * written for them (the vendor-profile system, the bring-your-own terminology adapter and the
+ * makes visible. Three surfaces were exempt-shaped until a page with an executable example was
+ * written for each (the vendor-profile system, the bring-your-own terminology adapter and the
  * required-section conformance status): each was mentioned only in passing, each had a reading a
  * caller could get backwards, and none had an executable example. That is the bar.
  *
@@ -43,7 +43,7 @@ export interface ExemptionGroup {
 export const EXEMPTION_GROUPS: readonly ExemptionGroup[] = [
   {
     reason:
-      "Structural input type for buildCcda. The cookbook's builder recipe shows the object literal a caller actually writes, and the per-field contract belongs in the generated API reference rather than in prose: a narrative that listed every field would go stale against the type it was copied from.",
+      "Structural input type for buildCcda. The build guide shows the object literal a caller actually writes, and the per-field contract belongs in the generated API reference rather than in prose: a narrative that listed every field would go stale against the type it was copied from.",
     symbols: [
       "BuildCcdaAllergy",
       "BuildCcdaEncounter",
@@ -164,7 +164,7 @@ export const EXEMPTION_GROUPS: readonly ExemptionGroup[] = [
   },
   {
     reason:
-      "Document-editing input type. The cookbook's edit recipe shows the call and the revision trail it stamps; these name the shapes that recipe passes.",
+      "Document-editing input type. The edit guide shows the call and the revision trail it stamps; these name the shapes that guide passes.",
     symbols: [
       "CcdaEditErrorCode",
       "DocumentIdInit",

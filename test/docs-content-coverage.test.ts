@@ -42,7 +42,7 @@ const DOCS_DIR = join(root, "docs-content");
 const ENTRY = "src/index.ts";
 
 /** The frontmatter keys every page in the bundle must carry. */
-const REQUIRED_FRONTMATTER_KEYS = ["id", "title", "sidebar_label", "sidebar_position"] as const;
+const REQUIRED_FRONTMATTER_KEYS = ["id", "title", "sidebar_label", "description"] as const;
 
 /**
  * The historical versions the bundle dates a real behaviour change to, and the total number of such
@@ -171,7 +171,7 @@ function runnableBlocks(pages: readonly DocPage[]): readonly RunnableBlock[] {
 
 /**
  * Every page carries the required keys, every page is shaped identically, `id` equals the filename
- * stem, and `title` / `sidebar_label` are present and non-empty.
+ * stem, and `title` / `sidebar_label` / `description` are present and non-empty.
  */
 export function frontmatterFailures(
   pages: readonly DocPage[],
@@ -195,7 +195,7 @@ export function frontmatterFailures(
         `${page.file}: frontmatter \`id\` is "${id}" but the filename stem is "${page.stem}"`,
       );
     }
-    for (const key of ["title", "sidebar_label"]) {
+    for (const key of ["title", "sidebar_label", "description"]) {
       const value = page.frontmatter.get(key);
       if (value !== undefined && value.trim() === "") {
         failures.push(`${page.file}: frontmatter \`${key}\` is present but empty`);
@@ -295,44 +295,145 @@ export function sidebarFailures(
 }
 
 /**
- * `sidebar_position` is a positive integer, unique across the bundle, and equal to the page's 1-based
- * place in the sidebar's own order.
- *
- * TYING THE TWO TOGETHER IS THE FIX FOR THE COLLISION, not merely detecting it. Requiring only
- * uniqueness would let the two orderings disagree, which is a slower version of the same defect: the
- * bundle would carry two answers to "what comes after this page". `sidebars.json` is the authority
- * because it is what the site renders; the frontmatter number has to agree with it.
+ * No page carries `sidebar_position`: `sidebars.json` sets the order, and a second statement of the
+ * same order is one more thing to keep in agreement with it.
  */
-export function positionFailures(
-  pages: readonly DocPage[],
-  sidebarOrder: readonly string[],
-): readonly string[] {
-  const failures: string[] = [];
-  const seen = new Map<string, string>();
+export function positionFailures(pages: readonly DocPage[]): readonly string[] {
+  return pages
+    .filter((page) => page.frontmatter.has("sidebar_position"))
+    .map(
+      (page) =>
+        `${page.file}: carries sidebar_position; sidebars.json sets the order, so remove the key`,
+    );
+}
 
-  for (const page of pages) {
-    const raw = page.frontmatter.get("sidebar_position");
-    if (raw === undefined) continue;
-    if (!/^[1-9]\d*$/.test(raw)) {
-      failures.push(`${page.file}: sidebar_position "${raw}" is not a positive integer`);
+/** A heading outside fenced code: one to six `#`, a space, the text. */
+const HEADING = /^(#{1,6}) (.*)$/;
+
+/**
+ * The heading level the reference generator gives each export. A member of an export (a property,
+ * a method) sits deeper, and can share an export's name: `#problem` is a `problem` property of a
+ * builder input, while the `Problem` interface further down is `#problem-1`. A link into the
+ * reference must land on an export, so a later member with the same name cannot move it.
+ */
+const EXPORT_HEADING_LEVEL = 3;
+
+/**
+ * The anchor the docs site gives a heading, as github-slugger computes it: lower-cased, every
+ * character that is not a letter, a digit, `_`, a space or a hyphen dropped (code ticks, escapes
+ * and parentheses included), and each space turned into a hyphen.
+ */
+export function headingSlug(heading: string): string {
+  return heading
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}_ -]/gu, "")
+    .replace(/ /g, "-");
+}
+
+/**
+ * Every anchor a page offers: one per heading outside fenced code, a repeated slug numbered from
+ * `-1` in document order, as the site numbers it. With `level`, only the anchors of headings at that
+ * level are returned, still numbered among every heading.
+ */
+export function anchorsIn(markdown: string, level?: number): ReadonlySet<string> {
+  const anchors = new Set<string>();
+  const counts = new Map<string, number>();
+  let fence: string | undefined;
+  for (const line of markdown.split(/\r?\n/)) {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (marker !== undefined) {
+      if (fence === undefined) fence = marker;
+      else if (line.trim() === fence) fence = undefined;
       continue;
     }
-    const previous = seen.get(raw);
-    if (previous !== undefined) {
-      failures.push(`${page.file}: sidebar_position ${raw} collides with ${previous}`);
+    if (fence !== undefined) continue;
+    const heading = HEADING.exec(line);
+    if (heading === null) continue;
+    const base = headingSlug(heading[2] ?? "");
+    const seen = counts.get(base) ?? 0;
+    counts.set(base, seen + 1);
+    if (level === undefined || heading[1]?.length === level) {
+      anchors.add(seen === 0 ? base : `${base}-${String(seen)}`);
     }
-    seen.set(raw, page.file);
+  }
+  return anchors;
+}
 
-    const index = sidebarOrder.indexOf(page.stem);
-    if (index === -1) continue;
-    const expected = index + 1;
-    if (Number(raw) !== expected) {
+/**
+ * Every inline link target on a page that is not an image, outside fenced code and inline code. A
+ * target with a scheme (`https:`, `mailto:`) leaves the bundle and is not returned.
+ */
+export function internalLinks(markdown: string): readonly string[] {
+  const targets: string[] = [];
+  let fence: string | undefined;
+  for (const line of markdown.split(/\r?\n/)) {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (marker !== undefined) {
+      if (fence === undefined) fence = marker;
+      else if (line.trim() === fence) fence = undefined;
+      continue;
+    }
+    if (fence !== undefined) continue;
+    const prose = line.replace(/`[^`]*`/g, "``");
+    for (const match of prose.matchAll(/(!?)\[[^\]]*\]\(([^)\s]+)\)/g)) {
+      const target = match[2] ?? "";
+      if (match[1] === "!" || /^[a-z][a-z0-9+.-]*:/i.test(target)) continue;
+      targets.push(target);
+    }
+  }
+  return targets;
+}
+
+/**
+ * Every link from one page to another resolves, page and anchor. A link is written as the file it
+ * names, `./page.md` or `./page.md#anchor`, `./api/README.md#export` for the generated reference,
+ * or `#anchor` within the same page; the anchor must be a heading of the page it names, slugged as
+ * the docs site slugs it. The shared link check is off, so nothing else catches an anchor that a
+ * renamed heading or a renamed export has left behind.
+ */
+export function linkFailures(
+  pages: ReadonlyMap<string, string>,
+  from: string,
+  targets: readonly string[],
+): readonly string[] {
+  const failures: string[] = [];
+  for (const target of targets) {
+    const shaped = /^(?:\.\/((?:api\/)?[a-z0-9-]+(?:\/[A-Za-z0-9@._-]+)*\.md))?(?:#(.+))?$/i.exec(
+      target,
+    );
+    if (shaped === null || (shaped[1] === undefined && shaped[2] === undefined)) {
+      failures.push(`${from}: link "${target}" is not written as ./<page>.md, optionally anchored`);
+      continue;
+    }
+    const file = shaped[1] ?? from;
+    const markdown = pages.get(file);
+    if (markdown === undefined) {
+      failures.push(`${from}: link "${target}" names no page in docs-content/`);
+      continue;
+    }
+    const anchor = shaped[2];
+    const level = file.startsWith("api/") ? EXPORT_HEADING_LEVEL : undefined;
+    if (anchor !== undefined && !anchorsIn(markdown, level).has(anchor)) {
       failures.push(
-        `${page.file}: sidebar_position is ${raw} but the page is #${String(expected)} in sidebars.json order`,
+        `${from}: link "${target}" names no ${level === undefined ? "heading" : "export"} on ${file}`,
       );
     }
   }
   return failures;
+}
+
+/** Every Markdown file under `docs-content/`, keyed by its path relative to that folder. */
+function readAllPages(): ReadonlyMap<string, string> {
+  const out = new Map<string, string>();
+  const walk = (dir: string, prefix: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) walk(join(dir, entry.name), `${prefix}${entry.name}/`);
+      else if (entry.name.endsWith(".md"))
+        out.set(`${prefix}${entry.name}`, readFileSync(join(dir, entry.name), "utf8"));
+    }
+  };
+  walk(DOCS_DIR, "");
+  return out;
 }
 
 /**
@@ -490,7 +591,7 @@ describe("docs-content bundle: the three task surfaces have executable examples"
     test(`"${task}" has its own executable example`, () => {
       const hosting = blocks.filter(
         (block) =>
-          block.file !== "troubleshooting.md" && new RegExp(`\\b${symbol}\\b`).test(block.code),
+          block.file !== "limitations.md" && new RegExp(`\\b${symbol}\\b`).test(block.code),
       );
       expect(
         hosting.map((block) => block.file),
@@ -524,8 +625,19 @@ describe("docs-content bundle: page shape", () => {
     expect(sidebarFailures(stems, sidebar.ids)).toStrictEqual([]);
   });
 
-  test("sidebar_position is unique and agrees with sidebars.json order", () => {
-    expect(positionFailures(pages, sidebar.ids)).toStrictEqual([]);
+  test("no page carries sidebar_position", () => {
+    expect(positionFailures(pages)).toStrictEqual([]);
+  });
+
+  test("every link between pages resolves, page and anchor", () => {
+    const all = readAllPages();
+    expect(all.has("api/README.md"), "the generated reference is missing").toBe(true);
+    const failures = pages.flatMap((page) =>
+      linkFailures(all, page.file, internalLinks(`${page.body}`)),
+    );
+    expect(failures).toStrictEqual([]);
+    const links = pages.flatMap((page) => internalLinks(page.body));
+    expect(links.filter((link) => link.startsWith("./api/")).length).toBeGreaterThan(20);
   });
 
   test("the release bundle's two required members are present", () => {
@@ -579,12 +691,12 @@ describe("negative controls", () => {
     body,
   });
 
-  const healthy = (stem: string, position: number): DocPage =>
+  const healthy = (stem: string): DocPage =>
     page(stem, {
       id: stem,
       title: stem,
       sidebar_label: stem,
-      sidebar_position: String(position),
+      description: `About ${stem}.`,
     });
 
   test("a page with no sidebars.json entry fails, naming the file", () => {
@@ -646,13 +758,13 @@ describe("negative controls", () => {
 
   test("a missing or empty frontmatter key fails, naming the file and the key", () => {
     const missing = frontmatterFailures(
-      [page("intro", { id: "intro", title: "Intro", sidebar_position: "1" })],
+      [page("intro", { id: "intro", title: "Intro", description: "D." })],
       REQUIRED_FRONTMATTER_KEYS,
     );
     expect(missing.some((f) => f.includes("intro.md") && f.includes("sidebar_label"))).toBe(true);
 
     const empty = frontmatterFailures(
-      [page("intro", { id: "intro", title: "Intro", sidebar_label: "  ", sidebar_position: "1" })],
+      [page("intro", { id: "intro", title: "Intro", sidebar_label: "  ", description: "D." })],
       REQUIRED_FRONTMATTER_KEYS,
     );
     expect(empty.some((f) => f.includes("present but empty"))).toBe(true);
@@ -665,7 +777,7 @@ describe("negative controls", () => {
           id: "install",
           title: "T",
           sidebar_label: "L",
-          sidebar_position: "1",
+          description: "D.",
         }),
       ],
       REQUIRED_FRONTMATTER_KEYS,
@@ -678,12 +790,12 @@ describe("negative controls", () => {
   test("pages with differently shaped frontmatter fail", () => {
     const failures = frontmatterFailures(
       [
-        healthy("a", 1),
+        healthy("a"),
         page("b", {
           id: "b",
           title: "B",
           sidebar_label: "B",
-          sidebar_position: "2",
+          description: "D.",
           draft: "true",
         }),
       ],
@@ -692,12 +804,88 @@ describe("negative controls", () => {
     expect(failures.some((f) => f.includes("do not share one frontmatter shape"))).toBe(true);
   });
 
-  test("colliding and out-of-order sidebar_position values fail", () => {
-    const collide = positionFailures([healthy("a", 1), healthy("b", 1)], ["a", "b"]);
-    expect(collide.some((f) => f.includes("collides"))).toBe(true);
+  test("an empty description fails like an empty title", () => {
+    const failures = frontmatterFailures(
+      [page("intro", { id: "intro", title: "Intro", sidebar_label: "Intro", description: " " })],
+      REQUIRED_FRONTMATTER_KEYS,
+    );
+    expect(failures).toStrictEqual(["intro.md: frontmatter `description` is present but empty"]);
+  });
 
-    const disagree = positionFailures([healthy("a", 1), healthy("b", 5)], ["a", "b"]);
-    expect(disagree.some((f) => f.includes("#2 in sidebars.json order"))).toBe(true);
+  test("a page carrying sidebar_position fails, naming the file", () => {
+    const failures = positionFailures([
+      healthy("a"),
+      page("b", {
+        id: "b",
+        title: "B",
+        sidebar_label: "B",
+        description: "D.",
+        sidebar_position: "2",
+      }),
+    ]);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toContain("b.md");
+  });
+
+  test("a heading's anchor is slugged the way the docs site slugs it", () => {
+    expect(headingSlug("A `nullFlavor` asserted beside a value")).toBe(
+      "a-nullflavor-asserted-beside-a-value",
+    );
+    expect(headingSlug("Provenance: who authored it, who holds it")).toBe(
+      "provenance-who-authored-it-who-holds-it",
+    );
+    expect(headingSlug("WARNING_CODES")).toBe("warning_codes");
+    const anchors = anchorsIn(
+      "# Page\n\n## Example\n\n```md\n## Not a heading\n```\n\n## Example\n",
+    );
+    expect([...anchors]).toStrictEqual(["page", "example", "example-1"]);
+  });
+
+  test("links are read from prose only, and images and external links are left out", () => {
+    expect(
+      internalLinks(
+        "See [a](./a.md) and ![img](./img/x.png), [b](https://example.com) and `[c](./c.md)`.\n```md\n[d](./d.md)\n```",
+      ),
+    ).toStrictEqual(["./a.md"]);
+  });
+
+  test("a link to a missing page, a missing heading or in the wrong form fails", () => {
+    const all = new Map([
+      ["a.md", "# A\n\n## Usage\n"],
+      [
+        "api/README.md",
+        "# Reference\n\n### BuildInput\n\n##### problem\n\n### parseCcda\n\n### Problem\n",
+      ],
+    ]);
+    expect(
+      linkFailures(all, "a.md", [
+        "./a.md",
+        "./a.md#usage",
+        "#usage",
+        "./api/README.md#parseccda",
+        "./api/README.md#problem-1",
+      ]),
+    ).toStrictEqual([]);
+    expect(linkFailures(all, "a.md", ["./api/README.md#problem"])).toStrictEqual([
+      'a.md: link "./api/README.md#problem" names no export on api/README.md',
+    ]);
+    const failures = linkFailures(all, "a.md", [
+      "./gone.md",
+      "./a.md#nowhere",
+      "#nowhere",
+      "./api/README.md#parseccdaa",
+      "./api/missing.md",
+      "./a",
+      "../a.md",
+    ]);
+    expect(failures).toHaveLength(7);
+    expect(failures[0]).toContain("names no page");
+    expect(failures[1]).toContain("names no heading on a.md");
+    expect(failures[2]).toContain("names no heading on a.md");
+    expect(failures[3]).toContain("names no export on api/README.md");
+    expect(failures[4]).toContain("names no page");
+    expect(failures[5]).toContain("is not written as");
+    expect(failures[6]).toContain("is not written as");
   });
 
   test("an unreadable sidebar node is reported rather than skipped", () => {
