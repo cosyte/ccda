@@ -311,7 +311,7 @@ import { attr, child, childElements, children } from "../model/dom.js";
 import type { TerminologyAdapter, TerminologyCoding } from "../model/terminology.js";
 import type { PlannedItemKind } from "../model/entries/plan-of-treatment.js";
 import type { ProcedureKind } from "../model/entries/procedure.js";
-import { parseCcda } from "../parser/index.js";
+import { parseCcdaText } from "../parser/index.js";
 import type { DocumentType } from "../parser/templates.js";
 import {
   missingPlannedMedicationEffectiveTime,
@@ -2779,8 +2779,8 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
   // a value to satisfy an adapter); the adapter can only ever add a flag.
   const parsed =
     options.terminology !== undefined
-      ? parseCcda(serializeDocument(doc), { terminology: options.terminology })
-      : parseCcda(serializeDocument(doc));
+      ? parseCcdaText(serializeDocument(doc), { terminology: options.terminology }, true)
+      : parseCcdaText(serializeDocument(doc), {}, true);
 
   // Then the emit-time diagnostics, read off the DOM that was just written: a
   // conformance gap the re-parse deliberately does not report, because the read

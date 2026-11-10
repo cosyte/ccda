@@ -115,10 +115,10 @@ export interface CcdaDocumentInit {
    */
   readonly profile?: ProfileAttribution;
   /**
-   * The spec-clean XML snapshot captured from the source DOM at parse time,
-   * returned by {@link CcdaDocument.toString}. Populated by `parseCcda`; absent
-   * for a hand-constructed document (which therefore cannot be serialized until
-   * a builder API lands).
+   * The spec-clean XML returned by {@link CcdaDocument.toString}. A document
+   * `parseCcda` returns has its XML without this field (written from the
+   * source the first time it is asked for); absent for a hand-constructed
+   * document, which therefore cannot be serialized.
    *
    * @internal
    */
@@ -161,6 +161,37 @@ export function isCcdaDocument(value: unknown): value is CcdaDocument {
     value !== null &&
     (value as { readonly [DOCUMENT_BRAND]?: unknown })[DOCUMENT_BRAND] === true
   );
+}
+
+/**
+ * A document's XML text: the string, or the function that writes it on first use. Exactly one of
+ * the two is set; `toString` swaps the writer for its string the first time it runs.
+ *
+ * @internal
+ */
+interface DocumentText {
+  value?: string;
+  write?: (() => string) | undefined;
+}
+
+/** Set a document's text; assigned in the class's static block, which can reach `#text`. @internal */
+let attachText: (doc: CcdaDocument, text: DocumentText) => void;
+
+/**
+ * Construct a document whose XML is written by `write` the first time `toString` asks for it, and
+ * then kept. `parseCcda` passes a function that builds the source's DOM again and serializes it,
+ * so a parse that never asks for its XML never writes it. The text is the same either way: the
+ * same source read by the same parser gives the same tree, and the same tree the same XML.
+ *
+ * Not on the package entry point: `CcdaDocumentInit` keeps its one `serialized` string, and this
+ * is the internal way to set the text lazily without adding a public field.
+ *
+ * @internal
+ */
+export function documentWithText(init: CcdaDocumentInit, write: () => string): CcdaDocument {
+  const doc = new CcdaDocument(init);
+  attachText(doc, { write });
+  return doc;
 }
 
 /**
@@ -219,12 +250,19 @@ export class CcdaDocument {
   /** The profile applied at parse time (name + lineage), or `undefined` when none was active. */
   public readonly profile: ProfileAttribution | undefined;
 
-  /** Spec-clean XML snapshot of the source DOM; `undefined` for a hand-constructed doc. @internal */
-  readonly #serialized: string | undefined;
+  /**
+   * The document's spec-clean XML, written now or on first use; `undefined` for a hand-constructed
+   * doc. Shared by reference with every document {@link CcdaDocument.withWarnings} derives, so the
+   * text is written at most once for all of them. @internal
+   */
+  #text: DocumentText | undefined;
 
   static {
     // On the prototype rather than each instance, so a document's own keys stay its model fields.
     Object.defineProperty(this.prototype, DOCUMENT_BRAND, { value: true });
+    attachText = (doc, text) => {
+      doc.#text = text;
+    };
   }
 
   /**
@@ -255,7 +293,7 @@ export class CcdaDocument {
     this.nonXmlBody = init.nonXmlBody;
     this.warnings = Object.freeze(init.warnings.slice());
     this.profile = init.profile;
-    this.#serialized = init.serialized;
+    this.#text = init.serialized === undefined ? undefined : { value: init.serialized };
   }
 
   /**
@@ -275,13 +313,20 @@ export class CcdaDocument {
    * ```
    */
   public toString(): string {
-    if (this.#serialized === undefined) {
+    const text = this.#text;
+    if (text === undefined) {
       throw new Error(
         "CcdaDocument.toString: no source document retained. Only documents produced " +
           "by parseCcda can be serialized.",
       );
     }
-    return this.#serialized;
+    if (text.value === undefined) {
+      // A DocumentText always carries one of the two; the writer is dropped once it has run, so
+      // what it holds (the source text) is released and the string is kept instead.
+      text.value = (text.write as () => string)();
+      text.write = undefined;
+    }
+    return text.value;
   }
 
   /**
@@ -324,7 +369,6 @@ export class CcdaDocument {
       nonXmlBody?: ED;
       profile?: ProfileAttribution;
       warnings: readonly CcdaWarning[];
-      serialized?: string;
     } = {
       templateIds: this.templateIds,
       header: this.header,
@@ -348,8 +392,9 @@ export class CcdaDocument {
     if (this.documentType !== undefined) init.documentType = this.documentType;
     if (this.nonXmlBody !== undefined) init.nonXmlBody = this.nonXmlBody;
     if (this.profile !== undefined) init.profile = this.profile;
-    if (this.#serialized !== undefined) init.serialized = this.#serialized;
-    return new CcdaDocument(init);
+    const annotated = new CcdaDocument(init);
+    annotated.#text = this.#text;
+    return annotated;
   }
 
   /**

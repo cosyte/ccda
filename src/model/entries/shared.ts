@@ -8,6 +8,7 @@
  */
 
 import { attr, child, children, positionOf, xsiType } from "../dom.js";
+import { V3_NS } from "../../parser/namespaces.js";
 import { sectionForLoinc, sectionForTemplateRoot } from "../../parser/templates.js";
 import { parseBlAttr } from "../types/bl.js";
 import { parseCd, type CD } from "../types/cd.js";
@@ -27,6 +28,9 @@ import {
   type NarrativeSlot,
 } from "../../parser/warnings.js";
 import type { Element } from "@xmldom/xmldom";
+
+/** Element node type per the DOM spec (`Node.ELEMENT_NODE`). @internal */
+const ELEMENT_NODE = 1 as const;
 
 /**
  * The resolved active-vs-resolved state of a Problem/Allergy Concern Act,
@@ -384,7 +388,17 @@ export function templateRoots(el: Element): readonly string[] {
  * ```
  */
 export function hasTemplateRoot(el: Element, root: string): boolean {
-  return templateRoots(el).includes(root);
+  // `templateRoots(el).includes(root)`, read in place: this runs for every family on every entry,
+  // so the array of roots it built each time was garbage the moment it was answered. An empty
+  // or absent `@root` is never one of the roots, whatever `root` is.
+  for (let node = el.firstChild; node !== null; node = node.nextSibling) {
+    const t = node as Element;
+    if (t.localName !== "templateId" || t.nodeType !== ELEMENT_NODE || t.namespaceURI !== V3_NS) {
+      continue;
+    }
+    if (t.getAttribute("root") === root && root !== "") return true;
+  }
+  return false;
 }
 
 /**

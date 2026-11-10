@@ -17,9 +17,11 @@
 // The suite is handed the module under test rather than importing it, so one file measures both
 // builds. Every input is synthetic and built in code by bench/shapes.mjs: no file is read.
 //
-// Serializing is not a benchmark of its own: `parseCcda` writes the document's XML while it parses
-// and `serializeCcda` returns that string, so its cost is inside every parse. The write path that
-// does work is `editCcda`, which re-reads the XML, grafts the change, writes it and parses the result.
+// Serializing is not a benchmark of its own: `parseCcda` writes a document's XML the first time
+// `toString` (or `serializeCcda`) asks for it, from the source text it keeps, so a parse that never
+// asks pays nothing for it. The write path that does work is `editCcda`, which writes the source's
+// XML once (kept on the document after that), re-reads it, grafts the change, writes the result
+// and parses it.
 
 import { defineBenchmark, defineSuite } from "@cosyte/bench";
 
@@ -114,8 +116,8 @@ const benchmarks = [];
 for (const shape of SHAPES) {
   benchmarks.push(
     defineBenchmark({
-      // The lenient read every caller starts with: XML to the document model, its clinical entries,
-      // its warnings, and its re-serialized XML.
+      // The lenient read every caller starts with: XML to the document model, its clinical entries
+      // and its warnings.
       name: `parseCcda: ${shape.name}`,
       sizes: sizes(shape),
       bind: (ccda) => (x) => ccda.parseCcda(x.text),

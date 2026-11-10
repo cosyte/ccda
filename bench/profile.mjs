@@ -195,6 +195,12 @@ async function main() {
       pass: (text) => () => ccda.parseCcda(text, validating).warnings.length + 1,
     },
     {
+      // A parse whose XML is asked for: what a pass-through caller pays, the parse and the write
+      // its `toString` makes the first time.
+      name: "parseCcda, then toString",
+      pass: (text) => () => ccda.parseCcda(text).toString().length,
+    },
+    {
       name: "editCcda, then toString",
       pass: (text, structured) => {
         const doc = ccda.parseCcda(text);

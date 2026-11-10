@@ -71,13 +71,14 @@ import { isCcdaDocument, readDocumentTemplate, type CcdaDocument } from "../mode
 import { attr, child, childElements, children } from "../model/dom.js";
 import type { TerminologyAdapter } from "../model/terminology.js";
 import type { II } from "../model/types/ii.js";
-import { parseCcda } from "../parser/index.js";
+import { parseCcdaText } from "../parser/index.js";
 import {
   missingRequiredSections,
   type RequiredSectionOptions,
 } from "../parser/required-sections.js";
 import { DEFAULT_LIMITS, parseSecureXml } from "../parser/secure-xml.js";
 import { sectionForLoinc, sectionForTemplateRoot, type DocumentType } from "../parser/templates.js";
+import type { CcdaWarning } from "../parser/warnings.js";
 import { serializeDocument } from "../serialize/serialize-dom.js";
 import type { Document, Element } from "@xmldom/xmldom";
 
@@ -374,6 +375,42 @@ export class CcdaEditError extends Error {
  * ```
  */
 export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): CcdaDocument {
+  const { xml, diagnostics } = writeEdit(source, options);
+
+  // Re-parse the edited XML into the returned document. When the caller supplied
+  // a terminology adapter, forward it so the edited document reaches the same
+  // semantic-validation tier `parseCcda`/`buildCcda` offer, surfacing
+  // `SEMANTIC_CODE_INVALID` for any coded value the adapter rejects (in a grafted
+  // section or an untouched one). The edit still emits every code **verbatim**; the
+  // adapter can only ever add a flag, never coerce a value.
+  //
+  // The re-parse is what the returned document IS, not a check on it: its model,
+  // its warnings and every warning's line and column are those of the XML the
+  // edit wrote, which no reading of the edited tree (positioned on the source's
+  // lines, the grafted nodes on none) could give back. The edited tree itself is
+  // gone by now: `writeEdit` returns only the text, so the two trees are never
+  // held at once.
+  const parsed =
+    options.terminology !== undefined
+      ? parseCcdaText(xml, { terminology: options.terminology }, true)
+      : parseCcdaText(xml, {}, true);
+
+  // Appended after the parse warnings rather than interleaved, matching
+  // `buildCcda`; `withWarnings` returns a new document rather than mutating.
+  return diagnostics.length === 0 ? parsed : parsed.withWarnings(diagnostics);
+}
+
+/**
+ * Perform the edit on a fresh DOM of the source's XML and return the XML it writes, with the
+ * emit-time diagnostics read off that DOM. The DOM is local to this function, so it can be
+ * collected before {@link editCcda} parses the result.
+ *
+ * @internal
+ */
+function writeEdit(
+  source: CcdaDocument,
+  options: EditCcdaOptions,
+): { readonly xml: string; readonly diagnostics: readonly CcdaWarning[] } {
   const xml = sourceXml(source);
   // Re-parse the retained (already-clean, already-safe) XML into a fresh DOM we
   // can mutate. A no-op emitter: this XML came from our own serializer, so it
@@ -405,18 +442,7 @@ export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): C
     stampRevision(dom, root, options.revision, uniqueIdGen(root));
   }
 
-  // Re-parse the edited XML into the returned document. When the caller supplied
-  // a terminology adapter, forward it so the edited document reaches the same
-  // semantic-validation tier `parseCcda`/`buildCcda` offer, surfacing
-  // `SEMANTIC_CODE_INVALID` for any coded value the adapter rejects (in a grafted
-  // section or an untouched one). The edit still emits every code **verbatim**; the
-  // adapter can only ever add a flag, never coerce a value.
-  const parsed =
-    options.terminology !== undefined
-      ? parseCcda(serializeDocument(dom), { terminology: options.terminology })
-      : parseCcda(serializeDocument(dom));
-
-  // Then the emit-time diagnostics, over the components this call GRAFTED that
+  // The emit-time diagnostics, over the components this call GRAFTED that
   // SURVIVED into the emitted DOM. Both halves of that scope are load-bearing and
   // neither is an optimisation:
   //
@@ -430,10 +456,10 @@ export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): C
   //   validator of a document its caller did not write, and would fire on the
   //   same act again on every subsequent edit of an unrelated section.
   //
-  // Appended after the parse warnings rather than interleaved, matching
-  // `buildCcda`; `withWarnings` returns a new document rather than mutating.
-  const diagnostics = plannedMedicationDiagnostics(grafted);
-  return diagnostics.length === 0 ? parsed : parsed.withWarnings(diagnostics);
+  // They are read here, before the re-parse rather than after it, because they
+  // read only the grafted components (no position, no parse state), and reading
+  // them here is what lets the edited DOM go before the re-parse builds its own.
+  return { xml: serializeDocument(dom), diagnostics: plannedMedicationDiagnostics(grafted) };
 }
 
 /**

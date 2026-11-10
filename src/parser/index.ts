@@ -17,11 +17,11 @@
 
 import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES, type FatalCode } from "./errors.js";
 import { V3_NS } from "./namespaces.js";
-import { parseSecureXml, resolveLimits } from "./secure-xml.js";
+import { parseSecureSource, rebuildDom, resolveLimits, type SecureSource } from "./secure-xml.js";
 import type { ParseCcdaOptions } from "./types.js";
 import type { CcdaWarning } from "./warnings.js";
 import { positionOf } from "../model/dom.js";
-import { buildDocument, CcdaDocument } from "../model/document.js";
+import { buildDocument, CcdaDocument, documentWithText } from "../model/document.js";
 import { wrapEmitterWithProfile } from "../profiles/apply.js";
 import { getDefaultCcdaProfile } from "../profiles/registry.js";
 import type { CcdaProfile } from "../profiles/types.js";
@@ -52,6 +52,30 @@ import { serializeDocument } from "../serialize/serialize-dom.js";
  * ```
  */
 export function parseCcda(raw: string, options: ParseCcdaOptions = {}): CcdaDocument {
+  return parseCcdaText(raw, options, false);
+}
+
+/**
+ * {@link parseCcda}, with the choice of when the document's XML is written.
+ *
+ * - `writeNow: false`, what `parseCcda` passes: the XML is written the first time `toString` (or
+ *   `serializeCcda`, or an edit) asks for it, from a DOM built again from the source text the
+ *   parse keeps. A caller that reads only the model never pays for it, and the tree is not kept
+ *   for the document's life (it is many times the size of the text).
+ * - `writeNow: true`, what `buildCcda` and `editCcda` pass: the XML is written from the DOM this
+ *   parse built, before it is dropped, as every parse did before. Both re-parse XML they have
+ *   just written, and their callers nearly always ask for it back, so writing it from the tree in
+ *   hand is cheaper than building that tree a second time.
+ *
+ * The text is the same either way: the same source read by the same parser gives the same tree.
+ *
+ * @internal
+ */
+export function parseCcdaText(
+  raw: string,
+  options: ParseCcdaOptions,
+  writeNow: boolean,
+): CcdaDocument {
   const limits = resolveLimits(options.limits);
   const warnings: CcdaWarning[] = [];
   const profile = resolveProfile(options);
@@ -71,7 +95,10 @@ export function parseCcda(raw: string, options: ParseCcdaOptions = {}): CcdaDocu
   // safety-critical code's place. The cost is that in lenient mode these land
   // last on `doc.warnings` rather than in discovery order.
   const foreignNamespaces: CcdaWarning[] = [];
-  const doc = parseSecureXml(raw, limits, emit, (warning) => foreignNamespaces.push(warning));
+  const accepted = parseSecureSource(raw, limits, emit, (warning) =>
+    foreignNamespaces.push(warning),
+  );
+  const doc = accepted.doc;
 
   const root = doc.documentElement;
   if (root === null) {
@@ -103,15 +130,25 @@ export function parseCcda(raw: string, options: ParseCcdaOptions = {}): CcdaDocu
   };
   const parts = buildDocument(root, ctx);
   for (const warning of foreignNamespaces) emit(warning);
-  const serialized = serializeDocument(doc);
-  const init = { ...parts, warnings, serialized };
-  if (profile !== undefined) {
-    return new CcdaDocument({
-      ...init,
-      profile: { name: profile.name, lineage: profile.lineage },
-    });
-  }
-  return new CcdaDocument(init);
+  const init =
+    profile === undefined
+      ? { ...parts, warnings }
+      : { ...parts, warnings, profile: { name: profile.name, lineage: profile.lineage } };
+  if (writeNow) return new CcdaDocument({ ...init, serialized: serializeDocument(doc) });
+  return documentWithText(init, writerFor(accepted));
+}
+
+/**
+ * The function that writes a parsed document's XML on first use: it builds the DOM of the source
+ * again and serializes it. A function of its own, so what it closes over is the source text and
+ * the gate's finding, never the tree or anything else the parse held.
+ *
+ * @internal
+ */
+function writerFor(accepted: SecureSource): () => string {
+  const source = accepted.source;
+  const lineBreaksToNormalize = accepted.lineBreaksToNormalize;
+  return () => serializeDocument(rebuildDom({ source, lineBreaksToNormalize }));
 }
 
 /**

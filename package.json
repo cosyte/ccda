@@ -113,6 +113,7 @@
     "bench:reading": "cosyte-bench run --suite bench/ccda.bench.mjs --target dist/index.mjs",
     "bench:compare": "cosyte-bench compare --suite bench/ccda.bench.mjs",
     "examples": "tsx scripts/run-examples.ts",
+    "capture:output-digests": "tsx scripts/capture-output-digests.ts",
     "check:example-imports": "tsx scripts/check-example-imports.ts",
     "typecheck:examples": "tsc -p examples/tsconfig.json",
     "lint:examples": "node scripts/process-tool.mjs eslint examples --max-warnings=0",

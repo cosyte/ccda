@@ -29,7 +29,7 @@
  * so the sweep rides on it and costs no second pass.
  */
 
-import { DOMParser, type Document, type Element } from "@xmldom/xmldom";
+import { DOMParser, normalizeLineEndings, type Document, type Element } from "@xmldom/xmldom";
 
 import { positionOf } from "../model/dom.js";
 import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES } from "./errors.js";
@@ -67,14 +67,39 @@ export const DEFAULT_LIMITS: ResolvedLimits = {
 /** Element node type per the DOM spec (`Node.ELEMENT_NODE`). @internal */
 const ELEMENT_NODE = 1 as const;
 
+/** A UTF-8 byte order mark, as the first UTF-16 code unit of a decoded text. @internal */
+const BYTE_ORDER_MARK = 0xfeff;
+
 /** The five XML predefined entities, always legal, never counted toward the expansion cap. @internal */
 const PREDEFINED_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
 
-/** Detects a declared DTD or entity, the XXE / external-entity attack surface. @internal */
-const DTD_RE = /<!DOCTYPE|<!ENTITY/iu;
+/**
+ * The one scan of the input text before the DOM is built. Each match is one of three things, told
+ * apart by its first character:
+ *
+ * - `<`: a declared DTD or entity (`<!DOCTYPE`, `<!ENTITY`), the XXE / external-entity attack
+ *   surface;
+ * - `&`: an entity reference `&name;` (predefined ones are told apart after the match);
+ * - anything else: a character XML's end-of-line handling rewrites (a carriage return, NEL, LINE
+ *   SEPARATOR or PARAGRAPH SEPARATOR).
+ *
+ * The first two alternatives are the two patterns this module ran as separate passes before
+ * (`/<!DOCTYPE|<!ENTITY/iu`, then `/&[a-z_][\w.-]*;/giu` over the whole text), with the same flags,
+ * so they match exactly what those matched: no DTD match can overlap an entity reference (one
+ * holds no `&`, the other no `<`), so the references found are the same ones in the same order.
+ * One global scan of a string with few matches is several times cheaper than the two passes, and
+ * the third alternative lets the parse skip the end-of-line rewrite when there is nothing for it
+ * to rewrite.
+ *
+ * @internal
+ */
+const GATE_RE = /<!DOCTYPE|<!ENTITY|&[a-z_][\w.-]*;|[\r\u0085\u2028\u2029]/giu;
 
-/** Matches a custom (non-predefined, non-numeric) entity reference `&name;`. @internal */
-const ENTITY_REF_RE = /&[a-z_][\w.-]*;/giu;
+/** `<`, the first character of a {@link GATE_RE} match on a DTD or entity declaration. @internal */
+const LESS_THAN = 0x3c;
+
+/** `&`, the first character of a {@link GATE_RE} match on an entity reference. @internal */
+const AMPERSAND = 0x26;
 
 /**
  * Merge caller-supplied limit overrides over {@link DEFAULT_LIMITS}. Honors
@@ -133,8 +158,39 @@ export function parseSecureXml(
   emit: (warning: CcdaWarning) => void,
   reportForeignNamespace: (warning: CcdaWarning) => void = emit,
 ): Document {
+  return parseSecureSource(raw, limits, emit, reportForeignNamespace).doc;
+}
+
+/**
+ * The text a DOM was built from, and what the gate found in it: what {@link parseSecureSource}
+ * returns beside the DOM, so a caller can build the same tree again later instead of keeping it.
+ *
+ * @internal
+ */
+export interface SecureSource {
+  /** The DOM, checked against every limit. */
+  readonly doc: Document;
+  /** The text it was built from: the input with a leading byte order mark removed. */
+  readonly source: string;
+  /** Whether the text holds a character XML's end-of-line handling rewrites. */
+  readonly lineBreaksToNormalize: boolean;
+}
+
+/**
+ * {@link parseSecureXml}, returning the cleaned text and what its gate scan found beside the DOM.
+ * `parseCcda` keeps the text so it can write the document's XML when a caller asks for it, from
+ * a tree {@link rebuildDom} builds again, rather than keeping the tree for the document's life.
+ *
+ * @internal
+ */
+export function parseSecureSource(
+  raw: string,
+  limits: ResolvedLimits,
+  emit: (warning: CcdaWarning) => void,
+  reportForeignNamespace: (warning: CcdaWarning) => void = emit,
+): SecureSource {
   let source = raw;
-  if (source.charCodeAt(0) === 0xfeff) {
+  if (source.charCodeAt(0) === BYTE_ORDER_MARK) {
     source = source.slice(1);
     emit(encodingBomStripped({}));
   }
@@ -148,41 +204,81 @@ export function parseSecureXml(
     );
   }
 
-  if (DTD_RE.test(source)) {
-    throw new CcdaParseError(FATAL_CODES.XXE_OR_DTD_PRESENT, FATAL_MESSAGES.XXE_OR_DTD_PRESENT, {});
-  }
+  const lineBreaksToNormalize = gateScan(source, limits);
 
-  countEntityRefs(source, limits);
-
-  const doc = buildDom(source);
+  const doc = buildDom(source, lineBreaksToNormalize);
   enforceStructureLimits(doc, limits, reportForeignNamespace);
-  return doc;
+  return { doc, source, lineBreaksToNormalize };
 }
 
 /**
- * Count custom entity references and throw `ENTITY_EXPANSION_LIMIT` when the
- * count exceeds the cap. Predefined (`&amp;` …) and numeric (`&#…;`) references
- * are never counted. With DTDs already rejected these references could only be
- * undefined anyway, this is billion-laughs defense-in-depth.
+ * Build the DOM of a text {@link parseSecureSource} accepted, again, for writing it out. The same
+ * parser reads the same text to the same tree, so the limits, the gate and the namespace sweep
+ * that passed on it the first time are not repeated. Its elements carry no line or column: this
+ * tree is serialized, never read for a position.
  *
  * @internal
  */
-function countEntityRefs(source: string, limits: ResolvedLimits): void {
-  const refs = source.match(ENTITY_REF_RE);
-  if (refs === null) return;
+export function rebuildDom(
+  accepted: Pick<SecureSource, "source" | "lineBreaksToNormalize">,
+): Document {
+  // Without the locator: a line and column are read only by a warning or an error, and the parse
+  // that raised those has run. xmldom's tracking of them is most of what a parse of a long text
+  // node costs, and nothing else in the tree depends on it.
+  return buildDom(accepted.source, accepted.lineBreaksToNormalize, false);
+}
+
+/**
+ * The gate, in one scan of the text ({@link GATE_RE}): throw `XXE_OR_DTD_PRESENT` for a declared
+ * DTD or entity anywhere, else `ENTITY_EXPANSION_LIMIT` when the custom entity references exceed
+ * the cap; return whether the text holds a character the end-of-line handling rewrites.
+ *
+ * A declared DTD outranks the entity cap wherever it sits, as it did when the two were separate
+ * passes with the DTD check first: a count over the cap does not throw until the scan has
+ * finished without finding one. Predefined (`&amp;` and the rest) and numeric (`&#...;`)
+ * references are never counted. With DTDs rejected these references could only be undefined
+ * anyway; the cap is billion-laughs defense-in-depth.
+ *
+ * @internal
+ */
+function gateScan(source: string, limits: ResolvedLimits): boolean {
   let count = 0;
-  for (const ref of refs) {
-    const name = ref.slice(1, -1).toLowerCase();
-    if (PREDEFINED_ENTITIES.has(name)) continue;
-    count += 1;
-    if (count > limits.maxEntityExpansions) {
+  let over = false;
+  let lineBreaks = false;
+  GATE_RE.lastIndex = 0;
+  for (let match = GATE_RE.exec(source); match !== null; match = GATE_RE.exec(source)) {
+    const token = match[0];
+    const first = token.charCodeAt(0);
+    if (first === LESS_THAN) {
+      GATE_RE.lastIndex = 0;
       throw new CcdaParseError(
-        FATAL_CODES.ENTITY_EXPANSION_LIMIT,
-        FATAL_MESSAGES.ENTITY_EXPANSION_LIMIT,
+        FATAL_CODES.XXE_OR_DTD_PRESENT,
+        FATAL_MESSAGES.XXE_OR_DTD_PRESENT,
         {},
       );
     }
+    if (first !== AMPERSAND) {
+      lineBreaks = true;
+    } else if (!over && !PREDEFINED_ENTITIES.has(token.slice(1, -1).toLowerCase())) {
+      // Compared at each custom reference, as the separate pass did, so a cap a caller set below
+      // zero is exceeded by the first custom reference and never by a text with none.
+      count += 1;
+      over = count > limits.maxEntityExpansions;
+    }
   }
+  if (over) {
+    throw new CcdaParseError(
+      FATAL_CODES.ENTITY_EXPANSION_LIMIT,
+      FATAL_MESSAGES.ENTITY_EXPANSION_LIMIT,
+      {},
+    );
+  }
+  return lineBreaks;
+}
+
+/** The end-of-line handling for a text with no line break to rewrite: the text itself. @internal */
+function keepLineEndings(source: string): string {
+  return source;
 }
 
 /**
@@ -195,9 +291,13 @@ function countEntityRefs(source: string, limits: ResolvedLimits): void {
  *
  * @internal
  */
-function buildDom(source: string): Document {
+function buildDom(source: string, lineBreaksToNormalize: boolean, locate = true): Document {
   const parser = new DOMParser({
-    locator: true,
+    locator: locate,
+    // XML's end-of-line handling, which xmldom applies to the whole text before it parses. On a
+    // text with none of the characters it rewrites, both of its replacements are the identity, so
+    // the text is passed through as it is instead of being scanned twice more.
+    normalizeLineEndings: lineBreaksToNormalize ? normalizeLineEndings : keepLineEndings,
     onError: (level: "warning" | "error" | "fatalError"): void => {
       if (level === "fatalError") {
         throw new CcdaParseError(
@@ -267,11 +367,14 @@ function enforceStructureLimits(
   let nodeCount = 0;
   const seenNamespaces = new Set<string>();
   let seenNoNamespace = false;
-  let level: { node: Element; depth: number }[] = [{ node: root, depth: 1 }];
+  // Every element of a level is at the same depth, so the level carries the depth once rather
+  // than a record per element.
+  let level: Element[] = [root];
+  let depth = 1;
 
   while (level.length > 0) {
-    const next: { node: Element; depth: number }[] = [];
-    for (const { node, depth } of level) {
+    const next: Element[] = [];
+    for (const node of level) {
       nodeCount += 1;
       if (depth > limits.maxDepth) {
         throw new CcdaParseError(
@@ -300,10 +403,10 @@ function enforceStructureLimits(
         }
       }
       for (let child = node.firstChild; child !== null; child = child.nextSibling) {
-        if (child.nodeType === ELEMENT_NODE)
-          next.push({ node: child as Element, depth: depth + 1 });
+        if (child.nodeType === ELEMENT_NODE) next.push(child as Element);
       }
     }
     level = next;
+    depth += 1;
   }
 }
