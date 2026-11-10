@@ -16,7 +16,8 @@
         "apply-a-vendor-profile",
         "check-codes-with-your-terminology",
         "check-value-set-membership",
-        "check-required-sections"
+        "check-required-sections",
+        "property-test-your-code"
       ]
     },
     {

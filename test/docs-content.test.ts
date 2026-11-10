@@ -43,11 +43,13 @@ import * as firstUseFixtures from "./__fixtures__/first-use.js";
  * held to the same standard as a docs page and `requireSnippet` refuses a green run in which that
  * block has gone missing or lost its `runnable` tag.
  *
- * `@cosyte/ccda` ships a single top-level entry, so every snippet imports `@cosyte/ccda` and resolves
- * against the **built** ESM artifact, exactly what an installer loads, not the source tree. The
- * runnable blocks stay on the deterministic, in-process reader/serializer (`parseCcda`,
- * `serializeCcda`, the UCUM validators); nothing here opens a socket or reads a real feed, and every
- * C-CDA document in the docs is synthetic (an invented patient, fake OIDs).
+ * Every snippet imports `@cosyte/ccda`, or its optional `@cosyte/ccda/arbitraries` subpath, and
+ * resolves against the **built** ESM artifact, exactly what an installer loads, not the source tree.
+ * The built subpath imports `@cosyte/ccda` by name, which resolves to the same built entry point, so
+ * a sample never mixes two copies of a class. The runnable blocks stay on the deterministic,
+ * in-process reader/serializer (`parseCcda`, `serializeCcda`, the UCUM validators) and the
+ * generators; nothing here opens a socket or reads a real feed, and every C-CDA document in the
+ * docs is synthetic (an invented patient, fake OIDs).
  *
  * The shared CI gate runs `test` before `build`, so we provision `dist/` on demand here rather than
  * assuming order.
@@ -56,6 +58,9 @@ const root = join(import.meta.dirname, "..");
 
 /** Map the published entry point to its built ESM artifact. */
 const ENTRY = join(root, "dist", "index.mjs");
+
+/** Map the optional `@cosyte/ccda/arbitraries` subpath to its built ESM artifact. */
+const ARBITRARIES = join(root, "dist", "arbitraries.mjs");
 
 /** The published README, which ships inside the npm tarball and is the npm package page. */
 const README = join(root, "README.md");
@@ -82,7 +87,12 @@ const PAGES = readdirSync(DOCS_DIR)
 const pageSuite = {
   files: PAGES,
   every: true,
-  resolve: (specifier: string) => (specifier === "@cosyte/ccda" ? ENTRY : undefined),
+  resolve: (specifier: string) =>
+    specifier === "@cosyte/ccda"
+      ? ENTRY
+      : specifier === "@cosyte/ccda/arbitraries"
+        ? ARBITRARIES
+        : undefined,
 };
 docSnippetSuite(pageSuite);
 
@@ -135,7 +145,10 @@ const FIRST_USE_TMP = join(root, ".cosyte-first-use-snippets");
  * bundler compiles into the published types. A program over the source takes seconds to check, so
  * these cases state their own budget.
  */
-const SOURCE_PATHS = { "@cosyte/ccda": join(root, "src", "index.ts") };
+const SOURCE_PATHS = {
+  "@cosyte/ccda": join(root, "src", "index.ts"),
+  "@cosyte/ccda/arbitraries": join(root, "src", "arbitraries", "index.ts"),
+};
 const COMPILE_TIMEOUT = 60_000;
 /** The embedded first-use fixtures, by value: a document literal must be exactly one of them. */
 const FIRST_USE_FIXTURES: ReadonlySet<string> = new Set(Object.values(firstUseFixtures));
