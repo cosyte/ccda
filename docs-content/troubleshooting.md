@@ -498,16 +498,18 @@ bug. Where a boundary is genuinely open, this page says so instead of resolving 
 - **Every coded value that reaches the narrative needs a `displayName`, and a missing one is
   refused.** Each populated section regenerates its `<text>` narrative from the same
   `BuildCode.displayName` the coded entry carries, and links the two with a `<reference>`, so the
-  narrative is the attested restatement a clinician reads. `displayName` is a required field, but the
-  package ships JavaScript and validates at runtime, so `buildCcda` (and `editCcda`, which writes
-  through the same emitter) throws a `TypeError` naming the field path when the label is absent,
-  empty, or not a string. It does **not** substitute a placeholder: any confident stand-in is a
-  sentence the entry does not support. Until `0.0.11` inclusive the allergy slot substituted **"No
-  known allergies"**, so an allergy asserted **positively** could carry a narrative byte-identical to
-  the negated no-known-allergies form, and seven other slots wrote the literal string `undefined`. A
-  `BuildCode` that reaches only the entry (an allergy `type`, a result `interpretation`, a medication
-  `route`) is not covered: `@displayName` is optional on a v3 `CD`, so omitting the attribute states
-  nothing false.
+  narrative is the attested restatement a clinician reads. `displayName` is a required field, but
+  the package ships JavaScript and validates at runtime, so `buildCcda` (and `editCcda`, which
+  writes through the same emitter) throws a `TypeError` naming the field path when the label is
+  absent, empty, or not a string, and the same when the code itself is missing or `null`. An
+  optional coded value with a fallback (a smoking status, a functional or mental finding, a family
+  relationship or condition) set to `null` reads as absent, the same as leaving it out. It does
+  **not** substitute a placeholder: any confident stand-in is a sentence the entry does not support.
+  Until `0.0.11` inclusive the allergy slot substituted **"No known allergies"**, so an allergy
+  asserted **positively** could carry a narrative byte-identical to the negated no-known-allergies
+  form, and seven other slots wrote the literal string `undefined`. A `BuildCode` that reaches only
+  the entry (an allergy `type`, a result `interpretation`, a medication `route`) is not covered:
+  `@displayName` is optional on a v3 `CD`, so omitting the attribute states nothing false.
 - **Every entry carries the `effectiveTime` its template requires.** The caller's time when supplied,
   else `nullFlavor="UNK"`: the SHALL cardinality is satisfied without a fabricated clinical
   timestamp, and the parser reads that back as absent, never as a real `Date`.
