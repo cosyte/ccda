@@ -1035,6 +1035,113 @@ Defaults to the neutral `419199007` "Allergy to substance", the builder does
 
 ***
 
+### BuildCcdaAssessmentScale
+
+A direct-entry Assessment Scale Observation (`…22.4.69`) for the Functional
+Status or Mental Status section, a formal scored instrument (e.g. a PHQ-9
+depression screen or a Glasgow Coma scale). C-CDA R2.1 carries the Assessment
+Scale Observation as a **direct section entry** (`entry/observation`), *not* as
+a Functional/Mental Status Organizer member, so the builder emits it directly
+under the section, and the parser reads it back tagged `assessmentScale: true`
+with the section's `domain`. The template id is the **bare root** `…22.4.69`
+(R2.1 SHALL: `@root` with **no** `@extension`).
+
+**`code` is the scale panel code** (LOINC by default, e.g. PHQ-9 `44249-1`).
+`score` is the total score, emitted as the SHALL `value` [1..1] with
+`xsi:type="INT"` (the type C-CDA prefers for a questionnaire, units are not
+allowed on an `INT`). **The score is never fabricated:** when `score` is
+omitted the SHALL `value` is `nullFlavor="UNK"`, an explicit unknown. The SHALL
+`effectiveTime` [1..1] is the administration time (`nullFlavor="UNK"` when
+omitted). `interpretation` (e.g. High/Low/Normal) and the `supporting`
+components (the individual items) are optional, each emitted only when
+supplied, never invented.
+
+#### Example
+
+```ts
+import type { BuildCcdaAssessmentScale } from "@cosyte/ccda";
+const phq9: BuildCcdaAssessmentScale = {
+  code: { code: "44249-1", displayName: "PHQ-9 quick depression assessment panel" }, // LOINC
+  score: 12,
+  effectiveTime: "20240101",
+  interpretation: { code: "H", displayName: "High" },
+  supporting: [
+    { code: { code: "44250-9", displayName: "Little interest or pleasure in doing things" }, score: 0 },
+  ],
+};
+```
+
+#### Properties
+
+##### code
+
+> `readonly` **code**: [`BuildCode`](#buildcode)
+
+The scale/panel code (LOINC by default, e.g. PHQ-9 `44249-1`).
+
+##### effectiveTime?
+
+> `readonly` `optional` **effectiveTime?**: `string`
+
+When the scale was administered (HL7 date string); `nullFlavor="UNK"` when omitted.
+
+##### interpretation?
+
+> `readonly` `optional` **interpretation?**: [`BuildCode`](#buildcode)
+
+The score interpretation (HL7 ObservationInterpretation by default), optional.
+
+##### score?
+
+> `readonly` `optional` **score?**: `number`
+
+The total score (`xsi:type="INT"`). Omit → SHALL `value nullFlavor="UNK"`.
+
+##### supporting?
+
+> `readonly` `optional` **supporting?**: readonly [`BuildCcdaAssessmentScaleItem`](#buildccdaassessmentscaleitem)[]
+
+The individual scored components; each an Assessment Scale Supporting Observation. Optional.
+
+***
+
+### BuildCcdaAssessmentScaleItem
+
+One scored component of an Assessment Scale, an Assessment Scale Supporting
+Observation (`…22.4.86`), e.g. a single PHQ-9 question or a Glasgow Coma
+sub-score. `code` is the item's LOINC/SNOMED code (SHALL, LOINC default);
+`score` its integer answer (the SHALL `value`, `xsi:type="INT"`).
+
+**The answer is never fabricated.** When `score` is omitted the SHALL `value`
+is emitted as `nullFlavor="UNK"`, an *explicit* unknown, never a guessed
+number. Units are not allowed on an `INT`, so a supporting item carries no unit.
+
+#### Example
+
+```ts
+import type { BuildCcdaAssessmentScaleItem } from "@cosyte/ccda";
+const q1: BuildCcdaAssessmentScaleItem = {
+  code: { code: "44250-9", displayName: "Little interest or pleasure in doing things" },
+  score: 0,
+};
+```
+
+#### Properties
+
+##### code
+
+> `readonly` **code**: [`BuildCode`](#buildcode)
+
+The component's LOINC/SNOMED code (LOINC default).
+
+##### score?
+
+> `readonly` `optional` **score?**: `number`
+
+The integer answer/score (`xsi:type="INT"`). Omit → `value nullFlavor="UNK"`.
+
+***
+
 ### BuildCcdaEncompassingEncounter
 
 The `componentOf/encompassingEncounter` frame a Discharge Summary SHALL carry
@@ -1639,7 +1746,7 @@ emitted when either is non-empty.
 
 ##### functionalStatusScales?
 
-> `readonly` `optional` **functionalStatusScales?**: readonly `BuildCcdaAssessmentScale`[]
+> `readonly` `optional` **functionalStatusScales?**: readonly [`BuildCcdaAssessmentScale`](#buildccdaassessmentscale)[]
 
 Direct-entry Assessment Scale Observations (`…22.4.69`) for the Functional
 Status section, scored instruments (e.g. a Barthel index, a Glasgow Coma
@@ -1698,7 +1805,7 @@ non-empty.
 
 ##### mentalStatusScales?
 
-> `readonly` `optional` **mentalStatusScales?**: readonly `BuildCcdaAssessmentScale`[]
+> `readonly` `optional` **mentalStatusScales?**: readonly [`BuildCcdaAssessmentScale`](#buildccdaassessmentscale)[]
 
 Direct-entry Assessment Scale Observations (`…22.4.69`) for the Mental Status
 section, scored instruments (e.g. a PHQ-9 depression screen, a MoCA). Emitted

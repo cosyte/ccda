@@ -46,6 +46,8 @@ export const EXEMPTION_GROUPS: readonly ExemptionGroup[] = [
       "Structural input type for buildCcda. The build guide shows the object literal a caller actually writes, and the per-field contract belongs in the generated API reference rather than in prose: a narrative that listed every field would go stale against the type it was copied from.",
     symbols: [
       "BuildCcdaAllergy",
+      "BuildCcdaAssessmentScale",
+      "BuildCcdaAssessmentScaleItem",
       "BuildCcdaEncounter",
       "BuildCcdaFamilyHistory",
       "BuildCcdaFamilyHistoryObservation",

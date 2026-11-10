@@ -15,6 +15,8 @@
  *     unit is surfaced, never silently defaulted to a confident-wrong value.
  */
 
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 import { DOMParser } from "@xmldom/xmldom";
 import type { Element } from "@xmldom/xmldom";
@@ -35,6 +37,7 @@ import {
 import { ALL_WARNING_MESSAGES } from "../src/parser/warnings.js";
 import { BUILDER_BASELINE_DOCUMENTS } from "./__fixtures__/builder-baseline.js";
 import { BUILT_DOCUMENT_CASES } from "./__fixtures__/conformance.js";
+import { compileEach } from "./_helpers/first-use.js";
 
 const PROBLEM_OBSERVATION = "2.16.840.1.113883.10.20.22.4.4";
 const ALLERGY_OBSERVATION = "2.16.840.1.113883.10.20.22.4.7";
@@ -1609,6 +1612,39 @@ describe("buildCcda, direct-entry assessment scales", () => {
     const xml = serializeCcda(buildCcda(SCALE_INIT));
     expect(parseCcda(xml).toString()).toBe(xml);
   });
+
+  // A caller has to pass these values to `buildCcda`, so it has to be able to name their types
+  // from the package entry point. Compiled as a consumer's own module against the published
+  // entry point's source; the second module proves the names carry the real field types rather
+  // than resolving to something that accepts anything.
+  it("names the scale and scale-item input types from the package entry point", () => {
+    const consumer = (score: string): string =>
+      [
+        "import {",
+        "  buildCcda,",
+        "  type BuildCcdaAssessmentScale,",
+        "  type BuildCcdaAssessmentScaleItem,",
+        '} from "@cosyte/ccda";',
+        "const item: BuildCcdaAssessmentScaleItem = {",
+        '  code: { code: "44250-9", displayName: "Little interest or pleasure" },',
+        "  score: 0,",
+        "};",
+        "const phq9: BuildCcdaAssessmentScale = {",
+        '  code: { code: "44249-1", displayName: "PHQ-9 quick depression assessment panel" },',
+        `  score: ${score},`,
+        "  supporting: [item],",
+        "};",
+        'buildCcda({ patient: { mrn: "M" }, mentalStatusScales: [phq9] });',
+      ].join("\n");
+    const errors = compileEach(
+      join(import.meta.dirname, ".."),
+      { "@cosyte/ccda": join(import.meta.dirname, "..", "src", "index.ts") },
+      ["assessment-scale-types-good", "assessment-scale-types-bad"],
+      [consumer("12"), consumer('"12"')],
+    );
+    expect(errors[0]).toEqual([]);
+    expect(errors[1]).toEqual([expect.stringMatching(/^line 12: TS2322 /)]);
+  }, 60_000); // checks in `test/docs-content.test.ts`. // A TypeScript program over the package source, the same work and budget as the compile
 });
 
 describe("buildCcda, past medical history round-trip", () => {
