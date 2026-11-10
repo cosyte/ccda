@@ -101,6 +101,8 @@ export type {
   BuildCcdaSelfCareActivity,
   BuildCcdaMentalStatus,
   BuildCcdaMentalStatusOrganizer,
+  BuildCcdaAssessmentScale,
+  BuildCcdaAssessmentScaleItem,
   BuildCcdaPlannedItem,
   BuildCcdaPlannedAct,
   BuildCcdaPlannedOrder,
