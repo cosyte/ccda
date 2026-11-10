@@ -8,13 +8,14 @@
  * `import(...)` or `require(...)` call.
  *
  * A specifier resolves when it names this package (`@cosyte/ccda`, which is checked against the
- * entry point `src/index.ts`, the module a consumer's import reaches), a path relative to the file
+ * entry point `src/index.ts`, the module a consumer's import reaches) or one of its subpaths
+ * (`@cosyte/ccda/arbitraries`, checked against `src/arbitraries/index.ts`), a path relative to the file
  * the example sits in, or a module TypeScript itself can resolve (`node:fs`, a dependency). Every
  * named binding must then be an export of that module, and a default import needs a default
  * export. An example whose import does not resolve is a finding, and any finding fails the run.
  *
  * One more rule follows from where a consumer reads an example. The doc comment of a declaration
- * the entry point exports is copied into the published `dist/index.d.ts`, where a path relative to
+ * an entry point exports is copied into the published `dist/*.d.ts`, where a path relative to
  * a source file means nothing, so an example on a public declaration may not import a relative
  * path: it has to reach what it uses through `@cosyte/ccda`. An example on an internal helper,
  * which only a reader of this repository sees, imports it from its own module by relative path.
@@ -54,6 +55,8 @@ export interface ExampleImportOptions {
   /** The package name examples import this package by, and the entry point it resolves to. */
   readonly selfName: string;
   readonly selfEntry: string;
+  /** The package's other entry points: each subpath specifier, and the source it resolves to. */
+  readonly selfSubpaths?: Readonly<Record<string, string>>;
 }
 
 /** The result of one check. */
@@ -209,9 +212,12 @@ function citedImports(code: string): CitedImport[] {
 /** Checks every `@example` import in `files`. */
 export function checkExampleImports(options: ExampleImportOptions): ExampleImportReport {
   const selfEntry = resolve(options.selfEntry);
+  const subpaths = new Map(
+    Object.entries(options.selfSubpaths ?? {}).map(([name, entry]) => [name, resolve(entry)]),
+  );
   const files = options.files.map((f) => resolve(f));
   const program = ts.createProgram({
-    rootNames: [...new Set([selfEntry, ...files])],
+    rootNames: [...new Set([selfEntry, ...subpaths.values(), ...files])],
     options: COMPILER_OPTIONS,
   });
   const checker = program.getTypeChecker();
@@ -223,8 +229,20 @@ export function checkExampleImports(options: ExampleImportOptions): ExampleImpor
     let target: string | undefined;
     if (specifier === options.selfName) {
       target = selfEntry;
+    } else if (subpaths.has(specifier)) {
+      target = subpaths.get(specifier);
     } else {
-      const resolved = ts.resolveModuleName(specifier, fromFile, COMPILER_OPTIONS, ts.sys);
+      // An example is an ES module, so a dependency resolves through its `import` condition: the
+      // declaration file the program itself read for the source's own imports.
+      const resolved = ts.resolveModuleName(
+        specifier,
+        fromFile,
+        COMPILER_OPTIONS,
+        ts.sys,
+        undefined,
+        undefined,
+        ts.ModuleKind.ESNext,
+      );
       target = resolved.resolvedModule?.resolvedFileName;
     }
     if (target === undefined) return ambient.get(specifier);
@@ -232,10 +250,15 @@ export function checkExampleImports(options: ExampleImportOptions): ExampleImpor
     return sf === undefined ? undefined : checker.getSymbolAtLocation(sf);
   };
 
-  const entrySymbol = program.getSourceFile(selfEntry);
-  const entryModule = entrySymbol && checker.getSymbolAtLocation(entrySymbol);
-  if (entryModule === undefined) throw new Error(`could not read the entry point ${selfEntry}`);
-  const publicComments = publicDocComments(checker, entryModule);
+  const publicComments = new Map<string, Set<number>>();
+  for (const entry of [selfEntry, ...subpaths.values()]) {
+    const entrySymbol = program.getSourceFile(entry);
+    const entryModule = entrySymbol && checker.getSymbolAtLocation(entrySymbol);
+    if (entryModule === undefined) throw new Error(`could not read the entry point ${entry}`);
+    for (const [file, offsets] of publicDocComments(checker, entryModule)) {
+      publicComments.set(file, new Set([...(publicComments.get(file) ?? []), ...offsets]));
+    }
+  }
 
   let examples = 0;
   let imports = 0;
@@ -306,12 +329,18 @@ export function sourceFiles(dir: string): string[] {
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
+/** The package's subpath entry points, each with the source a consumer's import of it reaches. */
+export const SELF_SUBPATHS: Readonly<Record<string, string>> = {
+  "@cosyte/ccda/arbitraries": join(REPO_ROOT, "src", "arbitraries", "index.ts"),
+};
+
 if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const report = checkExampleImports({
     root: REPO_ROOT,
     files: sourceFiles(join(REPO_ROOT, "src")),
     selfName: "@cosyte/ccda",
     selfEntry: join(REPO_ROOT, "src", "index.ts"),
+    selfSubpaths: SELF_SUBPATHS,
   });
   for (const f of report.findings) console.error(`${f.file}:${String(f.line)}: ${f.message}`);
   if (report.examples === 0) {

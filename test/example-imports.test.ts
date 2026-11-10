@@ -14,7 +14,11 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { checkExampleImports, sourceFiles } from "../scripts/check-example-imports.js";
+import {
+  SELF_SUBPATHS,
+  checkExampleImports,
+  sourceFiles,
+} from "../scripts/check-example-imports.js";
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 const FIXTURE = join(REPO_ROOT, "test", "__fixtures__", "example-imports");
@@ -35,6 +39,7 @@ describe("the @example import check", () => {
       files: sourceFiles(join(REPO_ROOT, "src")),
       selfName: "@cosyte/ccda",
       selfEntry: join(REPO_ROOT, "src", "index.ts"),
+      selfSubpaths: SELF_SUBPATHS,
     });
     expect(report.findings).toEqual([]);
     expect(report.examples).toBeGreaterThan(300);
@@ -46,6 +51,27 @@ describe("the @example import check", () => {
     expect(report.findings).toEqual([]);
     expect(report.examples).toBe(2);
     expect(report.imports).toBe(4);
+  });
+
+  it("reads a subpath entry point as public, and checks imports of it against its exports", () => {
+    const options = {
+      root: FIXTURE,
+      files: [join(FIXTURE, "subpath.ts")],
+      selfName: "@cosyte/ccda",
+      selfEntry: join(FIXTURE, "index.ts"),
+    };
+    const withSubpath = checkExampleImports({
+      ...options,
+      selfSubpaths: { "@cosyte/ccda/extra": join(FIXTURE, "subpath.ts") },
+    });
+    expect(withSubpath.findings.map((f) => [f.line, f.specifier, f.name ?? null])).toEqual([
+      [6, "@cosyte/ccda/extra", "notOnTheSubpath"],
+      [19, "./subpath.js", null],
+    ]);
+    // Without the subpath named, the package's own subpath is not a module the check can read.
+    expect(checkExampleImports(options).findings.map((f) => [f.line, f.specifier])).toEqual([
+      [6, "@cosyte/ccda/extra"],
+    ]);
   });
 
   it("fails on each form of an import that does not resolve", () => {
