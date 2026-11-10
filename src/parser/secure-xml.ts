@@ -37,7 +37,7 @@ import { isRecognizedNamespace } from "./namespaces.js";
 import type { CcdaParseLimits } from "./types.js";
 import { encodingBomStripped, unknownNamespacePrefix, type CcdaWarning } from "./warnings.js";
 
-/** Fully-resolved safety caps, every field present (defaults merged in). @internal */
+/** Fully-resolved safety caps, every field present (defaults merged in), as `resolveLimits` returns them. */
 export interface ResolvedLimits {
   readonly maxInputBytes: number;
   readonly maxDepth: number;

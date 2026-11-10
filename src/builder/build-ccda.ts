@@ -6032,15 +6032,16 @@ function deathObservation(doc: Document): Element {
 // re-implements a section. These exports expose that machinery (and the
 // identifying template roots the editor matches a source section against)
 // without widening the package's public surface: they are re-exported only into
-// the internal `edit` module, never from `src/index.ts`.
+// the internal `edit` module. The one exception is the `EditableSectionKind`
+// type, which `src/index.ts` exports because it is the type of an edit's `kind`.
 // ---------------------------------------------------------------------------
 
 /**
- * The section kinds {@link buildSectionComponent} can emit as a standalone
- * `<component>`, the sections `buildCcda` builds from a single content list.
- * The compound Functional/Mental Status sections (three content arrays each)
- * and narrative-only sections are intentionally excluded from edit support.
- * @internal
+ * The section kinds `editCcda` can add or replace: the sections `buildCcda`
+ * builds from a single content list, each emitted as a standalone
+ * `<component>`. The compound Functional/Mental Status sections (three content
+ * arrays each) and narrative-only sections are intentionally excluded from
+ * edit support.
  */
 export type EditableSectionKind =
   | "problems"
