@@ -172,10 +172,19 @@ export function isCcdaDocument(value: unknown): value is CcdaDocument {
 interface DocumentText {
   value?: string;
   write?: (() => string) | undefined;
+  /**
+   * Whether the text is known to be written as the writer writes it (`TreeDocument.writtenEnd`
+   * of its read is its length) and to pass the default limits, so an edit can be made on it
+   * without reading it into a tree first (`../edit/text-read.ts`).
+   */
+  written?: boolean;
 }
 
 /** Set a document's text; assigned in the class's static block, which can reach `#text`. @internal */
 let attachText: (doc: CcdaDocument, text: DocumentText) => void;
+
+/** A document's text, if it has one this class can reach; assigned in the same static block. @internal */
+let textOf: (doc: CcdaDocument) => DocumentText | undefined;
 
 /**
  * Construct a document whose XML is written by `write` the first time `toString` asks for it, and
@@ -188,10 +197,53 @@ let attachText: (doc: CcdaDocument, text: DocumentText) => void;
  *
  * @internal
  */
-export function documentWithText(init: CcdaDocumentInit, write: () => string): CcdaDocument {
+export function documentWithText(
+  init: CcdaDocumentInit,
+  write: () => string,
+  written = false,
+): CcdaDocument {
   const doc = new CcdaDocument(init);
-  attachText(doc, { write });
+  attachText(doc, written ? { write, written } : { write });
   return doc;
+}
+
+/**
+ * A document whose XML is `serialized`, as `new CcdaDocument({ ...init, serialized })` makes it,
+ * with `written` recorded beside it (see {@link writtenXml}).
+ *
+ * @internal
+ */
+export function documentWithXml(
+  init: CcdaDocumentInit,
+  serialized: string,
+  written: boolean,
+): CcdaDocument {
+  const doc = new CcdaDocument({ ...init, serialized });
+  if (written) markWritten(doc);
+  return doc;
+}
+
+/**
+ * The document's XML when it is known to be written as the writer writes it and to pass the
+ * default limits (the parse that made the document found it so, or an edit of it did), else
+ * `undefined`. Writes the XML first if it has not been written yet.
+ *
+ * @internal
+ */
+export function writtenXml(doc: CcdaDocument): string | undefined {
+  return textOf(doc)?.written === true ? doc.toString() : undefined;
+}
+
+/**
+ * Record that the document's XML, as `toString` returns it, is written as the writer writes it
+ * and passes the default limits: an edit read it whole and found it so. A document made by
+ * another copy of this package is left as it is.
+ *
+ * @internal
+ */
+export function markWritten(doc: CcdaDocument): void {
+  const text = textOf(doc);
+  if (text !== undefined) text.written = true;
 }
 
 /**
@@ -263,6 +315,9 @@ export class CcdaDocument {
     attachText = (doc, text) => {
       doc.#text = text;
     };
+    // A document made by another copy of this package (its other build) keeps its text where this
+    // class cannot reach it, and has none here.
+    textOf = (doc) => (#text in doc ? doc.#text : undefined);
   }
 
   /**

@@ -305,10 +305,11 @@ export function normalizeLineEndings(source: string): string {
 /**
  * Strip a leading byte order mark (emitting `ENCODING_BOM_STRIPPED`), refuse an input over the
  * size cap, and run the gate scan. Returns the text a tree is built from and what the scan found.
+ * `editCcda` runs it alone on a text it already knows is written and within the other limits.
  *
  * @internal
  */
-function acceptSource(
+export function acceptSource(
   raw: string,
   limits: ResolvedLimits,
   emit: (warning: CcdaWarning) => void,

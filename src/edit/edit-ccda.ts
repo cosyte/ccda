@@ -61,6 +61,8 @@
  * @packageDocumentation
  */
 
+import { channel } from "node:diagnostics_channel";
+
 import {
   buildSectionComponent,
   EDITABLE_SECTIONS,
@@ -69,7 +71,13 @@ import {
 import type { EditableSectionKind, SectionInput } from "../builder/build-ccda.js";
 import { el } from "../builder/dom.js";
 import { LOINC } from "../model/code-systems.js";
-import { isCcdaDocument, readDocumentTemplate, type CcdaDocument } from "../model/document.js";
+import {
+  isCcdaDocument,
+  markWritten,
+  readDocumentTemplate,
+  writtenXml,
+  type CcdaDocument,
+} from "../model/document.js";
 import { attr, child, childElements, children } from "../model/dom.js";
 import type { TerminologyAdapter } from "../model/terminology.js";
 import type { II } from "../model/types/ii.js";
@@ -78,12 +86,17 @@ import {
   missingRequiredSections,
   type RequiredSectionOptions,
 } from "../parser/required-sections.js";
-import { DEFAULT_LIMITS, parseSecureEditable } from "../parser/secure-xml.js";
+import {
+  acceptSource,
+  DEFAULT_LIMITS,
+  parseSecureDom,
+  parseSecureEditable,
+} from "../parser/secure-xml.js";
 import { sectionForLoinc, sectionForTemplateRoot, type DocumentType } from "../parser/templates.js";
-import { domOfTree } from "../parser/tree-dom.js";
 import type { CcdaWarning } from "../parser/warnings.js";
 import { serializeDocument } from "../serialize/serialize-dom.js";
 import { DomSurface, type EditSurface } from "./surface.js";
+import { readText } from "./text-read.js";
 import { TextSurface } from "./text-surface.js";
 import type { Document, Element } from "@xmldom/xmldom";
 
@@ -406,16 +419,36 @@ export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): C
 }
 
 /**
+ * The diagnostics channel an edit reports the way it was made on: `{ path: "text" }` for an edit
+ * made on the source's written text, `{ path: "dom" }` for one made on an `@xmldom/xmldom` DOM of
+ * it. Published only while something subscribes (`node:diagnostics_channel`); the benchmarks read
+ * it to show when an edit falls back to the DOM.
+ *
+ * @internal
+ */
+export const EDIT_PATH_CHANNEL = "cosyte:ccda:edit";
+
+/** The channel itself, made once. @internal */
+const editPath = channel(EDIT_PATH_CHANNEL);
+
+/** Report the way an edit was made, to whatever subscribes. @internal */
+function reportPath(path: "text" | "dom"): void {
+  if (editPath.hasSubscribers) editPath.publish({ path });
+}
+
+/**
  * Perform the edit on the source's XML and return the XML it writes, with the emit-time
  * diagnostics read off what it grafted. Nothing it builds outlives it, so all of it can be
  * collected before {@link editCcda} parses the result.
  *
  * **On the text, where the text allows.** A source's XML is nearly always already written in the
  * form the writer gives it (`TreeDocument.writtenEnd`), and then the edit is made on that text
- * (`./text-surface.ts`): the compact tree is read for the structure, each new node is written by
- * the same serializer, and the text is spliced, with no `@xmldom/xmldom` DOM of the document. Any
- * other text, and any splice the surface cannot vouch for, is edited on a DOM as before. The XML is
- * the same either way; `onText: false` makes the edit on the DOM, for the tests that compare them.
+ * (`./text-surface.ts`): only the elements the edit looks at are read, each new node is written as
+ * the same serializer writes it, and the text is spliced, with no tree and no `@xmldom/xmldom` DOM
+ * of the document. The parse that made the document says whether its XML is written
+ * (`writtenXml`); when it cannot, the XML is read whole once to find out. Any other text, and any
+ * splice the surface cannot vouch for, is edited on a DOM as before. The XML is the same either
+ * way; `onText: false` makes the edit on the DOM, for the tests that compare them.
  *
  * @internal
  */
@@ -425,19 +458,53 @@ export function writeEdit(
   onText = true,
 ): { readonly xml: string; readonly diagnostics: readonly CcdaWarning[] } {
   const xml = sourceXml(source);
-  // Re-read the retained (already-clean, already-safe) XML. A no-op emitter: this XML came from
-  // our own serializer, so it carries no Tier-2 deviations to record, and any Tier-3 fatal is
-  // impossible.
-  const read = parseSecureEditable(xml, DEFAULT_LIMITS, () => undefined);
-  if (read.dom !== undefined) return editDom(read.dom, source, options);
-  if (onText) {
-    const surface = new TextSurface(read.tree, read.text);
+  if (!onText) return editDom(parseSecureDom(xml, DEFAULT_LIMITS, ignore), source, options);
+  const found = writtenSource(source, xml);
+  if (found.dom !== undefined) return editDom(found.dom, source, options);
+  const read = readText(found.text);
+  if (read !== undefined) {
+    const surface = new TextSurface(read, found.text, found.end);
     const diagnostics = editOn(surface, source, options);
     const written = surface.write();
     /* v8 ignore else -- TextSurface.write vouches for every text a parse writes (see its module comment); the DOM is the fallback it was built against */
-    if (written !== undefined) return { xml: written, diagnostics };
+    if (written !== undefined) {
+      reportPath("text");
+      return { xml: written, diagnostics };
+    }
   }
-  return editDom(domOfTree(read.tree), source, options);
+  return editDom(parseSecureDom(xml, DEFAULT_LIMITS, ignore), source, options);
+}
+
+/** A warning sink that keeps nothing: the source's XML came from our own writer. @internal */
+function ignore(): void {
+  // Re-reading the retained (already-clean, already-safe) XML records no Tier-2 deviation, and a
+  // Tier-3 fatal still throws.
+}
+
+/**
+ * The source's XML, when it is written as the writer writes it, with where its last node ends,
+ * after the gate and limits a read of it runs; else its DOM, for an edit on that. A document whose
+ * parse found its XML written says so, and then only the gate runs again (its size and
+ * references): the depth and node count held at that parse, on the same elements. Any other is
+ * read whole once, with every limit, and remembered as written when it is.
+ *
+ * @internal
+ */
+function writtenSource(
+  source: CcdaDocument,
+  xml: string,
+):
+  | { readonly text: string; readonly end: number; readonly dom?: undefined }
+  | { readonly dom: Document } {
+  if (writtenXml(source) !== undefined) {
+    acceptSource(xml, DEFAULT_LIMITS, ignore);
+    return { text: xml, end: xml.length };
+  }
+  const read = parseSecureEditable(xml, DEFAULT_LIMITS, ignore);
+  if (read.dom !== undefined) return { dom: read.dom };
+  const end = read.tree.writtenEnd;
+  if (read.text === xml && end === xml.length) markWritten(source);
+  return { text: read.text, end };
 }
 
 /** The edit on a DOM of the source's XML, written by `serializeDocument`. @internal */
@@ -450,11 +517,12 @@ function editDom(
   /* v8 ignore if -- a CcdaDocument retains only XML this package emitted, which always has a root element */
   if (root === null) {
     // Unreachable: sourceXml refuses anything that is not a CcdaDocument, a CcdaDocument retains the
-    // XML its parse read (which had a root element), and parseSecureEditable throws
+    // XML its parse read (which had a root element), and parseSecureDom throws
     // NOT_WELL_FORMED_XML for XML with none in any case.
     throw new CcdaEditError("NO_SOURCE_DOCUMENT", "editCcda: source produced no document element.");
   }
   const diagnostics = editOn(new DomSurface(dom, root), source, options);
+  reportPath("dom");
   return { xml: serializeDocument(dom), diagnostics };
 }
 

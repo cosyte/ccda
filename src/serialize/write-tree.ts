@@ -72,6 +72,28 @@ function escape(c: string): string {
 }
 
 /**
+ * An attribute value as the writer writes it between its quotes, as `@xmldom/xmldom`'s serializer
+ * does. `../edit/light-dom.ts` writes the elements an edit adds with it.
+ *
+ * @internal
+ */
+export function attributeText(value: string): string {
+  ATTRIBUTE_ESCAPED_RE.lastIndex = 0;
+  return ATTRIBUTE_ESCAPED_RE.test(value) ? value.replace(ATTRIBUTE_ESCAPED_RE, escape) : value;
+}
+
+/**
+ * Text as the writer writes it: as `@xmldom/xmldom`'s serializer does, with a carriage return as
+ * `&#13;` (the node filter `serializeDocument` passes).
+ *
+ * @internal
+ */
+export function textData(data: string): string {
+  TEXT_ESCAPED_RE.lastIndex = 0;
+  return TEXT_ESCAPED_RE.test(data) ? data.replace(TEXT_ESCAPED_RE, escape) : data;
+}
+
+/**
  * The XML `serializeDocument` writes for the `@xmldom/xmldom` tree of `source` (the text after
  * its byte order mark is removed; `lineBreaksToNormalize` as the gate scan found), or `undefined`
  * when the compact reader hands the text back or the tree holds an element written another way
@@ -116,12 +138,7 @@ function writeElement(root: TreeElement): string | undefined {
       const attrs = el.attrs;
       if (attrs !== null) {
         for (let i = 0; i < attrs.length; i += 3) {
-          const value = attrs[i + 1] as string;
-          ATTRIBUTE_ESCAPED_RE.lastIndex = 0;
-          const written = ATTRIBUTE_ESCAPED_RE.test(value)
-            ? value.replace(ATTRIBUTE_ESCAPED_RE, escape)
-            : value;
-          out += ` ${attrs[i] as string}="${written}"`;
+          out += ` ${attrs[i] as string}="${attributeText(attrs[i + 1] as string)}"`;
         }
       }
       if (el.firstChild !== null) {
@@ -153,8 +170,7 @@ function writeCharacterData(node: TreeCharacterData): string {
   const data = node.nodeValue;
   switch (node.nodeType) {
     case TEXT_NODE:
-      TEXT_ESCAPED_RE.lastIndex = 0;
-      return TEXT_ESCAPED_RE.test(data) ? data.replace(TEXT_ESCAPED_RE, escape) : data;
+      return textData(data);
     case CDATA_SECTION_NODE:
       return `<![CDATA[${data}]]>`;
     case PROCESSING_INSTRUCTION_NODE:
