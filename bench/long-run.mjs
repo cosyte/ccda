@@ -4,11 +4,14 @@
 //
 // A reading (`pnpm bench:reading`) runs a long run of 30 rounds of about 100 ms each, collects
 // fully between rounds, fits a slope through the settled heap of the last 25 and calls the case
-// growing when that slope makes 64 KiB or more over them: about 2.5 seconds of work. This repeats
-// those 30 rounds the same way, then runs `--rounds` more (300 unless told), so the same slope is
-// read over ten times the work, and over the last half of it alone. A heap snapshot is written at
-// the end of the reading's 30 rounds and at the end of the run, and the two are summed by what
-// each object is and diffed: the rows that grew name what the run kept.
+// growing when that slope makes 64 KiB or more over them: about 2.5 seconds of work, read at the
+// smallest size of every benchmark. This repeats those 30 rounds the same way for each of those
+// cases, then runs a long window after them: rounds enough for 12,000 operations, at least 300
+// and at most 1,000 (or `--rounds` of them), so the same slope is read over ten to forty times
+// the work. Each window is fitted twice: on the whole heap, as the reading fits it, and on the
+// heap outside the spaces V8 keeps compiled code in. A heap snapshot is written before the
+// reading's window, after it and at the end; each pair is summed by what each object is and
+// diffed, and the rows that grew name what the run kept.
 //
 // Then allocations, for every operation the bench times at every size, the 2 MiB, 5.4 MiB and
 // 8 MiB inputs among them: a reading counts a call's allocations only in a window with no
@@ -18,7 +21,9 @@
 //
 // Each case runs in a fresh process with `--expose-gc`. The inputs are the bench's own, from
 // bench/shapes.mjs: synthetic, built in code. No value from a document is printed: a snapshot is
-// summed by constructor and function names, and strings and numbers only by their type.
+// summed by constructor and function names, and strings and numbers only by their type. `--out`
+// keeps the results as long-run.json; the snapshots are deleted once read unless
+// `--keep-snapshots` is given (each is several megabytes).
 
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -49,10 +54,13 @@ import {
 const READING_ROUNDS = 30;
 const READING_SKIP = 5;
 const ROUND_MS = 100;
-const LONG_ROUNDS = 300;
+/** The long window: rounds enough for this many operations, within the bounds below. */
+const LONG_OPS = 12_000;
+const LONG_MIN_ROUNDS = 300;
+const LONG_MAX_ROUNDS = 1_000;
 const WARMUP_MS = 1_000;
-/** Snapshot rows shown for each case. */
-const TOP = 12;
+/** Snapshot rows kept for each window. */
+const TOP = 8;
 /** Allocation windows read for each case, each one pass over its inputs. */
 const WINDOWS = 7;
 const CHILD_TIMEOUT_MS = 15 * 60 * 1_000;
@@ -137,16 +145,19 @@ const SIZES = [
   },
 ];
 
-/** The two cases a reading called growing, each as `[operation, shape, size]`. */
-const LONG_RUNS = [
-  ["parseCcda", "Referral Note", "23 KiB"],
-  ["editCcda, then toString", "CCD", "100 entries, 0.2 MiB"],
-];
+/**
+ * The cases a reading reads a long run for: every operation at each shape's smallest size, in the
+ * reading's order.
+ */
+const LONG_RUNS = SIZES.filter((_s, i) => i === 0 || SIZES[i - 1].shape !== SIZES[i].shape).flatMap(
+  (size) => OPERATIONS.map((op) => ({ op, size })),
+);
 
 function args(argv) {
   const out = {
     target: argv[0],
-    rounds: LONG_ROUNDS,
+    rounds: undefined,
+    keep: false,
     dir: undefined,
     summary: undefined,
     child: undefined,
@@ -156,15 +167,9 @@ function args(argv) {
     else if (argv[i] === "--out") out.dir = argv[++i];
     else if (argv[i] === "--summary") out.summary = argv[++i];
     else if (argv[i] === "--child") out.child = argv[++i];
+    else if (argv[i] === "--keep-snapshots") out.keep = true;
   }
   return out;
-}
-
-function caseOf(operation, shape, size) {
-  const op = OPERATIONS.find((o) => o.name === operation);
-  const s = SIZES.find((x) => x.shape === shape && x.size === size);
-  if (op === undefined || s === undefined) throw new Error("no such case");
-  return { op, size: s };
 }
 
 /** The probe a child reads the heap with; it needs `--expose-gc`. */
@@ -206,8 +211,27 @@ function spaceChange(from, to) {
     .filter((x) => x.bytes !== 0);
 }
 
-function snapshotSummary(file) {
-  return summarizeSnapshot(JSON.parse(readFileSync(file, "utf8")));
+/** A snapshot written now, summed, and deleted unless it is to be kept. */
+function snapshot(dir, name, keep) {
+  const file = writeHeapSnapshot(join(dir, `${name}.heapsnapshot`));
+  const summary = summarizeSnapshot(JSON.parse(readFileSync(file, "utf8")));
+  if (!keep) rmSync(file, { force: true });
+  return summary;
+}
+
+/** What changed between two snapshot summaries: compiled code apart from everything else. */
+function snapshotChange(before, after) {
+  const diff = diffSummaries(before, after);
+  const isCode = (row) => row.key.startsWith("code: ");
+  const sum = (rows) => rows.reduce((n, row) => n + row.bytes, 0);
+  return {
+    before: diff.before,
+    after: diff.after,
+    codeBytes: sum(diff.rows.filter(isCode)),
+    otherBytes: sum(diff.rows.filter((row) => !isCode(row))),
+    rows: diff.rows.slice(0, TOP),
+    rowsOutsideCode: diff.rows.filter((row) => !isCode(row)).slice(0, TOP),
+  };
 }
 
 /** Rounds `from` to `to` of a long run's readings, as `fitGrowth` takes them, on one series. */
@@ -228,7 +252,7 @@ function fits(readings, field, count) {
 }
 
 /** One long run, in this process. */
-function longRun(ccda, c, rounds, dir) {
+function longRun(ccda, c, options) {
   const p = probe();
   const texts = Array.from({ length: c.size.inputs }, (_v, i) => c.size.build(i));
   const pass = passOf(c.op.bind(ccda, c.size.structured), texts);
@@ -238,71 +262,71 @@ function longRun(ccda, c, rounds, dir) {
   sink += calibration.sink;
   const passesPerRound = calibration.passes;
   const opsPerRound = passesPerRound * c.size.inputs;
+  const rounds =
+    options.rounds ??
+    Math.min(LONG_MAX_ROUNDS, Math.max(LONG_MIN_ROUNDS, Math.ceil(LONG_OPS / opsPerRound)));
 
   // Each round's operations so far, settled heap, and settled heap outside the spaces that hold
-  // compiled code and its metadata, kept in one array allocated before the run, so the record of
-  // the run is not itself a growth the run reads.
+  // compiled code, kept in one array allocated before the run, so the record of the run is not
+  // itself a growth the run reads.
   const count = READING_ROUNDS + rounds + 1;
   const readings = new Float64Array(count * 3);
+  const snapshots = [];
+  const spacesAt = {};
   let unsettled = 0;
   let ops = 0;
-  let spacesAtSkip = null;
-  let spacesAtReadingEnd = null;
-  let first = null;
   for (let r = 0; r < count; r++) {
     let s = p.settle();
     if (r === READING_ROUNDS) {
-      // The end of the reading's window: the first snapshot, then the heap settled again, so the
-      // snapshot's own garbage is not read as growth.
-      first = writeHeapSnapshot(join(dir, "start.heapsnapshot"));
+      // The end of the reading's window, then its snapshot, then the heap settled again: writing
+      // a snapshot leaves the heap higher, a step the long window starts after.
+      spacesAt.readingEnd = spaces();
+      snapshots.push(snapshot(options.dir, "2-after-reading-window", options.keep));
       s = p.settle();
+      spacesAt.longStart = spaces();
     }
     const now = getHeapSpaceStatistics();
-    if (r === READING_SKIP) spacesAtSkip = spaces();
-    if (r === READING_ROUNDS) spacesAtReadingEnd = spaces();
+    if (r === READING_SKIP) spacesAt.readingStart = spaces();
     if (!s.settled) unsettled++;
     readings[r * 3] = ops;
     readings[r * 3 + 1] = s.heap;
     readings[r * 3 + 2] = s.heap - codeBytes(now);
     if (r === count - 1) break;
+    // The first snapshot, before the round the reading's fit starts at, so its step falls
+    // outside that fit.
+    if (r === READING_SKIP - 1) {
+      snapshots.push(snapshot(options.dir, "1-before-reading-window", options.keep));
+      p.settle();
+    }
     for (let i = 0; i < passesPerRound; i++) sink += pass();
     ops += opsPerRound;
   }
-  const spacesEnd = spaces();
-  const last = writeHeapSnapshot(join(dir, "end.heapsnapshot"));
-  const diff = diffSummaries(snapshotSummary(first), snapshotSummary(last));
+  spacesAt.end = spaces();
+  snapshots.push(snapshot(options.dir, "3-end", options.keep));
   if (sink < 0) throw new Error("unreachable");
   const heapAt = (r) => readings[r * 3 + 1];
   const dataAt = (r) => readings[r * 3 + 2];
   return {
     opsPerRound,
+    rounds,
     unsettled,
     heap: {
-      atSkip: heapAt(READING_SKIP),
-      atReadingEnd: heapAt(READING_ROUNDS),
+      atReadingStart: heapAt(READING_SKIP),
+      atLongStart: heapAt(READING_ROUNDS),
       atEnd: heapAt(count - 1),
-    },
-    data: {
-      atSkip: dataAt(READING_SKIP),
-      atReadingEnd: dataAt(READING_ROUNDS),
-      atEnd: dataAt(count - 1),
     },
     total: fits(readings, 1, count),
     outsideCode: fits(readings, 2, count),
     spaces: {
-      readingWindow: spaceChange(spacesAtSkip, spacesAtReadingEnd),
-      longWindow: spaceChange(spacesAtReadingEnd, spacesEnd),
+      readingWindow: spaceChange(spacesAt.readingStart, spacesAt.readingEnd),
+      longWindow: spaceChange(spacesAt.longStart, spacesAt.end),
+    },
+    snapshots: {
+      readingWindow: snapshotChange(snapshots[0], snapshots[1]),
+      longWindow: snapshotChange(snapshots[1], snapshots[2]),
     },
     settledHeap: Array.from({ length: count }, (_v, r) => heapAt(r)),
     settledHeapOutsideCode: Array.from({ length: count }, (_v, r) => dataAt(r)),
-    snapshot: {
-      before: diff.before,
-      after: diff.after,
-      rows: diff.rows.slice(0, TOP),
-      // The same diff without V8's compiled code and its metadata: what the package's own objects
-      // and the run's data did.
-      rowsOutsideCode: diff.rows.filter((row) => !row.key.startsWith("code: ")).slice(0, TOP),
-    },
   };
 }
 
@@ -348,8 +372,7 @@ async function child(options) {
   const [kind, index] = options.child.split(":");
   let result;
   if (kind === "long") {
-    const c = caseOf(...LONG_RUNS[Number(index)]);
-    result = longRun(ccda, c, options.rounds, options.dir);
+    result = longRun(ccda, LONG_RUNS[Number(index)], options);
   } else {
     const n = Number(index);
     const op = OPERATIONS[n % OPERATIONS.length];
@@ -362,8 +385,9 @@ async function child(options) {
 
 function runChild(options, child, dir) {
   const self = fileURLToPath(import.meta.url);
-  const argv = ["--expose-gc", self, options.target, "--child", child, "--rounds"];
-  argv.push(String(options.rounds), "--out", dir);
+  const argv = ["--expose-gc", self, options.target, "--child", child, "--out", dir];
+  if (options.rounds !== undefined) argv.push("--rounds", String(options.rounds));
+  if (options.keep) argv.push("--keep-snapshots");
   const out = spawnSync(process.execPath, argv, {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
@@ -385,30 +409,31 @@ function perOp(bytes) {
   return `${bytes.toFixed(1)} B/op`;
 }
 
-function spaceText(rows) {
-  return rows.length === 0 ? "no change" : rows.map((x) => `${x.name} ${kib(x.bytes)}`).join(", ");
+/** One fit as a table cell: the growth over its window, the slope, the verdict. */
+function fitCell(f) {
+  const verdict = f.verdict === "growing" ? "**growing**" : "flat";
+  return `${kib(f.growthBytes)}, ${perOp(f.slopeBytesPerOp)}, ${verdict}`;
 }
 
-function snapshotTable(rows) {
-  return [
-    "| What | Objects | Self size |",
-    "| --- | --- | --- |",
-    ...rows.map(
-      (row) =>
-        `| \`${row.key.replaceAll("|", "\\|")}\` | ${row.count > 0 ? "+" : ""}${String(row.count)} | ${row.bytes > 0 ? "+" : ""}${kib(row.bytes)} |`,
-    ),
-  ];
+function signed(bytes) {
+  return `${bytes > 0 ? "+" : ""}${kib(bytes)}`;
 }
 
-function fitRow(label, heap, f) {
-  return `| ${label} | ${heap} | ${String(f.rounds)} | ${String(f.ops)} | ${perOp(f.slopeBytesPerOp)} | ${kib(f.growthBytes)} | ${perOp(f.detectableBytesPerOp)} | ${f.verdict} |`;
+/** The rows of a snapshot diff that grew, as a short list. */
+function grew(rows, n) {
+  const up = rows.filter((row) => row.bytes > 0).slice(0, n);
+  if (up.length === 0) return "nothing";
+  return up
+    .map((row) => `\`${row.key.replaceAll("|", "\\|")}\` ${signed(row.bytes)} (${row.count > 0 ? "+" : ""}${String(row.count)})`)
+    .join(", ");
 }
 
 async function main() {
   const options = args(process.argv.slice(2));
-  if (options.target === undefined || !(options.rounds >= 2)) {
+  const roundsOk = options.rounds === undefined || options.rounds >= 2;
+  if (options.target === undefined || !roundsOk) {
     process.stderr.write(
-      "usage: node bench/long-run.mjs <dist/index.mjs> [--rounds <n>] [--out <dir>] [--summary <file.md>]\n",
+      "usage: node bench/long-run.mjs <dist/index.mjs> [--rounds <n>] [--out <dir>] [--summary <file.md>] [--keep-snapshots]\n",
     );
     return 2;
   }
@@ -417,41 +442,42 @@ async function main() {
   const scratch = options.dir === undefined ? mkdtempSync(join(tmpdir(), "ccda-long-run-")) : null;
   const root = options.dir ?? scratch;
   mkdirSync(root, { recursive: true });
-  const results = { node: process.version, rounds: options.rounds, longRuns: [], allocations: [] };
-  const lines = [
-    "### Long run, read longer",
-    "",
-    `Node ${process.version}. Each case in a fresh process: warmed for ${String(WARMUP_MS)} ms, then rounds of about ${String(ROUND_MS)} ms of passes, every round after full collections until two in a row free less than 64 KiB. The reading's own window is rounds ${String(READING_SKIP)} to ${String(READING_ROUNDS - 1)}; the long window is the ${String(options.rounds)} rounds after them, the last half that window's second half. Each is a Theil-Sen slope through the settled heap, and growing when it makes 64 KiB or more over its span, as @cosyte/bench decides; read once on the whole heap, as the reading reads it, and once without the spaces V8 keeps compiled code and its metadata in (every space named \`code\` or \`trusted\`), which grow while the compiler optimizes and shrink when it flushes.`,
+  const results = { node: process.version, longRuns: [], allocations: [] };
+  const fitsTable = [
+    "| Benchmark | Size | Ops a round | Rounds after | The reading's window | Long window | Long window, outside code | Last half, outside code | Detectable, long |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
   ];
-  for (const [index, spec] of LONG_RUNS.entries()) {
+  const snapshotsTable = [
+    "| Benchmark | Size | Reading's window: code, other | Long window: code, other | Grew most outside code, long window |",
+    "| --- | --- | --- | --- | --- |",
+  ];
+  for (const [index, c] of LONG_RUNS.entries()) {
     const dir = join(root, `long-run-${String(index + 1)}`);
     mkdirSync(dir, { recursive: true });
     const r = runChild(options, `long:${String(index)}`, dir);
-    results.longRuns.push({ operation: spec[0], shape: spec[1], size: spec[2], ...r });
-    lines.push(
-      "",
-      `#### ${spec[0]}: ${spec[1]} / ${spec[2]}`,
-      "",
-      `${String(r.opsPerRound)} operations a round; ${String(r.unsettled)} round(s) did not settle. Settled heap ${kib(r.heap.atSkip)} at round ${String(READING_SKIP)}, ${kib(r.heap.atReadingEnd)} at round ${String(READING_ROUNDS)}, ${kib(r.heap.atEnd)} at the end; outside compiled code ${kib(r.data.atSkip)}, ${kib(r.data.atReadingEnd)} and ${kib(r.data.atEnd)}.`,
-      "",
-      "| Window | Heap | Rounds | Operations | Slope | Growth over the window | Detectable | Verdict |",
-      "| --- | --- | --- | --- | --- | --- | --- | --- |",
-      fitRow("The reading's", "all", r.total.reading),
-      fitRow("Long", "all", r.total.long),
-      fitRow("Last half", "all", r.total.lastHalf),
-      fitRow("The reading's", "outside code", r.outsideCode.reading),
-      fitRow("Long", "outside code", r.outsideCode.long),
-      fitRow("Last half", "outside code", r.outsideCode.lastHalf),
-      "",
-      `Heap spaces over the reading's window: ${spaceText(r.spaces.readingWindow)}. Over the long window: ${spaceText(r.spaces.longWindow)}.`,
-      "",
-      `Heap snapshots, end of the reading's window to the end: ${String(r.snapshot.before.count)} to ${String(r.snapshot.after.count)} objects, ${kib(r.snapshot.before.bytes)} to ${kib(r.snapshot.after.bytes)}. What grew most, then what grew most outside compiled code:`,
-      "",
-      ...snapshotTable(r.snapshot.rows),
-      "",
-      ...snapshotTable(r.snapshot.rowsOutsideCode),
+    const benchmark = `${c.op.name}: ${c.size.shape}`;
+    results.longRuns.push({ benchmark, size: c.size.size, ...r });
+    const unsettled = r.unsettled === 0 ? "" : ` (${String(r.unsettled)} unsettled)`;
+    fitsTable.push(
+      `| ${benchmark} | ${c.size.size} | ${String(r.opsPerRound)} | ${String(r.rounds)}${unsettled} | ${fitCell(r.total.reading)} | ${fitCell(r.total.long)} | ${fitCell(r.outsideCode.long)} | ${fitCell(r.outsideCode.lastHalf)} | ${perOp(r.outsideCode.long.detectableBytesPerOp)} |`,
+    );
+    const rw = r.snapshots.readingWindow;
+    const lw = r.snapshots.longWindow;
+    snapshotsTable.push(
+      `| ${benchmark} | ${c.size.size} | ${signed(rw.codeBytes)}, ${signed(rw.otherBytes)} | ${signed(lw.codeBytes)}, ${signed(lw.otherBytes)} | ${grew(lw.rowsOutsideCode, 3)} |`,
     );
   }
+  const lines = [
+    "### Long run, read longer",
+    "",
+    `Node ${process.version}. Each case in a fresh process: warmed for ${String(WARMUP_MS)} ms, then rounds of about ${String(ROUND_MS)} ms of passes, every round after full collections until two in a row free less than 64 KiB. The reading's window is rounds ${String(READING_SKIP)} to ${String(READING_ROUNDS - 1)}, as a reading fits it; the long window is the rounds after them, enough for ${String(LONG_OPS)} operations, at least ${String(LONG_MIN_ROUNDS)} and at most ${String(LONG_MAX_ROUNDS)}; the last half is that window's second half. Each cell is a Theil-Sen slope through the settled heap and the growth it makes over its window, growing at 64 KiB or more, as @cosyte/bench decides. "Outside code" leaves out the spaces V8 keeps compiled code in (every space named \`code\` or \`trusted\`), which grow while the compiler optimizes and shrink when it flushes.`,
+    "",
+    ...fitsTable,
+    "",
+    "Heap snapshots, written before the reading's window, after it, and at the end, summed by constructor and diffed: what compiled code (every snapshot node of type `code`: machine code, bytecode, feedback, deoptimization data) and everything else gained over each window, then the rows outside code that grew most over the long window, with how many objects.",
+    "",
+    ...snapshotsTable,
+  ];
 
   lines.push(
     "",

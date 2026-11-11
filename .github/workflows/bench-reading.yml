@@ -30,7 +30,8 @@ jobs:
   reading:
     runs-on: ubuntu-latest
     # The whole job, a reading of its 24 cases and the profile, took about 9 minutes on a 4-CPU
-    # GitHub-hosted runner; the bound is for a case that hangs.
+    # GitHub-hosted runner before the long run read longer was added, which reads 12 long runs of
+    # 30 seconds to 2 minutes each; the bound is for a case that hangs.
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -64,13 +65,6 @@ jobs:
           fi
           pnpm exec cosyte-bench check "${out}/reading.json"
           cat "${out}/reading.md" >> "${GITHUB_STEP_SUMMARY}"
-      - name: Budgets
-        shell: bash
-        run: |
-          set -euo pipefail
-          out="${RUNNER_TEMP}/bench-reading"
-          node bench/budgets.mjs "${out}/reading.json" --summary "${out}/budgets.md"
-          { echo; cat "${out}/budgets.md"; } >> "${GITHUB_STEP_SUMMARY}"
       - name: Long run, read longer
         shell: bash
         run: |
@@ -78,6 +72,14 @@ jobs:
           out="${RUNNER_TEMP}/bench-reading"
           node bench/long-run.mjs dist/index.mjs --out "${out}/long-run" --summary "${out}/long-run.md"
           { echo; cat "${out}/long-run.md"; } >> "${GITHUB_STEP_SUMMARY}"
+      - name: Budgets
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/bench-reading"
+          node bench/budgets.mjs "${out}/reading.json" --long-run "${out}/long-run/long-run.json" \
+            --summary "${out}/budgets.md"
+          { echo; cat "${out}/budgets.md"; } >> "${GITHUB_STEP_SUMMARY}"
       - name: CPU and heap profile
         shell: bash
         run: |
