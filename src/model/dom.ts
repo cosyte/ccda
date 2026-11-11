@@ -94,9 +94,26 @@ export function child(el: Element, localName: string): Element | undefined {
  * ```
  */
 export function children(el: Element, localName: string): readonly Element[] {
-  const out: Element[] = [];
+  // Counted first, so the array is made at its size: an array grown from empty by `push` reserves
+  // room for seventeen elements at the first one, and most lookups find none or one. Every slot is
+  // filled before it is returned.
+  let count = 0;
+  let first: Element | undefined;
   for (let n = el.firstChild; n !== null; n = n.nextSibling) {
-    if (isV3Element(n, localName)) out.push(n);
+    if (isV3Element(n, localName)) {
+      if (count === 0) first = n;
+      count += 1;
+    }
+  }
+  if (first === undefined) return [];
+  if (count === 1) return [first];
+  const out = new Array<Element>(count);
+  let i = 0;
+  for (let n: Node | null = first; n !== null; n = n.nextSibling) {
+    if (isV3Element(n, localName)) {
+      out[i] = n;
+      i += 1;
+    }
   }
   return out;
 }
@@ -112,9 +129,33 @@ export function children(el: Element, localName: string): readonly Element[] {
  * ```
  */
 export function childElements(el: Element): readonly Element[] {
-  const out: Element[] = [];
+  return elementChildren(el);
+}
+
+/**
+ * The direct child elements of `el`, in document order, in an array made at its size (see
+ * {@link children}).
+ *
+ * @internal
+ */
+export function elementChildren(el: Element): Element[] {
+  let count = 0;
+  let first: Element | undefined;
   for (let n = el.firstChild; n !== null; n = n.nextSibling) {
-    if (n.nodeType === ELEMENT_NODE) out.push(n as Element);
+    if (n.nodeType === ELEMENT_NODE) {
+      if (count === 0) first = n as Element;
+      count += 1;
+    }
+  }
+  if (first === undefined) return [];
+  if (count === 1) return [first];
+  const out = new Array<Element>(count);
+  let i = 0;
+  for (let n: Node | null = first; n !== null; n = n.nextSibling) {
+    if (n.nodeType === ELEMENT_NODE) {
+      out[i] = n as Element;
+      i += 1;
+    }
   }
   return out;
 }
