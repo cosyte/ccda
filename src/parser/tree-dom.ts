@@ -2,7 +2,8 @@
  * The `@xmldom/xmldom` document of a text the compact reader (`./xml-tree.ts`) read, built from
  * its tree rather than by `@xmldom/xmldom`'s own parser.
  *
- * `editCcda` edits a DOM of the source's XML. Building that DOM through the DOM methods, from a
+ * `editCcda` edits a DOM of the source's XML when that XML is not in the form the writer gives it
+ * (otherwise it edits the text, `../edit/text-surface.ts`). Building that DOM through the DOM methods, from a
  * tree already read, does what `DOMParser` does after its tokenizer has run, the same calls in the
  * same order: the document from `createDocument(null, "")`, each element from `createElementNS`
  * with the line and column of its `<`, each attribute from `createAttributeNS` with its value and

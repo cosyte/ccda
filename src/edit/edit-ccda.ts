@@ -5,12 +5,14 @@
  * **added** or **replaced**, then returns the re-parsed {@link CcdaDocument},
  * so `parseCcda(editCcda(parseCcda(xml), …).toString())` round-trips.
  *
- * **Byte-faithful on the untouched sections.** The edit is performed as DOM
- * surgery on the document the parser actually read (recovered from the
- * serialized snapshot every parsed document retains), not by reconstructing XML
- * from the lossy read-model. Every section, entry, attribute, namespace
- * declaration, and even content this library never models survives an edit
- * verbatim, only the one section the caller targeted is rebuilt. The
+ * **Byte-faithful on the untouched sections.** The edit is made on the document
+ * the parser actually read (recovered from the serialized snapshot every parsed
+ * document retains), not by reconstructing XML from the lossy read-model: on its
+ * text, spliced where each changed element stands, when that text is in the form
+ * the writer gives it (nearly always), and as DOM surgery otherwise, with the
+ * same XML either way. Every section, entry, attribute, namespace declaration,
+ * and even content this library never models survives an edit verbatim, only
+ * the one section the caller targeted is rebuilt. The
  * replacement section is emitted through the **same per-section emitters
  * `buildCcda` uses** ({@link buildSectionComponent}), so it carries the identical
  * templateIds, LOINC code, SHALL `effectiveTime`, and narrative/entry agreement
@@ -76,10 +78,13 @@ import {
   missingRequiredSections,
   type RequiredSectionOptions,
 } from "../parser/required-sections.js";
-import { DEFAULT_LIMITS, parseSecureDom } from "../parser/secure-xml.js";
+import { DEFAULT_LIMITS, parseSecureEditable } from "../parser/secure-xml.js";
 import { sectionForLoinc, sectionForTemplateRoot, type DocumentType } from "../parser/templates.js";
+import { domOfTree } from "../parser/tree-dom.js";
 import type { CcdaWarning } from "../parser/warnings.js";
 import { serializeDocument } from "../serialize/serialize-dom.js";
+import { DomSurface, type EditSurface } from "./surface.js";
+import { TextSurface } from "./text-surface.js";
 import type { Document, Element } from "@xmldom/xmldom";
 
 /** A synthetic (non-real) assigning-authority OID for editor-generated ids. @internal */
@@ -401,30 +406,69 @@ export function editCcda(source: CcdaDocument, options: EditCcdaOptions = {}): C
 }
 
 /**
- * Perform the edit on a fresh DOM of the source's XML and return the XML it writes, with the
- * emit-time diagnostics read off that DOM. The DOM is local to this function, so it can be
+ * Perform the edit on the source's XML and return the XML it writes, with the emit-time
+ * diagnostics read off what it grafted. Nothing it builds outlives it, so all of it can be
  * collected before {@link editCcda} parses the result.
+ *
+ * **On the text, where the text allows.** A source's XML is nearly always already written in the
+ * form the writer gives it (`TreeDocument.writtenEnd`), and then the edit is made on that text
+ * (`./text-surface.ts`): the compact tree is read for the structure, each new node is written by
+ * the same serializer, and the text is spliced, with no `@xmldom/xmldom` DOM of the document. Any
+ * other text, and any splice the surface cannot vouch for, is edited on a DOM as before. The XML is
+ * the same either way; `onText: false` makes the edit on the DOM, for the tests that compare them.
  *
  * @internal
  */
-function writeEdit(
+export function writeEdit(
+  source: CcdaDocument,
+  options: EditCcdaOptions,
+  onText = true,
+): { readonly xml: string; readonly diagnostics: readonly CcdaWarning[] } {
+  const xml = sourceXml(source);
+  // Re-read the retained (already-clean, already-safe) XML. A no-op emitter: this XML came from
+  // our own serializer, so it carries no Tier-2 deviations to record, and any Tier-3 fatal is
+  // impossible.
+  const read = parseSecureEditable(xml, DEFAULT_LIMITS, () => undefined);
+  if (read.dom !== undefined) return editDom(read.dom, source, options);
+  if (onText) {
+    const surface = new TextSurface(read.tree, read.text);
+    const diagnostics = editOn(surface, source, options);
+    const written = surface.write();
+    /* v8 ignore else -- TextSurface.write vouches for every text a parse writes (see its module comment); the DOM is the fallback it was built against */
+    if (written !== undefined) return { xml: written, diagnostics };
+  }
+  return editDom(domOfTree(read.tree), source, options);
+}
+
+/** The edit on a DOM of the source's XML, written by `serializeDocument`. @internal */
+function editDom(
+  dom: Document,
   source: CcdaDocument,
   options: EditCcdaOptions,
 ): { readonly xml: string; readonly diagnostics: readonly CcdaWarning[] } {
-  const xml = sourceXml(source);
-  // Re-parse the retained (already-clean, already-safe) XML into a fresh DOM we
-  // can mutate. A no-op emitter: this XML came from our own serializer, so it
-  // carries no Tier-2 deviations to record, and any Tier-3 fatal is impossible.
-  const dom = parseSecureDom(xml, DEFAULT_LIMITS, () => undefined);
   const root = dom.documentElement;
   /* v8 ignore if -- a CcdaDocument retains only XML this package emitted, which always has a root element */
   if (root === null) {
     // Unreachable: sourceXml refuses anything that is not a CcdaDocument, a CcdaDocument retains the
-    // XML its parse read (which had a root element), and parseSecureDom throws NOT_WELL_FORMED_XML
-    // for XML with none in any case.
+    // XML its parse read (which had a root element), and parseSecureEditable throws
+    // NOT_WELL_FORMED_XML for XML with none in any case.
     throw new CcdaEditError("NO_SOURCE_DOCUMENT", "editCcda: source produced no document element.");
   }
+  const diagnostics = editOn(new DomSurface(dom, root), source, options);
+  return { xml: serializeDocument(dom), diagnostics };
+}
 
+/**
+ * Apply the section edits and the revision through `surface`, and return the emit-time
+ * diagnostics of what survived of the grafts.
+ *
+ * @internal
+ */
+function editOn(
+  surface: EditSurface,
+  source: CcdaDocument,
+  options: EditCcdaOptions,
+): readonly CcdaWarning[] {
   const edits = options.sections ?? [];
   // The SHALL required-section set is read under the stamp the source was PARSED
   // under, from the same templateIds by the same function, so an R1.1-origin
@@ -434,16 +478,14 @@ function writeEdit(
     stamp: readDocumentTemplate(source.templateIds).stamp,
   };
   const grafted =
-    edits.length > 0
-      ? applySectionEdits(dom, root, edits, source.documentType, requiredOptions)
-      : [];
+    edits.length > 0 ? applySectionEdits(surface, edits, source.documentType, requiredOptions) : [];
 
   if (options.revision !== false) {
-    stampRevision(dom, root, options.revision, uniqueIdGen(root));
+    stampRevision(surface, options.revision, uniqueIdGen(surface));
   }
 
   // The emit-time diagnostics, over the components this call GRAFTED that
-  // SURVIVED into the emitted DOM. Both halves of that scope are load-bearing and
+  // SURVIVED into the emitted document. Both halves of that scope are load-bearing and
   // neither is an optimisation:
   //
   // - **Surviving, not supplied.** `options.sections` is an ORDERED list, and a
@@ -458,8 +500,8 @@ function writeEdit(
   //
   // They are read here, before the re-parse rather than after it, because they
   // read only the grafted components (no position, no parse state), and reading
-  // them here is what lets the edited DOM go before the re-parse builds its own.
-  return { xml: serializeDocument(dom), diagnostics: plannedMedicationDiagnostics(grafted) };
+  // them here is what lets the edited document go before the re-parse builds its own.
+  return plannedMedicationDiagnostics(grafted);
 }
 
 /**
@@ -501,13 +543,12 @@ function sourceXml(source: CcdaDocument): string {
  * document is the reading that cannot be wrong about it. @internal
  */
 function applySectionEdits(
-  dom: Document,
-  root: Element,
+  surface: EditSurface,
   edits: readonly SectionEdit[],
   documentType: DocumentType | undefined,
   requiredOptions: RequiredSectionOptions,
 ): readonly Element[] {
-  const structuredBody = findStructuredBody(root);
+  const structuredBody = findStructuredBody(surface.root);
   if (structuredBody === undefined) {
     throw new CcdaEditError(
       "NO_STRUCTURED_BODY",
@@ -520,19 +561,23 @@ function applySectionEdits(
     documentType === undefined
       ? new Set<string>()
       : new Set(
-          missingRequiredSections(documentType, sectionKeys(structuredBody), requiredOptions),
+          missingRequiredSections(
+            documentType,
+            sectionKeys(surface.components(structuredBody)),
+            requiredOptions,
+          ),
         );
 
-  const id = uniqueIdGen(root);
+  const id = uniqueIdGen(surface);
   const grafted = new Set<Element>();
   for (const edit of edits) {
-    grafted.add(applyOneSectionEdit(dom, structuredBody, edit, id));
+    grafted.add(applyOneSectionEdit(surface, structuredBody, edit, id));
   }
 
   if (documentType !== undefined) {
     const missingAfter = missingRequiredSections(
       documentType,
-      sectionKeys(structuredBody),
+      sectionKeys(surface.components(structuredBody)),
       requiredOptions,
     );
     const newlyMissing = missingAfter.filter((key) => !requiredBefore.has(key));
@@ -547,7 +592,7 @@ function applySectionEdits(
 
   // Every graft lands as a direct `<component>` of the body (appended or swapped
   // in place), so the body's own child list is the whole search space.
-  return children(structuredBody, "component").filter((component) => grafted.has(component));
+  return surface.components(structuredBody).filter((component) => grafted.has(component));
 }
 
 /**
@@ -555,13 +600,13 @@ function applySectionEdits(
  * the `<component>` this edit grafted into the body. @internal
  */
 function applyOneSectionEdit(
-  dom: Document,
+  surface: EditSurface,
   structuredBody: Element,
   edit: SectionEdit,
   id: (prefix: string) => string,
 ): Element {
   const meta = EDITABLE_SECTIONS[edit.kind];
-  const existing = findSectionComponent(structuredBody, edit.kind);
+  const existing = findSectionComponent(surface.components(structuredBody), edit.kind);
   const mode = edit.mode ?? "upsert";
 
   if (mode === "add" && existing !== undefined) {
@@ -581,11 +626,11 @@ function applyOneSectionEdit(
 
   // `edit` is `SectionInput & { mode? }`, structurally a `SectionInput`; the
   // dispatcher's switch on `kind` narrows `content` to the right builder shape.
-  const component = buildSectionComponent(dom, edit, id);
+  const component = buildSectionComponent(surface.doc, edit, id);
   if (existing === undefined) {
-    structuredBody.appendChild(component);
+    surface.append(structuredBody, component);
   } else {
-    structuredBody.replaceChild(component, existing);
+    surface.replace(structuredBody, component, existing);
   }
   return component;
 }
@@ -602,11 +647,11 @@ function findStructuredBody(root: Element): Element | undefined {
  * @internal
  */
 function findSectionComponent(
-  structuredBody: Element,
+  components: readonly Element[],
   kind: EditableSectionKind,
 ): Element | undefined {
   const meta = EDITABLE_SECTIONS[kind];
-  for (const component of children(structuredBody, "component")) {
+  for (const component of components) {
     const section = child(component, "section");
     if (section !== undefined && sectionMatches(section, meta.base, meta.loinc)) {
       return component;
@@ -625,11 +670,11 @@ function sectionMatches(section: Element, base: string, loinc: string): boolean 
 }
 
 /**
- * The recognized catalog `key` of every section under a `structuredBody`
- * (top-level and nested), by templateId root then LOINC, the present-section
- * set the SHALL required-section check runs against. @internal
+ * The recognized catalog `key` of every section under a `structuredBody`'s
+ * `<component>`s (top-level and nested), by templateId root then LOINC, the
+ * present-section set the SHALL required-section check runs against. @internal
  */
-function sectionKeys(structuredBody: Element): ReadonlySet<string> {
+function sectionKeys(components: readonly Element[]): ReadonlySet<string> {
   const keys = new Set<string>();
   const visit = (section: Element): void => {
     const key = recognizeSectionKey(section);
@@ -639,7 +684,7 @@ function sectionKeys(structuredBody: Element): ReadonlySet<string> {
       if (nested !== undefined) visit(nested);
     }
   };
-  for (const component of children(structuredBody, "component")) {
+  for (const component of components) {
     const section = child(component, "section");
     if (section !== undefined) visit(section);
   }
@@ -671,8 +716,8 @@ function recognizeSectionKey(section: Element): string | undefined {
  * (which would make a `<reference value="#id">` ambiguous). Deterministic: no
  * randomness, so an edit is reproducible. @internal
  */
-function uniqueIdGen(root: Element): (prefix: string) => string {
-  const taken = collectIds(root);
+function uniqueIdGen(surface: EditSurface): (prefix: string) => string {
+  const taken = surface.ids();
   const counters = new Map<string, number>();
   return (prefix) => {
     let n = counters.get(prefix) ?? 0;
@@ -687,18 +732,6 @@ function uniqueIdGen(root: Element): (prefix: string) => string {
   };
 }
 
-/** Collect every `ID` attribute value in the document (narrative reference targets). @internal */
-function collectIds(root: Element): Set<string> {
-  const ids = new Set<string>();
-  const visit = (node: Element): void => {
-    const id = attr(node, "ID");
-    if (id !== undefined) ids.add(id);
-    for (const kid of childElements(node)) visit(kid);
-  };
-  visit(root);
-  return ids;
-}
-
 /**
  * Stamp a CDA R2 `RPLC` revision onto the document: give it a fresh
  * `ClinicalDocument.id`, keep/mint the version-series `setId` (a minted one
@@ -710,11 +743,11 @@ function collectIds(root: Element): Set<string> {
  * before `componentOf`/`component`). @internal
  */
 function stampRevision(
-  dom: Document,
-  root: Element,
+  surface: EditSurface,
   init: RevisionInit | undefined,
   id: (prefix: string) => string,
 ): void {
+  const { doc: dom, root } = surface;
   const oldIdEl = child(root, "id");
   const oldCodeEl = child(root, "code");
   const oldSetIdEl = child(root, "setId");
@@ -807,23 +840,22 @@ function stampRevision(
 
   // Overwrite the document id in place (keeping its header position).
   const newIdEl = idElement(dom, "id", newDocId);
-  root.replaceChild(newIdEl, oldIdEl);
+  surface.replace(root, newIdEl, oldIdEl);
 
   // Replace setId + versionNumber (removing any existing pair), inserting them at
   // their CDA R2 sequence slot: immediately before the first element that follows
   // versionNumber (robust to a document that omits recordTarget).
-  if (oldSetIdEl !== undefined) root.removeChild(oldSetIdEl);
+  if (oldSetIdEl !== undefined) surface.remove(root, oldSetIdEl);
   const oldVersionEl = child(root, "versionNumber");
-  if (oldVersionEl !== undefined) root.removeChild(oldVersionEl);
+  if (oldVersionEl !== undefined) surface.remove(root, oldVersionEl);
   const setIdEl = idElement(dom, "setId", seriesId);
   const versionEl = el(dom, "versionNumber", { value: newVersion.toString() });
-  insertBeforeFirst(root, setIdEl, AFTER_VERSION_NUMBER);
-  root.insertBefore(versionEl, setIdEl.nextSibling);
+  surface.insertBefore(root, [setIdEl, versionEl], firstNamed(root, AFTER_VERSION_NUMBER));
 
   // A replacement supersedes the source, not the source's parent: drop any
   // relatedDocument the source carried, then add the RPLC link to the source.
-  for (const existing of children(root, "relatedDocument")) root.removeChild(existing);
-  insertBeforeFirst(root, relatedDocument, AFTER_RELATED_DOCUMENT);
+  for (const existing of children(root, "relatedDocument")) surface.remove(root, existing);
+  surface.insertBefore(root, [relatedDocument], firstNamed(root, AFTER_RELATED_DOCUMENT));
 }
 
 /** A fresh document id different from the parent's, same root, new extension. @internal */
@@ -856,15 +888,16 @@ function cloneCode(dom: Document, code: Element): Element {
   });
 }
 
-/** Insert `node` before the first child element named in `beforeNames`, else append. @internal */
-function insertBeforeFirst(root: Element, node: Element, beforeNames: readonly string[]): void {
+/**
+ * The first child element of `root` named in `names`, the one a new header element goes before, or
+ * `undefined` to append it. None of the names is one an edit adds, replaces or removes, so the
+ * answer is the same before and after the other header changes. @internal
+ */
+function firstNamed(root: Element, names: readonly string[]): Element | undefined {
   for (const kid of childElements(root)) {
-    if (kid.localName !== null && beforeNames.includes(kid.localName)) {
-      root.insertBefore(node, kid);
-      return;
-    }
+    if (kid.localName !== null && names.includes(kid.localName)) return kid;
   }
-  root.appendChild(node);
+  return undefined;
 }
 
 /** Parse an integer `@name` attribute off an element, or `undefined`. @internal */
