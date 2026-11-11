@@ -2,9 +2,9 @@
  * `@xmldom/xmldom`, loaded the first time something needs it rather than when the package is
  * imported.
  *
- * A parse reads its tree with `./xml-tree.ts` and needs `@xmldom/xmldom` only for a text that
- * reader hands back. Writing XML (`toString`, `serializeCcda`), `editCcda`, `buildCcda` and
- * `parseSecureXml` still use it. Loading it costs more than the rest of this package together (most
+ * A parse reads its tree with `./xml-tree.ts`, and a parsed document writes its XML from that tree
+ * (`../serialize/write-tree.ts`); both need `@xmldom/xmldom` only for a text the reader hands back.
+ * `editCcda`, `buildCcda` and `parseSecureXml` still use it. Loading it costs more than the rest of this package together (most
  * of it the HTML entity table its parser module builds, which an XML parse never reads), so an
  * import that does not need it does not pay for it.
  *

@@ -16,8 +16,8 @@ limit.
   it reads, rather than a second walk of the tree.
 - The first `toString` of a parsed document, and the re-parse in `buildCcda` and `editCcda`, write
   the XML from that compact tree, as `@xmldom/xmldom`'s serializer writes the same text.
-- Deliberate change: `@xmldom/xmldom` is loaded the first time something needs it (writing XML,
-  `editCcda`, `buildCcda`, `parseSecureXml`, or a parse of a text the compact reader hands back),
+- Deliberate change: `@xmldom/xmldom` is loaded the first time something needs it (`editCcda`,
+  `buildCcda`, `parseSecureXml`, or a text the compact reader hands back, to parse or to write),
   not when the package is imported. It is loaded with `require`, which a bundler that inlines
   dependencies does not see. If you bundle `@cosyte/ccda` that way, keep `@xmldom/xmldom` installed
   beside the bundle or mark it external, as you would any dependency loaded at run time. Running

@@ -454,11 +454,11 @@ describe("every sample on a hand-written page", () => {
 
 /**
  * The built package loads `@xmldom/xmldom` the first time something needs it, not when it is
- * imported: a parse of a document the compact reader reads never loads it, and writing the XML
- * does. Checked here because this file is the one that builds `dist/`, in both built entry points
- * and in a fresh process for each, since a module once loaded stays loaded for the life of its
- * process. The CommonJS loader's cache holds `@xmldom/xmldom` once anything has required it, from
- * either build.
+ * imported: a parse of a document the compact reader reads never loads it, nor does writing that
+ * document's XML, and an edit does. Checked here because this file is the one that builds `dist/`,
+ * in both built entry points and in a fresh process for each, since a module once loaded stays
+ * loaded for the life of its process. The CommonJS loader's cache holds `@xmldom/xmldom` once
+ * anything has required it, from either build.
  */
 describe("the built package loads @xmldom/xmldom on first use", () => {
   const probe = [
@@ -471,7 +471,9 @@ describe("the built package loads @xmldom/xmldom on first use", () => {
     "const doc = ccda.parseCcda(xml);",
     "const afterParse = loaded();",
     "doc.toString();",
-    "console.log(JSON.stringify({ afterImport, afterParse, afterWrite: loaded() }));",
+    "const afterWrite = loaded();",
+    "ccda.editCcda(doc);",
+    "console.log(JSON.stringify({ afterImport, afterParse, afterWrite, afterEdit: loaded() }));",
   ].join("\n");
 
   test.each(["index.mjs", "index.cjs"])("dist/%s", (entry) => {
@@ -486,6 +488,11 @@ describe("the built package loads @xmldom/xmldom on first use", () => {
       ],
       { encoding: "utf8" },
     );
-    expect(JSON.parse(out)).toEqual({ afterImport: false, afterParse: false, afterWrite: true });
+    expect(JSON.parse(out)).toEqual({
+      afterImport: false,
+      afterParse: false,
+      afterWrite: false,
+      afterEdit: true,
+    });
   });
 });
