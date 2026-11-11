@@ -16,7 +16,9 @@
  *
  * The corpus is built in code and is the same on every run: this package's own fixtures, the
  * benchmark shapes at small sizes, documents written here for the paths a performance change
- * touches (entity references, line endings, subject declarations, limits), and documents drawn
+ * touches (entity references, line endings, XML syntax a reader may take or refuse: quoting,
+ * comments, CDATA, processing instructions, character references, namespaces, repeated attributes,
+ * malformed tags; subject declarations; limits), and documents drawn
  * from `@cosyte/ccda/arbitraries` on fixed seeds, clean, messy and hostile. Every document is
  * synthetic: the patient is the placeholder Jane Doe and every identifier is made up.
  */
@@ -207,6 +209,119 @@ function writtenDocuments(): OutputDocument[] {
   add("malformed", `${base.slice(0, Math.floor(base.length / 2))}`);
   add("cdata-and-comment", titled("<![CDATA[a ]]> b]]><!-- c -->"));
   add("processing-instruction", base.replace("<title>", "<?vendor data?><title>"));
+
+  // XML syntax, as a parse path reads it. Each construct sits before the title, followed by an
+  // element in a foreign namespace whose warning carries a line and column read after it; most
+  // are refused or recovered from, which pins the error or the recovery as well.
+  const marked = (construct: string): string =>
+    base.replace("<title>", `${construct}<v:mark xmlns:v="urn:example:vendor"/><title>`);
+  const manyAttributes = Array.from({ length: 12 }, (_v, i) => `a${String(i)}="${String(i)}"`);
+  for (const [name, construct] of [
+    ["single-quotes", `<a b='1' c = "2"\n d\t=\t'3'/>`],
+    ["attribute-white-space", `<a b="x\ty\nz" c="&#9;&#10;&#13;&#x20;"/>`],
+    ["attribute-references", `<a b="&amp;&lt;&gt;&quot;&apos;" c="a>b" d='"' e="'"/>`],
+    ["attribute-entity", `<a b="&custom;"/>`],
+    ["comment", "<!-- a - b -->\n<!---->"],
+    ["comment-double-dash", "<!-- a -- b -->"],
+    ["comment-trailing-dash", "<!-- a --->"],
+    ["comment-unterminated", "<!-- a"],
+    ["cdata", "<c><![CDATA[a<b&c]]]]></c>"],
+    ["cdata-empty", "<c>a<![CDATA[]]>b</c>"],
+    ["cdata-unterminated", "<c><![CDATA[a</c>"],
+    ["instructions", "<?pi?><?pi data ?><?pi  two  spaces ?>"],
+    ["instruction-xml-inside", '<?xml version="1.0"?>'],
+    ["instruction-xml-upper", "<?XML x?>"],
+    ["instruction-colon-target", "<?a:b c?>"],
+    ["instruction-unterminated", "<?pi a"],
+    ["numeric-references", "<c>&#65;&#x41;&#x1F600;&#0065;&#xd7ff;</c>"],
+    ["numeric-upper-x", "<c>&#X41;</c>"],
+    ["numeric-zero", "<c>&#0;</c>"],
+    ["numeric-surrogate", "<c>&#xD800;</c>"],
+    ["numeric-out-of-range", "<c>&#x110000;</c>"],
+    ["numeric-fffe", "<c>&#xFFFE;</c>"],
+    ["numeric-leading-zeros", "<c>&#00000000065;</c>"],
+    ["numeric-letters", "<c>&#6a;</c>"],
+    ["stray-ampersand", "<c>AT&T &amp T & T</c>"],
+    ["non-ascii-text", "<c>caf\u00e9 \ud83d\ude00</c><d/>"],
+    ["non-ascii-name", "<caf\u00e9/>"],
+    ["control-in-text", "<c>a\u0001b</c>"],
+    ["fffe-in-text", "<c>a\uFFFEb</c>"],
+    ["lone-surrogate-in-text", "<c>a\ud800b</c>"],
+    ["lone-surrogate-in-comment", "<!-- \ud800 -->"],
+    ["nel-in-tag", "<a\u0085b='1'/>"],
+    ["c1-in-tag", "<a\u0080b='1'/>"],
+    ["nbsp-in-tag", "<a\u00a0b='1'/>"],
+    ["control-in-tag", "<a\u0001b='1'/>"],
+    ["no-space-between-attributes", `<a b="1"c="2"/>`],
+    ["unquoted-attribute", "<a b=1/>"],
+    ["attribute-without-value", "<a b/>"],
+    ["less-than-in-attribute", `<a b="<"/>`],
+    ["repeated-attribute", `<a b="1" b="2"/>`],
+    ["same-expanded-name", `<a xmlns:p="urn:x" xmlns:q="urn:x" p:b="1" q:b="2"/>`],
+    ["many-attributes", `<a ${manyAttributes.join(" ")}/>`],
+    ["many-attributes-repeated", `<a ${manyAttributes.join(" ")} a3="x"/>`],
+    [
+      "many-attributes-same-expanded-name",
+      `<a xmlns:p="urn:x" xmlns:q="urn:x" ${manyAttributes.join(" ")} p:b="1" q:b="2"/>`,
+    ],
+    ["unbound-element-prefix", "<p:a/>"],
+    ["unbound-attribute-prefix", `<a p:b="1"/>`],
+    ["prefix-bound-to-nothing", `<a xmlns:p=""/>`],
+    ["xml-prefix-declared", `<a xmlns:xml="http://www.w3.org/XML/1998/namespace"/>`],
+    ["xmlns-prefix-declared", `<a xmlns:xmlns="urn:x"/>`],
+    ["xml-namespace-bound", `<a xmlns:p="http://www.w3.org/XML/1998/namespace"/>`],
+    ["xmlns-namespace-bound", `<a xmlns:p="http://www.w3.org/2000/xmlns/"/>`],
+    ["xml-lang", `<a xml:lang="en"/>`],
+    ["xml-prefixed-element", "<xml:a/>"],
+    ["xmlns-element", "<xmlns/>"],
+    ["xmlns-prefixed-element", "<xmlns:a/>"],
+    ["default-namespace-undeclared", `<a xmlns=""><b/></a>`],
+    ["default-namespace-other", `<a xmlns="urn:example:other"><b xmlns="urn:hl7-org:v3"/></a>`],
+    ["prefix-rebound", `<p:a xmlns:p="urn:x"><p:b xmlns:p="urn:y"/><p:c/></p:a>`],
+    ["prefix-out-of-scope", `<a xmlns:p="urn:x"/><p:b/>`],
+    [
+      "xsi-other-prefix",
+      `<value xmlns:x="http://www.w3.org/2001/XMLSchema-instance" x:type="CD"/>`,
+    ],
+    ["end-tag-space", "<a></a >"],
+    ["end-tag-line-feed", "<a></a\n>"],
+    ["end-tag-trailing-content", "<a></a\nb>"],
+    ["end-tag-mismatch", "<a></b>"],
+    ["end-tag-longer", "<a></ab>"],
+    ["end-tag-prefixed", `<a xmlns:p="urn:x"></a:p>`],
+    ["end-tag-unopened", "</a>"],
+    ["self-close-space", "<a/ >"],
+    ["self-close-after-attribute", `<a b="1" />`],
+    ["bare-less-than", "<c>a < b</c>"],
+    ["less-than-digit", "<c>a <1 b</c>"],
+    ["bang-element", "<!ELEMENT a>"],
+    ["bang-other", "<!-x>"],
+    ["tabs-before", "\t\t<a/>\t"],
+  ] as const) {
+    add(`xml-${name}`, marked(construct));
+  }
+  add(
+    "declaration-single-quotes",
+    base.replace(/^<\?xml[^>]*\?>/u, "<?xml version='1.0' encoding='UTF-8' standalone='yes'?>"),
+  );
+  add("declaration-version-only", base.replace(/^<\?xml[^>]*\?>/u, '<?xml version="1.0"?>'));
+  add("declaration-bad-version", base.replace(/^<\?xml[^>]*\?>/u, '<?xml version="2.0"?>'));
+  add("declaration-upper", base.replace(/^<\?xml/u, "<?XML"));
+  add("declaration-spaced", base.replace(/^<\?xml[^>]*\?>/u, '<?xml   version = "1.0"   ?>'));
+  add("space-before-declaration", ` ${base}`);
+  add("prolog", base.replace("<ClinicalDocument", "<!-- c -->\n<?pi x?>\n<ClinicalDocument"));
+  add("after-root", `${base}\n<!-- c -->\n<?pi x?>\n`);
+  add("text-after-root", `${base}x`);
+  add("cdata-after-root", `${base}<![CDATA[x]]>`);
+  add("second-root", `${base}<ClinicalDocument xmlns="urn:hl7-org:v3"/>`);
+  add("text-before-root", base.replace("<ClinicalDocument", "x<ClinicalDocument"));
+  add("unclosed-root", base.replace("</ClinicalDocument>", ""));
+  add(
+    "prefixed-root",
+    base
+      .replace("<ClinicalDocument", '<cda:ClinicalDocument xmlns:cda="urn:hl7-org:v3"')
+      .replace("</ClinicalDocument>", "</cda:ClinicalDocument>"),
+  );
 
   // Subject declarations: on a section, an act, a nested observation, a subsection and the Family
   // History Organizer's own slot.
