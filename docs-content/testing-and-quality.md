@@ -44,9 +44,12 @@ nothing flags it. So most of what follows checks values, not only that the parse
 - **The coverage gate** runs with the suite. A floor that is not met fails the pull request.
 - **The conformance run** fetches the C-CDA R2.1 Schematron, its vocabulary file and the CDA R2 XML
   schema from pinned, digest-checked references, and runs on every pull request in a job of its
-  own. It writes
+  own, named `conformance`. It writes
   [a report](https://github.com/cosyte/ccda/blob/main/documentation/conformance-report.md) and fails
-  when the committed report differs from what the run produced.
+  when the committed report differs from what the run produced. The fetched artifacts are cached
+  between runs, and every cached file is checked against its pin again before it is used, so a run
+  with a warm cache needs no network and a cached file that fails the check is fetched again. See
+  [When an upstream artifact is unreachable](#when-an-upstream-artifact-is-unreachable).
 - **The PHI scan** runs on every commit (a pre-commit hook) and in CI.
 
 ## Run them yourself
@@ -58,6 +61,25 @@ pnpm test:coverage      # the same suite with the coverage gate
 pnpm conformance        # the conformance run; it needs the network
 pnpm phi-scan           # the PHI scan over the repository
 ```
+
+## When an upstream artifact is unreachable
+
+The conformance run reaches the network by design, and an artifact it cannot fetch fails the run
+rather than passing it: an artifact nobody could fetch is one nothing was validated against. It
+reaches the network only when its cache does not hold an artifact as pinned: the first run after a
+pin moves, or after the cache is evicted. When that fetch fails, the run stops with
+`CONFORMANCE_ARTIFACT_UNREACHABLE` and names the URL. Then:
+
+1. Check that the host in the URL is up. Every pinned artifact comes from GitHub
+   (`raw.githubusercontent.com` or `codeload.github.com`).
+2. Re-run the failed job once the host answers. A re-run fetches only what the cache lacks.
+3. If your change moved a pin, the new artifact has to come from upstream once. Wait for the host;
+   do not move the pin back to get a green.
+4. Do not skip the run or let it pass on failure to get past an outage.
+
+`CONFORMANCE_ARTIFACT_DIGEST_MISMATCH` is a different fault: the host served bytes other than the
+pinned commit's, and a re-run does not fix it. Read the diff between the two commits before moving
+a pin in `scripts/conformance/artifacts.json`.
 
 ## Current numbers
 
