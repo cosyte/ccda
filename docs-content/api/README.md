@@ -3301,10 +3301,10 @@ re-badged `PROFILE_QUIRK_APPLIED`, flagged `expected`).
 
 **`Internal`**
 
-The spec-clean XML snapshot captured from the source DOM at parse time,
-returned by [CcdaDocument.toString](#tostring). Populated by `parseCcda`; absent
-for a hand-constructed document (which therefore cannot be serialized until
-a builder API lands).
+The spec-clean XML returned by [CcdaDocument.toString](#tostring). A document
+`parseCcda` returns has its XML without this field (written from the
+source the first time it is asked for); absent for a hand-constructed
+document, which therefore cannot be serialized.
 
 ##### smokingStatus
 
@@ -5528,9 +5528,10 @@ R1.1-origin reduction on a document that release never wrote.
 The three-state reading of the document-level `templateId`'s version stamp.
 Supersedes [RequiredSectionOptions.r21Stamped](#r21stamped) when both are given.
 
-`unmodeled-release` is the state the boolean cannot hold: the obligation is
-**not evaluated**, so the key set is empty and
-[RequiredSectionStatus.evaluation](#evaluation) says which emptiness that is.
+`r30-stamped` reads the C-CDA 5.0.0 table. `unmodeled-release` is a state
+the boolean cannot hold either: the obligation is **not evaluated**, so the
+key set is empty and [RequiredSectionStatus.evaluation](#evaluation) says which
+emptiness that is.
 
 ***
 
@@ -6238,13 +6239,15 @@ requiredSectionStatus("diagnosticImagingReport").unasserted[0];
 
 > `readonly` **conformanceId**: `string`
 
-The conformance statement that requires it.
+The conformance statement that requires it. A C-CDA 5.0.0 row the source
+states only as a named invariant, with no `CONF:` id, carries that
+invariant's key (for example `ap-or-a-and-p`).
 
 ##### reason
 
 > `readonly` **reason**: [`UnassertedSectionReason`](#unassertedsectionreason)
 
-Which of the two permitted reasons keeps it out of the asserted set.
+Which of the permitted reasons keeps it out of the asserted set.
 
 ##### sourceName
 
@@ -7042,7 +7045,7 @@ const e: RequiredSectionEvaluation = requiredSectionStatus("ccd", {
 
 How much of a [DocumentType](#documenttype-4)'s required-section obligation this package
 has actually read off the normative source of the release named in
-[RequiredSectionStatus.release](#requiredsectionstatus): for C-CDA R2.1, its `CONF:1198-`
+[RequiredSectionStatus.release](#release-1): for C-CDA R2.1, its `CONF:1198-`
 document-level conformance statements and the Schematron HL7 publishes in
 that release; for C-CDA 5.0.0, the document profiles HL7 publishes it from.
 
@@ -7724,7 +7727,7 @@ console.log(V3_NS); // "urn:hl7-org:v3"
 
 ### VERSION
 
-> `const` **VERSION**: `string` = `"0.1.5"`
+> `const` **VERSION**: `string` = `"0.1.11"`
 
 Library version string, synced with `package.json#version` at build time.
 
@@ -10527,6 +10530,11 @@ requiredSectionKeys("progressNote"); // []
 requiredSectionKeys("ccd", { r21Stamped: false });
 // ["allergies", "medications", "problems", "results"]
 
+// A Discharge Summary stamped 2024-05-01 is read against C-CDA 5.0.0, which
+// also requires Procedures and Results:
+requiredSectionKeys("dischargeSummary", { stamp: "r30-stamped" });
+// ["allergies", "hospitalDischargeDiagnosis", "planOfTreatment", "procedures", "results"]
+
 // A CCD stamped for a release this package does not model asserts NOTHING,
 // and it is not the R1.1-origin reduction:
 requiredSectionKeys("ccd", { stamp: "unmodeled-release" }); // []
@@ -10544,9 +10552,11 @@ under the same options, plus how much of the obligation was read off the
 normative source and what is deliberately left unasserted.
 
 `options` narrows `keys` (and the `traced` rows beside them) exactly as
-[requiredSectionKeys](#requiredsectionkeys) does, and sets `evaluation`. It does **not** move
-`verification`, nor `unasserted`, nor `source`: those record what was read
-about the type, not what a particular document is asserted against.
+[requiredSectionKeys](#requiredsectionkeys) does, and sets `evaluation` and `release`. Within
+one release it does **not** move `verification`, nor `unasserted`, nor
+`source`: those record what was read about the type. The `r30-stamped`
+reading selects the C-CDA 5.0.0 row, so all of them come from 5.0.0 there,
+where the type has a 5.0.0 row; otherwise they are the R2.1 row's.
 
 #### Parameters
 
@@ -10572,6 +10582,7 @@ requiredSectionStatus("ccd").source?.revision; // "2025-09-08"
 requiredSectionStatus("consultationNote", { r21Stamped: false }).keys; // []
 requiredSectionStatus("ccd", { stamp: "unmodeled-release" }).evaluation;
 // "not-evaluated"
+requiredSectionStatus("ccd", { stamp: "r30-stamped" }).release; // "5.0.0"
 ```
 
 ***
