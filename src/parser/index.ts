@@ -17,11 +17,23 @@
 
 import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES, type FatalCode } from "./errors.js";
 import { V3_NS } from "./namespaces.js";
-import { parseSecureSource, rebuildDom, resolveLimits, type SecureSource } from "./secure-xml.js";
+import {
+  DEFAULT_LIMITS,
+  parseSecureSource,
+  rebuildDom,
+  resolveLimits,
+  type ResolvedLimits,
+  type SecureSource,
+} from "./secure-xml.js";
 import type { ParseCcdaOptions } from "./types.js";
 import type { CcdaWarning } from "./warnings.js";
 import { positionOf } from "../model/dom.js";
-import { buildDocument, CcdaDocument, documentWithText } from "../model/document.js";
+import {
+  buildDocument,
+  type CcdaDocument,
+  documentWithText,
+  documentWithXml,
+} from "../model/document.js";
 import { wrapEmitterWithProfile } from "../profiles/apply.js";
 import { getDefaultCcdaProfile } from "../profiles/registry.js";
 import type { CcdaProfile } from "../profiles/types.js";
@@ -135,13 +147,32 @@ export function parseCcdaText(
     profile === undefined
       ? { ...parts, warnings }
       : { ...parts, warnings, profile: { name: profile.name, lineage: profile.lineage } };
+  const written = isWrittenWithin(accepted, limits);
   if (writeNow) {
     // From the `@xmldom/xmldom` tree when the parse built one, else as `writerFor` writes it.
     const serialized =
       accepted.dom === undefined ? writerFor(accepted)() : serializeDocument(accepted.dom);
-    return new CcdaDocument({ ...init, serialized });
+    return documentWithXml(init, serialized, written);
   }
-  return documentWithText(init, writerFor(accepted));
+  return documentWithText(init, writerFor(accepted), written);
+}
+
+/**
+ * Whether the XML the document writes is known, from this parse, to be written as the writer
+ * writes it and to pass the default limits, so `editCcda` can edit it without reading it whole
+ * again: the text was found written with no line ending rewritten (so the XML is that text), and
+ * passed limits no looser than the defaults on its depth and node count. The XML has the same
+ * elements as the text; its size and references the edit checks again, as the defaults say.
+ *
+ * @internal
+ */
+function isWrittenWithin(accepted: SecureSource, limits: ResolvedLimits): boolean {
+  return (
+    accepted.writtenEnd !== -1 &&
+    !accepted.lineBreaksToNormalize &&
+    limits.maxDepth <= DEFAULT_LIMITS.maxDepth &&
+    limits.maxNodeCount <= DEFAULT_LIMITS.maxNodeCount
+  );
 }
 
 /**

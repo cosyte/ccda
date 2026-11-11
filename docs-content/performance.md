@@ -36,6 +36,13 @@ size. `@cosyte/bench` cannot finish warming up a case of about 1 MiB or more, so
 timings of those cases and still reports their peak heap; `bench/profile.mjs` times every size the
 simpler way and profiles the hottest paths.
 
+`bench/profile.mjs` also shows which way each edit the bench makes went. `editCcda` makes an edit on
+the source's XML text when that text is in the form our writer gives it, which is nearly always, and
+falls back to a DOM of the whole document otherwise, at several times the memory. It reports which
+on the `cosyte:ccda:edit` channel of `node:diagnostics_channel`, as `{ path: "text" }` or
+`{ path: "dom" }`, and only while something subscribes. The profile's "Edit path" table counts them
+for every shape and size, so an edit that has started falling back is seen before its memory is.
+
 `test/perf/scaling-gate.perf.ts` is the scaling gate from `@cosyte/test-utils/perf`: it fails when
 parse cost grows faster than its input, on 4 times the referral notes and on documents with 4 times
 the entries, and its self-check proves those sizes are large enough to catch a parse that has become

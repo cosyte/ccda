@@ -14,8 +14,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as treeDom from "../src/parser/tree-dom.js";
 import { writeEdit, type EditCcdaOptions } from "../src/edit/edit-ccda.js";
-import { elementEnd, TextSurface } from "../src/edit/text-surface.js";
-import { DEFAULT_LIMITS, parseSecureDom, parseSecureEditable } from "../src/parser/secure-xml.js";
+import { readText } from "../src/edit/text-read.js";
+import { TextSurface } from "../src/edit/text-surface.js";
+import { DEFAULT_LIMITS, parseSecureDom } from "../src/parser/secure-xml.js";
 import { serializeDocument } from "../src/serialize/serialize-dom.js";
 import { editCcda, parseCcda, type CcdaDocument } from "../src/index.js";
 import { editOptions } from "../bench/shapes.mjs";
@@ -206,9 +207,9 @@ describe("editCcda on a written document", () => {
 
 describe("TextSurface", () => {
   const written = (xml: string): TextSurface => {
-    const read = parseSecureEditable(xml, DEFAULT_LIMITS, () => undefined);
-    if (read.dom !== undefined) throw new Error("expected a written text");
-    return new TextSurface(read.tree, read.text);
+    const read = readText(xml);
+    if (read === undefined) throw new Error("expected a written text");
+    return new TextSurface(read, xml, xml.length);
   };
 
   it("reads the IDs left after a header change, and those of what it adds", () => {
@@ -231,13 +232,5 @@ describe("parseSecureDom", () => {
   it("builds the DOM of a written text from its tree, as xmldom reads it", () => {
     const xml = parseCcda(DOCUMENTS[0]?.xml as string).toString();
     expect(serializeDocument(parseSecureDom(xml, DEFAULT_LIMITS, () => undefined))).toBe(xml);
-  });
-});
-
-describe("elementEnd", () => {
-  it("steps over comments, CDATA and instructions to the element's end", () => {
-    const text = `<a><!-- </a> --><![CDATA[</a>]]><?p </a>?><b/><c x="1">t</c></a><d/>`;
-    expect(text.slice(0, elementEnd(text, 0))).toBe(text.slice(0, text.length - 4));
-    expect(elementEnd(text, text.length - 4)).toBe(text.length);
   });
 });

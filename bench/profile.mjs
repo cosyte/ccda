@@ -1,5 +1,6 @@
-// The time a pass of each operation takes at each shape's smallest and largest size, then a CPU
-// profile and a sampled heap profile of the hottest paths, with the top functions of each:
+// Which way each edit the bench makes was made (on the source's text, or on a DOM of it), the time a
+// pass of each operation takes at each shape's smallest and largest size, then a CPU profile and a
+// sampled heap profile of the hottest paths, with the top functions of each:
 //   pnpm build && node --enable-source-maps bench/profile.mjs dist/index.mjs [--out <dir>] [--summary <file.md>]
 //
 // Each workload is warmed, then profiled on its own for about two seconds through the inspector
@@ -9,6 +10,7 @@
 // profiler's own view (Chrome DevTools, speedscope). The inputs are the bench's own, from
 // bench/shapes.mjs: synthetic, built in code.
 
+import { subscribe, unsubscribe } from "node:diagnostics_channel";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { Session } from "node:inspector/promises";
 import { findSourceMap } from "node:module";
@@ -23,6 +25,62 @@ import {
   unstructuredDocument,
   validationOptions,
 } from "./shapes.mjs";
+
+/**
+ * The diagnostics channel `editCcda` reports on, with `{ path: "text" }` for an edit made on the
+ * source's written text and `{ path: "dom" }` for one that fell back to a DOM of it.
+ */
+const EDIT_PATH_CHANNEL = "cosyte:ccda:edit";
+
+/** Every size the bench edits, as bench/ccda.bench.mjs has them. */
+const EDITED = [
+  {
+    shape: "Referral Note",
+    size: "23 KiB",
+    structured: true,
+    inputs: () => Array.from({ length: 64 }, (_v, i) => referralNote(i)),
+  },
+  { shape: "CCD", size: "100 entries", structured: true, inputs: () => [ccd(0, 100)] },
+  { shape: "CCD", size: "1,000 entries", structured: true, inputs: () => [ccd(0, 1_000)] },
+  { shape: "CCD", size: "4,000 entries", structured: true, inputs: () => [ccd(0, 4_000)] },
+  {
+    shape: "Unstructured, base64 PDF",
+    size: "64 KiB PDF",
+    structured: false,
+    inputs: () => [unstructuredDocument(0, 64 * KIB)],
+  },
+  {
+    shape: "Unstructured, base64 PDF",
+    size: "4 MiB PDF",
+    structured: false,
+    inputs: () => [unstructuredDocument(0, 4096 * KIB)],
+  },
+];
+
+/**
+ * How the bench's edit of each input went: made on the text, on a DOM, or not reported (a build
+ * from before the channel). Each input is parsed, then edited once, as the bench edits it.
+ */
+function editPaths(ccda, inputs, structured) {
+  const counts = { text: 0, dom: 0, unreported: 0 };
+  let reported = 0;
+  const listener = (message) => {
+    counts[message.path] += 1;
+    reported += 1;
+  };
+  subscribe(EDIT_PATH_CHANNEL, listener);
+  try {
+    for (const text of inputs) {
+      const doc = ccda.parseCcda(text);
+      const before = reported;
+      ccda.editCcda(doc, editOptions(structured)).toString();
+      if (reported === before) counts.unreported += 1;
+    }
+  } finally {
+    unsubscribe(EDIT_PATH_CHANNEL, listener);
+  }
+  return counts;
+}
 
 const PROFILE_MS = 2_000;
 const WARMUP_MS = 500;
@@ -210,16 +268,36 @@ async function main() {
     },
   ];
 
-  // First, before the profiles' inputs and documents are built and held: a heap already holding
-  // them makes every collection dearer, and a parse that allocates as much as these do pays for it.
+  // Which way each edit went. An edit of a source written as the writer writes it is made on that
+  // text; one that falls back to a DOM costs several times the memory, and shows here first.
   const lines = [
+    "### Edit path",
+    "",
+    "Which way `editCcda` made each edit the bench makes, as it reports on the `cosyte:ccda:edit` diagnostics channel: on the source's written text, or on a DOM of it (the fallback for a text not in the writer's form). One edit of each input.",
+    "",
+    "| Shape | Size | Inputs | On the text | On a DOM | Not reported |",
+    "| --- | --- | --- | --- | --- | --- |",
+  ];
+  for (const edited of EDITED) {
+    const inputs = edited.inputs();
+    const counts = editPaths(ccda, inputs, edited.structured);
+    const dom = counts.dom === 0 ? "0" : `**${String(counts.dom)}**`;
+    lines.push(
+      `| ${edited.shape} | ${edited.size} | ${String(inputs.length)} | ${String(counts.text)} | ${dom} | ${String(counts.unreported)} |`,
+    );
+  }
+
+  // Then, before the profiles' inputs and documents are built and held: a heap already holding
+  // them makes every collection dearer, and a parse that allocates as much as these do pays for it.
+  lines.push(
+    "",
     "### Throughput, smallest size against largest",
     "",
     "A reading cannot time a case of a megabyte or more when its warmup never settles, and skips it. This times every size the same simpler way: warmed, then the median of 9 samples of at least 100 ms of whole passes (a single pass when one takes longer), one size at a time, in one process.",
     "",
     "| Operation | Shape | Smallest | Largest | ms a pass, smallest | ms a pass, largest | Bytes/s, smallest | Bytes/s, largest | Kept |",
     "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-  ];
+  );
   for (const pair of PAIRS) {
     const small = pair.small();
     const large = pair.large();

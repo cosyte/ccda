@@ -455,7 +455,7 @@ describe("every sample on a hand-written page", () => {
 /**
  * The built package loads `@xmldom/xmldom` the first time something needs it, not when it is
  * imported: a parse of a document the compact reader reads never loads it, nor does writing that
- * document's XML, and an edit does. Checked here because this file is the one that builds `dist/`,
+ * document's XML, nor an edit of it, which is made on that XML's text. Checked here because this file is the one that builds `dist/`,
  * in both built entry points and in a fresh process for each, since a module once loaded stays
  * loaded for the life of its process. The CommonJS loader's cache holds `@xmldom/xmldom` once
  * anything has required it, from either build.
@@ -492,7 +492,7 @@ describe("the built package loads @xmldom/xmldom on first use", () => {
       afterImport: false,
       afterParse: false,
       afterWrite: false,
-      afterEdit: true,
+      afterEdit: false,
     });
   });
 });

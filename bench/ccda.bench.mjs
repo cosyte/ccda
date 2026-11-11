@@ -7,7 +7,8 @@
 //   pnpm bench:reading --only "parseCcda: Referral Note"
 // A base against head comparison, the base built in another checkout:
 //   pnpm bench:compare --base <base checkout>/dist/index.mjs --head dist/index.mjs
-// The budgets, and the single-run numbers and CPU and heap profile of the hottest paths:
+// The budgets, and which way each edit went (on the text or on a DOM), the single-run numbers and
+// the CPU and heap profile of the hottest paths:
 //   node bench/budgets.mjs bench-results/reading.json
 //   node --enable-source-maps bench/profile.mjs dist/index.mjs
 // On a pull request CI runs the comparison in its bench-compare job, and the bench-reading workflow
@@ -21,8 +22,9 @@
 // from the source text it keeps, so a parse that never asks pays nothing for it. `parseCcda, then
 // toString` is the parse of a caller that does ask, a pass-through that reads a document and
 // writes it on: the parse and that first write. The other write path is `editCcda`, which writes
-// the source's XML once (kept on the document after that), re-reads it, splices the change into
-// that text and parses the result.
+// the source's XML once (kept on the document after that), reads only the elements the edit looks
+// at, splices the change into that text and parses the result. A source not in the writer's form
+// is edited on a DOM instead; bench/profile.mjs shows which way each edit here went.
 
 import { defineBenchmark, defineSuite } from "@cosyte/bench";
 

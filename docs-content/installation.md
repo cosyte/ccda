@@ -25,8 +25,9 @@ has a **single** exact-pinned runtime dependency: the W3C-DOM substrate `@xmldom
   caps itself at **≤ 3** justified deps. There is no native build and no
   post-install script.
 - **Loaded on first use.** `@xmldom/xmldom` is loaded with `require` the first time it is needed:
-  `editCcda`, `buildCcda`, `parseSecureXml`, and a document the built-in reader hands to it, to
-  parse or to write. Importing the package does not load it. A bundler that inlines dependencies
+  `buildCcda`, `parseSecureXml`, a document the built-in reader hands to it, to parse or to write,
+  and `editCcda` of a document whose XML is not in the form our writer gives it. Importing the
+  package does not load it. A bundler that inlines dependencies
   does not see that `require`, so a bundle keeps `@xmldom/xmldom` installed beside it or marks it
   external.
 
