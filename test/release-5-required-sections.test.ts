@@ -273,6 +273,20 @@ describe("a document stamped 2024-05-01 is checked against C-CDA 5.0.0", () => {
     expect(stamp?.message).toContain(POST_R21_STAMP);
     expect(stamp?.message).toContain("5.0.0");
   });
+
+  it("does not tell a 2024-05-01 reader that nothing is refused: strict and editCcda can refuse it", () => {
+    const doc = parseCcda(buildCcda({ extension: POST_R21_STAMP, sections: "" }));
+    // The same empty body draws REQUIRED_SECTION_MISSING, which strict mode throws on and
+    // editCcda refuses an edit over, so the stamp warning must not promise otherwise.
+    expect(codes(doc.warnings)).toContain(WARNING_CODES.REQUIRED_SECTION_MISSING);
+    expect(() => parseCcda(buildCcda({ extension: POST_R21_STAMP, sections: "" }), { strict: true })).toThrow();
+    const stamp = doc.warnings.find(
+      (w) => w.code === WARNING_CODES.TEMPLATE_EXTENSION_UNMODELED_RELEASE,
+    );
+    expect(stamp?.message).not.toContain("nothing is refused");
+    expect(stamp?.message).toContain("strict");
+    expect(stamp?.message).toContain("editCcda");
+  });
 });
 
 describe("the Patient Generated Document header", () => {

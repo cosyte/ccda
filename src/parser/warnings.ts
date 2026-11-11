@@ -530,11 +530,11 @@ const REQUIRED_SECTION_MISSING_BY_SECTION = tableOver(
  * *name*: the members of this package's closed release table other than the one
  * it targets. That is the `2024-05-01` stamp alone, the one whose required
  * sections are read against C-CDA 5.0.0, and the wording says so; a stamp added
- * to the table later needs its own wording here. Naming the stamp is what makes the diagnostic useful, and taking
- * it from this table rather than from the document is what keeps it PHI-free. A
- * document carrying a stamp outside the table (a forged value, a release nobody
- * has read yet) falls back to the generic registry entry, which names no stamp
- * at all.
+ * to the table later needs its own wording here. Naming the stamp is what makes
+ * the diagnostic useful, and taking it from this table rather than from the
+ * document is what keeps it PHI-free. A document carrying a stamp outside the
+ * table (a forged value, a release nobody has read yet) falls back to the
+ * generic registry entry, which names no stamp at all.
  *
  * Built from the table's own entries rather than by looking each release back up
  * from its stamp, so there is no unreachable "stamp with no release" arm here
@@ -548,7 +548,7 @@ const TEMPLATE_EXTENSION_UNMODELED_RELEASE_BY_STAMP: Readonly<Record<string, str
       CCDA_RELEASE_STAMPS.filter((entry) => entry.release !== CCDA_CONFORMANCE_RELEASE).map(
         (entry) => [
           entry.stamp,
-          `The recognized templateId carries the C-CDA document-template version stamp ${entry.stamp}, which names release ${entry.release}; its required sections are checked against the C-CDA 5.0.0 document profiles where 5.0.0 has the document type, but its sections and entries are read with the C-CDA ${CCDA_CONFORMANCE_RELEASE} catalogs, so content added after ${CCDA_CONFORMANCE_RELEASE} may be kept as narrative only. The document is parsed leniently and nothing is refused.`,
+          `The recognized templateId carries the C-CDA document-template version stamp ${entry.stamp}, which names release ${entry.release}; its required sections are checked against the C-CDA 5.0.0 document profiles where 5.0.0 has the document type, but its sections and entries are read with the C-CDA ${CCDA_CONFORMANCE_RELEASE} catalogs, so content added after ${CCDA_CONFORMANCE_RELEASE} may be kept as narrative only. The document is parsed leniently, but a required section it lacks is a REQUIRED_SECTION_MISSING, which strict mode throws on and editCcda refuses an edit over.`,
         ],
       ),
     ),
