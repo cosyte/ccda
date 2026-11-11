@@ -16,7 +16,8 @@ scanned document). `parseCcda` frames all three into one immutable `CcdaDocument
 The document **type** is resolved from the root `templateId` OIDs against the 12 recognized US Realm
 types (CCD, Discharge Summary, Referral Note, Consultation Note, History & Physical, Progress Note,
 Procedure Note, Operative Note, Care Plan, Diagnostic Imaging Report, Unstructured Document, Transfer
-Summary). Recognition is fail-safe:
+Summary). Diagnostic Imaging Report is R2.1-only: C-CDA 3.0.0 removed it, and the other 11 types are
+in 5.0.0 too ([versions we read and build](./spec-notes-versions.md)). Recognition is fail-safe:
 
 - No `templateId` at all → `MISSING_TEMPLATE_ID`, `documentType` is `undefined`.
 - `templateId`s present but none map to a known type → `UNKNOWN_DOCUMENT_TEMPLATE`, still parsed as a

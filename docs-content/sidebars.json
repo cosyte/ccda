@@ -25,6 +25,7 @@
       "label": "Explanation",
       "items": [
         "spec-notes-model",
+        "spec-notes-versions",
         "spec-notes-tolerance",
         "spec-notes-clinical",
         "spec-notes-datatypes",
