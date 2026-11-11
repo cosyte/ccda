@@ -11,7 +11,9 @@ limit.
   reads. It reads only XML it can vouch for; any other text (a malformed document, an unknown
   entity, a non-ASCII element name, a quirk `@xmldom/xmldom` reports and recovers from) is read by
   `@xmldom/xmldom` as before, so every error and every recovery is the one it was. The size, DTD,
-  entity, depth and node-count limits run around both.
+  entity, depth and node-count limits run around both; for the compact tree the depth and
+  node-count limits and the foreign-namespace sweep are worked out from counts the reader keeps as
+  it reads, rather than a second walk of the tree.
 - The first `toString` of a parsed document, and the re-parse in `buildCcda` and `editCcda`, write
   the XML from that compact tree, as `@xmldom/xmldom`'s serializer writes the same text.
 - Deliberate change: `@xmldom/xmldom` is loaded the first time something needs it (writing XML,
@@ -21,4 +23,4 @@ limit.
   beside the bundle or mark it external, as you would any dependency loaded at run time. Running
   from `node_modules` needs no change.
 - `children()` and `childElements()` make their arrays at their final size, and the search for a
-  narrative or product element walks one queue instead of an array per level.
+  narrative or product element, and for an entry's clinical act, allocate less on each call.

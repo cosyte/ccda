@@ -1354,8 +1354,10 @@ export function childEntries(sectionEl: Element): readonly Element[] {
  * ```
  */
 export function entryAct(entry: Element, root: string): Element | undefined {
-  for (const name of ACT_NAMES) {
-    const el = child(entry, name);
+  // An index rather than `for...of`: this runs for every family on every entry, and before it is
+  // optimized an array iterator allocates an object for each step.
+  for (let i = 0; i < ACT_NAMES.length; i++) {
+    const el = child(entry, ACT_NAMES[i] as string);
     if (el !== undefined && hasTemplateRoot(el, root)) return el;
   }
   return undefined;
@@ -1373,8 +1375,9 @@ export function entryAct(entry: Element, root: string): Element | undefined {
  * ```
  */
 export function anyEntryAct(entry: Element): Element | undefined {
-  for (const name of ACT_NAMES) {
-    const el = child(entry, name);
+  // An index rather than `for...of`, as in `entryAct`.
+  for (let i = 0; i < ACT_NAMES.length; i++) {
+    const el = child(entry, ACT_NAMES[i] as string);
     if (el !== undefined) return el;
   }
   return undefined;
