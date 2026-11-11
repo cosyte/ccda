@@ -87,7 +87,9 @@ not a claim that R1.1 omitted the other two; it is the absence of a source, reco
 guessed. Both `requiredSectionKeys` and `missingRequiredSections` take an optional
 `{ r21Stamped: false }` to ask for the unstamped reading.
 
-**A document stamped for a release later than R2.1 gets neither reading.** It is outside those rules
+**A document stamped for a release later than R2.1, with no R2.1 stamp on the same root, gets
+neither reading.** (One that carries both, the usual backward-compatible shape, is read as R2.1; see
+[the stamps we recognize](./spec-notes-versions.md#the-stamps-we-recognize).) It is outside those rules
 just as an unstamped document is, but it is a different document and the unstamped reduction is a
 statement about the past. Such a document draws a `REQUIRED_SECTIONS_NOT_EVALUATED` warning and **no
 `REQUIRED_SECTION_MISSING` at all**, and `requiredSectionStatus(type, { stamp: "unmodeled-release" })`

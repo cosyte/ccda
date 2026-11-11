@@ -146,6 +146,10 @@ required-section and value-set checks are stated with how far each was traced, a
 not a conformance result). It reads C-CDA R2.1, US Realm; other CDA templates and realms are out of
 scope.
 
+Our conformance target is C-CDA R2.1 with Companion Guide R4.1 (USCDI v3): we build R2.1, read
+3.0.0 to 5.0.0 documents leniently, and do not trace the Companion Guide yet
+([versions we read and build](./spec-notes-versions.md)).
+
 ## Next
 
 - **[Installation](./installation.md)**: prerequisites and a smoke test.
@@ -156,6 +160,7 @@ scope.
   [edit a document](./edit-a-document.md), [serialize a document](./serialize-a-document.md),
   [apply a vendor profile](./apply-a-vendor-profile.md), and the conformance checks.
 - **Explanation**: [the document model](./spec-notes-model.md),
+  [the versions we read and build](./spec-notes-versions.md),
   [tolerance and the warning model](./spec-notes-tolerance.md),
   [the clinical entry layer](./spec-notes-clinical.md) and
   [the parser archetype](./parser-archetype.md).

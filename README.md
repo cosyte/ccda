@@ -50,6 +50,9 @@ change bumps the minor version and is called out in the changelog with its migra
 version, pin an exact version rather than a range. Some surfaces are still partial, and they are
 named rather than implied:
 
+- **The conformance target is C-CDA R2.1 with Companion Guide R4.1** (USCDI v3): we build R2.1,
+  read 3.0.0 to 5.0.0 documents leniently, and do not trace the Companion Guide yet
+  ([versions we read and build](https://docs.cosyte.com/ccda/spec-notes-versions)).
 - **Building is partial.** `buildCcda` emits three of the twelve US Realm document types (CCD,
   Referral Note, and inpatient Discharge Summary); the other nine throw rather than emitting
   something that merely resembles the type you asked for.

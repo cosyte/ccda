@@ -12,6 +12,8 @@ description: "Everything the parser reads out of a document, from the header and
 - **Document type**: all 12 US Realm document types resolved from the root `templateId` (CCD,
   Discharge Summary, Referral Note, Consultation Note, History & Physical, Progress Note, Procedure
   Note, Operative Note, Care Plan, Diagnostic Imaging Report, Unstructured Document, Transfer Summary).
+  Diagnostic Imaging Report is R2.1-only: C-CDA 3.0.0 removed it
+  ([versions we read and build](./spec-notes-versions.md)).
 - **US Realm header**: document identity (`code`, `title`, `effectiveTime`, `confidentialityCode`,
   `languageCode`) and the `recordTarget` patient (name parts, gender, birth time, marital status, race,
   ethnic group) + identifiers, via `getPatient()` / `getMrn()`.
