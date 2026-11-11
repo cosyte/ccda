@@ -211,9 +211,11 @@ function spaceChange(from, to) {
     .filter((x) => x.bytes !== 0);
 }
 
-/** A snapshot written now, summed, and deleted unless it is to be kept. */
-function snapshot(dir, name, keep) {
-  const file = writeHeapSnapshot(join(dir, `${name}.heapsnapshot`));
+/**
+ * A snapshot written during a run, summed once the run is over (a summary held during the run
+ * would be in the next snapshot), and deleted unless it is to be kept.
+ */
+function summarize(file, keep) {
   const summary = summarizeSnapshot(JSON.parse(readFileSync(file, "utf8")));
   if (!keep) rmSync(file, { force: true });
   return summary;
@@ -281,7 +283,7 @@ function longRun(ccda, c, options) {
       // The end of the reading's window, then its snapshot, then the heap settled again: writing
       // a snapshot leaves the heap higher, a step the long window starts after.
       spacesAt.readingEnd = spaces();
-      snapshots.push(snapshot(options.dir, "2-after-reading-window", options.keep));
+      snapshots.push(writeHeapSnapshot(join(options.dir, "2-after-reading-window.heapsnapshot")));
       s = p.settle();
       spacesAt.longStart = spaces();
     }
@@ -295,15 +297,16 @@ function longRun(ccda, c, options) {
     // The first snapshot, before the round the reading's fit starts at, so its step falls
     // outside that fit.
     if (r === READING_SKIP - 1) {
-      snapshots.push(snapshot(options.dir, "1-before-reading-window", options.keep));
+      snapshots.push(writeHeapSnapshot(join(options.dir, "1-before-reading-window.heapsnapshot")));
       p.settle();
     }
     for (let i = 0; i < passesPerRound; i++) sink += pass();
     ops += opsPerRound;
   }
   spacesAt.end = spaces();
-  snapshots.push(snapshot(options.dir, "3-end", options.keep));
+  snapshots.push(writeHeapSnapshot(join(options.dir, "3-end.heapsnapshot")));
   if (sink < 0) throw new Error("unreachable");
+  const [before, after, end] = snapshots.map((file) => summarize(file, options.keep));
   const heapAt = (r) => readings[r * 3 + 1];
   const dataAt = (r) => readings[r * 3 + 2];
   return {
@@ -322,8 +325,8 @@ function longRun(ccda, c, options) {
       longWindow: spaceChange(spacesAt.longStart, spacesAt.end),
     },
     snapshots: {
-      readingWindow: snapshotChange(snapshots[0], snapshots[1]),
-      longWindow: snapshotChange(snapshots[1], snapshots[2]),
+      readingWindow: snapshotChange(before, after),
+      longWindow: snapshotChange(after, end),
     },
     settledHeap: Array.from({ length: count }, (_v, r) => heapAt(r)),
     settledHeapOutsideCode: Array.from({ length: count }, (_v, r) => dataAt(r)),

@@ -9,9 +9,9 @@
 //   largest;
 // - a settled heap that does not grow over a long run: under 64 KiB of growth over the long window
 //   bench/long-run.mjs reads (`--long-run`, its long-run.json), outside the heap spaces V8 keeps
-//   compiled code in. The reading's own long run is about 2.5 seconds right after warm-up, and over
-//   that window compiled code alone grows by about as much as its 64 KiB line, so its verdict is
-//   shown beside this one but is not the budget.
+//   compiled code in. The reading's own long run is about 2.5 seconds right after warm-up, while
+//   the compiler is still adding optimized code and the feedback it optimizes from, which is of the
+//   same order as its 64 KiB line, so its verdict is shown beside this one but is not the budget.
 // It prints a Markdown table and always exits 0 when it could read the reading: the budgets are
 // advisory, and a finding is a number to act on, not a red check. It exits 2 when it cannot read it.
 
