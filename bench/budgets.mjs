@@ -1,12 +1,17 @@
 // The performance budgets, read from a reading that `pnpm bench:reading --out <file>` wrote:
-//   node bench/budgets.mjs bench-results/reading.json [--summary <file.md>]
+//   node bench/budgets.mjs bench-results/reading.json [--long-run <long-run.json>] [--summary <file.md>]
 //
-// Four budgets, each a proposal until a package's numbers show it can be held:
+// Five budgets, each a proposal until a package's numbers show it can be held:
 // - peak heap under 20 times the input for a dense shape (a document of many entries);
 // - peak heap under 3 times the input for a large opaque payload (the base64 PDF document);
 // - a cold import under 15 ms;
 // - throughput, in bytes a second, not falling by more than half from a shape's smallest size to its
-//   largest.
+//   largest;
+// - a settled heap that does not grow over a long run: under 64 KiB of growth over the long window
+//   bench/long-run.mjs reads (`--long-run`, its long-run.json), outside the heap spaces V8 keeps
+//   compiled code in. The reading's own long run is about 2.5 seconds right after warm-up, while
+//   the compiler is still adding optimized code and the feedback it optimizes from, which is of the
+//   same order as its 64 KiB line, so its verdict is shown beside this one but is not the budget.
 // It prints a Markdown table and always exits 0 when it could read the reading: the budgets are
 // advisory, and a finding is a number to act on, not a red check. It exits 2 when it cannot read it.
 
@@ -48,6 +53,18 @@ function main(argv) {
   }
   const summaryAt = argv.indexOf("--summary");
   const summary = summaryAt === -1 ? undefined : argv[summaryAt + 1];
+  const longRunAt = argv.indexOf("--long-run");
+  let longRuns = null;
+  if (longRunAt !== -1) {
+    try {
+      longRuns = JSON.parse(readFileSync(argv[longRunAt + 1], "utf8")).longRuns;
+    } catch (error) {
+      process.stderr.write(
+        `could not read the long run: ${error instanceof Error ? error.name : "error"}\n`,
+      );
+      return 2;
+    }
+  }
   let doc;
   try {
     doc = readResults(readFileSync(file, "utf8"));
@@ -110,6 +127,31 @@ function main(argv) {
     const kept = large / small;
     lines.push(
       `| ${benchmark} | ${first.size} | ${last.size} | ${mib(small)}/s | ${mib(large)}/s | ${(kept * 100).toFixed(0)}% | ${kept >= THROUGHPUT_KEPT ? "yes" : "**no**"} |`,
+    );
+  }
+
+  lines.push(
+    "",
+    "Long run: the budget is under 64 KiB of growth over the long window bench/long-run.mjs reads, outside the spaces V8 keeps compiled code in. The reading's verdict, over its 25 rounds just after warm-up, is shown beside it.",
+    "",
+    "| Benchmark | Size | The reading's | Long window, outside code | Within |",
+    "| --- | --- | --- | --- | --- |",
+  );
+  for (const c of cases) {
+    const lr = c.longRun;
+    if (lr === null) continue;
+    const reading =
+      lr.status === "measured"
+        ? `${lr.verdict} (${mib(lr.growthBytes)} over ${String(lr.ops)} ops)`
+        : `skipped (${lr.reason})`;
+    const longer = longRuns?.find((r) => r.benchmark === c.benchmark && r.size === c.size);
+    if (longer === undefined) {
+      lines.push(`| ${c.benchmark} | ${c.size} | ${reading} | not read | not measured |`);
+      continue;
+    }
+    const f = longer.outsideCode.long;
+    lines.push(
+      `| ${c.benchmark} | ${c.size} | ${reading} | ${f.verdict} (${mib(f.growthBytes)} over ${String(f.ops)} ops) | ${f.verdict === "flat" ? "yes" : "**no**"} |`,
     );
   }
 

@@ -2,8 +2,9 @@ name: Bench reading
 
 # A reading of this build on a GitHub-hosted runner: every case of bench/ccda.bench.mjs (throughput,
 # latency p50/p95/p99, allocations, peak heap, a long run for leaks, the cold import with every file
-# it loads and its gzip size), the budgets read from it (bench/budgets.mjs), and a CPU and heap
-# profile of the hottest paths (bench/profile.mjs). The tables go to the run's summary; the results
+# it loads and its gzip size), the budgets read from it (bench/budgets.mjs), the long run read ten
+# times longer with a heap snapshot diff and the allocations of every size (bench/long-run.mjs),
+# and a CPU and heap profile of the hottest paths (bench/profile.mjs). The tables go to the run's summary; the results
 # document, its Markdown and the raw profiles are kept as the `bench-reading` artifact.
 #
 # Advisory: it fails only when it could not take a reading at all. A budget it finds exceeded is a
@@ -29,7 +30,8 @@ jobs:
   reading:
     runs-on: ubuntu-latest
     # The whole job, a reading of its 24 cases and the profile, took about 9 minutes on a 4-CPU
-    # GitHub-hosted runner; the bound is for a case that hangs.
+    # GitHub-hosted runner before the long run read longer was added, which reads 12 long runs of
+    # 30 seconds to 2 minutes each; the bound is for a case that hangs.
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -63,12 +65,20 @@ jobs:
           fi
           pnpm exec cosyte-bench check "${out}/reading.json"
           cat "${out}/reading.md" >> "${GITHUB_STEP_SUMMARY}"
+      - name: Long run, read longer
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${RUNNER_TEMP}/bench-reading"
+          node bench/long-run.mjs dist/index.mjs --out "${out}/long-run" --summary "${out}/long-run.md"
+          { echo; cat "${out}/long-run.md"; } >> "${GITHUB_STEP_SUMMARY}"
       - name: Budgets
         shell: bash
         run: |
           set -euo pipefail
           out="${RUNNER_TEMP}/bench-reading"
-          node bench/budgets.mjs "${out}/reading.json" --summary "${out}/budgets.md"
+          node bench/budgets.mjs "${out}/reading.json" --long-run "${out}/long-run/long-run.json" \
+            --summary "${out}/budgets.md"
           { echo; cat "${out}/budgets.md"; } >> "${GITHUB_STEP_SUMMARY}"
       - name: CPU and heap profile
         shell: bash
