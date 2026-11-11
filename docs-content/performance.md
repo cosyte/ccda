@@ -27,8 +27,9 @@ shapes real traffic has:
 - **an Unstructured Document** whose `nonXMLBody` carries a base64 PDF of 64 KiB or 4 MiB, the large
   opaque payload.
 
-Each shape is measured three ways: `parseCcda`; `parseCcda` with a terminology adapter and a value set
-source, both answering from memory; and `editCcda` replacing a section, then `toString`. A reading
+Each shape is measured four ways: `parseCcda`; `parseCcda` with a terminology adapter and a value set
+source, both answering from memory; `parseCcda`, then `toString`, the parse and the first write of a
+caller that passes a document on; and `editCcda` replacing a section, then `toString`. A reading
 reports throughput, latency p50, p95 and p99, allocations per call, the peak heap of one call, whether
 the heap stays flat over a long run, and the cold import time with every file it loads and its gzip
 size. `@cosyte/bench` cannot finish warming up a case of about 1 MiB or more, so a reading skips the

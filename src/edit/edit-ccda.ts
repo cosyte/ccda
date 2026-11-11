@@ -76,7 +76,7 @@ import {
   missingRequiredSections,
   type RequiredSectionOptions,
 } from "../parser/required-sections.js";
-import { DEFAULT_LIMITS, parseSecureXml } from "../parser/secure-xml.js";
+import { DEFAULT_LIMITS, parseSecureDom } from "../parser/secure-xml.js";
 import { sectionForLoinc, sectionForTemplateRoot, type DocumentType } from "../parser/templates.js";
 import type { CcdaWarning } from "../parser/warnings.js";
 import { serializeDocument } from "../serialize/serialize-dom.js";
@@ -415,12 +415,12 @@ function writeEdit(
   // Re-parse the retained (already-clean, already-safe) XML into a fresh DOM we
   // can mutate. A no-op emitter: this XML came from our own serializer, so it
   // carries no Tier-2 deviations to record, and any Tier-3 fatal is impossible.
-  const dom = parseSecureXml(xml, DEFAULT_LIMITS, () => undefined);
+  const dom = parseSecureDom(xml, DEFAULT_LIMITS, () => undefined);
   const root = dom.documentElement;
   /* v8 ignore if -- a CcdaDocument retains only XML this package emitted, which always has a root element */
   if (root === null) {
     // Unreachable: sourceXml refuses anything that is not a CcdaDocument, a CcdaDocument retains the
-    // XML its parse read (which had a root element), and parseSecureXml throws NOT_WELL_FORMED_XML
+    // XML its parse read (which had a root element), and parseSecureDom throws NOT_WELL_FORMED_XML
     // for XML with none in any case.
     throw new CcdaEditError("NO_SOURCE_DOCUMENT", "editCcda: source produced no document element.");
   }

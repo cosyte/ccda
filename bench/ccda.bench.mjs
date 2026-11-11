@@ -17,11 +17,12 @@
 // The suite is handed the module under test rather than importing it, so one file measures both
 // builds. Every input is synthetic and built in code by bench/shapes.mjs: no file is read.
 //
-// Serializing is not a benchmark of its own: `parseCcda` writes a document's XML the first time
-// `toString` (or `serializeCcda`) asks for it, from the source text it keeps, so a parse that never
-// asks pays nothing for it. The write path that does work is `editCcda`, which writes the source's
-// XML once (kept on the document after that), re-reads it, grafts the change, writes the result
-// and parses it.
+// `parseCcda` writes a document's XML the first time `toString` (or `serializeCcda`) asks for it,
+// from the source text it keeps, so a parse that never asks pays nothing for it. `parseCcda, then
+// toString` is the parse of a caller that does ask, a pass-through that reads a document and
+// writes it on: the parse and that first write. The other write path is `editCcda`, which writes
+// the source's XML once (kept on the document after that), re-reads it, grafts the change, writes
+// the result and parses it.
 
 import { defineBenchmark, defineSuite } from "@cosyte/bench";
 
@@ -134,6 +135,14 @@ for (const shape of SHAPES) {
         return (x) => ccda.parseCcda(x.text, options);
       },
       weigh: (doc) => doc.warnings.length + 1,
+    }),
+    defineBenchmark({
+      // A parse whose XML is asked for: the parse and the write its first `toString` makes. Read
+      // only, never in the pull request comparison, whose time budget the cases above fill.
+      name: `parseCcda, then toString: ${shape.name}`,
+      sizes: sizes(shape).map((size) => ({ ...size, compare: false })),
+      bind: (ccda) => (x) => ccda.parseCcda(x.text).toString(),
+      weigh: (text) => text.length,
     }),
     defineBenchmark({
       // The read, edit, write loop: a section replaced (or, with no structured body, a revision

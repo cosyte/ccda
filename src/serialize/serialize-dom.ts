@@ -18,10 +18,12 @@
  * @packageDocumentation
  */
 
-import { XMLSerializer, type Document, type Node } from "@xmldom/xmldom";
+import type { Document, Node } from "@xmldom/xmldom";
+
+import { xmldom } from "../parser/xmldom.js";
 
 /** The conservative XML declaration prepended when the source carried none. @internal */
-const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>';
+export const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>';
 
 /** Text node type per the DOM spec (`Node.TEXT_NODE`). @internal */
 const TEXT_NODE = 3 as const;
@@ -64,6 +66,6 @@ export function serializeDocument(doc: Document): string {
   // xmldom writes a string a node filter returns in the node's place, but its types allow only a
   // node back, so the filter is passed under the type they name.
   const filter = keepCarriageReturns as unknown as (node: Node) => Node;
-  const xml = new XMLSerializer().serializeToString(doc, filter);
+  const xml = new (xmldom().XMLSerializer)().serializeToString(doc, filter);
   return xml.startsWith("<?xml") ? xml : `${XML_DECLARATION}\n${xml}`;
 }

@@ -7,7 +7,7 @@
  * collapsed) and coded-value-vs-narrative (both surfaced, no winner picked).
  */
 
-import { attr, child, children, positionOf, xsiType } from "../dom.js";
+import { attr, child, children, elementChildren, positionOf, xsiType } from "../dom.js";
 import { V3_NS } from "../../parser/namespaces.js";
 import { sectionForLoinc, sectionForTemplateRoot } from "../../parser/templates.js";
 import { parseBlAttr } from "../types/bl.js";
@@ -1077,25 +1077,17 @@ function offersConflictingProducts(
 
 /** Breadth-first search for the first descendant with the given local name. @internal */
 function firstDescendant(el: Element, localName: string): Element | undefined {
-  let level: readonly Element[] = childElementsOf(el);
-  while (level.length > 0) {
-    const next: Element[] = [];
-    for (const node of level) {
-      if (node.localName === localName) return node;
-      next.push(...childElementsOf(node));
+  // Level by level, each level left to right: one queue read from the front, rather than an
+  // array per level and a copy of every element's children into it.
+  const queue: Element[] = elementChildren(el);
+  for (let i = 0; i < queue.length; i++) {
+    const node = queue[i] as Element;
+    if (node.localName === localName) return node;
+    for (let n = node.firstChild; n !== null; n = n.nextSibling) {
+      if (n.nodeType === 1) queue.push(n as Element);
     }
-    level = next;
   }
   return undefined;
-}
-
-/** Direct child elements of any namespace. @internal */
-function childElementsOf(el: Element): readonly Element[] {
-  const out: Element[] = [];
-  for (let n = el.firstChild; n !== null; n = n.nextSibling) {
-    if (n.nodeType === 1) out.push(n as Element);
-  }
-  return out;
 }
 
 /**
@@ -1362,8 +1354,10 @@ export function childEntries(sectionEl: Element): readonly Element[] {
  * ```
  */
 export function entryAct(entry: Element, root: string): Element | undefined {
-  for (const name of ACT_NAMES) {
-    const el = child(entry, name);
+  // An index rather than `for...of`: this runs for every family on every entry, and before it is
+  // optimized an array iterator allocates an object for each step.
+  for (let i = 0; i < ACT_NAMES.length; i++) {
+    const el = child(entry, ACT_NAMES[i] as string);
     if (el !== undefined && hasTemplateRoot(el, root)) return el;
   }
   return undefined;
@@ -1381,8 +1375,9 @@ export function entryAct(entry: Element, root: string): Element | undefined {
  * ```
  */
 export function anyEntryAct(entry: Element): Element | undefined {
-  for (const name of ACT_NAMES) {
-    const el = child(entry, name);
+  // An index rather than `for...of`, as in `entryAct`.
+  for (let i = 0; i < ACT_NAMES.length; i++) {
+    const el = child(entry, ACT_NAMES[i] as string);
     if (el !== undefined) return el;
   }
   return undefined;

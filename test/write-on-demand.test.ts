@@ -3,12 +3,14 @@
  *
  * `parseCcda` writes a document's XML the first time `toString` (or `serializeCcda`, or an edit)
  * asks for it, and keeps it: a caller that reads only the model never pays for the write, and the
- * DOM is not kept for the document's life. These tests count the serializer's calls to pin that,
+ * DOM is not kept for the document's life. These tests count the writes to pin that (a call of
+ * `serializeDocument`, of `writeSource` that wrote, the writer of the compact reader's tree, or of
+ * `writtenText`, which returns a text the reader found already written as the writer writes it),
  * and compare the text with what the source gives when it is parsed and written at once, so a
  * change that writes eagerly again, writes twice, or writes something else fails here.
  *
  * `buildCcda` and `editCcda` re-parse XML they have just written and their callers nearly always
- * ask for it back, so they write it from the tree in hand, once, as every parse did before.
+ * ask for it back, so they write it as they parse, once, as every parse did before.
  */
 
 import { DOMParser } from "@xmldom/xmldom";
@@ -16,9 +18,26 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildCcda as buildFixture } from "./__fixtures__/ccda.js";
 import type * as SerializeDom from "../src/serialize/serialize-dom.js";
+import type * as WriteTree from "../src/serialize/write-tree.js";
 import { referralNote } from "../bench/shapes.mjs";
 
 const calls = vi.hoisted(() => ({ serialize: 0 }));
+
+vi.mock("../src/serialize/write-tree.js", async (importOriginal) => {
+  const original = await importOriginal<typeof WriteTree>();
+  return {
+    ...original,
+    writeSource: (...args: Parameters<typeof original.writeSource>): string | undefined => {
+      const written = original.writeSource(...args);
+      if (written !== undefined) calls.serialize += 1;
+      return written;
+    },
+    writtenText: (...args: Parameters<typeof original.writtenText>): string => {
+      calls.serialize += 1;
+      return original.writtenText(...args);
+    },
+  };
+});
 
 vi.mock("../src/serialize/serialize-dom.js", async (importOriginal) => {
   const original = await importOriginal<typeof SerializeDom>();
@@ -71,6 +90,8 @@ describe("parseCcda writes its XML on first use", () => {
       `\uFEFF${buildFixture()}`,
       buildFixture().replace(/\n/gu, "\r\n"),
       buildFixture().replace("<title>Synthetic Test Document</title>", "<title>a&#13;b</title>"),
+      // An empty XHTML element, which the compact tree's writer hands to @xmldom/xmldom.
+      buildFixture().replace("<title>", '<x:br xmlns:x="http://www.w3.org/1999/xhtml"/><title>'),
     ];
     for (const source of sources) {
       const stripped = source.startsWith("\uFEFF") ? source.slice(1) : source;
@@ -82,7 +103,7 @@ describe("parseCcda writes its XML on first use", () => {
   });
 });
 
-describe("buildCcda and editCcda write from the tree in hand", () => {
+describe("buildCcda and editCcda write as they parse", () => {
   it("buildCcda writes its document, then re-parses and writes it once more, and no more", () => {
     const doc = buildCcda({
       patient: {
@@ -97,6 +118,17 @@ describe("buildCcda and editCcda write from the tree in hand", () => {
     expect(calls.serialize).toBe(2);
     doc.toString();
     expect(calls.serialize).toBe(2);
+  });
+
+  it("writes once on the first toString when the compact tree's writer hands the tree back", () => {
+    const doc = parseCcda(
+      buildFixture().replace("<title>", '<x:p xmlns:x="http://www.w3.org/1999/xhtml"/><title>'),
+    );
+    const first = doc.toString();
+    expect(first).toContain('<x:p xmlns:x="http://www.w3.org/1999/xhtml"></x:p>');
+    expect(calls.serialize).toBe(1);
+    expect(doc.toString()).toBe(first);
+    expect(calls.serialize).toBe(1);
   });
 
   it("editCcda writes the edit and the re-parse, and its toString writes nothing more", () => {

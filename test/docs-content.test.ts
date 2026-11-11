@@ -451,3 +451,48 @@ describe("every sample on a hand-written page", () => {
     COMPILE_TIMEOUT,
   );
 });
+
+/**
+ * The built package loads `@xmldom/xmldom` the first time something needs it, not when it is
+ * imported: a parse of a document the compact reader reads never loads it, nor does writing that
+ * document's XML, and an edit does. Checked here because this file is the one that builds `dist/`,
+ * in both built entry points and in a fresh process for each, since a module once loaded stays
+ * loaded for the life of its process. The CommonJS loader's cache holds `@xmldom/xmldom` once
+ * anything has required it, from either build.
+ */
+describe("the built package loads @xmldom/xmldom on first use", () => {
+  const probe = [
+    'import { createRequire } from "node:module";',
+    "const [entry, xml] = process.argv.slice(1);",
+    "const require = createRequire(entry);",
+    'const loaded = () => Object.keys(require.cache).some((key) => key.includes("@xmldom"));',
+    'const ccda = entry.endsWith(".cjs") ? require(entry) : await import(entry);',
+    "const afterImport = loaded();",
+    "const doc = ccda.parseCcda(xml);",
+    "const afterParse = loaded();",
+    "doc.toString();",
+    "const afterWrite = loaded();",
+    "ccda.editCcda(doc);",
+    "console.log(JSON.stringify({ afterImport, afterParse, afterWrite, afterEdit: loaded() }));",
+  ].join("\n");
+
+  test.each(["index.mjs", "index.cjs"])("dist/%s", (entry) => {
+    const out = execFileSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        probe,
+        join(root, "dist", entry),
+        firstUseFixtures.QUICKSTART_CCD,
+      ],
+      { encoding: "utf8" },
+    );
+    expect(JSON.parse(out)).toEqual({
+      afterImport: false,
+      afterParse: false,
+      afterWrite: false,
+      afterEdit: true,
+    });
+  });
+});

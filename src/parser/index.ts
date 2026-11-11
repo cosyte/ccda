@@ -26,6 +26,7 @@ import { wrapEmitterWithProfile } from "../profiles/apply.js";
 import { getDefaultCcdaProfile } from "../profiles/registry.js";
 import type { CcdaProfile } from "../profiles/types.js";
 import { serializeDocument } from "../serialize/serialize-dom.js";
+import { writeSource, writtenText } from "../serialize/write-tree.js";
 
 /**
  * Parse a C-CDA XML payload into an immutable {@link CcdaDocument}.
@@ -62,10 +63,11 @@ export function parseCcda(raw: string, options: ParseCcdaOptions = {}): CcdaDocu
  *   `serializeCcda`, or an edit) asks for it, from a DOM built again from the source text the
  *   parse keeps. A caller that reads only the model never pays for it, and the tree is not kept
  *   for the document's life (it is many times the size of the text).
- * - `writeNow: true`, what `buildCcda` and `editCcda` pass: the XML is written from the DOM this
- *   parse built, before it is dropped, as every parse did before. Both re-parse XML they have
- *   just written, and their callers nearly always ask for it back, so writing it from the tree in
- *   hand is cheaper than building that tree a second time.
+ * - `writeNow: true`, what `buildCcda` and `editCcda` pass: the XML is written during the parse.
+ *   Both re-parse XML they have just written, and their callers nearly always ask for it back.
+ *   When the parse built an `@xmldom/xmldom` DOM (a text the compact reader hands back) it is
+ *   written from that DOM; when the parse read the compact tree, which the writer cannot write,
+ *   the DOM is built from the text without the locator and written at once.
  *
  * The text is the same either way: the same source read by the same parser gives the same tree.
  *
@@ -98,9 +100,8 @@ export function parseCcdaText(
   const accepted = parseSecureSource(raw, limits, emit, (warning) =>
     foreignNamespaces.push(warning),
   );
-  const doc = accepted.doc;
 
-  const root = doc.documentElement;
+  const root = accepted.root;
   if (root === null) {
     throw new CcdaParseError(
       FATAL_CODES.NOT_WELL_FORMED_XML,
@@ -134,7 +135,12 @@ export function parseCcdaText(
     profile === undefined
       ? { ...parts, warnings }
       : { ...parts, warnings, profile: { name: profile.name, lineage: profile.lineage } };
-  if (writeNow) return new CcdaDocument({ ...init, serialized: serializeDocument(doc) });
+  if (writeNow) {
+    // From the `@xmldom/xmldom` tree when the parse built one, else as `writerFor` writes it.
+    const serialized =
+      accepted.dom === undefined ? writerFor(accepted)() : serializeDocument(accepted.dom);
+    return new CcdaDocument({ ...init, serialized });
+  }
   return documentWithText(init, writerFor(accepted));
 }
 
@@ -148,7 +154,25 @@ export function parseCcdaText(
 function writerFor(accepted: SecureSource): () => string {
   const source = accepted.source;
   const lineBreaksToNormalize = accepted.lineBreaksToNormalize;
-  return () => serializeDocument(rebuildDom({ source, lineBreaksToNormalize }));
+  // A text the reader found already written as the writer writes it is its own XML. The end it
+  // found is in the text it read, which is this one only when no line ending was rewritten.
+  const writtenEnd = lineBreaksToNormalize ? -1 : accepted.writtenEnd;
+  if (writtenEnd !== -1) return () => writtenText(source, writtenEnd);
+  return () => writeText({ source, lineBreaksToNormalize });
+}
+
+/**
+ * The XML of an accepted text: written from the compact reader's tree when it reads the text and
+ * the tree holds nothing written another way (`../serialize/write-tree.ts`), else from the
+ * `@xmldom/xmldom` DOM built again. The two write the same XML for the same text.
+ *
+ * @internal
+ */
+function writeText(accepted: Pick<SecureSource, "source" | "lineBreaksToNormalize">): string {
+  return (
+    writeSource(accepted.source, accepted.lineBreaksToNormalize) ??
+    serializeDocument(rebuildDom(accepted))
+  );
 }
 
 /**
