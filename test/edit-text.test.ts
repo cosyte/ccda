@@ -14,7 +14,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as treeDom from "../src/parser/tree-dom.js";
 import { writeEdit, type EditCcdaOptions } from "../src/edit/edit-ccda.js";
-import { elementEnd } from "../src/edit/text-surface.js";
+import { elementEnd, TextSurface } from "../src/edit/text-surface.js";
+import { DEFAULT_LIMITS, parseSecureDom, parseSecureEditable } from "../src/parser/secure-xml.js";
+import { serializeDocument } from "../src/serialize/serialize-dom.js";
 import { editCcda, parseCcda, type CcdaDocument } from "../src/index.js";
 import { editOptions } from "../bench/shapes.mjs";
 import { outputCorpus } from "./_output-corpus.js";
@@ -200,6 +202,36 @@ describe("editCcda on a written document", () => {
       expect(differing).toEqual([]);
     },
   );
+});
+
+describe("TextSurface", () => {
+  const written = (xml: string): TextSurface => {
+    const read = parseSecureEditable(xml, DEFAULT_LIMITS, () => undefined);
+    if (read.dom !== undefined) throw new Error("expected a written text");
+    return new TextSurface(read.tree, read.text);
+  };
+
+  it("reads the IDs left after a header change, and those of what it adds", () => {
+    const surface = written(
+      `<ClinicalDocument xmlns="${V3}"><id ID="gone-1"/><title ID="kept-1"/></ClinicalDocument>`,
+    );
+    const root = surface.root;
+    const old = root.firstChild as unknown as Parameters<TextSurface["remove"]>[1];
+    const added = surface.doc.createElementNS(V3, "id");
+    added.setAttribute("ID", "added-1");
+    surface.replace(root, added, old);
+    const inserted = surface.doc.createElementNS(V3, "code");
+    inserted.setAttribute("ID", "added-2");
+    surface.insertBefore(root, [inserted], undefined);
+    expect([...surface.ids()].sort()).toEqual(["added-1", "added-2", "kept-1"]);
+  });
+});
+
+describe("parseSecureDom", () => {
+  it("builds the DOM of a written text from its tree, as xmldom reads it", () => {
+    const xml = parseCcda(DOCUMENTS[0]?.xml as string).toString();
+    expect(serializeDocument(parseSecureDom(xml, DEFAULT_LIMITS, () => undefined))).toBe(xml);
+  });
 });
 
 describe("elementEnd", () => {
