@@ -133,6 +133,30 @@ describe("the document built from the compact tree", () => {
     );
     expect(check("<r/>")).toBe("same");
   });
+
+  it("reads no index past the nodes outside the root", () => {
+    const sources = [
+      "<r/>",
+      "<!-- a -->\n<r/>",
+      "<r/>\n<!-- b -->\n<?pi d?>\n",
+      '<?xml version="1.0"?>\n<!-- a -->\n<r>t</r>\n<?pi d?>\n<!-- b -->',
+    ];
+    for (const source of sources) {
+      const tree = readDocument(source);
+      if (tree === undefined) throw new Error(`the reader handed back ${source}`);
+      const outside = new Proxy(tree.outside, {
+        get(target, key, receiver) {
+          if (typeof key === "string" && /^\d+$/.test(key) && Number(key) >= target.length) {
+            throw new RangeError(`read outside[${key}] of ${target.length}`);
+          }
+          return Reflect.get(target, key, receiver) as unknown;
+        },
+      });
+      const ours = domOfTree({ ...tree, outside });
+      const theirs = new DOMParser({ locator: true }).parseFromString(source, "application/xml");
+      expect(difference(ours, theirs)).toBeUndefined();
+    }
+  });
 });
 
 describe("parseSecureDom", () => {

@@ -41,11 +41,12 @@ const PROCESSING_INSTRUCTION_NODE = 7;
 export function domOfTree(tree: TreeDocument): Document {
   const doc = new (xmldom().DOMImplementation)().createDocument(null, "", null);
   const outside = tree.outside;
-  for (let i = 0; i <= outside.length; i++) {
+  for (let i = 0; i < outside.length; i++) {
     if (i === tree.rootAt) appendTree(doc, tree.root);
-    const node = outside[i];
-    if (node !== undefined) doc.appendChild(outsideNode(doc, node));
+    doc.appendChild(outsideNode(doc, outside[i] as OutsideNode));
   }
+  // No node outside the root follows it: the root comes last.
+  if (tree.rootAt >= outside.length) appendTree(doc, tree.root);
   return doc;
 }
 
