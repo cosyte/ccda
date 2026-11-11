@@ -10,9 +10,10 @@
  * @packageDocumentation
  */
 
-import { DOMImplementation, type Document, type Element } from "@xmldom/xmldom";
+import type { Document, Element } from "@xmldom/xmldom";
 
 import { SDTC_NS, V3_NS, XSI_NS } from "../parser/namespaces.js";
+import { xmldom } from "../parser/xmldom.js";
 
 /** The XML Namespaces namespace, used to declare `xmlns:*` prefixes. @internal */
 const XMLNS_NS = "http://www.w3.org/2000/xmlns/";
@@ -29,7 +30,7 @@ export type Attrs = Readonly<Record<string, string | undefined>>;
  * @internal
  */
 export function newCdaDocument(): { readonly doc: Document; readonly root: Element } {
-  const doc = new DOMImplementation().createDocument(V3_NS, "ClinicalDocument", null);
+  const doc = new (xmldom().DOMImplementation)().createDocument(V3_NS, "ClinicalDocument", null);
   const root = doc.documentElement;
   /* v8 ignore if -- createDocument with a qualified name always yields a root */
   if (root === null) {

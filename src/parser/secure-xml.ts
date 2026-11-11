@@ -31,12 +31,7 @@
  * so the sweep rides on it and costs no second pass.
  */
 
-import {
-  DOMParser,
-  normalizeLineEndings as xmldomLineEndings,
-  type Document,
-  type Element,
-} from "@xmldom/xmldom";
+import type { Document, Element } from "@xmldom/xmldom";
 
 import { positionOf } from "../model/dom.js";
 import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES } from "./errors.js";
@@ -44,6 +39,7 @@ import { isRecognizedNamespace } from "./namespaces.js";
 import type { CcdaParseLimits } from "./types.js";
 import { encodingBomStripped, unknownNamespacePrefix, type CcdaWarning } from "./warnings.js";
 import { readTree } from "./xml-tree.js";
+import { xmldom } from "./xmldom.js";
 
 /** Fully-resolved safety caps, every field present (defaults merged in), as `resolveLimits` returns them. */
 export interface ResolvedLimits {
@@ -351,6 +347,7 @@ function keepLineEndings(source: string): string {
  * @internal
  */
 function buildDom(source: string, lineBreaksToNormalize: boolean, locate = true): Document {
+  const { DOMParser, normalizeLineEndings: xmldomLineEndings } = xmldom();
   const parser = new DOMParser({
     locator: locate,
     // XML's end-of-line handling, which xmldom applies to the whole text before it parses. On a
