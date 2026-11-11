@@ -28,7 +28,7 @@ permissions:
 jobs:
   reading:
     runs-on: ubuntu-latest
-    # The whole job, a reading of its 21 cases and the profile, took about 13 minutes on a 4-CPU
+    # The whole job, a reading of its 24 cases and the profile, took about 9 minutes on a 4-CPU
     # GitHub-hosted runner; the bound is for a case that hangs.
     timeout-minutes: 60
     steps:

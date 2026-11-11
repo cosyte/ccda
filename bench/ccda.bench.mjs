@@ -21,8 +21,8 @@
 // from the source text it keeps, so a parse that never asks pays nothing for it. `parseCcda, then
 // toString` is the parse of a caller that does ask, a pass-through that reads a document and
 // writes it on: the parse and that first write. The other write path is `editCcda`, which writes
-// the source's XML once (kept on the document after that), re-reads it, grafts the change, writes
-// the result and parses it.
+// the source's XML once (kept on the document after that), re-reads it, splices the change into
+// that text and parses the result.
 
 import { defineBenchmark, defineSuite } from "@cosyte/bench";
 

@@ -39,7 +39,7 @@ import { isRecognizedNamespace } from "./namespaces.js";
 import type { CcdaParseLimits } from "./types.js";
 import { encodingBomStripped, unknownNamespacePrefix, type CcdaWarning } from "./warnings.js";
 import { domOfTree } from "./tree-dom.js";
-import { readDocument, type TreeShape } from "./xml-tree.js";
+import { readDocument, type TreeDocument, type TreeShape } from "./xml-tree.js";
 import { xmldom } from "./xmldom.js";
 
 /** Fully-resolved safety caps, every field present (defaults merged in), as `resolveLimits` returns them. */
@@ -189,15 +189,44 @@ export function parseSecureDom(
   limits: ResolvedLimits,
   emit: (warning: CcdaWarning) => void,
 ): Document {
+  const read = parseSecureEditable(raw, limits, emit);
+  return read.dom === undefined ? domOfTree(read.tree) : read.dom;
+}
+
+/**
+ * What {@link parseSecureEditable} read: the compact tree and the text it was read from, when that
+ * text is already written as the writer writes it, else the `@xmldom/xmldom` document
+ * {@link parseSecureDom} returns.
+ *
+ * @internal
+ */
+export type SecureEditable =
+  | { readonly dom: undefined; readonly tree: TreeDocument; readonly text: string }
+  | { readonly dom: Document; readonly tree: undefined; readonly text: undefined };
+
+/**
+ * {@link parseSecureDom}, for an edit that can be made on the text: the same gate, limits, fatals
+ * and warnings, and for a text the compact reader finds already written in the writer's form
+ * (`TreeDocument.writtenEnd`), its tree and the text (line endings normalized) instead of a DOM.
+ *
+ * @internal
+ */
+export function parseSecureEditable(
+  raw: string,
+  limits: ResolvedLimits,
+  emit: (warning: CcdaWarning) => void,
+): SecureEditable {
   const { source, lineBreaksToNormalize } = acceptSource(raw, limits, emit);
-  const tree = readDocument(lineBreaksToNormalize ? normalizeLineEndings(source) : source);
+  const text = lineBreaksToNormalize ? normalizeLineEndings(source) : source;
+  const tree = readDocument(text);
   if (tree === undefined) {
     const doc = buildDom(source, lineBreaksToNormalize);
     enforceStructureLimits(doc.documentElement, limits, emit);
-    return doc;
+    return { dom: doc, tree: undefined, text: undefined };
   }
   enforceShapeLimits(tree.shape, limits, emit);
-  return domOfTree(tree);
+  if (tree.writtenEnd === -1) return { dom: domOfTree(tree), tree: undefined, text: undefined };
+  return { dom: undefined, tree, text };
 }
 
 /**
