@@ -54,13 +54,33 @@ jobs:
   # any machine behind an egress lockdown, and the pressure to soften that red is exactly how
   # a fail-safe like this one gets quietly reversed.
   #
-  # WHAT IT BLOCKS, said plainly rather than assumed. On 2026-11-08 the required contexts on
-  # `main` were `ci / verify (22, ubuntu-latest)`, `ci / verify (24, ubuntu-latest)`,
-  # `ci / actionlint` and `no-emdash / tracked-files` (derive the current set with
-  # `gh api repos/cosyte/ccda/rules/branches/main`), and this job's context was not among them,
-  # so a red here is VISIBLE on every pull request and does not by itself stop a merge. Adding it
-  # is a GitHub settings change, not a file change. The public-surface gate sits behind the
-  # identical gap and its own workflow says so.
+  # WHAT IT BLOCKS, said plainly rather than assumed. This job's check context is the bare job
+  # name, `conformance`, and it is meant to gate a merge on `main`. Requiring it is a GitHub
+  # settings change, not a file change, so read the current set rather than trusting this
+  # comment: `gh api repos/cosyte/ccda/rules/branches/main`. Until `conformance` is in that set,
+  # a red here is visible on every pull request and does not by itself stop a merge.
+  #
+  # WHY IT CAN BE REQUIRED. On a warm cache the run asks the network for nothing: every
+  # artifact is read from `.conformance-artifacts/` and re-hashed against its pin, so an
+  # upstream outage cannot red it. A pull request restores the cache `main` saved, and the
+  # nightly run keeps that entry from going unused long enough to be evicted. The network is
+  # reached only on a miss: the first run after a pin moves, or after an eviction.
+  #
+  # WHEN AN UPSTREAM ARTIFACT IS UNREACHABLE. The run fails with
+  # `CONFORMANCE_ARTIFACT_UNREACHABLE` and names the URL it could not fetch. Then:
+  #   1. Read the cache step's log. A miss means the cache did not cover the run; a hit with a
+  #      fetch anyway means a cached file failed its digest and was fetched again.
+  #   2. Check that the host in the URL is up (raw.githubusercontent.com or
+  #      codeload.github.com, both GitHub), and re-run the failed job once it is. A re-run
+  #      fetches only what the cache lacks.
+  #   3. If the pull request moved a pin, the new artifact has to come from upstream once;
+  #      there is no other source. Wait for the host rather than moving the pin back.
+  #   4. Never add `continue-on-error`, `|| true` or a skip to get past it, and never take the
+  #      context out of the ruleset for an outage: an artifact nobody could fetch is an
+  #      artifact nothing was validated against.
+  # `CONFORMANCE_ARTIFACT_DIGEST_MISMATCH` is a different fault: the host served bytes other
+  # than the pinned commit's, and a re-run will not fix it. Read the diff between the two
+  # commits before moving a pin in `scripts/conformance/artifacts.json`.
   #
   # ONE NODE VERSION, NOT THE MATRIX. The shared caller already runs the type checker, the
   # linter and the suite on Node 22, 24, and 26. What this job measures is a property of the
@@ -79,16 +99,21 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      # The vocabulary file alone is about 65 MB and is fetched on every run. Caching it is a
-      # PERFORMANCE matter and nothing more: the key is the pin file's own hash, so moving a
-      # pin misses the cache, and a cache hit is still re-hashed against the pin before a
-      # single byte of it is validated against. A miss therefore cannot become a reason to
-      # skip the vocabulary input, and a poisoned cache entry is a cache miss rather than a
-      # way past the digest check.
+      # The vocabulary file alone is about 65 MB. The cache saves the time to fetch it and keeps
+      # the run off the network, and it can never stand in for the check: the key is the pin
+      # file's own hash, and every cached file is re-hashed against its pin before a single
+      # byte of it is validated against. A cached file that fails that check, the corpus
+      # archive included, is fetched again, so a poisoned or half-written entry is a miss
+      # rather than a way past the digest check or a red that outlives it.
+      #
+      # `restore-keys` covers a change to the pin file: the newest earlier entry is restored,
+      # the artifacts whose pins did not move are read from it, and only a moved pin is
+      # fetched. That is safe for the same reason as above: a stale file fails its own digest.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .conformance-artifacts
           key: conformance-artifacts-${{ hashFiles('scripts/conformance/artifacts.json') }}
+          restore-keys: conformance-artifacts-
 
       - run: pnpm install --frozen-lockfile
 

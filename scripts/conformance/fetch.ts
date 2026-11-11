@@ -63,7 +63,18 @@ function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function cachePathFor(directory: string, url: string): string {
+/**
+ * The cache slot one URL reads from and writes to, under the working directory.
+ *
+ * @param directory - The working directory.
+ * @param url - The pinned URL.
+ * @returns The path of the cache entry for that URL.
+ * @example
+ * ```ts
+ * const path = cachePathFor(".conformance-artifacts", pins.schematron.url);
+ * ```
+ */
+export function cachePathFor(directory: string, url: string): string {
   return `${directory}/${sha256(new TextEncoder().encode(url)).slice(0, 16)}.bin`;
 }
 
@@ -269,14 +280,20 @@ export function readTarXmlEntries(tar: Uint8Array): readonly CorpusDocument[] {
 /**
  * Fetch the corpus archive, unpack it in memory, and check its content against the pin.
  *
+ * A CACHED ARCHIVE IS CHECKED THE SAME WAY, AND A BAD ONE IS A MISS. The archive cannot be
+ * hashed as bytes (see `corpusContentDigest`), so its check is the unpack and the content
+ * digest. A cached copy that fails either is fetched again, exactly like a single file whose
+ * cached bytes do not hash to the pin, and the fresh copy replaces it. Refusing it instead
+ * would leave every later run red until somebody deleted the working directory by hand.
+ *
  * @param fetcher - The network boundary.
  * @param directory - Working directory for the cache.
  * @param corpus - The pinned corpus archive.
  * @returns Every `.xml` document in the archive.
- * @throws {ConformanceError} `ARTIFACT_UNREACHABLE` when the archive cannot be fetched,
- *   `CORPUS_EMPTY` when it unpacks to no documents, `ARTIFACT_DIGEST_MISMATCH` when its
- *   content digest differs from the pin, or `ARTIFACT_MISSING_PATH` when the document count
- *   differs from the pin.
+ * @throws {ConformanceError} `ARTIFACT_UNREACHABLE` when no cached copy matches the pin and the
+ *   archive cannot be fetched, `ARTIFACT_MISSING_PATH` when the fetched archive does not unpack,
+ *   `CORPUS_EMPTY` when it unpacks to no documents, or `ARTIFACT_DIGEST_MISMATCH` when its
+ *   content digest differs from the pin.
  * @example
  * ```ts
  * const documents = await fetchCorpus(httpFetcher, dir, pins.corpus);
@@ -288,23 +305,40 @@ export async function fetchCorpus(
   corpus: PinnedCorpus,
 ): Promise<readonly CorpusDocument[]> {
   const cachePath = cachePathFor(directory, corpus.url);
-  let archive: Uint8Array | null = readIfPresent(cachePath);
-
-  if (archive === null) {
+  const cached = readIfPresent(cachePath);
+  if (cached !== null) {
     try {
-      archive = await fetcher(corpus.url);
-      // The cause is deliberately not carried into the message: a transport or decompression
-      // error can quote bytes it was reading, and nothing this layer prints may do that.
+      return unpackCorpus(cached, corpus);
     } catch {
-      throw new ConformanceError(
-        CONFORMANCE_CODES.ARTIFACT_UNREACHABLE,
-        `${corpus.title} could not be fetched from ${corpus.url}`,
-        "The round-trip half of this check needs the corpus and never passes without it. Run it where " +
-          `the host is reachable, or populate ${WORKING_DIRECTORY}/ once from a machine that can.`,
-      );
+      // A cached archive that fails its check is a miss: fall through and fetch it again.
     }
   }
 
+  let archive: Uint8Array;
+  try {
+    archive = await fetcher(corpus.url);
+    // The cause is deliberately not carried into the message: a transport or decompression
+    // error can quote bytes it was reading, and nothing this layer prints may do that.
+  } catch {
+    throw new ConformanceError(
+      CONFORMANCE_CODES.ARTIFACT_UNREACHABLE,
+      `${corpus.title} could not be fetched from ${corpus.url}`,
+      "The round-trip half of this check needs the corpus and never passes without it. Run it where " +
+        `the host is reachable, or populate ${WORKING_DIRECTORY}/ once from a machine that can.`,
+    );
+  }
+
+  const documents = unpackCorpus(archive, corpus);
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(cachePath, archive);
+  return documents;
+}
+
+/**
+ * Unpack an archive and check its content against the pin, or refuse with the code that names
+ * what was wrong with it.
+ */
+function unpackCorpus(archive: Uint8Array, corpus: PinnedCorpus): readonly CorpusDocument[] {
   let documents: readonly CorpusDocument[];
   try {
     documents = readTarXmlEntries(new Uint8Array(gunzipSync(archive)));
@@ -314,7 +348,8 @@ export async function fetchCorpus(
     throw new ConformanceError(
       CONFORMANCE_CODES.ARTIFACT_MISSING_PATH,
       `${corpus.title} was fetched but could not be unpacked as a gzipped tar archive`,
-      `Delete ${WORKING_DIRECTORY}/ and re-run so the archive is fetched again.`,
+      "The host served something other than the archive at the pinned commit. Re-run once it serves " +
+        "the archive again; a cached copy that does not unpack is never used, it is fetched again.",
     );
   }
 
@@ -337,8 +372,5 @@ export async function fetchCorpus(
         "artifacts.corpus in scripts/conformance/artifacts.json.",
     );
   }
-
-  mkdirSync(directory, { recursive: true });
-  writeFileSync(cachePath, archive);
   return documents;
 }
