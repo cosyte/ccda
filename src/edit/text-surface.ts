@@ -8,7 +8,8 @@
  * `serializeDocument` of the edited DOM is the text with each changed child replaced by what the
  * serializer writes for the new one in that place, and this surface writes it that way: it reads
  * the compact tree (`../parser/xml-tree.ts`) for the structure and the positions, records each
- * change, and at the end splices the text, each new node written by `serializeDocument` itself
+ * change, and at the end splices the text, each new node written by the serializer itself
+ * (`serializeNodes`, what `serializeDocument` writes before its declaration)
  * inside a copy of the elements it sits in (their names and attributes, so the same namespaces are
  * declared above it). No `@xmldom/xmldom` tree of the whole document is built, and the parts of
  * the text no change touches are copied as they stand.
@@ -26,7 +27,7 @@ import type { Document, Element } from "@xmldom/xmldom";
 import { children } from "../model/dom.js";
 import { xmldom } from "../parser/xmldom.js";
 import type { TreeDocument, TreeElement } from "../parser/xml-tree.js";
-import { serializeDocument } from "../serialize/serialize-dom.js";
+import { serializeNodes } from "../serialize/serialize-dom.js";
 import { writtenText } from "../serialize/write-tree.js";
 import { collectIds, type EditSurface } from "./surface.js";
 
@@ -326,12 +327,12 @@ function writeChildren(
       closeAbove += `</${(chain[i] as TreeElement).nodeName}>`;
     }
     const close = `</${parent.nodeName}>${closeAbove}`;
-    const empty = serializeDocument(doc);
+    const empty = serializeNodes(doc);
     /* v8 ignore if -- an element read from text is written by its own name, and one in the v3 namespace closes with "/>" */
     if (!empty.endsWith(`/>${closeAbove}`)) return undefined;
     const open = empty.slice(0, empty.length - closeAbove.length - 2);
     for (const node of nodes) holder.appendChild(node);
-    const full = serializeDocument(doc);
+    const full = serializeNodes(doc);
     for (const node of nodes) holder.removeChild(node);
     /* v8 ignore if -- the parent's start tag does not depend on its children */
     if (!full.startsWith(`${open}>`) || !full.endsWith(close)) return undefined;

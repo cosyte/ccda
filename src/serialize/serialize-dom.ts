@@ -63,9 +63,20 @@ function keepCarriageReturns(node: Node): Node | string {
  * @internal
  */
 export function serializeDocument(doc: Document): string {
+  const xml = serializeNodes(doc);
+  return xml.startsWith("<?xml") ? xml : `${XML_DECLARATION}\n${xml}`;
+}
+
+/**
+ * What {@link serializeDocument} writes for `doc` before it adds a declaration: the serializer's
+ * text, with the same carriage-return filter. `editCcda` writes the elements it adds with it
+ * (`../edit/text-surface.ts`), as parts of a document it then writes once.
+ *
+ * @internal
+ */
+export function serializeNodes(doc: Document): string {
   // xmldom writes a string a node filter returns in the node's place, but its types allow only a
   // node back, so the filter is passed under the type they name.
   const filter = keepCarriageReturns as unknown as (node: Node) => Node;
-  const xml = new (xmldom().XMLSerializer)().serializeToString(doc, filter);
-  return xml.startsWith("<?xml") ? xml : `${XML_DECLARATION}\n${xml}`;
+  return new (xmldom().XMLSerializer)().serializeToString(doc, filter);
 }
