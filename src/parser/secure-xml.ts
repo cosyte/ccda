@@ -38,7 +38,7 @@ import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES } from "./errors.js";
 import { isRecognizedNamespace } from "./namespaces.js";
 import type { CcdaParseLimits } from "./types.js";
 import { encodingBomStripped, unknownNamespacePrefix, type CcdaWarning } from "./warnings.js";
-import { readTree } from "./xml-tree.js";
+import { readDocument, type TreeShape } from "./xml-tree.js";
 import { xmldom } from "./xmldom.js";
 
 /** Fully-resolved safety caps, every field present (defaults merged in), as `resolveLimits` returns them. */
@@ -209,16 +209,15 @@ export function parseSecureSource(
   raw: string,
   limits: ResolvedLimits,
   emit: (warning: CcdaWarning) => void,
-  reportForeignNamespace: (warning: CcdaWarning) => void = emit,
+  reportForeignNamespace: (warning: CcdaWarning) => void,
 ): SecureSource {
   const accepted = acceptSource(raw, limits, emit);
   const { source, lineBreaksToNormalize } = accepted;
-  const tree = readTree(lineBreaksToNormalize ? normalizeLineEndings(source) : source);
+  const tree = readDocument(lineBreaksToNormalize ? normalizeLineEndings(source) : source);
   if (tree !== undefined) {
+    enforceShapeLimits(tree.shape, limits, reportForeignNamespace);
     // The model reads the members the two trees share; it is typed against the larger one.
-    const root = tree as unknown as Element;
-    enforceStructureLimits(root, limits, reportForeignNamespace);
-    return { root, dom: undefined, source, lineBreaksToNormalize };
+    return { root: tree.root as unknown as Element, dom: undefined, source, lineBreaksToNormalize };
   }
   const dom = buildDom(source, lineBreaksToNormalize);
   enforceStructureLimits(dom.documentElement, limits, reportForeignNamespace);
@@ -375,6 +374,73 @@ function buildDom(source: string, lineBreaksToNormalize: boolean, locate = true)
       FATAL_MESSAGES.NOT_WELL_FORMED_XML,
       {},
     );
+  }
+}
+
+/**
+ * {@link enforceStructureLimits} for the compact tree, from the shape its reader counted rather than
+ * a walk: the same fatal, at the same element, and the same namespace warnings in the same order,
+ * with one difference no caller sees: the warnings are reported only when no limit is exceeded
+ * (the one caller drops what was reported when a fatal is thrown).
+ *
+ * The walk visits elements level by level, each level in document order, and at each element
+ * checks the depth, then the count. So the first element deeper than `maxDepth` is the first, in
+ * document order, of the first level past it, at place 1 + the elements above that level; the
+ * first past `maxNodeCount` is at the first place greater than it; whichever comes first throws,
+ * the depth when both fall on one element. A limit that is not a number never throws, as no
+ * comparison with it holds. A namespace is reported at its first element in that order: its
+ * shallowest, the first in document order among those; the namespaces in the order of those
+ * elements.
+ *
+ * @internal
+ */
+function enforceShapeLimits(
+  shape: TreeShape,
+  limits: ResolvedLimits,
+  reportForeignNamespace: (warning: CcdaWarning) => void,
+): void {
+  const { perDepth, firstAtDepth } = shape;
+  let total = 0;
+  let tooDeepAt = Number.POSITIVE_INFINITY;
+  let tooDeep: Element | undefined;
+  for (let level = 0; level < perDepth.length; level++) {
+    if (tooDeep === undefined && level + 1 > limits.maxDepth) {
+      tooDeepAt = total + 1;
+      tooDeep = firstAtDepth[level] as unknown as Element;
+    }
+    total += perDepth[level] as number;
+  }
+  const max = limits.maxNodeCount;
+  const overCountAt =
+    total > max ? (Number.isFinite(max) ? Math.max(1, Math.floor(max) + 1) : 1) : Infinity;
+  if (tooDeep !== undefined && tooDeepAt <= overCountAt) {
+    throw new CcdaParseError(
+      FATAL_CODES.ELEMENT_DEPTH_LIMIT_EXCEEDED,
+      FATAL_MESSAGES.ELEMENT_DEPTH_LIMIT_EXCEEDED,
+      positionOf(tooDeep),
+    );
+  }
+  if (overCountAt !== Infinity) {
+    throw new CcdaParseError(
+      FATAL_CODES.NODE_COUNT_LIMIT_EXCEEDED,
+      FATAL_MESSAGES.NODE_COUNT_LIMIT_EXCEEDED,
+      {},
+    );
+  }
+  const { namespaceElements, namespaceDepths, namespaceIndexes } = shape;
+  const foreign: number[] = [];
+  for (let slot = 0; slot < namespaceElements.length; slot++) {
+    const el = namespaceElements[slot] as TreeShape["namespaceElements"][number];
+    if (!isRecognizedNamespace(el.namespaceURI)) foreign.push(slot);
+  }
+  foreign.sort(
+    (a, b) =>
+      (namespaceDepths[a] as number) - (namespaceDepths[b] as number) ||
+      (namespaceIndexes[a] as number) - (namespaceIndexes[b] as number),
+  );
+  for (const slot of foreign) {
+    const el = namespaceElements[slot] as unknown as Element;
+    reportForeignNamespace(unknownNamespacePrefix(positionOf(el)));
   }
 }
 

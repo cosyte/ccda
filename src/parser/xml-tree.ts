@@ -27,8 +27,13 @@
  * **Every string it hands out is part of the text or built from it.** A name, an attribute value
  * or a text node with nothing to decode is a slice of the source, which keeps the source alive as
  * long as the string is: the same as the `@xmldom/xmldom` tree, whose values are slices too, and
- * the parsed document keeps the source for its first `toString` anyway. Element names and the
- * white space between elements are read once per distinct value and shared.
+ * the parsed document keeps the source for its first `toString` anyway. Names, short attribute
+ * values and the white space between elements are shared: a value read again is the string read
+ * before, so a document's many `classCode="OBS"` hold one string.
+ *
+ * **It counts the tree's shape as it reads** (the elements at each depth, the first at each depth,
+ * and the first element in each namespace), so the depth and node-count limits and the namespace
+ * sweep `./secure-xml.ts` applies need no walk of the tree of their own.
  *
  * @internal
  */
@@ -251,6 +256,29 @@ export interface TreeDocument {
   readonly prolog: string;
   /** The nodes after the root, written out. */
   readonly epilog: string;
+  /** The tree's shape, counted as it was read. */
+  readonly shape: TreeShape;
+}
+
+/**
+ * What a walk of the tree level by level would find, counted while it is read, so the depth and
+ * node-count limits and the namespace sweep need no walk of their own. Depth 0 is the root's.
+ *
+ * @internal
+ */
+export interface TreeShape {
+  /** The number of elements at each depth. */
+  readonly perDepth: readonly number[];
+  /** The first element, in document order, at each depth. */
+  readonly firstAtDepth: readonly TreeElement[];
+  /**
+   * For each namespace the elements are in (`null` for none), in the order first met in document
+   * order: the shallowest element in it, the first in document order among those; its depth; and
+   * its place in document order.
+   */
+  readonly namespaceElements: readonly TreeElement[];
+  readonly namespaceDepths: readonly number[];
+  readonly namespaceIndexes: readonly number[];
 }
 
 /**
@@ -305,6 +333,12 @@ function hexValue(code: number): number {
 
 /** The most digits a character reference may have here: any legal one fits, with no leading zero run. @internal */
 const MAX_REFERENCE_DIGITS = 7;
+
+/** The number of strings the reader keeps to share: a power of two. @internal */
+const SHARED_SLOTS = 512;
+
+/** The longest attribute value shared rather than sliced: codes, OIDs, class and mood codes repeat. @internal */
+const MAX_SHARED_VALUE = 64;
 
 /** The longest run of white space shared rather than sliced. @internal */
 const MAX_SHARED_SPACE = 256;
@@ -371,12 +405,29 @@ class Reader {
   private readonly replacedUri: (string | null | undefined)[] = [];
   private readonly declared: number[] = [];
 
+  /** The tree's shape, counted as each element is read (see {@link TreeShape}). */
+  private readonly perDepth: number[] = [];
+  private readonly firstAtDepth: TreeElement[] = [];
+  private readonly namespaceElements: TreeElement[] = [];
+  private readonly namespaceDepths: number[] = [];
+  private readonly namespaceIndexes: number[] = [];
+  private readonly namespaceSlots = new Map<string, number>();
+  private noNamespaceSlot = -1;
+  private elementCount = 0;
+  /** The namespace of the last element read and its slot: most elements share their neighbour's. */
+  private lastNamespace: string | null | undefined = undefined;
+  private lastSlot = -1;
+
   /** The first `<` at or after {@link ltFrom}, or -1: what a start tag found, kept for the text after it. */
   private ltFrom = Number.MAX_SAFE_INTEGER;
   private ltAt = -1;
 
-  /** Names and runs of white space read so far, by a hash of their text, shared rather than sliced again. */
-  private readonly seen = new Map<number, string>();
+  /**
+   * Names and runs of white space read so far, shared rather than sliced again: a table of
+   * {@link SHARED_SLOTS} strings, each in the slot a hash of its text picks. A string whose slot
+   * holds another takes it over; the table is made at its size once, and never grows.
+   */
+  private readonly seen = new Array<string | undefined>(SHARED_SLOTS);
 
   /**
    * The attributes of the start tag being read, copied to an array of their own size when it ends.
@@ -412,7 +463,14 @@ class Reader {
       pos = end;
     }
     if (this.open.length > 0 || this.root === undefined) return undefined;
-    return { root: this.root, prolog: this.prolog, epilog: this.epilog };
+    const shape: TreeShape = {
+      perDepth: this.perDepth,
+      firstAtDepth: this.firstAtDepth,
+      namespaceElements: this.namespaceElements,
+      namespaceDepths: this.namespaceDepths,
+      namespaceIndexes: this.namespaceIndexes,
+    };
+    return { root: this.root, prolog: this.prolog, epilog: this.epilog, shape };
   }
 
   /** Read the text from `start` to `end`: white space only outside the root, a text node inside it. */
@@ -445,7 +503,7 @@ class Reader {
     const hasReference = this.nextAmpersand < end;
     if (!attribute && !hasReference) return this.plainText(start, end);
     if (attribute && !hasReference && !hasTabOrLineFeed(source, start, end)) {
-      return source.slice(start, end);
+      return end - start <= MAX_SHARED_VALUE ? this.shared(start, end) : source.slice(start, end);
     }
     let out = "";
     let from = start;
@@ -483,8 +541,7 @@ class Reader {
 
   /**
    * The string from `start` to `end`, shared with an equal one read before. Strings are found by
-   * an FNV-1a hash of their text and compared in place; of two that share a hash, the first is
-   * shared and the second sliced each time.
+   * an FNV-1a hash of their text and compared in place.
    */
   private shared(start: number, end: number): string {
     const source = this.source;
@@ -492,12 +549,13 @@ class Reader {
     for (let i = start; i < end; i++) {
       hash = Math.imul(hash ^ source.charCodeAt(i), 0x01000193);
     }
-    const known = this.seen.get(hash);
+    const slot = hash & (SHARED_SLOTS - 1);
+    const known = this.seen[slot];
     if (known !== undefined && known.length === end - start && source.startsWith(known, start)) {
       return known;
     }
     const value = source.slice(start, end);
-    if (known === undefined) this.seen.set(hash, value);
+    this.seen[slot] = value;
     return value;
   }
 
@@ -713,7 +771,39 @@ class Reader {
     );
     if (parent === null) this.root = element;
     else this.append(element, false);
+    this.count(element, depth);
     return element;
+  }
+
+  /** Count an element into the tree's shape (see {@link TreeShape}). */
+  private count(element: TreeElement, depth: number): void {
+    if (depth === this.perDepth.length) {
+      this.perDepth.push(1);
+      this.firstAtDepth.push(element);
+    } else {
+      this.perDepth[depth] = (this.perDepth[depth] as number) + 1;
+    }
+    const index = this.elementCount;
+    this.elementCount += 1;
+    const ns = element.namespaceURI;
+    let slot = this.lastSlot;
+    if (ns !== this.lastNamespace) {
+      slot = ns === null ? this.noNamespaceSlot : (this.namespaceSlots.get(ns) ?? -1);
+      this.lastNamespace = ns;
+    }
+    if (slot === -1) {
+      slot = this.namespaceElements.length;
+      this.namespaceElements.push(element);
+      this.namespaceDepths.push(depth);
+      this.namespaceIndexes.push(index);
+      if (ns === null) this.noNamespaceSlot = slot;
+      else this.namespaceSlots.set(ns, slot);
+    } else if ((this.namespaceDepths[slot] as number) > depth) {
+      this.namespaceElements[slot] = element;
+      this.namespaceDepths[slot] = depth;
+      this.namespaceIndexes[slot] = index;
+    }
+    this.lastSlot = slot;
   }
 
   /** Put back the bindings the element that is ending declared over. */
