@@ -13,7 +13,7 @@ import fc from "fast-check";
  */
 function mostly<T>(good: readonly T[], bad: readonly T[]): fc.Arbitrary<T> {
   return fc.oneof(
-    { arbitrary: fc.constantFrom(...good), weight: 12 },
+    { arbitrary: fc.constantFrom(...good), weight: 30 },
     { arbitrary: fc.constantFrom(...bad), weight: 1 },
   );
 }
@@ -112,13 +112,15 @@ export function generatedDocument(): fc.Arbitrary<string> {
         "\n<?pi?>\n<!-- p -->",
         " ",
       ),
-      fc.constantFrom(
-        ' xmlns="urn:hl7-org:v3" xmlns:p="urn:p" xmlns:q="urn:q" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
-        ' xmlns:p="urn:p"',
-        "",
+      // Mostly a root that declares every prefix the names use; now and then one that does not.
+      mostly(
+        [
+          ' xmlns="urn:hl7-org:v3" xmlns:p="urn:p" xmlns:q="urn:q" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+        ],
+        [' xmlns:p="urn:p"', ""],
       ),
       fc.array(content.node, { maxLength: 5 }),
-      fc.constantFrom("", "\n", "<!-- e -->", "\n<?pi d?>\n  ", "x"),
+      mostly(["", "\n", "<!-- e -->", "\n<?pi d?>\n  "], ["x"]),
     )
     .map(([prolog, decls, kids, epilog]) => `${prolog}<r${decls}>${kids.join("")}</r>${epilog}`);
 }
