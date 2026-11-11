@@ -38,6 +38,7 @@ import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES } from "./errors.js";
 import { isRecognizedNamespace } from "./namespaces.js";
 import type { CcdaParseLimits } from "./types.js";
 import { encodingBomStripped, unknownNamespacePrefix, type CcdaWarning } from "./warnings.js";
+import { domOfTree } from "./tree-dom.js";
 import { readDocument, type TreeShape } from "./xml-tree.js";
 import { xmldom } from "./xmldom.js";
 
@@ -172,6 +173,31 @@ export function parseSecureXml(
   const doc = buildDom(accepted.source, accepted.lineBreaksToNormalize);
   enforceStructureLimits(doc.documentElement, limits, reportForeignNamespace);
   return doc;
+}
+
+/**
+ * {@link parseSecureXml} for `editCcda`, which edits the document it returns: the same gate,
+ * limits, fatals and document, with the document built from the compact reader's tree
+ * (`./tree-dom.ts`) when the reader reads the text, rather than by `@xmldom/xmldom`'s parser.
+ * Foreign namespaces go to `emit`, and only when no limit is exceeded (see
+ * {@link enforceShapeLimits}).
+ *
+ * @internal
+ */
+export function parseSecureDom(
+  raw: string,
+  limits: ResolvedLimits,
+  emit: (warning: CcdaWarning) => void,
+): Document {
+  const { source, lineBreaksToNormalize } = acceptSource(raw, limits, emit);
+  const tree = readDocument(lineBreaksToNormalize ? normalizeLineEndings(source) : source);
+  if (tree === undefined) {
+    const doc = buildDom(source, lineBreaksToNormalize);
+    enforceStructureLimits(doc.documentElement, limits, emit);
+    return doc;
+  }
+  enforceShapeLimits(tree.shape, limits, emit);
+  return domOfTree(tree);
 }
 
 /**

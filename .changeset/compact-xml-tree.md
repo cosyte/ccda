@@ -17,6 +17,8 @@ limit.
 - The first `toString` of a parsed document, and the re-parse in `buildCcda` and `editCcda`, write
   the XML from that compact tree, as `@xmldom/xmldom`'s serializer writes the same text; a text
   already written in the form that serializer gives it is returned as it stands.
+- `editCcda` builds the `@xmldom/xmldom` document it edits from that compact tree, through the DOM
+  methods `@xmldom/xmldom`'s parser calls, rather than with its parser.
 - Deliberate change: `@xmldom/xmldom` is loaded the first time something needs it (`editCcda`,
   `buildCcda`, `parseSecureXml`, or a text the compact reader hands back, to parse or to write),
   not when the package is imported. It is loaded with `require`, which a bundler that inlines

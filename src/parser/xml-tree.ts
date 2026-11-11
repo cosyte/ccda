@@ -259,6 +259,9 @@ export interface TreeDocument {
   readonly prolog: string;
   /** The nodes after the root, written out. */
   readonly epilog: string;
+  /** The nodes outside the root, in document order, and where among them the root stands. */
+  readonly outside: readonly OutsideNode[];
+  readonly rootAt: number;
   /** The tree's shape, counted as it was read. */
   readonly shape: TreeShape;
   /**
@@ -268,6 +271,18 @@ export interface TreeDocument {
    * after the last node is not written.
    */
   readonly writtenEnd: number;
+}
+
+/**
+ * A node outside the root: white space (`Node.TEXT_NODE`), a comment, or a processing instruction
+ * (its target, else `""`).
+ *
+ * @internal
+ */
+export interface OutsideNode {
+  readonly nodeType: number;
+  readonly nodeValue: string;
+  readonly target: string;
 }
 
 /**
@@ -400,6 +415,8 @@ class Reader {
   private space = "";
   private prolog = "";
   private epilog = "";
+  private readonly outsideNodes: OutsideNode[] = [];
+  private rootAt = -1;
 
   /**
    * The namespace each prefix in scope is bound to (`""` for the default namespace), and what each
@@ -491,7 +508,15 @@ class Reader {
       namespaceIndexes: this.namespaceIndexes,
     };
     const writtenEnd = this.written ? this.nodeEnd : -1;
-    return { root: this.root, prolog: this.prolog, epilog: this.epilog, shape, writtenEnd };
+    return {
+      root: this.root,
+      prolog: this.prolog,
+      epilog: this.epilog,
+      outside: this.outsideNodes,
+      rootAt: this.rootAt,
+      shape,
+      writtenEnd,
+    };
   }
 
   /** Read the text from `start` to `end`: white space only outside the root, a text node inside it. */
@@ -595,11 +620,20 @@ class Reader {
   }
 
   /** Write out a node outside the root, after the white space before it. */
-  private outside(written: string): void {
-    const piece = this.space + written;
+  private outside(nodeType: number, value: string, target: string, written: string): void {
+    this.spaceOutside();
+    this.outsideNodes.push({ nodeType, nodeValue: value, target });
+    if (this.root === undefined) this.prolog += written;
+    else this.epilog += written;
+  }
+
+  /** Keep the white space read last outside the root as a node: a node follows it. */
+  private spaceOutside(): void {
+    if (this.space === "") return;
+    this.outsideNodes.push({ nodeType: TEXT_NODE, nodeValue: this.space, target: "" });
+    if (this.root === undefined) this.prolog += this.space;
+    else this.epilog += this.space;
     this.space = "";
-    if (this.root === undefined) this.prolog += piece;
-    else this.epilog += piece;
   }
 
   /** The innermost open element. Called only while one is open. */
@@ -803,8 +837,8 @@ class Reader {
     const depth = this.open.length;
     if (depth === 0) {
       if (this.root !== undefined) return undefined;
-      this.prolog += this.space;
-      this.space = "";
+      this.spaceOutside();
+      this.rootAt = this.outsideNodes.length;
     }
     this.advanceLines(lt);
     const parent = depth === 0 ? null : this.current();
@@ -913,7 +947,7 @@ class Reader {
     if (this.open.length > 0) {
       this.append(new TreeInstruction(target, data, this.current()), false);
     } else {
-      this.outside(`<?${target} ${data}?>`);
+      this.outside(PROCESSING_INSTRUCTION_NODE, data, target, `<?${target} ${data}?>`);
     }
     return lt + match[0].length;
   }
@@ -929,7 +963,7 @@ class Reader {
       if (this.open.length > 0) {
         this.append(new TreeCharacterData(COMMENT_NODE, value, this.current()), false);
       } else {
-        this.outside(`<!--${value}-->`);
+        this.outside(COMMENT_NODE, value, "", `<!--${value}-->`);
       }
       return end + 3;
     }
