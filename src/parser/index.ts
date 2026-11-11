@@ -26,6 +26,7 @@ import { wrapEmitterWithProfile } from "../profiles/apply.js";
 import { getDefaultCcdaProfile } from "../profiles/registry.js";
 import type { CcdaProfile } from "../profiles/types.js";
 import { serializeDocument } from "../serialize/serialize-dom.js";
+import { writeSource } from "../serialize/write-tree.js";
 
 /**
  * Parse a C-CDA XML payload into an immutable {@link CcdaDocument}.
@@ -135,10 +136,10 @@ export function parseCcdaText(
       ? { ...parts, warnings }
       : { ...parts, warnings, profile: { name: profile.name, lineage: profile.lineage } };
   if (writeNow) {
-    // From the `@xmldom/xmldom` tree when the parse built one, else from one built now: the same
-    // text read by the same parser gives the same tree either way, and the same tree the same XML.
-    const dom = accepted.dom ?? rebuildDom(accepted);
-    return new CcdaDocument({ ...init, serialized: serializeDocument(dom) });
+    // From the `@xmldom/xmldom` tree when the parse built one, else as `writeText` writes it.
+    const serialized =
+      accepted.dom === undefined ? writeText(accepted) : serializeDocument(accepted.dom);
+    return new CcdaDocument({ ...init, serialized });
   }
   return documentWithText(init, writerFor(accepted));
 }
@@ -153,7 +154,21 @@ export function parseCcdaText(
 function writerFor(accepted: SecureSource): () => string {
   const source = accepted.source;
   const lineBreaksToNormalize = accepted.lineBreaksToNormalize;
-  return () => serializeDocument(rebuildDom({ source, lineBreaksToNormalize }));
+  return () => writeText({ source, lineBreaksToNormalize });
+}
+
+/**
+ * The XML of an accepted text: written from the compact reader's tree when it reads the text and
+ * the tree holds nothing written another way (`../serialize/write-tree.ts`), else from the
+ * `@xmldom/xmldom` DOM built again. The two write the same XML for the same text.
+ *
+ * @internal
+ */
+function writeText(accepted: Pick<SecureSource, "source" | "lineBreaksToNormalize">): string {
+  return (
+    writeSource(accepted.source, accepted.lineBreaksToNormalize) ??
+    serializeDocument(rebuildDom(accepted))
+  );
 }
 
 /**

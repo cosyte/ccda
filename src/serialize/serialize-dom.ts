@@ -23,7 +23,7 @@ import type { Document, Node } from "@xmldom/xmldom";
 import { xmldom } from "../parser/xmldom.js";
 
 /** The conservative XML declaration prepended when the source carried none. @internal */
-const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>';
+export const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8"?>';
 
 /** Text node type per the DOM spec (`Node.TEXT_NODE`). @internal */
 const TEXT_NODE = 3 as const;

@@ -222,6 +222,38 @@ export class TreeCharacterData {
 }
 
 /**
+ * A processing instruction: character data with a target.
+ *
+ * @internal
+ */
+export class TreeInstruction extends TreeCharacterData {
+  /** The instruction's target, the name after `<?`. */
+  readonly target: string;
+
+  /** An instruction with this target and data, under this parent. */
+  constructor(target: string, data: string, parentNode: TreeElement) {
+    super(PROCESSING_INSTRUCTION_NODE, data, parentNode);
+    this.target = target;
+  }
+}
+
+/**
+ * A document as {@link readDocument} reads it: the root element, and what stands before and after
+ * it (the XML declaration, comments, processing instructions and the white space between them)
+ * already written as `@xmldom/xmldom`'s serializer writes those nodes.
+ *
+ * @internal
+ */
+export interface TreeDocument {
+  /** The root element. */
+  readonly root: TreeElement;
+  /** The nodes before the root, written out. */
+  readonly prolog: string;
+  /** The nodes after the root, written out. */
+  readonly epilog: string;
+}
+
+/**
  * Above this many attributes on one element, repeats are found through a set rather than by
  * comparing each attribute with those before it, so a tag with thousands of attributes is read in
  * linear time.
@@ -285,6 +317,16 @@ const MAX_SHARED_SPACE = 256;
  * @internal
  */
 export function readTree(source: string): TreeElement | undefined {
+  return readDocument(source)?.root;
+}
+
+/**
+ * {@link readTree}, with the nodes outside the root written out beside it (see
+ * {@link TreeDocument}), for writing the document back out.
+ *
+ * @internal
+ */
+export function readDocument(source: string): TreeDocument | undefined {
   return new Reader(source).read();
 }
 
@@ -305,6 +347,15 @@ class Reader {
   private readonly open: TreeElement[] = [];
   private readonly lastChild: (TreeNode | null)[] = [];
   private root: TreeElement | undefined = undefined;
+
+  /**
+   * The nodes outside the root, written out: the white space read last outside it (written only
+   * when a node follows it, as `@xmldom/xmldom` adds none for white space that ends the text), and
+   * what stands before and after the root.
+   */
+  private space = "";
+  private prolog = "";
+  private epilog = "";
 
   /**
    * The namespace each prefix in scope is bound to (`""` for the default namespace), and what each
@@ -342,7 +393,7 @@ class Reader {
     this.nextAmpersand = amp === -1 ? source.length : amp;
   }
 
-  read(): TreeElement | undefined {
+  read(): TreeDocument | undefined {
     const source = this.source;
     let pos = 0;
     while (pos < this.length) {
@@ -360,8 +411,8 @@ class Reader {
       if (end === -1) return undefined;
       pos = end;
     }
-    if (this.open.length > 0) return undefined;
-    return this.root;
+    if (this.open.length > 0 || this.root === undefined) return undefined;
+    return { root: this.root, prolog: this.prolog, epilog: this.epilog };
   }
 
   /** Read the text from `start` to `end`: white space only outside the root, a text node inside it. */
@@ -371,6 +422,7 @@ class Reader {
       for (let i = start; i < end; i++) {
         if (!isSpace(source.charCodeAt(i))) return false;
       }
+      this.space = source.slice(start, end);
       return true;
     }
     const value = this.decoded(start, end, false);
@@ -447,6 +499,14 @@ class Reader {
     const value = source.slice(start, end);
     if (known === undefined) this.seen.set(hash, value);
     return value;
+  }
+
+  /** Write out a node outside the root, after the white space before it. */
+  private outside(written: string): void {
+    const piece = this.space + written;
+    this.space = "";
+    if (this.root === undefined) this.prolog += piece;
+    else this.epilog += piece;
   }
 
   /** The innermost open element. Called only while one is open. */
@@ -635,7 +695,11 @@ class Reader {
     }
 
     const depth = this.open.length;
-    if (depth === 0 && this.root !== undefined) return undefined;
+    if (depth === 0) {
+      if (this.root !== undefined) return undefined;
+      this.prolog += this.space;
+      this.space = "";
+    }
     this.advanceLines(lt);
     const parent = depth === 0 ? null : this.current();
     const element = new TreeElement(
@@ -697,11 +761,11 @@ class Reader {
       XML_DECL_RE.lastIndex = 0;
       if (!XML_DECL_RE.test(source)) return -1;
     }
+    const data = match[2] ?? "";
     if (this.open.length > 0) {
-      this.append(
-        new TreeCharacterData(PROCESSING_INSTRUCTION_NODE, match[2] ?? "", this.current()),
-        false,
-      );
+      this.append(new TreeInstruction(target, data, this.current()), false);
+    } else {
+      this.outside(`<?${target} ${data}?>`);
     }
     return lt + match[0].length;
   }
@@ -716,6 +780,8 @@ class Reader {
       if (!CHARS_RE.test(value)) return -1;
       if (this.open.length > 0) {
         this.append(new TreeCharacterData(COMMENT_NODE, value, this.current()), false);
+      } else {
+        this.outside(`<!--${value}-->`);
       }
       return end + 3;
     }
