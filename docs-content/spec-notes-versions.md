@@ -33,15 +33,15 @@ document whose document-type `templateId` carries a later stamp and **no** `temp
 root carries the R2.1 stamp; a document that carries both is read as R2.1
 ([the stamps we recognize](#the-stamps-we-recognize)).
 
-| Part of the target                                       | What the code does today                                                                                                                                                                                                                                                                    |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| C-CDA R2.1, read                                         | The recognition catalogs and the required-section tables are written against R2.1. `CCDA_CONFORMANCE_RELEASE` is `"R2.1"`.                                                                                                                                                                  |
-| C-CDA R2.1, build                                        | `buildCcda` emits a CCD, a Referral Note or an inpatient Discharge Summary with R2.1 templates and stamps. `pnpm conformance` checks what it emits against the normative R2.1 Schematron.                                                                                                   |
-| Companion Guide R4.1                                     | Named as the target, **not yet traced**. No Companion Guide constraint is in the tables, and `pnpm conformance` runs the R2.1 Schematron only, so a clean result says nothing about the Companion Guide.                                                                                    |
-| A document stamped for 3.0.0 to 5.0.0, read              | Read leniently. Its clinical reading is the same as the same document stamped for R2.1.                                                                                                                                                                                                     |
-| A document stamped for 3.0.0 to 5.0.0, required sections | Reported **not evaluated** today (`REQUIRED_SECTIONS_NOT_EVALUATED`, and `evaluation: "not-evaluated"` from `requiredSectionStatus`). Checking them against the 5.0.0 required sections for the document type is part of the target and is not built yet; until it is, nothing is asserted. |
-| A document stamped for 3.0.0 to 5.0.0 and for R2.1       | Read as R2.1: its required sections are evaluated against the R2.1 tables, so `REQUIRED_SECTION_MISSING` can fire. The later stamp still draws `TEMPLATE_EXTENSION_UNMODELED_RELEASE` when it is on the `templateId` that resolves the type.                                                |
-| A document stamped for 3.0.0 to 5.0.0, build             | Not built. `buildCcda` emits R2.1 only.                                                                                                                                                                                                                                                     |
+| Part of the target                                       | What the code does today                                                                                                                                                                                                                                                               |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C-CDA R2.1, read                                         | The recognition catalogs and the R2.1 required-section tables are written against R2.1. `CCDA_CONFORMANCE_RELEASE` is `"R2.1"`.                                                                                                                                                        |
+| C-CDA R2.1, build                                        | `buildCcda` emits a CCD, a Referral Note or an inpatient Discharge Summary with R2.1 templates and stamps. `pnpm conformance` checks what it emits against the normative R2.1 Schematron.                                                                                              |
+| Companion Guide R4.1                                     | Named as the target, **not yet traced**. No Companion Guide constraint is in the tables, and `pnpm conformance` runs the R2.1 Schematron only, so a clean result says nothing about the Companion Guide.                                                                               |
+| A document stamped for 3.0.0 to 5.0.0, read              | Read leniently. Its clinical reading is the same as the same document stamped for R2.1.                                                                                                                                                                                                |
+| A document stamped for 3.0.0 to 5.0.0, required sections | Checked against the **5.0.0** required sections for the document type: `REQUIRED_SECTION_MISSING` can fire, and `requiredSectionStatus(type, { stamp: "r30-stamped" })` reports `release: "5.0.0"`. A Diagnostic Imaging Report, which 5.0.0 does not have, is reported not evaluated. |
+| A document stamped for 3.0.0 to 5.0.0 and for R2.1       | Read as R2.1: its required sections are evaluated against the R2.1 tables, so `REQUIRED_SECTION_MISSING` can fire. The later stamp still draws `TEMPLATE_EXTENSION_UNMODELED_RELEASE` when it is on the `templateId` that resolves the type.                                           |
+| A document stamped for 3.0.0 to 5.0.0, build             | Not built. `buildCcda` emits R2.1 only.                                                                                                                                                                                                                                                |
 
 ## USCDI and the C-CDA version that carries it
 
@@ -55,9 +55,14 @@ the same root is read as R2.1.
 | --------- | ----------------------------------------- | ------------------------ | ------------------------------------------------------- |
 | v1 and v2 | R2.1 with Companion Guide Release 2 and 3 | not on the pages we read | Read as R2.1                                            |
 | v3        | R2.1 with Companion Guide Release 4.1     | not on the pages we read | **Our target.** R2.1 tables; Companion Guide not traced |
-| v4        | 3.0.0                                     | 2024-05-18               | Read leniently; required sections not evaluated         |
-| v5        | 4.0.0                                     | 2025-06-20               | Read leniently; required sections not evaluated         |
-| v6        | 5.0.0, the current publication            | 2026-06-13               | Read leniently; required sections not evaluated         |
+| v4        | 3.0.0                                     | 2024-05-18               | Read leniently; required sections checked against 5.0.0 |
+| v5        | 4.0.0                                     | 2025-06-20               | Read leniently; required sections checked against 5.0.0 |
+| v6        | 5.0.0, the current publication            | 2026-06-13               | Read leniently; required sections checked against 5.0.0 |
+
+The 3.0.0, 4.0.0 and 5.0.0 documents share one stamp, so we check all three against 5.0.0. The
+document-level section requirements are the same in the three: the document profiles in HL7's
+source for C-CDA (the `HL7/CDA-ccda` repository at tags `2024JUL`, `4.0.0` and `5.0.0`, read
+2026-11-11) require the same sections of each document type.
 
 ONC published USCDI v7 on 2026-07-23
 ([ONC USCDI](https://isp.healthit.gov/united-states-core-data-interoperability-uscdi), read
@@ -86,15 +91,19 @@ So a dual-stamped document, the usual backward-compatible shape of a 3.0.0 or la
 read as R2.1 and its required sections are checked against R2.1's tables, even though it can draw a
 stamp warning. Section and entry `templateId`s play no part in this.
 
-| `templateId`s with the resolving root             | Reading             | Warnings                                                                  | Required sections                           |
-| ------------------------------------------------- | ------------------- | ------------------------------------------------------------------------- | ------------------------------------------- |
-| `2015-08-01`                                      | `r21-stamped`       | none                                                                      | evaluated against R2.1                      |
-| `2015-08-01` first, then `2024-05-01`             | `r21-stamped`       | none                                                                      | evaluated against R2.1                      |
-| `2024-05-01` first, then `2015-08-01`             | `r21-stamped`       | `TEMPLATE_EXTENSION_UNMODELED_RELEASE`                                    | evaluated against R2.1                      |
-| no extension first, then `2015-08-01`             | `r21-stamped`       | `TEMPLATE_EXTENSION_ABSENT`                                               | evaluated against R2.1                      |
-| `2024-05-01`, and no `2015-08-01` on that root    | `unmodeled-release` | `TEMPLATE_EXTENSION_UNMODELED_RELEASE`, `REQUIRED_SECTIONS_NOT_EVALUATED` | not evaluated                               |
-| no extension, and no `2015-08-01` on that root    | `unstamped`         | `TEMPLATE_EXTENSION_ABSENT`                                               | evaluated against the reduced unstamped set |
-| any other value, and no `2015-08-01` on that root | `unmodeled-release` | `TEMPLATE_EXTENSION_UNMODELED_RELEASE`, `REQUIRED_SECTIONS_NOT_EVALUATED` | not evaluated                               |
+| `templateId`s with the resolving root             | Reading             | Warnings                                                                  | Required sections                                 |
+| ------------------------------------------------- | ------------------- | ------------------------------------------------------------------------- | ------------------------------------------------- |
+| `2015-08-01`                                      | `r21-stamped`       | none                                                                      | evaluated against R2.1                            |
+| `2015-08-01` first, then `2024-05-01`             | `r21-stamped`       | none                                                                      | evaluated against R2.1                            |
+| `2024-05-01` first, then `2015-08-01`             | `r21-stamped`       | `TEMPLATE_EXTENSION_UNMODELED_RELEASE`                                    | evaluated against R2.1                            |
+| no extension first, then `2015-08-01`             | `r21-stamped`       | `TEMPLATE_EXTENSION_ABSENT`                                               | evaluated against R2.1                            |
+| `2024-05-01`, and no `2015-08-01` on that root    | `r30-stamped`       | `TEMPLATE_EXTENSION_UNMODELED_RELEASE`                                    | evaluated against 5.0.0 (not evaluated for a DIR) |
+| no extension, and no `2015-08-01` on that root    | `unstamped`         | `TEMPLATE_EXTENSION_ABSENT`                                               | evaluated against the reduced unstamped set       |
+| any other value, and no `2015-08-01` on that root | `unmodeled-release` | `TEMPLATE_EXTENSION_UNMODELED_RELEASE`, `REQUIRED_SECTIONS_NOT_EVALUATED` | not evaluated                                     |
+
+The `2024-05-01` stamp still draws `TEMPLATE_EXTENSION_UNMODELED_RELEASE`, whose message says what
+is and is not read: the required sections are checked against 5.0.0, while sections and entries are
+read with the R2.1 catalogs, so a template added after R2.1 may be kept as narrative only.
 
 `releaseForTemplateExtension` names the release a single stamp belongs to: `"R2.1"` for
 `2015-08-01`, `"R3.0 or later"` for `2024-05-01`, and nothing for any other value. C-CDA 3.0.0 gave
@@ -120,11 +129,12 @@ import {
   parseCcda,
   readTemplateStamp,
   releaseForTemplateExtension,
+  requiredSectionStatus,
 } from "@cosyte/ccda";
 
 CCDA_RELEASE_STAMPS.map((entry) => entry.stamp); // => ["2015-08-01", "2024-05-01"]
 releaseForTemplateExtension("2024-05-01"); // => "R3.0 or later"
-readTemplateStamp("2024-05-01"); // => "unmodeled-release"
+readTemplateStamp("2024-05-01"); // => "r30-stamped"
 
 // A synthetic CCD stamped for C-CDA 3.0.0 or later, with no R2.1 stamp.
 // Invented patient, fake OIDs.
@@ -161,12 +171,17 @@ doc.documentType; // => "ccd"
 doc.getMrn(); // => "MRN-00042"
 doc.findSection("allergies")?.title; // => "Allergies"
 
-// The release is named, and the required sections are reported unevaluated
-// rather than checked against R2.1's list.
+// The stamp is named, and the required sections are checked against the
+// C-CDA 5.0.0 CCD. This CCD carries only Allergies, so the other five
+// sections 5.0.0 requires of a CCD are reported missing.
 const codes = doc.warnings.map((w) => w.code);
 codes.includes("TEMPLATE_EXTENSION_UNMODELED_RELEASE"); // => true
-codes.includes("REQUIRED_SECTIONS_NOT_EVALUATED"); // => true
-codes.includes("REQUIRED_SECTION_MISSING"); // => false
+codes.includes("REQUIRED_SECTIONS_NOT_EVALUATED"); // => false
+codes.filter((code) => code === "REQUIRED_SECTION_MISSING").length; // => 5
+
+// The status names the release the sections were checked against.
+requiredSectionStatus("ccd", { stamp: "r30-stamped" }).release; // => "5.0.0"
+requiredSectionStatus("ccd").release; // => "R2.1"
 ```
 
 The same CCD dual-stamped, the later stamp first and the R2.1 stamp after it on the same root:
@@ -221,15 +236,25 @@ codes.filter((code) => code === "REQUIRED_SECTION_MISSING").length; // => 5
 
 C-CDA 5.0.0 lists 11 document types and two header templates
 ([template ids](https://hl7.org/cda/us/ccda/templateids.html), read 2026-11-11). We recognize all 12
-of R2.1's document types:
+of R2.1's document types and the Patient Generated Document header, 13 values of `documentType`:
 
 - **Diagnostic Imaging Report is R2.1-only.** C-CDA 3.0.0 removed it
   ([C-CDA change log](https://hl7.org/cda/us/ccda/changes.html), read 2026-11-11). We still recognize
   it, as R2.1 defines it; a document claiming it with the `2024-05-01` stamp names a template the
   later releases do not have, and reads with `TEMPLATE_EXTENSION_UNMODELED_RELEASE` like any other.
-- The other 11 types are in 5.0.0 too.
-- The Patient Generated Document header (root `2.16.840.1.113883.10.20.29.1`) is not recognized. A
-  document that carries only it gets no `documentType` and `UNKNOWN_DOCUMENT_TEMPLATE`.
+  Stamped `2024-05-01` alone, its required sections are reported not evaluated, because 5.0.0 has
+  no Diagnostic Imaging Report to check them against.
+- The other 11 types are in 5.0.0 too, and a document of any of them stamped `2024-05-01` is checked
+  against that type's 5.0.0 required sections. The sections 5.0.0 requires are the ones R2.1 requires
+  for every type but one: a 5.0.0 Discharge Summary also requires a Procedures Section, a Results
+  Section and a Hospital Consultations Section. We check Procedures and Results; Hospital
+  Consultations is not in our section catalog, so `requiredSectionStatus` names it in `unasserted`.
+- The Patient Generated Document header (root `2.16.840.1.113883.10.20.29.1`) gives a document that
+  carries no other document-type `templateId` the `documentType` `"patientGeneratedDocument"`. The
+  header is not a document type in the guide: it says the patient or a related person wrote the
+  document, and its body may carry any C-CDA content, so no section is required of it. A CCD or other
+  document type that also carries the header keeps its own type, whatever the order of the
+  `templateId`s.
 
 ## Templates added or reworked after R2.1, and which we model
 

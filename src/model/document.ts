@@ -37,12 +37,13 @@ import type { ParseCtx } from "./types/_shared.js";
 import { pickMrn } from "../helpers/pick-mrn.js";
 import {
   documentTypeForOid,
+  PATIENT_GENERATED_DOCUMENT_OID,
   R21_EXTENSION,
   readTemplateStamp,
   type DocumentType,
   type TemplateStampReading,
 } from "../parser/templates.js";
-import { missingRequiredSections } from "../parser/required-sections.js";
+import { missingRequiredSections, requiredSectionStatus } from "../parser/required-sections.js";
 import { safeDerivedToken } from "../parser/tokens.js";
 import type { CcdaPosition } from "../parser/types.js";
 import {
@@ -906,14 +907,18 @@ function recognizeDocumentType(
   // established warning), while TEMPLATE_EXTENSION_UNMODELED_RELEASE is "this
   // tid carried a stamp that is not the R2.1 one". So a dual-stamped document
   // can legitimately raise either while still being R2.1-scoped.
+  //
+  // A `2024-05-01` stamp (r30-stamped) still draws the unmodelled-release code:
+  // its required sections are checked against 5.0.0, but its sections and
+  // entries are read with the R2.1 catalogs, and the stamp's own message says so.
   const tidStamp = readTemplateStamp(matched.extension);
   if (tidStamp === "unstamped") {
     ctx.emit(templateExtensionAbsent(templateIdPosition(root, matched.root)));
-  } else if (tidStamp === "unmodeled-release") {
+  } else if (tidStamp === "unmodeled-release" || tidStamp === "r30-stamped") {
     ctx.emit(
       templateExtensionUnmodeledRelease(
         templateIdPosition(root, matched.root),
-        /* v8 ignore next -- an unmodeled-release reading is made only from a present extension */
+        /* v8 ignore next -- both readings are made only from a present extension */
         matched.extension ?? "",
       ),
     );
@@ -965,17 +970,41 @@ type DocumentTemplateReading =
  * not an exotic one, so the scan matches the XPath rather than the loop that
  * happens to be here.
  *
- * It governs the THIRD state too, and that is the point worth stating: a
+ * It governs the later stamps too, and that is the point worth stating: a
  * document carrying the resolving root twice, once stamped `2015-08-01` and once
- * stamped for a later release, is inside the rule's context and stays
- * R2.1-scoped. Its obligations are evaluated, not reported unevaluated.
+ * stamped `2024-05-01` or for an unmodelled release, is inside the rule's
+ * context and stays R2.1-scoped. Only without an R2.1 stamp on that root does
+ * `2024-05-01` read `r30-stamped` and select the C-CDA 5.0.0 table.
+ *
+ * **The Patient Generated Document header resolves last.** It is a header that
+ * sits beside a document type, not a type of its own in the guide, so it names
+ * the type only when no other `templateId` resolves one, whatever the order:
+ * a CCD that also carries the header reads `ccd`.
  *
  * @internal
  */
 export function readDocumentTemplate(templateIds: readonly II[]): DocumentTemplateReading {
+  return (
+    firstDocumentTemplate(templateIds, (root) => root !== PATIENT_GENERATED_DOCUMENT_OID) ??
+    firstDocumentTemplate(templateIds, (root) => root === PATIENT_GENERATED_DOCUMENT_OID) ?? {
+      documentType: undefined,
+      stamp: "unstamped",
+      matched: undefined,
+    }
+  );
+}
+
+/**
+ * The first `templateId` whose root `accept`s and names a recognized type, read
+ * as {@link readDocumentTemplate} describes, or `undefined`. @internal
+ */
+function firstDocumentTemplate(
+  templateIds: readonly II[],
+  accept: (root: string) => boolean,
+): DocumentTemplateReading | undefined {
   for (const tid of templateIds) {
     const root = tid.root;
-    if (root === undefined) continue;
+    if (root === undefined || !accept(root)) continue;
     const documentType = documentTypeForOid(root);
     if (documentType === undefined) continue;
     const r21Stamped = templateIds.some((t) => t.root === root && t.extension === R21_EXTENSION);
@@ -985,7 +1014,7 @@ export function readDocumentTemplate(templateIds: readonly II[]): DocumentTempla
       matched: { ...tid, root },
     };
   }
-  return { documentType: undefined, stamp: "unstamped", matched: undefined };
+  return undefined;
 }
 
 /**
@@ -1013,9 +1042,13 @@ function templateIdPosition(el: Element, root: string): CcdaPosition {
  * {@link missingRequiredSections}. A no-op when the document type is
  * unrecognized (nothing to validate against). Never throws.
  *
+ * **A `2024-05-01` stamp is checked against C-CDA 5.0.0**, where 5.0.0 has the
+ * document type, through the same {@link missingRequiredSections} call.
+ *
  * **A stamp naming a release this package has not read stops the check and says
- * so.** These tables are scoped to the C-CDA R2.1 stamp, so such a document is
- * outside every one of them: it draws one `REQUIRED_SECTIONS_NOT_EVALUATED` and
+ * so**, and so does a `2024-05-01` document of a type 5.0.0 does not publish.
+ * Such a document is outside every table: it draws one
+ * `REQUIRED_SECTIONS_NOT_EVALUATED` and
  * no `REQUIRED_SECTION_MISSING` at all. It is reported rather than reduced,
  * because the alternative was silent: through `0.0.15` the same document took
  * the R1.1-origin reduction and a `2024-05-01` CCD carrying neither Social
@@ -1037,7 +1070,7 @@ function validateRequiredSections(
   stamp: TemplateStampReading,
 ): void {
   if (documentType === undefined) return;
-  if (stamp === "unmodeled-release") {
+  if (requiredSectionStatus(documentType, { stamp }).evaluation === "not-evaluated") {
     ctx.emit(requiredSectionsNotEvaluated(positionOf(root)));
     return;
   }

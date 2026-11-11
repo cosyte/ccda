@@ -1,12 +1,12 @@
 /**
- * Per-document-type **required-section** (SHALL) tables for C-CDA R2.1, traced
- * to the Implementation Guide's document-level templates. Each of the twelve
+ * Per-document-type **required-section** (SHALL) tables for C-CDA R2.1 and C-CDA
+ * 5.0.0, traced to each release's document-level templates. Each of the thirteen
  * recognized {@link DocumentType}s maps to the catalog section keys it SHALL
  * contain, used by the parser to emit `REQUIRED_SECTION_MISSING` (a Tier-2
  * **warning**, never a fatal: a missing required section never blocks reading
  * the data that *is* present).
  *
- * **Every one of the twelve rows is now read off the normative source.** Each
+ * **Every one of the thirteen rows is now read off the normative source.** Each
  * asserted key names the conformance statement it came from and the source's own
  * name for the section, each SHALL section the source names but this package
  * cannot assert is enumerated with the reason, and every row names the artifact
@@ -43,20 +43,29 @@
  * in-catalog SHALL section is asserted yet"*, **not** *"this type has no
  * requirements."* Which of those emptinesses a caller is looking at is not a
  * guess: {@link requiredSectionStatus} attaches a
- * {@link RequiredSectionVerification} to every one of the twelve types, and a
+ * {@link RequiredSectionVerification} to every one of the thirteen types, and a
  * type that was traced against the normative source names the SHALL sections it
  * still does not assert, with the reason each one is unassertable. See the
  * package README "Required-section validation" for the full provenance +
  * known-limitations note.
  *
- * **A third emptiness exists and is reported as its own state.** These rules are
- * scoped to the C-CDA R2.1 version stamp, so a document stamped for a release
- * this package has not read is outside all of them. It is reported
- * `not-evaluated` ({@link RequiredSectionEvaluation}) and draws no
- * `REQUIRED_SECTION_MISSING` at all; it emphatically does **not** fall back to
- * the R1.1-origin reduction, which is a reading of a document that carries no
- * stamp and which silently dropped Social History and Vital Signs from a
- * `2024-05-01` CCD through `0.0.15`.
+ * **A document stamped `2024-05-01` is checked against C-CDA 5.0.0.** That stamp
+ * is the one C-CDA 3.0.0 gave every document template and 4.0.0 and 5.0.0 kept
+ * ({@link TemplateStampReading} `r30-stamped`). Its keys come from
+ * `R5_REQUIRED_SECTION_TRACE` below, read off the 5.0.0 document profiles, and
+ * {@link RequiredSectionStatus.release} names `"5.0.0"`. The sections those
+ * profiles require of each document type are the same in the 3.0.0, 4.0.0 and
+ * 5.0.0 source, so one table serves the stamp all three share.
+ *
+ * **A third emptiness exists and is reported as its own state.** A document
+ * stamped for a release this package has not read (any stamp other than
+ * `2015-08-01` and `2024-05-01`), or a `2024-05-01` document of a type 5.0.0 does
+ * not publish (Diagnostic Imaging Report, removed in 3.0.0), is outside every
+ * table. It is reported `not-evaluated` ({@link RequiredSectionEvaluation}) and
+ * draws no `REQUIRED_SECTION_MISSING` at all; it emphatically does **not** fall
+ * back to the R1.1-origin reduction, which is a reading of a document that
+ * carries no stamp and which silently dropped Social History and Vital Signs
+ * from a `2024-05-01` CCD through `0.0.15`.
  *
  * **Keep the builder in lockstep.** This table and the builder's
  * `DOC_TYPE_SPECS.*.shallSections` name the same sections for the three document
@@ -178,6 +187,10 @@ const REQUIRED_SECTIONS: Readonly<Record<DocumentType, readonly string[]>> = {
     "vitalSigns",
     "reasonForReferral",
   ],
+  // US Realm Header for Patient Generated Document (…10.20.29.1:2015-08-01): its
+  // R2.1 Schematron errors rule names no section, so nothing is asserted. It is
+  // a header, and its body may carry any C-CDA content.
+  patientGeneratedDocument: [],
 };
 
 /**
@@ -274,9 +287,10 @@ export interface RequiredSectionOptions {
    * The three-state reading of the document-level `templateId`'s version stamp.
    * Supersedes {@link RequiredSectionOptions.r21Stamped} when both are given.
    *
-   * `unmodeled-release` is the state the boolean cannot hold: the obligation is
-   * **not evaluated**, so the key set is empty and
-   * {@link RequiredSectionStatus.evaluation} says which emptiness that is.
+   * `r30-stamped` reads the C-CDA 5.0.0 table. `unmodeled-release` is a state
+   * the boolean cannot hold either: the obligation is **not evaluated**, so the
+   * key set is empty and {@link RequiredSectionStatus.evaluation} says which
+   * emptiness that is.
    */
   readonly stamp?: TemplateStampReading;
 }
@@ -291,6 +305,28 @@ function stampReading(options?: RequiredSectionOptions): TemplateStampReading {
   return options?.r21Stamped === false ? "unstamped" : "r21-stamped";
 }
 
+/**
+ * The C-CDA 5.0.0 trace row a reading selects, or `undefined` when the reading is
+ * not `r30-stamped` or 5.0.0 publishes no such document type. @internal
+ */
+function r5Trace(
+  documentType: DocumentType,
+  reading: TemplateStampReading,
+): DocumentTypeTrace | undefined {
+  return reading === "r30-stamped" ? R5_REQUIRED_SECTION_TRACE[documentType] : undefined;
+}
+
+/**
+ * Whether a reading puts `documentType` inside one of the tables here. An
+ * unmodelled stamp never does; `2024-05-01` does wherever 5.0.0 has the type.
+ * @internal
+ */
+function isEvaluated(documentType: DocumentType, reading: TemplateStampReading): boolean {
+  if (reading === "unmodeled-release") return false;
+  if (reading === "r30-stamped") return r5Trace(documentType, reading) !== undefined;
+  return true;
+}
+
 /** The SHALL keys asserted for `documentType` under `options`. @internal */
 function assertedKeys(
   documentType: DocumentType,
@@ -302,7 +338,10 @@ function assertedKeys(
   // statement about a document that carries no stamp, and applying it to one
   // stamped for a later release is how a post-R2.1 CCD came to lose Social
   // History and Vital Signs in silence.
-  if (reading === "unmodeled-release") return [];
+  if (!isEvaluated(documentType, reading)) return [];
+  // The 5.0.0 table asserts exactly the keys its trace records, in its order.
+  const r5 = r5Trace(documentType, reading);
+  if (r5 !== undefined) return r5.traced.map((row) => row.key);
   const all = REQUIRED_SECTIONS[documentType];
   if (reading !== "unstamped") return all;
   const scoped = R21_SCOPED_SECTIONS[documentType];
@@ -325,6 +364,11 @@ function assertedKeys(
  * // An R1.1-origin CCD (no R2.1 stamp) drops the R2.1-scoped keys:
  * requiredSectionKeys("ccd", { r21Stamped: false });
  * // ["allergies", "medications", "problems", "results"]
+ *
+ * // A Discharge Summary stamped 2024-05-01 is read against C-CDA 5.0.0, which
+ * // also requires Procedures and Results:
+ * requiredSectionKeys("dischargeSummary", { stamp: "r30-stamped" });
+ * // ["allergies", "hospitalDischargeDiagnosis", "planOfTreatment", "procedures", "results"]
  *
  * // A CCD stamped for a release this package does not model asserts NOTHING,
  * // and it is not the R1.1-origin reduction:
@@ -373,14 +417,17 @@ export function missingRequiredSections(
 
 /**
  * How much of a {@link DocumentType}'s required-section obligation this package
- * has actually read off the normative C-CDA R2.1 base implementation guide (its
- * `CONF:1198-` document-level conformance statements and the Schematron HL7
- * publishes in that release).
+ * has actually read off the normative source of the release named in
+ * {@link RequiredSectionStatus.release}: for C-CDA R2.1, its `CONF:1198-`
+ * document-level conformance statements and the Schematron HL7 publishes in
+ * that release; for C-CDA 5.0.0, the document profiles HL7 publishes it from.
  *
  * The four states are exhaustive and mutually exclusive, so an **empty** key set
  * is never ambiguous: the value says which emptiness it is.
  *
- * **A state is about the TYPE, and no option moves it.** The orthogonal question,
+ * **A state is about the TYPE in one release.** No option moves it within a
+ * release; the `r30-stamped` reading reports the 5.0.0 row, where the type has
+ * one. The orthogonal question,
  * whether an obligation was computed for the document in front of you at all, is
  * {@link RequiredSectionEvaluation}, which is where a stamp naming an unmodelled
  * release shows up. Reading `traced-complete` beside an empty key set is not a
@@ -479,12 +526,13 @@ export type UnassertedSectionReason =
  * - `evaluated`: the keys below are this type's obligation under the supplied
  *   stamp reading. An empty set means the type asserts none, and `verification`
  *   says which emptiness that is.
- * - `not-evaluated`: **no obligation was computed.** The only route to it today
- *   is `{ stamp: "unmodeled-release" }`: the document names a C-CDA release this
- *   package has not read, so `keys` is empty because nothing was asked, not
- *   because nothing is required. Reducing the set instead would be a confident
- *   wrong statement about conformance, which is the failure this state exists to
- *   prevent.
+ * - `not-evaluated`: **no obligation was computed.** Two routes reach it:
+ *   `{ stamp: "unmodeled-release" }`, a document naming a C-CDA release this
+ *   package has not read, and `{ stamp: "r30-stamped" }` for a type C-CDA 5.0.0
+ *   does not publish (Diagnostic Imaging Report). `keys` is empty because
+ *   nothing was asked, not because nothing is required. Reducing the set instead
+ *   would be a confident wrong statement about conformance, which is the failure
+ *   this state exists to prevent.
  *
  * @example
  * ```ts
@@ -512,9 +560,13 @@ export type RequiredSectionEvaluation = "evaluated" | "not-evaluated";
 export interface UnassertedRequiredSection {
   /** The source's own name for the section. */
   readonly sourceName: string;
-  /** The conformance statement that requires it. */
+  /**
+   * The conformance statement that requires it. A C-CDA 5.0.0 row the source
+   * states only as a named invariant, with no `CONF:` id, carries that
+   * invariant's key (for example `ap-or-a-and-p`).
+   */
   readonly conformanceId: string;
-  /** Which of the two permitted reasons keeps it out of the asserted set. */
+  /** Which of the permitted reasons keeps it out of the asserted set. */
   readonly reason: UnassertedSectionReason;
 }
 
@@ -560,6 +612,18 @@ const R21_SCHEMATRON: RequiredSectionSource = {
 };
 
 /**
+ * The artifact every C-CDA 5.0.0 row was read from: the FHIR Shorthand document
+ * profiles HL7 builds the 5.0.0 publication from, in the HL7/CDA-ccda
+ * repository at tag `5.0.0` (commit `c28f02124ee026dc3979827a297392cab38a6310`,
+ * `fsh-tank/input/fsh/Document/`). The revision is that commit's own date.
+ * @internal
+ */
+const R5_PROFILES: RequiredSectionSource = {
+  artifact: "HL7 C-CDA 5.0.0 document profiles (FHIR Shorthand source, HL7/CDA-ccda tag 5.0.0)",
+  revision: "2026-06-09",
+};
+
+/**
  * A document type's required-section obligation **and** how much of it was
  * verified against the normative source: the asserted keys a caller already gets
  * from {@link requiredSectionKeys}, plus the verification state, the provenance
@@ -578,6 +642,13 @@ const R21_SCHEMATRON: RequiredSectionSource = {
 export interface RequiredSectionStatus {
   /** The document type this status is about. */
   readonly documentType: DocumentType;
+  /**
+   * The C-CDA release whose required sections `keys` were read against:
+   * `"R2.1"` for a document stamped `2015-08-01` or carrying no stamp,
+   * `"5.0.0"` for one stamped `2024-05-01`, and `undefined` when
+   * `evaluation` is `not-evaluated`. Added in a patch.
+   */
+  readonly release: "R2.1" | "5.0.0" | undefined;
   /** How much of this type's obligation was read off the normative source. */
   readonly verification: RequiredSectionVerification;
   /**
@@ -1039,6 +1110,343 @@ const REQUIRED_SECTION_TRACE: Readonly<Record<DocumentType, DocumentTypeTrace>> 
     unasserted: [],
     source: R21_SCHEMATRON,
   },
+  patientGeneratedDocument: {
+    // The R2.1 errors rule for the Patient Generated Document header
+    // (r-urn-hl7ii-2.16.840.1.113883.10.20.29.1-2015-08-01-errors) asserts header
+    // participations and no section, so the whole section obligation, none, is
+    // covered.
+    verification: "traced-complete",
+    traced: [],
+    unasserted: [],
+    source: R21_SCHEMATRON,
+  },
+};
+
+/** The 5.0.0 "Assessment and Plan" choice, as the source's invariant states it. @internal */
+const R5_AP_CHOICE: UnassertedRequiredSection = {
+  sourceName:
+    "an Assessment and Plan Section, or both an Assessment Section and a Plan of Treatment Section",
+  conformanceId: "ap-or-a-and-p",
+  reason: "not-unconditionally-required",
+};
+
+/**
+ * Document type → what was read off the C-CDA 5.0.0 document profiles for that
+ * type, the table a `2024-05-01` document is checked against. The asserted keys
+ * are exactly the `traced` keys, in order.
+ *
+ * **What was read.** Each row is the list of section components the type's
+ * `structuredBody` declares in `fsh-tank/input/fsh/Document/<Type>.fsh` at tag
+ * `5.0.0`: a component with a minimum of 1 is a SHALL section, one with a
+ * minimum of 0 is not, and a section named only in an invariant (`ap-or-a-and-p`,
+ * `ccrfv-or-cc-or-rfv`, `rfr-or-rfv`) is a choice. The `CONF:1198-` id on a
+ * traced row is the one the source's comment on that section states. Comparing
+ * the same files at tag `2024JUL` (3.0.0) and tag `4.0.0` shows the same
+ * section components and minimums for every type, so the table holds for every
+ * release that shares the `2024-05-01` stamp.
+ *
+ * **Where 5.0.0 differs from R2.1.** The Discharge Summary also requires a
+ * Procedures Section and a Results Section, and a Hospital Consultations
+ * Section; the first two are asserted here. The source's comments give both
+ * Procedures and Results `CONF:1198-30560` on the section line, a duplicate in
+ * the source that is copied as it stands. The Care Plan's Health Concerns
+ * Section carries no id on its section line, so the component's
+ * (`CONF:1198-28755`) is recorded. Every other asserted key and id is the same
+ * as in R2.1.
+ *
+ * **What has no row.** Diagnostic Imaging Report: C-CDA 3.0.0 removed it, so a
+ * `2024-05-01` document claiming it is not evaluated.
+ *
+ * @internal
+ */
+const R5_REQUIRED_SECTION_TRACE: Partial<Readonly<Record<DocumentType, DocumentTypeTrace>>> = {
+  ccd: {
+    verification: "traced-complete",
+    traced: [
+      {
+        key: "allergies",
+        conformanceId: "CONF:1198-30662",
+        sourceName: "Allergies and Intolerances Section",
+      },
+      { key: "medications", conformanceId: "CONF:1198-30664", sourceName: "Medications Section" },
+      { key: "problems", conformanceId: "CONF:1198-30666", sourceName: "Problem Section" },
+      { key: "results", conformanceId: "CONF:1198-30670", sourceName: "Results Section" },
+      {
+        key: "socialHistory",
+        conformanceId: "CONF:1198-30688",
+        sourceName: "Social History Section",
+      },
+      { key: "vitalSigns", conformanceId: "CONF:1198-30690", sourceName: "Vital Signs Section" },
+    ],
+    unasserted: [],
+    source: R5_PROFILES,
+  },
+  dischargeSummary: {
+    verification: "traced-partial",
+    traced: [
+      {
+        key: "allergies",
+        conformanceId: "CONF:1198-30520",
+        sourceName: "Allergies and Intolerances Section",
+      },
+      {
+        key: "hospitalDischargeDiagnosis",
+        conformanceId: "CONF:1198-30524",
+        sourceName: "Discharge Diagnosis Section",
+      },
+      {
+        key: "planOfTreatment",
+        conformanceId: "CONF:1198-30528",
+        sourceName: "Plan of Treatment Section",
+      },
+      { key: "procedures", conformanceId: "CONF:1198-30560", sourceName: "Procedures Section" },
+      { key: "results", conformanceId: "CONF:1198-30560", sourceName: "Results Section" },
+    ],
+    unasserted: [
+      // Recognized when framing and not asserted, for the reason the R2.1 row
+      // gives: asserting it is its own change to how Discharge Summaries parse.
+      {
+        sourceName: "Hospital Course Section",
+        conformanceId: "CONF:1198-30522",
+        reason: "assertion-would-tighten-parse",
+      },
+      {
+        sourceName: "Hospital Consultations Section",
+        conformanceId: "CONF:1198-30548",
+        reason: "outside-section-catalog",
+      },
+    ],
+    source: R5_PROFILES,
+  },
+  referralNote: {
+    verification: "traced-partial",
+    traced: [
+      {
+        key: "allergies",
+        conformanceId: "CONF:1198-30912",
+        sourceName: "Allergies and Intolerances Section",
+      },
+      { key: "medications", conformanceId: "CONF:1198-30923", sourceName: "Medications Section" },
+      { key: "problems", conformanceId: "CONF:1198-29087", sourceName: "Problem Section" },
+      {
+        key: "reasonForReferral",
+        conformanceId: "CONF:1198-30925",
+        sourceName: "Reason for Referral Section",
+      },
+    ],
+    unasserted: [R5_AP_CHOICE],
+    source: R5_PROFILES,
+  },
+  consultationNote: {
+    verification: "traced-partial",
+    traced: [
+      {
+        key: "historyOfPresentIllness",
+        conformanceId: "CONF:1198-28907",
+        sourceName: "History of Present Illness Section",
+      },
+      {
+        key: "allergies",
+        conformanceId: "CONF:1198-28911",
+        sourceName: "Allergies and Intolerances Section",
+      },
+      { key: "problems", conformanceId: "CONF:1198-28929", sourceName: "Problem Section" },
+    ],
+    unasserted: [
+      {
+        sourceName: "a Reason for Referral or Reason for Visit section",
+        conformanceId: "CONF:1198-9504",
+        reason: "not-unconditionally-required",
+      },
+      R5_AP_CHOICE,
+    ],
+    source: R5_PROFILES,
+  },
+  historyAndPhysical: {
+    verification: "traced-partial",
+    traced: [
+      {
+        key: "allergies",
+        conformanceId: "CONF:1198-30572",
+        sourceName: "Allergies and Intolerances Section",
+      },
+      {
+        key: "familyHistory",
+        conformanceId: "CONF:1198-30584",
+        sourceName: "Family History Section",
+      },
+      {
+        key: "pastMedicalHistory",
+        conformanceId: "CONF:1198-30588",
+        sourceName: "Past Medical History",
+      },
+      { key: "medications", conformanceId: "CONF:1198-30596", sourceName: "Medications Section" },
+      { key: "results", conformanceId: "CONF:1198-30606", sourceName: "Results Section" },
+      {
+        key: "socialHistory",
+        conformanceId: "CONF:1198-30610",
+        sourceName: "Social History Section",
+      },
+      { key: "vitalSigns", conformanceId: "CONF:1198-30612", sourceName: "Vital Signs Section" },
+    ],
+    unasserted: [
+      {
+        sourceName: "General Status Section",
+        conformanceId: "CONF:1198-30586",
+        reason: "outside-section-catalog",
+      },
+      {
+        sourceName: "Physical Exam Section",
+        conformanceId: "CONF:1198-30598",
+        reason: "outside-section-catalog",
+      },
+      {
+        sourceName: "Review of Systems Section",
+        conformanceId: "CONF:1198-30608",
+        reason: "outside-section-catalog",
+      },
+      {
+        sourceName:
+          "a Chief Complaint and Reason for Visit Section or a Chief Complaint Section or a Reason for Visit Section",
+        conformanceId: "ccrfv-or-cc-or-rfv",
+        reason: "not-unconditionally-required",
+      },
+      R5_AP_CHOICE,
+    ],
+    source: R5_PROFILES,
+  },
+  progressNote: {
+    verification: "traced-partial",
+    traced: [],
+    unasserted: [R5_AP_CHOICE],
+    source: R5_PROFILES,
+  },
+  procedureNote: {
+    verification: "traced-partial",
+    traced: [],
+    unasserted: [
+      {
+        sourceName: "Complications Section",
+        conformanceId: "CONF:1198-30387",
+        reason: "outside-section-catalog",
+      },
+      {
+        sourceName: "Procedure Description Section",
+        conformanceId: "CONF:1198-30356",
+        reason: "outside-section-catalog",
+      },
+      {
+        sourceName: "Procedure Indications Section",
+        conformanceId: "CONF:1198-30358",
+        reason: "outside-section-catalog",
+      },
+      {
+        sourceName: "Postprocedure Diagnosis Section",
+        conformanceId: "CONF:1198-30360",
+        reason: "outside-section-catalog",
+      },
+      R5_AP_CHOICE,
+    ],
+    source: R5_PROFILES,
+  },
+  operativeNote: {
+    verification: "traced-partial",
+    traced: [],
+    unasserted: [
+      {
+        sourceName: "Anesthesia Section",
+        conformanceId: "CONF:1198-30487",
+        reason: "outside-section-catalog",
+      },
+      {
+        sourceName: "Complications Section",
+        conformanceId: "CONF:1198-30489",
+        reason: "outside-section-catalog",
+      },
+      {
+        sourceName: "Preoperative Diagnosis Section",
+        conformanceId: "CONF:1198-30491",
+        reason: "outside-section-catalog",
+      },
+      {
+        sourceName: "Procedure Estimated Blood Loss Section",
+        conformanceId: "CONF:1198-30493",
+        reason: "outside-section-catalog",
+      },
+      {
+        sourceName: "Procedure Findings Section",
+        conformanceId: "CONF:1198-30495",
+        reason: "outside-section-catalog",
+      },
+      {
+        sourceName: "Procedure Specimens Taken Section",
+        conformanceId: "CONF:1198-30497",
+        reason: "outside-section-catalog",
+      },
+      {
+        sourceName: "Procedure Description Section",
+        conformanceId: "CONF:1198-30499",
+        reason: "outside-section-catalog",
+      },
+      {
+        sourceName: "Postoperative Diagnosis Section",
+        conformanceId: "CONF:1198-30501",
+        reason: "outside-section-catalog",
+      },
+    ],
+    source: R5_PROFILES,
+  },
+  carePlan: {
+    verification: "traced-complete",
+    traced: [
+      {
+        key: "healthConcerns",
+        conformanceId: "CONF:1198-28755",
+        sourceName: "Health Concerns Section",
+      },
+      { key: "goals", conformanceId: "CONF:1198-28762", sourceName: "Goals Section" },
+    ],
+    unasserted: [],
+    source: R5_PROFILES,
+  },
+  unstructuredDocument: {
+    // The 5.0.0 profile keeps R2.1's shape: one `nonXMLBody` (CONF:1198-31086)
+    // and no `structuredBody`, so no section obligation.
+    verification: "not-applicable",
+    traced: [],
+    unasserted: [],
+    source: R5_PROFILES,
+  },
+  transferSummary: {
+    verification: "traced-partial",
+    traced: [
+      {
+        key: "allergies",
+        conformanceId: "CONF:1198-28256",
+        sourceName: "Allergies and Intolerances Section",
+      },
+      { key: "medications", conformanceId: "CONF:1198-28278", sourceName: "Medications Section" },
+      { key: "problems", conformanceId: "CONF:1198-28284", sourceName: "Problem Section" },
+      { key: "results", conformanceId: "CONF:1198-28288", sourceName: "Results Section" },
+      { key: "vitalSigns", conformanceId: "CONF:1198-28292", sourceName: "Vital Signs Section" },
+      {
+        key: "reasonForReferral",
+        conformanceId: "CONF:1198-31343",
+        sourceName: "Reason for Referral Section",
+      },
+    ],
+    unasserted: [R5_AP_CHOICE],
+    source: R5_PROFILES,
+  },
+  patientGeneratedDocument: {
+    // The 5.0.0 US Realm Header for Patient Generated Document profile constrains
+    // header participations only; its description says the body may carry any
+    // C-CDA content. No section is required.
+    verification: "traced-complete",
+    traced: [],
+    unasserted: [],
+    source: R5_PROFILES,
+  },
 };
 
 /**
@@ -1048,9 +1456,11 @@ const REQUIRED_SECTION_TRACE: Readonly<Record<DocumentType, DocumentTypeTrace>> 
  * normative source and what is deliberately left unasserted.
  *
  * `options` narrows `keys` (and the `traced` rows beside them) exactly as
- * {@link requiredSectionKeys} does, and sets `evaluation`. It does **not** move
- * `verification`, nor `unasserted`, nor `source`: those record what was read
- * about the type, not what a particular document is asserted against.
+ * {@link requiredSectionKeys} does, and sets `evaluation` and `release`. Within
+ * one release it does **not** move `verification`, nor `unasserted`, nor
+ * `source`: those record what was read about the type. The `r30-stamped`
+ * reading selects the C-CDA 5.0.0 row, so all of them come from 5.0.0 there,
+ * where the type has a 5.0.0 row; otherwise they are the R2.1 row's.
  *
  * @example
  * ```ts
@@ -1061,19 +1471,25 @@ const REQUIRED_SECTION_TRACE: Readonly<Record<DocumentType, DocumentTypeTrace>> 
  * requiredSectionStatus("consultationNote", { r21Stamped: false }).keys; // []
  * requiredSectionStatus("ccd", { stamp: "unmodeled-release" }).evaluation;
  * // "not-evaluated"
+ * requiredSectionStatus("ccd", { stamp: "r30-stamped" }).release; // "5.0.0"
  * ```
  */
 export function requiredSectionStatus(
   documentType: DocumentType,
   options?: RequiredSectionOptions,
 ): RequiredSectionStatus {
-  const trace = REQUIRED_SECTION_TRACE[documentType];
+  const reading = stampReading(options);
+  const trace = r5Trace(documentType, reading) ?? REQUIRED_SECTION_TRACE[documentType];
   const keys = assertedKeys(documentType, options);
   const asserted = new Set(keys);
+  const evaluated = isEvaluated(documentType, reading);
+  let release: RequiredSectionStatus["release"];
+  if (evaluated) release = reading === "r30-stamped" ? "5.0.0" : "R2.1";
   return {
     documentType,
+    release,
     verification: trace.verification,
-    evaluation: stampReading(options) === "unmodeled-release" ? "not-evaluated" : "evaluated",
+    evaluation: evaluated ? "evaluated" : "not-evaluated",
     keys,
     traced: trace.traced.filter((row) => asserted.has(row.key)),
     unasserted: trace.unasserted,
@@ -1084,7 +1500,7 @@ export function requiredSectionStatus(
 /**
  * Every recognized document type's {@link RequiredSectionStatus}, in
  * {@link DOCUMENT_TYPES} order. The enumeration a consumer uses to see the whole
- * picture at once: twelve entries, each carrying exactly one verification state.
+ * picture at once: thirteen entries, each carrying exactly one verification state.
  *
  * @example
  * ```ts

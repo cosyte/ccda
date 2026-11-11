@@ -20,34 +20,43 @@ CCDA_CONFORMANCE_RELEASE; // => "R2.1"
 Every conformance table here (the required-section SHALL sets, the recognition catalogs) is written
 against that release, and nothing below moves it.
 
-**A document written for a later release is recognized and named, which is not the same as being
-read against it.** C-CDA 3.0.0 gave every document template a new `@extension`, `2024-05-01`, and
-4.0.0 and 5.0.0 kept it, so a post-R2.1 document is detectable from the `templateId` that resolves
-its type. Recognition reads that stamp into one of **three** states, and a boolean cannot hold them:
+**A document written for a later release is recognized, named, and has its required sections
+checked against C-CDA 5.0.0.** C-CDA 3.0.0 gave every document template a new `@extension`,
+`2024-05-01`, and 4.0.0 and 5.0.0 kept it, so a post-R2.1 document is detectable from the
+`templateId` that resolves its type. Recognition reads that stamp into one of **four** states, and a
+boolean cannot hold them:
 
 | the resolving `templateId` | reading             | diagnostic                                                                 | required-section verdict         |
 | -------------------------- | ------------------- | -------------------------------------------------------------------------- | -------------------------------- |
 | `@extension="2015-08-01"`  | `r21-stamped`       | none                                                                       | the full R2.1 obligation         |
+| `@extension="2024-05-01"`  | `r30-stamped`       | `TEMPLATE_EXTENSION_UNMODELED_RELEASE`                                     | the C-CDA 5.0.0 obligation       |
 | no `@extension` at all     | `unstamped`         | `TEMPLATE_EXTENSION_ABSENT`                                                | the R1.1-origin reading          |
 | any other `@extension`     | `unmodeled-release` | `TEMPLATE_EXTENSION_UNMODELED_RELEASE` + `REQUIRED_SECTIONS_NOT_EVALUATED` | **not evaluated**, never reduced |
 
-The third row is the one worth reading twice. A stamp this package does not model means the
-obligation is **reported unevaluated**, not computed smaller: a `2024-05-01` CCD carrying neither
-Social History nor Vital Signs draws no `REQUIRED_SECTION_MISSING`, and says so out loud rather than
-by omission. Parsing is otherwise unchanged: the document is read leniently, nothing is refused, and
-the clinical reading is identical to the same document stamped `2015-08-01`.
+The `2024-05-01` row reads the document type's required sections off the C-CDA 5.0.0 document
+profiles, and `requiredSectionStatus` names `release: "5.0.0"`. A `2024-05-01` CCD carrying neither
+Social History nor Vital Signs draws a `REQUIRED_SECTION_MISSING` for each, as 5.0.0's CCD requires
+both. The one type 5.0.0 does not publish, Diagnostic Imaging Report, is reported not evaluated.
+Only the required sections are read against 5.0.0: sections and entries are read with the R2.1
+catalogs, so a template added after R2.1 may be kept as narrative only.
+
+The last row is the one worth reading twice. A stamp this package does not model means the
+obligation is **reported unevaluated**, not computed smaller, and says so out loud rather than by
+omission. Parsing is otherwise unchanged: the document is read leniently, nothing is refused, and the
+clinical reading is identical to the same document stamped `2015-08-01`.
 
 **A reported stamp never comes from the document.** `CCDA_RELEASE_STAMPS` is the closed table this
 package owns (`2015-08-01` → `R2.1`, `2024-05-01` → `R3.0 or later`), and a message names a member of
 it or names no stamp at all, so a sender-controlled `@extension` cannot reach a `CcdaWarning.message`.
-`releaseForTemplateExtension` exposes that lookup, and `readTemplateStamp` the three-state reading.
+`releaseForTemplateExtension` exposes that lookup, and `readTemplateStamp` the four-state reading.
 
 The existential R2.1 rule is unchanged: a document carrying the resolving root **twice**, once
 stamped `2015-08-01` and once for a later release, is inside the Schematron rule's context and is
 evaluated under the full R2.1 obligation.
 
-**What this does not do:** it does not read a document against C-CDA 3.0.0, 4.0.0 or 5.0.0. 4.0.0
-relaxed the US Realm Header and 5.0.0 added a Pregnancy Section, and neither is modeled here.
+**What this does not do:** apart from the required sections, it does not read a document against
+C-CDA 3.0.0, 4.0.0 or 5.0.0. 4.0.0 relaxed the US Realm Header and 5.0.0 added a Pregnancy Section,
+and neither is modeled here.
 Knowing which guide a document was written for is the whole of what is claimed.
 
 ## Required-section validation
@@ -87,11 +96,13 @@ not a claim that R1.1 omitted the other two; it is the absence of a source, reco
 guessed. Both `requiredSectionKeys` and `missingRequiredSections` take an optional
 `{ r21Stamped: false }` to ask for the unstamped reading.
 
-**A document stamped for a release later than R2.1, with no R2.1 stamp on the same root, gets
-neither reading.** (One that carries both, the usual backward-compatible shape, is read as R2.1; see
-[the stamps we recognize](./spec-notes-versions.md#the-stamps-we-recognize).) It is outside those rules
-just as an unstamped document is, but it is a different document and the unstamped reduction is a
-statement about the past. Such a document draws a `REQUIRED_SECTIONS_NOT_EVALUATED` warning and **no
+**A document stamped `2024-05-01`, with no R2.1 stamp on the same root, gets neither reading.**
+(One that carries both, the usual backward-compatible shape, is read as R2.1; see
+[the stamps we recognize](./spec-notes-versions.md#the-stamps-we-recognize).) It is read against the
+C-CDA 5.0.0 table instead, with `requiredSectionStatus(type, { stamp: "r30-stamped" })` reporting
+`release: "5.0.0"`. A document stamped for any other release gets no reading at all: it is outside
+those rules just as an unstamped document is, but it is a different document and the unstamped
+reduction is a statement about the past. It draws a `REQUIRED_SECTIONS_NOT_EVALUATED` warning and **no
 `REQUIRED_SECTION_MISSING` at all**, and `requiredSectionStatus(type, { stamp: "unmodeled-release" })`
 reports `evaluation: "not-evaluated"` so an empty key set still says which emptiness it is. See
 [Which C-CDA release this validates against](#which-c-cda-release-this-validates-against).
@@ -131,17 +142,19 @@ Discharge Summary no longer asserts Discharge Medications either.
 
 ### What each document type asserts, and how much of it was verified
 
-**Every one of the twelve types reports a verification state**, so an empty asserted set is never
+**Every one of the thirteen types reports a verification state**, so an empty asserted set is never
 ambiguous. `requiredSectionStatus(documentType)` returns the same `keys` as `requiredSectionKeys`
 plus a `verification` of `traced-complete`, `traced-partial`, `untraced`, or `not-applicable`, an
-`evaluation` of `evaluated` or `not-evaluated`, the provenance (`traced`) of every key read off the
+`evaluation` of `evaluated` or `not-evaluated`, the `release` the keys were read against (`"R2.1"`,
+`"5.0.0"`, or `undefined` when not evaluated), the provenance (`traced`) of every key read off the
 source, every SHALL section left `unasserted` with the reason, and the `source` the reading was taken
-from. `requiredSectionStatuses()` returns all twelve at once, and `DOCUMENT_TYPES` enumerates the
-types themselves.
+from. `requiredSectionStatuses()` returns all thirteen at once, and `DOCUMENT_TYPES` enumerates the
+types themselves. The thirteenth, `patientGeneratedDocument`, is the Patient Generated Document
+header; its source names no section, so it asserts none and reports `traced-complete`.
 
 The two states answer different questions and neither substitutes for the other. `verification` is
-about the **type**: how much of its obligation has been read off the normative source, which no
-option moves. `evaluation` is about the **lookup**: whether the stamp you supplied put the document
+about the **type**: how much of its obligation has been read off the normative source of the release
+named in `release`, which no option moves within that release. `evaluation` is about the **lookup**: whether the stamp you supplied put the document
 inside those tables at all. `traced-complete` beside an empty key set and `not-evaluated` is not a
 contradiction; it means the obligation is fully read and this document's release is not one it
 reaches.
@@ -149,8 +162,8 @@ reaches.
 A state says what was read off the normative C-CDA R2.1 base implementation guide **for that type**,
 not what this package has ever cited: `traced-complete` claims every SHALL section the source names
 is asserted, which is a completeness claim, so a type nobody re-read stays `untraced` even when its
-keys carry conformance ids. **No recognized type reports `untraced` today**: every one of the twelve
-has had its document-level rules read.
+keys carry conformance ids. **No recognized type reports `untraced` today**: every one of the thirteen
+has had its document-level rules read, against R2.1 and, where 5.0.0 has the type, against 5.0.0.
 
 **Each status names the artifact it was read from and that artifact's own revision.**
 `status.source` carries `{ artifact, revision }`, where `revision` is the artifact's self-reported

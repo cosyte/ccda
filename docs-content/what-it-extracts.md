@@ -13,7 +13,8 @@ description: "Everything the parser reads out of a document, from the header and
   Discharge Summary, Referral Note, Consultation Note, History & Physical, Progress Note, Procedure
   Note, Operative Note, Care Plan, Diagnostic Imaging Report, Unstructured Document, Transfer Summary).
   Diagnostic Imaging Report is R2.1-only: C-CDA 3.0.0 removed it
-  ([versions we read and build](./spec-notes-versions.md)).
+  ([versions we read and build](./spec-notes-versions.md)). A document carrying only the Patient
+  Generated Document header reads as `patientGeneratedDocument`.
 - **US Realm header**: document identity (`code`, `title`, `effectiveTime`, `confidentialityCode`,
   `languageCode`) and the `recordTarget` patient (name parts, gender, birth time, marital status, race,
   ethnic group) + identifiers, via `getPatient()` / `getMrn()`.
