@@ -9,11 +9,11 @@
  * code is raised **at the element that holds it**. Dropping it with neither is
  * the one outcome no test here accepts.
  *
- * Most classes pass and are pinned as regressions. Three do not today, and they
- * are written with `it.fails` so the suite stays a true record rather than a
- * wish: each states the outcome it wants, Vitest checks that the outcome is
- * still missing, and the day a fix lands the test goes red and says so. Flip it
- * to `it` then. `docs-content/limitations.md` lists every class with its result.
+ * Every class passes and is pinned as a regression. Three of them used to fail
+ * (an entry with no templateId, a Goal Observation, an implant's device) and
+ * were written with `it.fails` until the parser kept or reported each value;
+ * they are plain tests now. `docs-content/limitations.md` lists every class
+ * with its result.
  */
 
 import { describe, expect, it } from "vitest";
@@ -143,13 +143,13 @@ describe("no silent loss: classes that keep the value", () => {
     expect(doc.warnings).toHaveLength(0);
   });
 
-  it("a REAL observation value is reported with RESULT_VALUE_TYPE_UNHANDLED", () => {
+  it("a REAL observation value keeps its number, with no warning", () => {
     const xml = documentWith(REAL_VALUE);
     const doc = parseCcda(xml);
     const value = doc.getResults()[0]?.results[0]?.value;
-    expect(value).toStrictEqual({ kind: "unsupported", xsiType: "REAL" });
+    expect(value).toStrictEqual({ kind: "real", value: 7.25, raw: "7.25" });
     const range = linesOf(xml, 'xsi:type="REAL"', "<value", "/>");
-    expect(warningsWithin(doc, range)).toStrictEqual([WARNING_CODES.RESULT_VALUE_TYPE_UNHANDLED]);
+    expect(warningsWithin(doc, range)).toStrictEqual([]);
   });
 
   it("an ED observation value keeps its text and is reported", () => {
@@ -209,30 +209,61 @@ describe("no silent loss: classes that keep the value", () => {
   });
 });
 
-describe("no silent loss: classes that still drop a value without a warning", () => {
-  // Each of these states the outcome it wants. `it.fails` passes while that
-  // outcome is missing and goes red when a fix provides it: flip it to `it`.
-
-  it.fails("a medication entry with no templateId is kept or reported", () => {
+describe("no silent loss: the classes that used to drop a value without a warning", () => {
+  it("a medication entry with no templateId is kept or reported", () => {
     expectKeptOrReported(MEDICATION_MISSING_TEMPLATE, "med-unstamped-1", {
       open: "<entry>",
       close: "</entry>",
     });
   });
 
-  it.fails("a Goal Observation in a Goals section is kept or reported", () => {
+  it("a medication entry with no templateId is reported with MISSING_TEMPLATE_ID on its act", () => {
+    const xml = documentWith(MEDICATION_MISSING_TEMPLATE);
+    const doc = parseCcda(xml);
+    const range = linesOf(xml, "med-unstamped-1", "<entry>", "</entry>");
+    expect(warningsWithin(doc, range)).toStrictEqual([WARNING_CODES.MISSING_TEMPLATE_ID]);
+  });
+
+  it("a Goal Observation in a Goals section is kept or reported", () => {
     expectKeptOrReported(GOALS_WITH_ENTRY, "SYN-GOAL-1", { open: "<entry>", close: "</entry>" });
   });
 
-  it.fails("an implant's device and UDI are kept or reported", () => {
+  it("a Goal Observation is reported with PLAN_ENTRY_NOT_MODELED on its act", () => {
+    const xml = documentWith(GOALS_WITH_ENTRY);
+    const doc = parseCcda(xml);
+    const range = linesOf(xml, "SYN-GOAL-1", "<entry>", "</entry>");
+    expect(warningsWithin(doc, range)).toStrictEqual([WARNING_CODES.PLAN_ENTRY_NOT_MODELED]);
+  });
+
+  it("an implant's device and UDI are kept or reported", () => {
     expectKeptOrReported(IMPLANTS, "(01)99999999999999", {
+      open: "<participant",
+      close: "</participant>",
+    });
+    expectKeptOrReported(IMPLANTS, "SYN-DEVICE-1", {
       open: "<participant",
       close: "</participant>",
     });
   });
 
-  // The halves of those three that do hold today, so a regression in them is
-  // not hidden behind the expected failure above.
+  it("an implant's device code and UDI are kept on the procedure", () => {
+    const procedure = parse(IMPLANTS).getProcedures()[0];
+    expect(procedure?.devices).toHaveLength(1);
+    const device = procedure?.devices?.[0];
+    expect(device?.ids.map((id) => [id.root, id.extension])).toStrictEqual([
+      ["2.16.840.1.113883.3.3719", "(01)99999999999999(17)991231(10)SYN1(21)SYN2"],
+    ]);
+    expect(device?.code?.code).toBe("SYN-DEVICE-1");
+  });
+
+  it("a Procedure Activity Procedure in Medical Equipment is not flagged as misplaced", () => {
+    // The C-CDA R2.1 Medical Equipment Section (V2) names this entry itself:
+    // CONF:1098-31885 / 1098-31886.
+    const doc = parse(IMPLANTS);
+    expect(doc.warnings.map((w) => w.code)).not.toContain(WARNING_CODES.SECTION_PLACEMENT_SUSPECT);
+  });
+
+  // The parts of those three that held before the fix, kept as regressions.
   it("the stamped medication beside the unstamped one is still read", () => {
     const doc = parse(MEDICATION_MISSING_TEMPLATE);
     expect(doc.getMedications().map((m) => m.drug?.code)).toStrictEqual(["SYN-RX-4"]);
@@ -247,5 +278,181 @@ describe("no silent loss: classes that still drop a value without a warning", ()
     const doc = parse(IMPLANTS);
     expect(doc.getProcedures().map((p) => p.code?.code)).toStrictEqual(["SYN-IMPLANT-PROC"]);
     expect(doc.findSection("medicalEquipment")?.narrativeText).toBe("Synthetic implant.");
+  });
+});
+
+describe("no silent loss: an entry with no templateId, in every section that reads entries", () => {
+  // Every entry family is routed by templateId, so an entry act with none
+  // reaches no extractor. Each section and each act element name is checked,
+  // not only the medication that was first reported.
+  const SECTIONS: ReadonlyArray<readonly [string, string, string]> = [
+    ["Allergies", "2.16.840.1.113883.10.20.22.2.6.1", "48765-2"],
+    ["Medications", "2.16.840.1.113883.10.20.22.2.1.1", "10160-0"],
+    ["Problems", "2.16.840.1.113883.10.20.22.2.5.1", "11450-4"],
+    ["Results", "2.16.840.1.113883.10.20.22.2.3.1", "30954-2"],
+    ["Vital Signs", "2.16.840.1.113883.10.20.22.2.4.1", "8716-3"],
+    ["Procedures", "2.16.840.1.113883.10.20.22.2.7.1", "47519-4"],
+    ["Immunizations", "2.16.840.1.113883.10.20.22.2.2.1", "11369-6"],
+    ["Social History", "2.16.840.1.113883.10.20.22.2.17", "29762-2"],
+    ["Encounters", "2.16.840.1.113883.10.20.22.2.22.1", "46240-8"],
+    ["Plan of Treatment", "2.16.840.1.113883.10.20.22.2.10", "18776-5"],
+    ["Functional Status", "2.16.840.1.113883.10.20.22.2.14", "47420-5"],
+    ["Mental Status", "2.16.840.1.113883.10.20.22.2.56", "10190-7"],
+    ["Family History", "2.16.840.1.113883.10.20.22.2.15", "10157-6"],
+    ["Past Medical History", "2.16.840.1.113883.10.20.22.2.20", "11348-0"],
+    ["Medical Equipment", "2.16.840.1.113883.10.20.22.2.23", "46264-8"],
+    ["Goals", "2.16.840.1.113883.10.20.22.2.60", "61146-7"],
+  ];
+  const ACTS = [
+    "act",
+    "substanceAdministration",
+    "observation",
+    "organizer",
+    "procedure",
+    "encounter",
+    "supply",
+  ] as const;
+
+  for (const [title, root, loinc] of SECTIONS) {
+    it(`reports an unstamped entry act in ${title}`, () => {
+      const entries = ACTS.map(
+        (name, i) => `
+          <entry>
+            <${name} classCode="ACT" moodCode="EVN">
+              <id root="2.16.840.1.113883.19.5.99999.61" extension="unstamped-${String(i)}"/>
+              <code code="SYN-UNSTAMPED-${String(i)}" codeSystem="2.16.840.1.113883.6.96"/>
+            </${name}>
+          </entry>`,
+      ).join("");
+      const sections = `
+      <component>
+        <section>
+          <templateId root="${root}"/>
+          <code code="${loinc}" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>${title}</title>
+          <text>Synthetic section.</text>${entries}
+        </section>
+      </component>`;
+      const xml = documentWith(sections);
+      const doc = parseCcda(xml);
+      for (const [i] of ACTS.entries()) {
+        const range = linesOf(xml, `unstamped-${String(i)}"`, "<entry>", "</entry>");
+        expect(warningsWithin(doc, range), `act ${String(i)} in ${title}`).toStrictEqual([
+          WARNING_CODES.MISSING_TEMPLATE_ID,
+        ]);
+      }
+    });
+  }
+
+  it("does not report an entry act that carries a templateId", () => {
+    const doc = parse(MEDICATION_SECOND_TEMPLATE);
+    expect(doc.warnings.map((w) => w.code)).not.toContain(WARNING_CODES.MISSING_TEMPLATE_ID);
+  });
+});
+
+describe("no silent loss: the edges of the fixes", () => {
+  const SNOMED = "2.16.840.1.113883.6.96";
+  const IDS = "2.16.840.1.113883.19.5.99999.61";
+
+  /** One procedure entry, in a section given by its templateId root and LOINC. */
+  function procedureIn(root: string, loinc: string, inner: string): string {
+    return `
+      <component>
+        <section>
+          <templateId root="${root}"/>
+          <code code="${loinc}" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Synthetic section</title>
+          <text>Synthetic procedure.</text>
+          <entry>
+            <procedure classCode="PROC" moodCode="EVN">
+              <templateId root="2.16.840.1.113883.10.20.22.4.14" extension="2014-06-09"/>
+              <id root="${IDS}" extension="edge-proc-1"/>
+              <code code="SYN-EDGE-PROC" codeSystem="${SNOMED}" displayName="Synthetic procedure"/>
+              <statusCode code="completed"/>${inner}
+            </procedure>
+          </entry>
+        </section>
+      </component>`;
+  }
+  const PROCEDURES = ["2.16.840.1.113883.10.20.22.2.7.1", "47519-4"] as const;
+
+  it("keeps a REAL value's nullFlavor and gives no number when it has no @value", () => {
+    const doc = parse(REAL_VALUE.replace('value="7.25"', 'nullFlavor="UNK"'));
+    expect(doc.getResults()[0]?.results[0]?.value).toStrictEqual({
+      kind: "real",
+      nullFlavor: "UNK",
+    });
+  });
+
+  it("withholds a REAL number a nullFlavor contradicts, and keeps its token", () => {
+    const doc = parse(REAL_VALUE.replace('value="7.25"', 'value="7.25" nullFlavor="UNK"'));
+    expect(doc.getResults()[0]?.results[0]?.value).toStrictEqual({
+      kind: "real",
+      raw: "7.25",
+      nullFlavor: "UNK",
+    });
+    expect(doc.warnings.map((w) => w.code)).toContain(WARNING_CODES.CONTRADICTORY_NULL_FLAVOR);
+  });
+
+  it("reports a REAL whose @value is not a number, and keeps no number", () => {
+    const doc = parse(REAL_VALUE.replace('value="7.25"', 'value="seven"'));
+    expect(doc.getResults()[0]?.results[0]?.value).toStrictEqual({
+      kind: "unsupported",
+      xsiType: "REAL",
+    });
+    expect(doc.warnings.map((w) => w.code)).toContain(WARNING_CODES.RESULT_VALUE_TYPE_UNHANDLED);
+  });
+
+  it("reads only DEV participants with a role, and a device with no code keeps its ids", () => {
+    const doc = parse(
+      procedureIn(
+        ...PROCEDURES,
+        `
+              <participant typeCode="LOC">
+                <participantRole classCode="SDLOC"><id root="${IDS}" extension="loc-1"/></participantRole>
+              </participant>
+              <participant typeCode="DEV"/>
+              <participant typeCode="DEV">
+                <participantRole classCode="MANU"><id root="${IDS}" extension="dev-no-playing"/></participantRole>
+              </participant>
+              <participant typeCode="DEV">
+                <participantRole classCode="MANU">
+                  <id root="${IDS}" extension="dev-no-code"/>
+                  <playingDevice/>
+                </participantRole>
+              </participant>`,
+      ),
+    );
+    const devices = doc.getProcedures()[0]?.devices;
+    expect(devices).toStrictEqual([
+      { ids: [{ root: IDS, extension: "dev-no-playing" }] },
+      { ids: [{ root: IDS, extension: "dev-no-code" }] },
+    ]);
+  });
+
+  it("gives a procedure with no device participant no devices field", () => {
+    const procedure = parse(procedureIn(...PROCEDURES, "")).getProcedures()[0];
+    expect(procedure).toBeDefined();
+    expect(procedure && "devices" in procedure).toBe(false);
+  });
+
+  it("still flags a Procedure Activity Procedure in a section the guide does not name", () => {
+    // Results is neither its home nor Medical Equipment.
+    const doc = parse(procedureIn("2.16.840.1.113883.10.20.22.2.3.1", "30954-2", ""));
+    expect(doc.warnings.map((w) => w.code)).toContain(WARNING_CODES.SECTION_PLACEMENT_SUSPECT);
+  });
+
+  it("reports nothing for an entry that holds no clinical statement", () => {
+    const doc = parse(`
+      <component>
+        <section>
+          <templateId root="2.16.840.1.113883.10.20.22.2.60"/>
+          <code code="61146-7" codeSystem="2.16.840.1.113883.6.1"/>
+          <title>Goals</title>
+          <text>Synthetic goal.</text>
+          <entry/>
+        </section>
+      </component>`);
+    expect(doc.warnings.map((w) => w.code)).not.toContain(WARNING_CODES.MISSING_TEMPLATE_ID);
   });
 });

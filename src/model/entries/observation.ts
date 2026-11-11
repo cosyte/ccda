@@ -5,9 +5,12 @@
  * coded result, a free-text `ST`, an `IVL_PQ` range), so this module reads it
  * into a discriminated {@link ObservationValue} union, runs the **computable
  * UCUM** unit check on any physical quantity, and reads a result's reference
- * range. The lenient invariant holds throughout: an unrecognized `xsi:type` is
- * preserved as an `unsupported` value (nothing dropped), and a `PQ` with a
- * non-UCUM unit keeps its raw unit string, units are never normalized away.
+ * range. An unrecognized `xsi:type` becomes an `unsupported` value flagged with
+ * `RESULT_VALUE_TYPE_UNHANDLED`; it keeps the type name and the element's text
+ * (`raw`), and nothing else: a type whose content sits in attributes or child
+ * elements (an `MO` amount, an `RTO` ratio) is reported, not decoded, and its
+ * content is only in `doc.toString()`. A `PQ` with a non-UCUM unit keeps its raw
+ * unit string, units are never normalized away.
  */
 
 import { attr, child, positionOf, text, xsiType } from "../dom.js";
@@ -31,18 +34,20 @@ import type { Element } from "@xmldom/xmldom";
  * A parsed observation `value`, discriminated on `kind`. `physicalQuantity`
  * carries a UCUM-checked {@link PQ}; `coded` a {@link CD}; `string` a free-text
  * value; `integer` a count/score (`xsi:type="INT"`, the type C-CDA prefers for
- * an assessment-scale score, units are not allowed on an `INT`); `range` an
- * {@link IVL_PQ}. `unsupported` preserves an `xsi:type` the model does not
- * specialize (with any raw text) so nothing is ever discarded. `integer` keeps
- * `value` and `nullFlavor` distinct, a scored `INT` never collapses into an
- * unknown one, and vice versa.
+ * an assessment-scale score, units are not allowed on an `INT`); `real` a
+ * unitless decimal number (`xsi:type="REAL"`); `range` an {@link IVL_PQ}.
+ * `unsupported` marks an `xsi:type` the model does not specialize: it keeps the
+ * type name and any text content, and is always reported with
+ * `RESULT_VALUE_TYPE_UNHANDLED`. `integer` and `real` keep `value` and
+ * `nullFlavor` distinct, a scored `INT` never collapses into an unknown one,
+ * and vice versa.
  *
- * `integer` and `string` carry a `nullFlavor` beside their content for the same
- * reason every v3 datatype does, and `integer` mirrors `PQ` exactly: `raw` is
- * the verbatim `@value` token and `value` the parsed number, so when a
- * `nullFlavor` contradicts the score the parser withholds `value` and keeps
- * `raw` (see {@link parsePq}). These two arms are parsed inline here rather
- * than through `src/model/types/`, so they route through the shared
+ * `integer`, `real` and `string` carry a `nullFlavor` beside their content for
+ * the same reason every v3 datatype does, and `integer` and `real` mirror `PQ`
+ * exactly: `raw` is the verbatim `@value` token and `value` the parsed number,
+ * so when a `nullFlavor` contradicts the number the parser withholds `value`
+ * and keeps `raw` (see {@link parsePq}). These arms are parsed inline here
+ * rather than through `src/model/types/`, so they route through the shared
  * contradiction check explicitly.
  *
  * @example
@@ -60,6 +65,12 @@ export type ObservationValue =
   | { readonly kind: "string"; readonly value: string; readonly nullFlavor?: string }
   | {
       readonly kind: "integer";
+      readonly value?: number;
+      readonly raw?: string;
+      readonly nullFlavor?: string;
+    }
+  | {
+      readonly kind: "real";
       readonly value?: number;
       readonly raw?: string;
       readonly nullFlavor?: string;
@@ -159,46 +170,14 @@ export function readObservationValue(
         ? { kind: "string", value }
         : { kind: "string", value, nullFlavor };
     }
-    case "INT": {
+    case "INT":
       // A count/score (an assessment-scale score, a questionnaire answer). Units
-      // are not allowed on an INT, so there is no UCUM check. Value and nullFlavor
-      // are read as distinct fields, an explicit-unknown score (nullFlavor="UNK")
-      // is never collapsed into a real one, nor a real one dropped.
-      const raw = attr(valueEl, "value");
-      const nullFlavor = attr(valueEl, "nullFlavor");
-      // A nullFlavor asserted beside a score is the same contradiction a
-      // doseQuantity carries, on the slot that holds assessment-scale scores, so
-      // it gets the same answer: flag it, keep `raw`, withhold the number.
-      const contradicted = contradictsAssertedValue(
-        valueEl,
-        "INT",
-        nullFlavor,
-        raw !== undefined,
-        ctx,
-      );
-      if (raw !== undefined) {
-        // Strict numeric parse, reject whitespace-only / non-numeric so a malformed
-        // INT is never coerced into a fabricated score (e.g. Number(" ") === 0). An
-        // un-parseable @value is preserved + flagged (Postel: never a silent drop),
-        // exactly as any other unhandled typed value.
-        const trimmed = raw.trim();
-        const n = trimmed === "" ? Number.NaN : Number(trimmed);
-        if (!Number.isFinite(n)) return readUnsupported(valueEl, "INT", position, ctx);
-        const out: { kind: "integer"; value?: number; raw?: string; nullFlavor?: string } = {
-          kind: "integer",
-          raw,
-        };
-        if (!contradicted) out.value = n;
-        if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
-        return out;
-      }
-      // No @value: an explicit-unknown score (nullFlavor="UNK") or a bare INT, read
-      // as an integer with no number, never a fabricated one, and never a warning
-      // (a nullFlavor score is a legitimate, spec-clean "unknown").
-      const out: { kind: "integer"; nullFlavor?: string } = { kind: "integer" };
-      if (nullFlavor !== undefined) out.nullFlavor = nullFlavor;
-      return out;
-    }
+      // are not allowed on an INT, so there is no UCUM check.
+      return readNumber(valueEl, "INT", "integer", position, ctx);
+    case "REAL":
+      // A unitless decimal number. Like INT it carries no unit, so there is no
+      // UCUM check; until it was read here the number reached no model field.
+      return readNumber(valueEl, "REAL", "real", position, ctx);
     case "IVL_PQ": {
       const range = parseIvlPq(valueEl, ctx);
       /* v8 ignore next -- parseIvlPq returns undefined only for an absent element, and valueEl is present */
@@ -253,7 +232,57 @@ export function readReferenceRange(obs: Element, ctx: ParseCtx): ReferenceRange 
   return Object.keys(out).length === 0 ? undefined : out;
 }
 
-/** Preserve an unrecognized/untyped value as `unsupported`, flagging a typed one. @internal */
+/**
+ * Read an `INT` or `REAL` value into its numeric arm. Value and nullFlavor are
+ * read as distinct fields: an explicit-unknown number (`nullFlavor="UNK"`) is
+ * never collapsed into a real one, nor a real one dropped. @internal
+ */
+function readNumber(
+  valueEl: Element,
+  datatype: "INT" | "REAL",
+  kind: "integer" | "real",
+  position: CcdaPosition,
+  ctx: ParseCtx,
+): ObservationValue {
+  const raw = attr(valueEl, "value");
+  const nullFlavor = attr(valueEl, "nullFlavor");
+  // A nullFlavor asserted beside a number is the same contradiction a
+  // doseQuantity carries, on the slot that holds assessment-scale scores, so it
+  // gets the same answer: flag it, keep `raw`, withhold the number.
+  const contradicted = contradictsAssertedValue(
+    valueEl,
+    datatype,
+    nullFlavor,
+    raw !== undefined,
+    ctx,
+  );
+  if (raw !== undefined) {
+    // Strict numeric parse, reject whitespace-only / non-numeric so a malformed
+    // value is never coerced into a fabricated number (e.g. Number(" ") === 0).
+    // An un-parseable @value is read as unsupported and flagged with
+    // RESULT_VALUE_TYPE_UNHANDLED, exactly as any other unhandled typed value:
+    // no number is invented, and the token itself is only in doc.toString().
+    const trimmed = raw.trim();
+    const n = trimmed === "" ? Number.NaN : Number(trimmed);
+    if (!Number.isFinite(n)) return readUnsupported(valueEl, datatype, position, ctx);
+    return {
+      kind,
+      raw,
+      ...(contradicted ? {} : { value: n }),
+      ...(nullFlavor === undefined ? {} : { nullFlavor }),
+    };
+  }
+  // No @value: an explicit-unknown number (nullFlavor="UNK") or a bare element,
+  // read with no number, never a fabricated one, and never a warning (a
+  // nullFlavor number is a legitimate, spec-clean "unknown").
+  return nullFlavor === undefined ? { kind } : { kind, nullFlavor };
+}
+
+/**
+ * Mark an unrecognized/untyped value as `unsupported`, flagging a typed one. It
+ * keeps the type name and the element's text content; attribute and child
+ * content is not read (the warning is what says so). @internal
+ */
 function readUnsupported(
   valueEl: Element,
   t: string | undefined,

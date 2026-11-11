@@ -666,10 +666,11 @@ export class CcdaDocument {
    * returns **seven** entry templates and the Plan of Treatment Section admits
    * **eleven**: Instruction (`…22.4.20`), Handoff Communication Participants
    * (`…22.4.141`), Nutrition Recommendation (`…22.4.130`) and Goal Observation
-   * (`…22.4.121`) are not acts planned for the patient and are not returned, and
-   * nothing is raised about them. A Goal Observation is the clearest of the four:
-   * it is `moodCode="GOL"`, which this parser calls neither performed nor
-   * planned. And a planned entry is reached as a direct `<entry>` act or nested
+   * (`…22.4.121`) are not acts planned for the patient and are not returned;
+   * each is reported with `PLAN_ENTRY_NOT_MODELED` instead (the first three where
+   * planned items are read, a Goal Observation wherever it is a section's direct
+   * entry). A Goal Observation is the clearest of the four: it is
+   * `moodCode="GOL"`, which this parser calls neither performed nor planned. And a planned entry is reached as a direct `<entry>` act or nested
    * inside a **Planned Intervention Act** (`…22.4.146`), the one container R2.1
    * lets hold all seven inline. **Nesting is not solved in general**: R2.1 also
    * puts planned acts inside a Nutrition Recommendation (`…22.4.130`, six of the

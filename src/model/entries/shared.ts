@@ -139,6 +139,14 @@ export const PLANNED_INTERVENTION_ACT = "2.16.840.1.113883.10.20.22.4.146";
  */
 export const INSTRUCTION = "2.16.840.1.113883.10.20.22.4.20";
 /**
+ * Goal Observation, an `<observation moodCode="GOL">` recording a goal for the
+ * patient. **Not modelled**: it is neither performed nor planned in this
+ * package's mood model, so it is not a {@link PlannedItem}. Recognized only so
+ * that a section's direct entry carrying it is reported
+ * (`PLAN_ENTRY_NOT_MODELED`) rather than dropped in silence.
+ */
+export const GOAL_OBSERVATION = "2.16.840.1.113883.10.20.22.4.121";
+/**
  * Handoff Communication Participants, an `<act>` naming who handed care over to
  * whom. Not a {@link PlannedItem} either: it describes a communication, not a
  * planned act. Reported where planned items are read, never returned. No
@@ -254,6 +262,22 @@ export const ENTRY_ROOT_TO_SECTION: ReadonlyMap<string, string> = new Map([
   [MENTAL_STATUS_ORGANIZER, "mentalStatus"],
   [MENTAL_STATUS_OBSERVATION, "mentalStatus"],
   [FAMILY_HISTORY_ORGANIZER, "familyHistory"],
+]);
+
+/**
+ * The sections, beside its home in {@link ENTRY_ROOT_TO_SECTION}, where the
+ * C-CDA R2.1 guide names an entry root as a direct entry, so an entry there is
+ * not flagged `SECTION_PLACEMENT_SUSPECT`.
+ *
+ * Each pair is traced to the R2.1 schematron (HL7/CDA-ccda-2.1 at commit
+ * `6d3ed96`, the one `scripts/conformance/artifacts.json` pins), not stated from
+ * memory. Medical Equipment Section (V2): "SHOULD contain zero or more [0..*]
+ * entry (CONF:1098-31885) such that it SHALL contain exactly one [1..1]
+ * Procedure Activity Procedure (V2)" (CONF:1098-31886); that is how an implant
+ * is recorded. @internal
+ */
+export const ENTRY_ROOT_OTHER_SECTIONS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  [PROCEDURE_ACTIVITY_PROCEDURE, new Set(["medicalEquipment"])],
 ]);
 
 /**

@@ -4040,9 +4040,9 @@ describe("clinical entries, planned entries nested in a Planned Intervention Act
  *
  * What is worth pinning is mostly what did NOT change. Reporting an entry is not
  * modelling it, so `getPlannedItems()` must be identical to base on every one of
- * these documents, and the fourth admitted-but-unreturned template, Goal
- * Observation, must stay silent because the decision on it was to model it
- * rather than warn about it.
+ * these documents. The fourth admitted-but-unreturned template, Goal
+ * Observation, is reported too, under the same code with its own wording, and
+ * still not returned.
  */
 describe("clinical entries, the admitted-but-unmodelled plan entries", () => {
   const INSTRUCTION_XML = `<act classCode="ACT" moodCode="INT">
@@ -4061,7 +4061,7 @@ describe("clinical entries, the admitted-but-unmodelled plan entries", () => {
               <id root="2.16.840.1.113883.19.5.99999.20" extension="nutr-1"/>
               <statusCode code="active"/>
             </act>`;
-  /** The fourth admitted-but-unreturned template, deliberately NOT reported. */
+  /** The fourth admitted-but-unreturned template, reported on its own wording. */
   const GOAL_XML = `<observation classCode="OBS" moodCode="GOL">
               <templateId root="2.16.840.1.113883.10.20.22.4.121" extension="2022-06-01"/>
               <id root="2.16.840.1.113883.19.5.99999.20" extension="goal-1"/>
@@ -4297,13 +4297,17 @@ describe("clinical entries, the admitted-but-unmodelled plan entries", () => {
     expect(planEntry(unrecognized.warnings)).toStrictEqual([]);
   });
 
-  it("does NOT report a Goal Observation, the fourth admitted-but-unreturned template", () => {
-    // Deliberate. The decision taken on Goal Observation was to MODEL it, with
-    // its own IG grounding; a warning here would pre-empt that with a weaker
-    // answer, and would then be a stable code to retire later.
+  it("reports a Goal Observation once, on its own wording, and still returns no item", () => {
+    // Goals are not modelled. Until they are, a goal is reported rather than
+    // dropped in silence: once per direct entry, by the section walk, never a
+    // second time by the Plan of Treatment reading.
     const doc = parseCcda(buildCcda({ sections: planOfTreatment(entry(GOAL_XML)) }));
     expect(doc.getPlannedItems()).toStrictEqual([]);
-    expect(planEntry(doc.warnings)).toStrictEqual([]);
+    const reported = planEntry(doc.warnings);
+    expect(reported).toHaveLength(1);
+    expect(reported[0]?.message).toMatch(
+      /^A Goal Observation template was found as a section entry/,
+    );
   });
 
   it("does NOT report a performed act the Planned Intervention Act also holds", () => {

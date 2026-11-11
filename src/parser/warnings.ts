@@ -307,10 +307,11 @@ export type SubjectLocus = (typeof SUBJECT_LOCI)[number];
  * close a cycle. The **OIDs** are deliberately not repeated here: they live in
  * one place (`shared.ts`), and this file names templates, never OIDs.
  *
- * **Goal Observation is deliberately not a member.** It is `moodCode="GOL"`,
- * which `classifyDisposition` calls neither performed nor planned, and modelling
- * it is a separate piece of work with its own IG grounding rather than a
- * diagnostic.
+ * **Goal Observation is not a member, and is reported on its own wording.** It
+ * is `moodCode="GOL"`, which `classifyDisposition` calls neither performed nor
+ * planned, and it is reported wherever it is a section's direct entry (a Goals
+ * section above all), not only where planned items are read; see
+ * {@link goalObservationNotModeled}.
  */
 export const UNMODELED_PLAN_ENTRIES = [
   "instruction",
@@ -415,7 +416,7 @@ export const WARNING_MESSAGES: Readonly<Record<WarningCode, string>> = Object.fr
   FREE_TEXT_REFERENCE_RANGE:
     "Reference range is free text, not a structured low/high interval; preserved as text, not numerically comparable.",
   RESULT_VALUE_TYPE_UNHANDLED:
-    "The observation value's xsi:type is not specialized; raw value preserved as unsupported.",
+    "The observation value's xsi:type is not specialized; it is read as unsupported, keeping the type name and any text content. Content held in the value's attributes or child elements is not in the model and survives only in the re-serialized document.",
   IMMUNIZATION_REFUSED:
     'Immunization activity carries negationInd="true" (vaccine not administered / refused); modeled as refused, never as given.',
   DEPRECATED_LOINC:
@@ -559,7 +560,7 @@ const TEMPLATE_EXTENSION_UNMODELED_RELEASE_BY_STAMP: Readonly<Record<string, str
  *
  * @internal
  */
-const V3_DATATYPES = ["PQ", "TS", "CD", "II", "ST", "ED", "BL", "INT"] as const;
+const V3_DATATYPES = ["PQ", "TS", "CD", "II", "ST", "ED", "BL", "INT", "REAL"] as const;
 
 const CONTRADICTORY_NULL_FLAVOR_BY_DATATYPE = tableOver(
   V3_DATATYPES,
@@ -608,6 +609,23 @@ const SUBJECT_CONTEXT_OVERRIDE_BY_LOCUS: Readonly<Record<string, string>> = tabl
       : "This section carries a subject declaration, which CDA R2 makes the primary target of the entries it governs. It governs no entry, here or in any section nested inside it, so nothing is withheld and the declaration is reported rather than left silent; a section that declares somebody else's subject is never quiet merely because it is empty. What the declaration names is never compared with the record target.",
 );
 
+/**
+ * The `PLAN_ENTRY_NOT_MODELED` wording for a Goal Observation, which is reported
+ * wherever it is a section's direct entry rather than only where planned items
+ * are read. @internal
+ */
+const PLAN_ENTRY_NOT_MODELED_GOAL =
+  "A Goal Observation template was found as a section entry; this parser recognizes it but does not model it, so it reaches no model field and survives only in the re-serialized document.";
+
+/**
+ * The `MISSING_TEMPLATE_ID` wording for a section entry's clinical statement.
+ * The generic wording says recognition fell back to other signals, which is true
+ * of a document root or a section and false of an entry: entries are recognized
+ * by templateId alone, so an entry with none is not read at all. @internal
+ */
+const MISSING_TEMPLATE_ID_ON_ENTRY =
+  "A section entry's clinical statement carries no templateId; entries are recognized by templateId alone, so this one reaches no model field and survives only in the re-serialized document.";
+
 /** The two arm-relative wordings of `MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY`. @internal */
 const TRANSLATION_ONLY_BY_ARM = Object.freeze({
   selected: `${WARNING_MESSAGES.MEDICATION_PRODUCT_CODE_TRANSLATION_ONLY} The coding is somewhere on the returned CD's translation list rather than on its code (search the list, the first entry need not be the one naming the product).`,
@@ -636,6 +654,8 @@ export const ALL_WARNING_MESSAGES: ReadonlySet<string> = new Set([
   ...Object.values(CONTRADICTORY_NULL_FLAVOR_BY_DATATYPE),
   ...Object.values(TRANSLATION_ONLY_BY_ARM),
   ...Object.values(PLAN_ENTRY_NOT_MODELED_BY_ENTRY),
+  PLAN_ENTRY_NOT_MODELED_GOAL,
+  MISSING_TEMPLATE_ID_ON_ENTRY,
   ...Object.values(SUBJECT_CONTEXT_OVERRIDE_BY_LOCUS),
   ...Object.values(TEMPLATE_EXTENSION_UNMODELED_RELEASE_BY_STAMP),
 ]);
@@ -675,6 +695,28 @@ export function missingTemplateId(position: CcdaPosition): CcdaWarning {
   return {
     code: WARNING_CODES.MISSING_TEMPLATE_ID,
     message: WARNING_MESSAGES.MISSING_TEMPLATE_ID,
+    position,
+  };
+}
+
+/**
+ * Build a `MISSING_TEMPLATE_ID` warning for a section entry. Emitted when the
+ * clinical statement inside a section's direct `<entry>` carries no
+ * `templateId`. Every entry family is routed by `templateId`, so such an entry
+ * reaches no model field; this is what says so, at the statement that holds the
+ * lost content.
+ *
+ * (No `@example` import: this factory is not on the package entry point.)
+ *
+ * @example
+ * ```ts
+ * const w = missingEntryTemplateId({ path: "substanceAdministration" });
+ * ```
+ */
+export function missingEntryTemplateId(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.MISSING_TEMPLATE_ID,
+    message: MISSING_TEMPLATE_ID_ON_ENTRY,
     position,
   };
 }
@@ -1952,12 +1994,15 @@ export function freeTextReferenceRange(position: CcdaPosition): CcdaWarning {
 }
 
 /**
- * Build a `RESULT_VALUE_TYPE_UNHANDLED` warning. Emitted when a result/vital
- * observation `value` carries an `xsi:type` the model does not specialize
- * (anything beyond `PQ`/`CD`/`CE`/`ST`/`IVL_PQ`). The raw value is preserved as
- * an `unsupported` value so nothing is dropped, only the typed view is absent.
- * The type name is **not** in the message; it is on the model as
- * `unsupported.xsiType`, bounded to the HL7 v3 datatype names.
+ * Build a `RESULT_VALUE_TYPE_UNHANDLED` warning. Emitted when an observation
+ * `value` carries an `xsi:type` the model does not specialize (anything beyond
+ * `PQ`/`CD`/`CE`/`ST`/`INT`/`REAL`/`IVL_PQ`). The value becomes an
+ * `unsupported` value that keeps the type name and the element's text content;
+ * content held in attributes or child elements (an `MO` amount, an `RTO`
+ * ratio) is not in the model and survives only in the re-serialized document,
+ * which is why this warning is raised. The type name is **not** in the message;
+ * it is on the model as `unsupported.xsiType`, bounded to the HL7 v3 datatype
+ * names.
  *
  * @example
  * ```ts
@@ -2189,11 +2234,9 @@ export function missingSelfCareActivity(position: CcdaPosition): CcdaWarning {
  * `entry` is a member of the closed {@link UNMODELED_PLAN_ENTRIES} list, so the
  * variant wording names a parser constant and never document text.
  *
- * **Goal Observation, the fourth admitted-but-unreturned template, is
- * deliberately not reported here.** Modelling it is a separate piece of work
- * (it is `moodCode="GOL"`, neither performed nor planned in this package's mood
- * model, and a conformant Planned Intervention Act must reference one), and a
- * diagnostic is not a stand-in for it.
+ * **Goal Observation, the fourth admitted-but-unreturned template, is reported
+ * by {@link goalObservationNotModeled}** under the same code, wherever it is a
+ * section's direct entry.
  *
  * (No `@example` import: this factory is not on the package entry point.)
  *
@@ -2213,6 +2256,29 @@ export function planEntryNotModeled(
       entry,
       WARNING_MESSAGES.PLAN_ENTRY_NOT_MODELED,
     ),
+    position,
+  };
+}
+
+/**
+ * Build a `PLAN_ENTRY_NOT_MODELED` warning for a Goal Observation (`…22.4.121`)
+ * that is a section's direct entry. The package does not model goals: it is
+ * `moodCode="GOL"`, neither performed nor planned in this package's mood model,
+ * so it is not a planned item and reaches no model field. This is what says so,
+ * at the observation that holds the goal, so the goal is never dropped in
+ * silence. When goals are modelled, this report goes away for them.
+ *
+ * (No `@example` import: this factory is not on the package entry point.)
+ *
+ * @example
+ * ```ts
+ * const w = goalObservationNotModeled({ path: "observation", sectionCode: "61146-7" });
+ * ```
+ */
+export function goalObservationNotModeled(position: CcdaPosition): CcdaWarning {
+  return {
+    code: WARNING_CODES.PLAN_ENTRY_NOT_MODELED,
+    message: PLAN_ENTRY_NOT_MODELED_GOAL,
     position,
   };
 }
