@@ -110,9 +110,12 @@ describe("limits and the namespace sweep from the reader's shape", () => {
     ["the depth before the count runs out", 2, 9],
     ["a namespace met deep first and shallow later, reported at the shallow one", 99, 99],
   ])("%s", (_label, maxDepth, maxNodeCount) => {
-    const xml = `<ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:f="urn:f">
+    // `f` is met first, deep; `g` next, shallow; `f` again at `g`'s depth, after it: reported
+    // `g` then `f`, the order of their shallowest elements, not the order they were first met.
+    const xml = `<ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:f="urn:f" xmlns:g="urn:g">
   <a><b><f:x/></b></a>
   <c/>
+  <g:w/>
   <f:y/>
   <e xmlns=""/>
 </ClinicalDocument>`;
