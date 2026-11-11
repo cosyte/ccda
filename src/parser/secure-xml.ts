@@ -1,7 +1,9 @@
 /**
  * Hardened XML substrate for `@cosyte/ccda`. This is the single place the
- * package constructs a DOM from untrusted input, and it owns the security
- * posture:
+ * package builds a tree from untrusted input, and it owns the security
+ * posture. A parse builds the compact tree of `./xml-tree.ts` when that reader
+ * vouches for the text and an `@xmldom/xmldom` DOM otherwise; every check below
+ * runs around both the same way:
  *
  * - **No DTD / DOCTYPE.** Any `<!DOCTYPE` or `<!ENTITY` declaration is rejected
  *   outright (`XXE_OR_DTD_PRESENT`) before the DOM is built, this is the
@@ -29,13 +31,19 @@
  * so the sweep rides on it and costs no second pass.
  */
 
-import { DOMParser, normalizeLineEndings, type Document, type Element } from "@xmldom/xmldom";
+import {
+  DOMParser,
+  normalizeLineEndings as xmldomLineEndings,
+  type Document,
+  type Element,
+} from "@xmldom/xmldom";
 
 import { positionOf } from "../model/dom.js";
 import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES } from "./errors.js";
 import { isRecognizedNamespace } from "./namespaces.js";
 import type { CcdaParseLimits } from "./types.js";
 import { encodingBomStripped, unknownNamespacePrefix, type CcdaWarning } from "./warnings.js";
+import { readTree } from "./xml-tree.js";
 
 /** Fully-resolved safety caps, every field present (defaults merged in), as `resolveLimits` returns them. */
 export interface ResolvedLimits {
@@ -101,6 +109,12 @@ const LESS_THAN = 0x3c;
 /** `&`, the first character of a {@link GATE_RE} match on an entity reference. @internal */
 const AMPERSAND = 0x26;
 
+/** A carriage return followed by a line feed or NEL: one line break. @internal */
+const LINE_BREAK_PAIR_RE = /\r[\n\u0085]/g;
+
+/** Any other character the end-of-line handling turns into a line feed. @internal */
+const LINE_BREAK_RE = /[\r\u0085\u2028\u2029]/g;
+
 /**
  * Merge caller-supplied limit overrides over {@link DEFAULT_LIMITS}. Honors
  * `exactOptionalPropertyTypes`, an omitted override key falls back to the
@@ -158,18 +172,27 @@ export function parseSecureXml(
   emit: (warning: CcdaWarning) => void,
   reportForeignNamespace: (warning: CcdaWarning) => void = emit,
 ): Document {
-  return parseSecureSource(raw, limits, emit, reportForeignNamespace).doc;
+  const accepted = acceptSource(raw, limits, emit);
+  const doc = buildDom(accepted.source, accepted.lineBreaksToNormalize);
+  enforceStructureLimits(doc.documentElement, limits, reportForeignNamespace);
+  return doc;
 }
 
 /**
- * The text a DOM was built from, and what the gate found in it: what {@link parseSecureSource}
- * returns beside the DOM, so a caller can build the same tree again later instead of keeping it.
+ * The text a tree was built from, and what the gate found in it: what {@link parseSecureSource}
+ * returns beside the tree, so a caller can build the same tree again later instead of keeping it.
  *
  * @internal
  */
 export interface SecureSource {
-  /** The DOM, checked against every limit. */
-  readonly doc: Document;
+  /**
+   * The root element, checked against every limit: an element of the compact tree
+   * `./xml-tree.ts` reads, or of an `@xmldom/xmldom` document for a text that reader hands back.
+   * The model reads the two alike.
+   */
+  readonly root: Element | null;
+  /** The `@xmldom/xmldom` document the root belongs to, when it was built with `@xmldom/xmldom`. */
+  readonly dom: Document | undefined;
   /** The text it was built from: the input with a leading byte order mark removed. */
   readonly source: string;
   /** Whether the text holds a character XML's end-of-line handling rewrites. */
@@ -177,9 +200,12 @@ export interface SecureSource {
 }
 
 /**
- * {@link parseSecureXml}, returning the cleaned text and what its gate scan found beside the DOM.
- * `parseCcda` keeps the text so it can write the document's XML when a caller asks for it, from
- * a tree {@link rebuildDom} builds again, rather than keeping the tree for the document's life.
+ * {@link parseSecureXml} for `parseCcda`: the same gate, limits and namespace sweep, around the
+ * compact tree of `./xml-tree.ts` rather than an `@xmldom/xmldom` document wherever that reader
+ * vouches for the text (`@xmldom/xmldom` reads the rest, as it always did). Returns the cleaned
+ * text and what its gate scan found beside the root, so `parseCcda` can keep the text and write the
+ * document's XML when a caller asks for it, from a tree {@link rebuildDom} builds then, rather than
+ * keeping a tree for the document's life.
  *
  * @internal
  */
@@ -189,6 +215,42 @@ export function parseSecureSource(
   emit: (warning: CcdaWarning) => void,
   reportForeignNamespace: (warning: CcdaWarning) => void = emit,
 ): SecureSource {
+  const accepted = acceptSource(raw, limits, emit);
+  const { source, lineBreaksToNormalize } = accepted;
+  const tree = readTree(lineBreaksToNormalize ? normalizeLineEndings(source) : source);
+  if (tree !== undefined) {
+    // The model reads the members the two trees share; it is typed against the larger one.
+    const root = tree as unknown as Element;
+    enforceStructureLimits(root, limits, reportForeignNamespace);
+    return { root, dom: undefined, source, lineBreaksToNormalize };
+  }
+  const dom = buildDom(source, lineBreaksToNormalize);
+  enforceStructureLimits(dom.documentElement, limits, reportForeignNamespace);
+  return { root: dom.documentElement, dom, source, lineBreaksToNormalize };
+}
+
+/**
+ * XML's end-of-line handling as `@xmldom/xmldom` applies it before it parses (its
+ * `normalizeLineEndings`, transcribed): a carriage return followed by a line feed or NEL, then any
+ * carriage return, NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR left, becomes one line feed.
+ *
+ * @internal
+ */
+export function normalizeLineEndings(source: string): string {
+  return source.replace(LINE_BREAK_PAIR_RE, "\n").replace(LINE_BREAK_RE, "\n");
+}
+
+/**
+ * Strip a leading byte order mark (emitting `ENCODING_BOM_STRIPPED`), refuse an input over the
+ * size cap, and run the gate scan. Returns the text a tree is built from and what the scan found.
+ *
+ * @internal
+ */
+function acceptSource(
+  raw: string,
+  limits: ResolvedLimits,
+  emit: (warning: CcdaWarning) => void,
+): Pick<SecureSource, "source" | "lineBreaksToNormalize"> {
   let source = raw;
   if (source.charCodeAt(0) === BYTE_ORDER_MARK) {
     source = source.slice(1);
@@ -205,10 +267,7 @@ export function parseSecureSource(
   }
 
   const lineBreaksToNormalize = gateScan(source, limits);
-
-  const doc = buildDom(source, lineBreaksToNormalize);
-  enforceStructureLimits(doc, limits, reportForeignNamespace);
-  return { doc, source, lineBreaksToNormalize };
+  return { source, lineBreaksToNormalize };
 }
 
 /**
@@ -297,7 +356,7 @@ function buildDom(source: string, lineBreaksToNormalize: boolean, locate = true)
     // XML's end-of-line handling, which xmldom applies to the whole text before it parses. On a
     // text with none of the characters it rewrites, both of its replacements are the identity, so
     // the text is passed through as it is instead of being scanned twice more.
-    normalizeLineEndings: lineBreaksToNormalize ? normalizeLineEndings : keepLineEndings,
+    normalizeLineEndings: lineBreaksToNormalize ? xmldomLineEndings : keepLineEndings,
     onError: (level: "warning" | "error" | "fatalError"): void => {
       if (level === "fatalError") {
         throw new CcdaParseError(
@@ -356,12 +415,11 @@ function buildDom(source: string, lineBreaksToNormalize: boolean, locate = true)
  * @internal
  */
 function enforceStructureLimits(
-  doc: Document,
+  root: Element | null,
   limits: ResolvedLimits,
   reportForeignNamespace: (warning: CcdaWarning) => void,
 ): void {
-  const root = doc.documentElement;
-  /* v8 ignore next -- buildDom has already thrown NOT_WELL_FORMED_XML for a source with no root element */
+  /* v8 ignore next -- buildDom has already thrown NOT_WELL_FORMED_XML for a source with no root element, and readTree returns none */
   if (root === null) return;
 
   let nodeCount = 0;
