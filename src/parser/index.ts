@@ -26,7 +26,7 @@ import { wrapEmitterWithProfile } from "../profiles/apply.js";
 import { getDefaultCcdaProfile } from "../profiles/registry.js";
 import type { CcdaProfile } from "../profiles/types.js";
 import { serializeDocument } from "../serialize/serialize-dom.js";
-import { writeSource } from "../serialize/write-tree.js";
+import { writeSource, writtenText } from "../serialize/write-tree.js";
 
 /**
  * Parse a C-CDA XML payload into an immutable {@link CcdaDocument}.
@@ -136,9 +136,9 @@ export function parseCcdaText(
       ? { ...parts, warnings }
       : { ...parts, warnings, profile: { name: profile.name, lineage: profile.lineage } };
   if (writeNow) {
-    // From the `@xmldom/xmldom` tree when the parse built one, else as `writeText` writes it.
+    // From the `@xmldom/xmldom` tree when the parse built one, else as `writerFor` writes it.
     const serialized =
-      accepted.dom === undefined ? writeText(accepted) : serializeDocument(accepted.dom);
+      accepted.dom === undefined ? writerFor(accepted)() : serializeDocument(accepted.dom);
     return new CcdaDocument({ ...init, serialized });
   }
   return documentWithText(init, writerFor(accepted));
@@ -154,6 +154,10 @@ export function parseCcdaText(
 function writerFor(accepted: SecureSource): () => string {
   const source = accepted.source;
   const lineBreaksToNormalize = accepted.lineBreaksToNormalize;
+  // A text the reader found already written as the writer writes it is its own XML. The end it
+  // found is in the text it read, which is this one only when no line ending was rewritten.
+  const writtenEnd = lineBreaksToNormalize ? -1 : accepted.writtenEnd;
+  if (writtenEnd !== -1) return () => writtenText(source, writtenEnd);
   return () => writeText({ source, lineBreaksToNormalize });
 }
 

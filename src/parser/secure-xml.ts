@@ -193,6 +193,12 @@ export interface SecureSource {
   readonly source: string;
   /** Whether the text holds a character XML's end-of-line handling rewrites. */
   readonly lineBreaksToNormalize: boolean;
+  /**
+   * Where the written document ends in the text the compact reader read, when that text is already
+   * written as the writer writes it (`TreeDocument.writtenEnd`); else -1, as for a text read with
+   * `@xmldom/xmldom`.
+   */
+  readonly writtenEnd: number;
 }
 
 /**
@@ -217,11 +223,17 @@ export function parseSecureSource(
   if (tree !== undefined) {
     enforceShapeLimits(tree.shape, limits, reportForeignNamespace);
     // The model reads the members the two trees share; it is typed against the larger one.
-    return { root: tree.root as unknown as Element, dom: undefined, source, lineBreaksToNormalize };
+    return {
+      root: tree.root as unknown as Element,
+      dom: undefined,
+      source,
+      lineBreaksToNormalize,
+      writtenEnd: tree.writtenEnd,
+    };
   }
   const dom = buildDom(source, lineBreaksToNormalize);
   enforceStructureLimits(dom.documentElement, limits, reportForeignNamespace);
-  return { root: dom.documentElement, dom, source, lineBreaksToNormalize };
+  return { root: dom.documentElement, dom, source, lineBreaksToNormalize, writtenEnd: -1 };
 }
 
 /**

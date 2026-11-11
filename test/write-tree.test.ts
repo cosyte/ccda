@@ -13,6 +13,7 @@ import fc from "fast-check";
 import { DOMParser } from "@xmldom/xmldom";
 import { describe, expect, it } from "vitest";
 
+import { readDocument } from "../src/parser/xml-tree.js";
 import { serializeDocument } from "../src/serialize/serialize-dom.js";
 import { writeSource } from "../src/serialize/write-tree.js";
 import { generatedDocument } from "./_helpers/generated-xml.js";
@@ -39,11 +40,20 @@ function xmldomWrite(source: string): string {
 /**
  * Whether the writer is right about `raw` (with any byte order mark removed): it hands the text
  * back, or it writes what `serializeDocument` writes. Returns which, for the counts.
+ *
+ * Its own output is then read back: the reader must find it already written as the writer writes
+ * (so the writer returns that text as it stands), and writing it again must change nothing.
  */
 function check(raw: string): "written" | "handed back" {
   const source = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
   const ours = writeSource(source, LINE_BREAK_RE.test(source));
   if (ours === undefined) return "handed back";
+  if (readDocument(ours)?.writtenEnd !== ours.length) {
+    throw new Error(`its output does not read as written: ${ours.slice(0, 200)}`);
+  }
+  if (writeSource(ours, false) !== ours) {
+    throw new Error(`writing its output again changed it: ${ours.slice(0, 200)}`);
+  }
   const theirs = xmldomWrite(source);
   if (ours !== theirs) {
     let at = 0;
@@ -96,6 +106,29 @@ describe("the compact tree's writer against serializeDocument", () => {
     ["line breaks the reader normalizes", doc("<c>a\r\nb\rc\u0085d\u2028e</c>\r\n<d/>")],
   ])("writes %s as serializeDocument does", (_label, source) => {
     expect(check(source)).toBe("written");
+  });
+
+  it.each([
+    [
+      "text already written as the writer writes it",
+      '<?xml version="1.0"?>\n<a b="&amp;&quot;&#9;&#10;&#13;"><c>&lt;&amp;&gt;&#13;</c><?pi d?><?pi ?><!-- c --><![CDATA[x]]></a>\n',
+    ],
+    ["a quoted reference the writer writes as a character", doc("<c>&quot;</c>")],
+    ["a greater-than in an attribute", doc(`<a b=">"/>`)],
+    ["an element closed by an end tag with nothing in it", doc("<a></a>")],
+    ["an instruction with no data", doc("<?pi?>")],
+    ["two spaces before an attribute", doc(`<a  b="1"/>`)],
+    ["a space before the end of a tag", doc(`<a b="1" ><c/></a>`)],
+  ])("writes %s as serializeDocument does", (_label, source) => {
+    expect(check(source)).toBe("written");
+  });
+
+  it("returns a text already written as the writer writes it as it stands", () => {
+    const source = '<?xml version="1.0"?>\n<a b="1"><c>x</c></a>';
+    expect(readDocument(source)?.writtenEnd).toBe(source.length);
+    expect(writeSource(source, false)).toBe(source);
+    expect(readDocument(`${source}\n  `)?.writtenEnd).toBe(source.length);
+    expect(readDocument(doc("<a></a>"))?.writtenEnd).toBe(-1);
   });
 
   it.each([

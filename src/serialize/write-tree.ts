@@ -17,8 +17,15 @@
  *
  * One element is written differently there and is handed back instead: an element in the XHTML
  * namespace with no children, which `@xmldom/xmldom` closes with an end tag unless HTML calls it a
- * void element. `test/write-tree.test.ts` compares this writer with `serializeDocument` over the
- * output-equivalence corpus and generated XML.
+ * void element.
+ *
+ * **A text already written in these forms is its own XML.** The reader notes, as it reads,
+ * whether every tag, attribute, reference and instruction stands in the one form this writer gives
+ * it (`TreeDocument.writtenEnd`); when all do, writing the document is returning the text up to
+ * its last node, with no tree walked and no string built. What this package writes reads that way,
+ * so the re-parse in `buildCcda` and `editCcda`, and most documents passed on, are written so.
+ * `test/write-tree.test.ts` compares this writer with `serializeDocument` over the
+ * output-equivalence corpus and generated XML, and reads every text it writes back as written.
  *
  * @packageDocumentation
  */
@@ -73,11 +80,28 @@ function escape(c: string): string {
  * @internal
  */
 export function writeSource(source: string, lineBreaksToNormalize: boolean): string | undefined {
-  const doc = readDocument(lineBreaksToNormalize ? normalizeLineEndings(source) : source);
+  const text = lineBreaksToNormalize ? normalizeLineEndings(source) : source;
+  const doc = readDocument(text);
   if (doc === undefined) return undefined;
+  if (doc.writtenEnd !== -1) return writtenText(text, doc.writtenEnd);
   const body = writeElement(doc.root);
   if (body === undefined) return undefined;
-  const xml = doc.prolog + body + doc.epilog;
+  return declared(doc.prolog + body + doc.epilog);
+}
+
+/**
+ * The XML of a text that is already written as this writer writes it, up to `writtenEnd` (where
+ * its last node ends): that much of the text, with the declaration `serializeDocument` adds when it
+ * starts with none. The compact reader works out `writtenEnd` as it reads.
+ *
+ * @internal
+ */
+export function writtenText(text: string, writtenEnd: number): string {
+  return declared(writtenEnd === text.length ? text : text.slice(0, writtenEnd));
+}
+
+/** The XML with the declaration `serializeDocument` adds to one that starts with none. @internal */
+function declared(xml: string): string {
   return xml.startsWith("<?xml") ? xml : `${XML_DECLARATION}\n${xml}`;
 }
 

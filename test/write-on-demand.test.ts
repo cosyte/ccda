@@ -4,7 +4,8 @@
  * `parseCcda` writes a document's XML the first time `toString` (or `serializeCcda`, or an edit)
  * asks for it, and keeps it: a caller that reads only the model never pays for the write, and the
  * DOM is not kept for the document's life. These tests count the writes to pin that (a call of
- * `serializeDocument`, or of `writeSource` that wrote, the writer of the compact reader's tree),
+ * `serializeDocument`, of `writeSource` that wrote, the writer of the compact reader's tree, or of
+ * `writtenText`, which returns a text the reader found already written as the writer writes it),
  * and compare the text with what the source gives when it is parsed and written at once, so a
  * change that writes eagerly again, writes twice, or writes something else fails here.
  *
@@ -30,6 +31,10 @@ vi.mock("../src/serialize/write-tree.js", async (importOriginal) => {
       const written = original.writeSource(...args);
       if (written !== undefined) calls.serialize += 1;
       return written;
+    },
+    writtenText: (...args: Parameters<typeof original.writtenText>): string => {
+      calls.serialize += 1;
+      return original.writtenText(...args);
     },
   };
 });

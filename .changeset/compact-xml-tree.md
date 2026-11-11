@@ -15,7 +15,8 @@ limit.
   node-count limits and the foreign-namespace sweep are worked out from counts the reader keeps as
   it reads, rather than a second walk of the tree.
 - The first `toString` of a parsed document, and the re-parse in `buildCcda` and `editCcda`, write
-  the XML from that compact tree, as `@xmldom/xmldom`'s serializer writes the same text.
+  the XML from that compact tree, as `@xmldom/xmldom`'s serializer writes the same text; a text
+  already written in the form that serializer gives it is returned as it stands.
 - Deliberate change: `@xmldom/xmldom` is loaded the first time something needs it (`editCcda`,
   `buildCcda`, `parseSecureXml`, or a text the compact reader hands back, to parse or to write),
   not when the package is imported. It is loaded with `require`, which a bundler that inlines

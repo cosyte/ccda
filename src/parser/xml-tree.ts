@@ -44,6 +44,9 @@ const XML_NS = "http://www.w3.org/XML/1998/namespace";
 /** The namespace of `xmlns` and `xmlns:` attributes. @internal */
 const XMLNS_NS = "http://www.w3.org/2000/xmlns/";
 
+/** The XHTML namespace, whose empty elements the writer does not write (see `TreeDocument`). @internal */
+const XHTML_NS = "http://www.w3.org/1999/xhtml";
+
 /** DOM node types the reader builds. @internal */
 const TEXT_NODE = 3;
 const CDATA_SECTION_NODE = 4;
@@ -258,6 +261,13 @@ export interface TreeDocument {
   readonly epilog: string;
   /** The tree's shape, counted as it was read. */
   readonly shape: TreeShape;
+  /**
+   * Where the written document ends in the text, when the text is already written as
+   * `../serialize/write-tree.ts` writes it (every tag, attribute, reference and instruction in the
+   * one form the writer gives it), so writing it is that much of the text; else -1. The white space
+   * after the last node is not written.
+   */
+  readonly writtenEnd: number;
 }
 
 /**
@@ -418,6 +428,15 @@ class Reader {
   private lastNamespace: string | null | undefined = undefined;
   private lastSlot = -1;
 
+  /**
+   * Whether the text read so far is written as the writer writes it, where the last node read
+   * ends, and the next `>` at or after the last place one was looked for (the length of the text
+   * when there is none): a `>` in text or an attribute value is written as `&gt;`.
+   */
+  private written = true;
+  private nodeEnd = 0;
+  private nextGreaterThan = 0;
+
   /** The first `<` at or after {@link ltFrom}, or -1: what a start tag found, kept for the text after it. */
   private ltFrom = Number.MAX_SAFE_INTEGER;
   private ltAt = -1;
@@ -461,6 +480,7 @@ class Reader {
       else end = this.startTag(lt);
       if (end === -1) return undefined;
       pos = end;
+      this.nodeEnd = end;
     }
     if (this.open.length > 0 || this.root === undefined) return undefined;
     const shape: TreeShape = {
@@ -470,7 +490,8 @@ class Reader {
       namespaceDepths: this.namespaceDepths,
       namespaceIndexes: this.namespaceIndexes,
     };
-    return { root: this.root, prolog: this.prolog, epilog: this.epilog, shape };
+    const writtenEnd = this.written ? this.nodeEnd : -1;
+    return { root: this.root, prolog: this.prolog, epilog: this.epilog, shape, writtenEnd };
   }
 
   /** Read the text from `start` to `end`: white space only outside the root, a text node inside it. */
@@ -501,6 +522,7 @@ class Reader {
       this.nextAmpersand = amp === -1 ? this.length : amp;
     }
     const hasReference = this.nextAmpersand < end;
+    if (this.written && this.holdsGreaterThan(start, end)) this.written = false;
     if (!attribute && !hasReference) return this.plainText(start, end);
     if (attribute && !hasReference && !hasTabOrLineFeed(source, start, end)) {
       return end - start <= MAX_SHARED_VALUE ? this.shared(start, end) : source.slice(start, end);
@@ -512,11 +534,15 @@ class Reader {
       if (attribute && (code === TAB || code === LINE_FEED)) {
         out += `${source.slice(from, i)} `;
         from = i + 1;
+        this.written = false;
       } else if (code === AMPERSAND) {
         const semi = source.indexOf(";", i + 1);
         if (semi === -1 || semi >= end) return undefined;
         const value = referenceValue(source, i + 1, semi);
         if (value === undefined) return undefined;
+        if (this.written && !writtenReference(source, i + 1, semi, attribute)) {
+          this.written = false;
+        }
         out += source.slice(from, i) + value;
         i = semi;
         from = semi + 1;
@@ -537,6 +563,15 @@ class Reader {
       if (i === end) return this.shared(start, end);
     }
     return source.slice(start, end);
+  }
+
+  /** Whether the text from `start` to `end` holds a `>`. */
+  private holdsGreaterThan(start: number, end: number): boolean {
+    if (this.nextGreaterThan < start) {
+      const gt = this.source.indexOf(">", start);
+      this.nextGreaterThan = gt === -1 ? this.length : gt;
+    }
+    return this.nextGreaterThan < end;
   }
 
   /**
@@ -642,10 +677,12 @@ class Reader {
       const afterSpace = this.skipSpace(pos);
       const code = source.charCodeAt(afterSpace);
       if (code === GREATER_THAN) {
+        if (afterSpace !== pos) this.written = false;
         pos = afterSpace + 1;
         break;
       }
       if (code === SLASH && source.charCodeAt(afterSpace + 1) === GREATER_THAN) {
+        if (afterSpace !== pos) this.written = false;
         pos = afterSpace + 2;
         closed = true;
         break;
@@ -658,6 +695,16 @@ class Reader {
       const open = this.skipSpace(eq + 1);
       const quote = source.charCodeAt(open);
       if (quote !== DOUBLE_QUOTE && quote !== SINGLE_QUOTE) return -1;
+      // Written as one space, the name, `="`, the value and `"`.
+      if (
+        afterSpace !== pos + 1 ||
+        source.charCodeAt(pos) !== SPACE ||
+        eq !== attrEnd ||
+        open !== eq + 1 ||
+        quote !== DOUBLE_QUOTE
+      ) {
+        this.written = false;
+      }
       const close = source.indexOf(quote === DOUBLE_QUOTE ? '"' : "'", open + 1);
       if (close === -1 || (nextLt !== -1 && nextLt < close)) return -1;
       const value = this.decoded(open + 1, close, true);
@@ -680,6 +727,7 @@ class Reader {
       this.open.push(element);
       this.lastChild.push(null);
     } else {
+      if (element.namespaceURI === XHTML_NS) this.written = false;
       this.unbind();
     }
     return pos;
@@ -833,6 +881,8 @@ class Reader {
     if (source.charCodeAt(nameStart + name.length) === COLON) return -1;
     const gt = this.skipSpace(nameStart + name.length);
     if (source.charCodeAt(gt) !== GREATER_THAN) return -1;
+    // Written as `</name>`, and an element with no children as `<name/>`.
+    if (gt !== nameStart + name.length || element.firstChild === null) this.written = false;
     this.open.pop();
     this.lastChild.pop();
     this.unbind();
@@ -852,6 +902,14 @@ class Reader {
       if (!XML_DECL_RE.test(source)) return -1;
     }
     const data = match[2] ?? "";
+    // Written as `<?target data?>`, one space between.
+    if (
+      match[2] === undefined ||
+      match[0].length !== target.length + data.length + 5 ||
+      source.charCodeAt(lt + 2 + target.length) !== SPACE
+    ) {
+      this.written = false;
+    }
     if (this.open.length > 0) {
       this.append(new TreeInstruction(target, data, this.current()), false);
     } else {
@@ -880,9 +938,11 @@ class Reader {
       if (end === -1) return -1;
       const value = source.slice(lt + 9, end);
       if (!CHARS_RE.test(value)) return -1;
-      // An empty section adds no node, as `@xmldom/xmldom` adds none.
+      // An empty section adds no node, as `@xmldom/xmldom` adds none, so it is not written.
       if (value !== "") {
         this.append(new TreeCharacterData(CDATA_SECTION_NODE, value, this.current()), false);
+      } else {
+        this.written = false;
       }
       return end + 3;
     }
@@ -936,6 +996,29 @@ function hasRepeatedAttribute(attrs: readonly (string | null)[]): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Whether the reference from `start` (after its `&`) to `semi` is written back as it stands: the
+ * escapes the writer gives `&`, `<` and `>` everywhere, a carriage return everywhere, and `"`, a
+ * tab and a line feed in an attribute.
+ *
+ * @internal
+ */
+function writtenReference(
+  source: string,
+  start: number,
+  semi: number,
+  attribute: boolean,
+): boolean {
+  const name = semi - start;
+  if (name === 3 && (source.startsWith("amp", start) || source.startsWith("#13", start)))
+    return true;
+  if (name === 2 && (source.startsWith("lt", start) || source.startsWith("gt", start))) return true;
+  if (!attribute) return false;
+  if (name === 4 && source.startsWith("quot", start)) return true;
+  if (name === 2 && source.startsWith("#9", start)) return true;
+  return name === 3 && source.startsWith("#10", start);
 }
 
 /** Whether the text from `start` to `end` holds a tab or a line feed. @internal */
