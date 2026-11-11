@@ -9,12 +9,14 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getHeapSpaceStatistics } from "node:v8";
 
 import { afterAll, describe, expect, it } from "vitest";
 
 import {
   SETTLE_BYTES,
   allocatedBytes,
+  codeBytes,
   diffSummaries,
   fitGrowth,
   median,
@@ -96,6 +98,26 @@ describe("fitGrowth", () => {
     const f = fitGrowth([{ ops: 0, heap: 1 }]);
     expect(f.ops).toBe(0);
     expect(f.detectableBytesPerOp).toBe(Number.POSITIVE_INFINITY);
+  });
+});
+
+describe("codeBytes", () => {
+  it("sums the code and trusted spaces and nothing else", () => {
+    const stats = [
+      { space_name: "new_space", space_used_size: 1_000 },
+      { space_name: "old_space", space_used_size: 2_000 },
+      { space_name: "code_space", space_used_size: 300 },
+      { space_name: "code_large_object_space", space_used_size: 40 },
+      { space_name: "trusted_space", space_used_size: 5 },
+      { space_name: "large_object_space", space_used_size: 60_000 },
+    ];
+    expect(codeBytes(stats)).toBe(345);
+  });
+
+  it("finds the code spaces this Node names", () => {
+    const stats = getHeapSpaceStatistics();
+    expect(stats.some((s) => s.space_name === "code_space")).toBe(true);
+    expect(codeBytes(stats)).toBeGreaterThan(0);
   });
 });
 

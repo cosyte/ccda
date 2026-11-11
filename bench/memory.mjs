@@ -72,6 +72,21 @@ export function fitGrowth(rounds, growingBytes = SETTLE_BYTES) {
 }
 
 /**
+ * The bytes in the heap spaces V8 keeps compiled code and its metadata in: every space whose name
+ * holds `code` or `trusted` (`code_space`, `code_large_object_space`, `trusted_space`,
+ * `trusted_large_object_space` on Node 22). They grow while the compiler optimizes a hot path and
+ * shrink when it flushes code, which is warm-up, not data a caller's documents left behind.
+ * `stats` is what `v8.getHeapSpaceStatistics()` returns.
+ */
+export function codeBytes(stats) {
+  let total = 0;
+  for (const s of stats) {
+    if (s.space_name.includes("code") || s.space_name.includes("trusted")) total += s.space_used_size;
+  }
+  return total;
+}
+
+/**
  * The bytes allocated on the JavaScript heap between two readings, across any collections in
  * between: what the heap grew by up to each collection, from where the last one left it, then from
  * the last one to the end. `gcs` is the statistics a `v8.GCProfiler` returned, in order.

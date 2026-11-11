@@ -33,6 +33,11 @@ export declare function fitGrowth(
   growingBytes?: number,
 ): Growth;
 
+/** The bytes in the heap spaces that hold compiled code and its metadata. */
+export declare function codeBytes(
+  stats: readonly { space_name: string; space_used_size: number }[],
+): number;
+
 export interface GcStatistic {
   beforeGC: { heapStatistics: { usedHeapSize: number } };
   afterGC: { heapStatistics: { usedHeapSize: number } };
