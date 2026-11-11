@@ -200,7 +200,11 @@ loud safety-critical code, under-firing costs one of two strengths handed back i
 Every physical quantity is checked against a **computable, zero-dependency UCUM grammar**
 (`isValidUcumUnit`, `isUcumCaseSuspect`): a non-UCUM unit is flagged (`NON_UCUM_UNIT`) and a
 letter-case slip caught (`UCUM_CASE_SUSPECT`), but the **raw unit is always preserved, never
-normalized away**. An unrecognized `value xsi:type` is kept as `unsupported`; nothing is dropped.
+normalized away**. An unrecognized `value xsi:type` is typed `unsupported` and reported with
+`RESULT_VALUE_TYPE_UNHANDLED`. The element's text, if it has any, is kept in `raw`; an attribute-only
+value such as `<value xsi:type="REAL" value="7.25"/>` is not kept in the typed model, though
+`doc.toString()` still carries it. See the
+[cases reported against other parsers](./limitations.md#cases-reported-against-other-parsers).
 
 ## Procedures, encounters, and social history
 

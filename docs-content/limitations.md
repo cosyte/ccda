@@ -9,9 +9,12 @@ description: "Everything the parser, the builder and the editor do and do not do
 
 This page is the deliberate "do not over-trust" list. Mis-reading a dose, an allergy, a code system,
 or a patient identifier can cause real clinical harm, so each boundary of the parser, the builder and
-the editor is stated here. Everything on it is a documented boundary, not a bug: the lenient parser
-never silently drops or garbles data, and where a limitation applies, the raw value is preserved
-(often with a warning) and is simply not decoded further.
+the editor is stated here. Most of it is a documented boundary, not a bug: the lenient parser is
+built never to silently drop or garble data, and where a limitation applies, the raw value is
+preserved (often with a warning) and is simply not decoded further. Where a value does still go
+missing from the model with no warning, this page names the case;
+[the cases reported against other parsers](#cases-reported-against-other-parsers) lists the ones we
+test for, with the three that still fail.
 
 Depth tracks the code, and never leads it. Where a boundary is genuinely open, this page says so
 instead of resolving it in your favor.
@@ -487,6 +490,35 @@ instead of resolving it in your favor.
   requiredSectionKeys("dischargeSummary").includes("hospitalCourse"); // => false
   requiredSectionStatus("dischargeSummary").unasserted[0]?.reason; // => "assertion-would-tighten-parse"
   ```
+
+## Cases reported against other parsers
+
+The open issues on other C-CDA parsers are mostly one complaint: a value the document carried came
+back as nothing, with nothing said. We took each class of that complaint, wrote a synthetic document
+for it, and hold every class to one rule: the value is in the typed model, or a warning with a named
+code is raised on the element that holds it. `test/silent-loss.test.ts` runs them. Three classes do
+not meet the rule today. Each is a defect we mean to fix, and its test is written to go red the day
+the fix lands.
+
+| Class                                                                    | What we do today                                                                                                                            | Result                  |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| Allergy whose category is not food                                       | `type` keeps the propensity code and `allergen` the substance, whatever the category                                                        | Kept                    |
+| Interval `effectiveTime` on a medication                                 | `duration.low` and `duration.high`                                                                                                          | Kept                    |
+| Interval `effectiveTime` on a result                                     | `effectiveTime.low` and `effectiveTime.high`                                                                                                | Kept                    |
+| `REAL` observation value                                                 | `{ kind: "unsupported", xsiType: "REAL" }` and `RESULT_VALUE_TYPE_UNHANDLED`; the number itself is not in the model                         | Reported                |
+| `ED` observation value                                                   | `{ kind: "unsupported", xsiType: "ED", raw }` with the text, and `RESULT_VALUE_TYPE_UNHANDLED`                                              | Kept and reported       |
+| Family History section                                                   | `getFamilyHistory()`: the relative and each condition                                                                                       | Kept                    |
+| `negationInd` on a problem                                               | `negated: true` beside the coded `value`                                                                                                    | Kept                    |
+| `negationInd` on a medication                                            | `negated: true` beside the `drug`                                                                                                           | Kept                    |
+| Medication whose first `templateId` is not the Medication Activity root  | Read: every `templateId` is checked, not only the first                                                                                     | Kept                    |
+| Timestamp with no zone offset                                            | `raw` keeps every digit; `toObject` gives no `offsetMinutes` and `toDate` gives `undefined` unless you pass `assumeOffsetMinutes`           | Kept                    |
+| A single `participant`                                                   | The allergen is read from it like any other                                                                                                 | Kept                    |
+| Medication entry with no `templateId`                                    | Not read and not reported; the stamped entries beside it are read                                                                           | **Dropped, no warning** |
+| Goals section with a Goal Observation                                    | The section is recognized and keeps its narrative; the Goal Observation is not modeled and draws no warning                                 | **Dropped, no warning** |
+| Implant: a procedure in Medical Equipment with a Product Instance device | The procedure and its code are read (it draws `SECTION_PLACEMENT_SUSPECT`); the device code and its UDI are not modeled and draw no warning | **Dropped, no warning** |
+
+Every dropped value is still in the document: `doc.toString()` re-serializes it faithfully, so a
+caller who needs one of the three today can read it from there.
 
 ## Building a document
 

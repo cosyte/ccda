@@ -12,9 +12,12 @@ common C-CDA, and pull out who the patient is and their reconciliation triad (Pr
 Allergies), plus a lab result and an immunization, in a few lines. The CCD is what a hospital hands you
 on a transition of care, so it is the fastest way to see the library earn its keep.
 
-The parser is **lenient** (vendor quirks become stable-coded `warnings`, never silent failures) and
-every coded value is preserved verbatim: a code that disagrees with its narrative surfaces **both** and
-picks no winner (`CODE_NARRATIVE_MISMATCH`); a missing dose or route is flagged, never defaulted.
+The parser is **lenient** (vendor quirks become stable-coded `warnings` rather than thrown errors) and
+every coded value it models is preserved verbatim: a code that disagrees with its narrative surfaces
+**both** and picks no winner (`CODE_NARRATIVE_MISMATCH`); a missing dose or route is flagged, never
+defaulted. Not every value a document carries is in the typed model yet, and a few are left out with
+no warning; the [cases reported against other parsers](./limitations.md#cases-reported-against-other-parsers)
+list them.
 
 > Every document below is **synthetic**: an invented patient ("Jane Q. Doe"), obviously-fake OIDs and
 > MRNs. A C-CDA is PHI; a fixture must never hold a real one.
