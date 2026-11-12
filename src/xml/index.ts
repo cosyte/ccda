@@ -91,23 +91,14 @@ function ignoreWarning(): void {
   // Nothing to do: a reader of another XML format has no namespace to expect.
 }
 
-/** `Node.ELEMENT_NODE`. @internal */
-const ELEMENT_NODE = 1 as const;
-
 /** `Node.ATTRIBUTE_NODE`. @internal */
 const ATTRIBUTE_NODE = 2 as const;
 
 /** `Node.TEXT_NODE`. @internal */
 const TEXT_NODE = 3 as const;
 
-/** `Node.CDATA_SECTION_NODE`. @internal */
-const CDATA_SECTION_NODE = 4 as const;
-
 /** `Node.PROCESSING_INSTRUCTION_NODE`. @internal */
 const PROCESSING_INSTRUCTION_NODE = 7 as const;
-
-/** `Node.COMMENT_NODE`. @internal */
-const COMMENT_NODE = 8 as const;
 
 /** `Node.DOCUMENT_NODE`. @internal */
 const DOCUMENT_NODE = 9 as const;
@@ -139,46 +130,29 @@ function refuseForbidden(value: string | null): void {
 /** The members of a node {@link writeFilter} reads, by its type. @internal */
 type FilteredNode = Node & {
   readonly namespaceURI: string | null;
-  readonly value: string;
-  readonly data: string;
-  readonly target: string;
+  readonly value?: string;
+  readonly data?: string;
+  readonly target?: string;
 };
 
 /**
  * The node filter {@link serializeXml} writes with, which sees every node and attribute before the
  * serializer writes it. It refuses a DOCTYPE, and a character XML 1.0 forbids wherever one would be
- * written: an element's or attribute's namespace (which the serializer may declare), an attribute
- * value, and the data of a text, CDATA, comment or processing instruction node. It writes the XML
- * declaration a parse keeps as the document's first node as it was, and a text node that holds a
- * carriage return with it as `&#13;`, so a parse keeps it. Every other node is left to the
- * serializer.
+ * written: a namespace (which the serializer may declare), an attribute value, and the data of a
+ * text, CDATA, comment or processing instruction node. It writes the XML declaration a parse keeps
+ * as the document's first node as it was, and a text node itself ({@link writeText}). Every other
+ * node is left to the serializer.
  *
  * @internal
  */
 function writeFilter(node: FilteredNode): Node | string {
-  switch (node.nodeType) {
-    case DOCUMENT_TYPE_NODE:
-      throw new Refusal("holds a DOCTYPE, which parseXml refuses");
-    case ELEMENT_NODE:
-      refuseForbidden(node.namespaceURI);
-      return node;
-    case ATTRIBUTE_NODE:
-      refuseForbidden(node.namespaceURI);
-      refuseForbidden(node.value);
-      return node;
-    case CDATA_SECTION_NODE:
-    case COMMENT_NODE:
-      refuseForbidden(node.data);
-      return node;
-    case PROCESSING_INSTRUCTION_NODE:
-      refuseForbidden(node.data);
-      return writeInstruction(node);
-    case TEXT_NODE:
-      refuseForbidden(node.data);
-      return writeText(node);
-    default:
-      return node;
-  }
+  const type = node.nodeType;
+  if (type === DOCUMENT_TYPE_NODE) throw new Refusal("holds a DOCTYPE, which parseXml refuses");
+  refuseForbidden(node.namespaceURI);
+  refuseForbidden((type === ATTRIBUTE_NODE ? node.value : node.data) ?? null);
+  if (type === PROCESSING_INSTRUCTION_NODE) return writeInstruction(node);
+  if (type === TEXT_NODE) return writeText(node.data as string);
+  return node;
 }
 
 /**
@@ -190,24 +164,24 @@ function writeFilter(node: FilteredNode): Node | string {
  * @internal
  */
 function writeInstruction(node: FilteredNode): Node | string {
+  const data = node.data as string;
   const declaration =
     node.target === "xml" &&
     node.previousSibling === null &&
     node.parentNode === node.ownerDocument &&
-    !node.data.includes("?>");
-  return declaration ? `<?xml ${node.data}?>` : node;
+    !data.includes("?>");
+  return declaration ? `<?xml ${data}?>` : node;
 }
 
 /**
- * A text node that holds a carriage return, with that character as `&#13;` and `<`, `>` and `&`
- * escaped as the serializer escapes them; any other left to the serializer, which writes a
- * carriage return raw, where a parse would read it as a line feed.
+ * A text node's data as XML text: `<`, `>` and `&` escaped as the serializer escapes them, and a
+ * carriage return as `&#13;`, which the serializer writes raw and a parse would read as a line
+ * feed.
  *
  * @internal
  */
-function writeText(node: FilteredNode): Node | string {
-  if (!node.data.includes("\r")) return node;
-  return node.data
+function writeText(data: string): string {
+  return data
     .replace(/&/gu, "&amp;")
     .replace(/</gu, "&lt;")
     .replace(/>/gu, "&gt;")
