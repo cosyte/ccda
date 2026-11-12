@@ -140,12 +140,6 @@ const LINE_SEPARATOR = 0x2028;
 const PARAGRAPH_SEPARATOR = 0x2029;
 
 /**
- * A carriage return and the line feed after it, if there is one: one line break, which XML 1.0
- * (section 2.11) passes on as a single line feed. @internal
- */
-const LINE_BREAK_RE = /\r\n?/g;
-
-/**
  * Merge caller-supplied limit overrides over {@link DEFAULT_LIMITS}. Honors
  * `exactOptionalPropertyTypes`, an omitted override key falls back to the
  * default rather than producing `undefined`.
@@ -335,7 +329,9 @@ export function parseSecureSource(
  * @internal
  */
 export function normalizeLineEndings(source: string): string {
-  return source.replace(LINE_BREAK_RE, "\n");
+  // A carriage return and the line feed after it, if there is one: one line break. The pattern is
+  // written here, not as a module constant, so a test that calls this function is traced to it.
+  return source.replace(/\r\n?/g, "\n");
 }
 
 /**
@@ -480,11 +476,25 @@ function isXml11Break(code: number): boolean {
   return code === NEXT_LINE || code === LINE_SEPARATOR || code === PARAGRAPH_SEPARATOR;
 }
 
-/** NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR, anywhere in a string. @internal */
-const XML11_BREAK_RE = /[\u0085\u2028\u2029]/u;
+/**
+ * Whether a string holds NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR anywhere. The pattern is
+ * written in the function, not as a module constant, so a test that calls it is traced to it.
+ *
+ * @internal
+ */
+function hasXml11Break(text: string): boolean {
+  return /[\u0085\u2028\u2029]/u.test(text);
+}
 
-/** XML 1.0's white space (production [3]): space, tab, line feed, carriage return. @internal */
-const XML_SPACE_RE = /[ \t\n\r]/u;
+/**
+ * Where the first XML 1.0 white space (production [3]: space, tab, line feed, carriage return)
+ * sits in a string, or -1. The pattern is written here for the reason {@link hasXml11Break} gives.
+ *
+ * @internal
+ */
+function firstXmlSpace(text: string): number {
+  return text.search(/[ \t\n\r]/u);
+}
 
 /**
  * Whether NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR sits where XML 1.0 allows no such character:
@@ -514,16 +524,16 @@ export function breakInMarkup(source: string): boolean {
   for (;;) {
     const lt = source.indexOf("<", at);
     const textEnd = lt === -1 ? source.length : lt;
-    if (depth === 0 && XML11_BREAK_RE.test(source.slice(at, textEnd))) return true;
+    if (depth === 0 && hasXml11Break(source.slice(at, textEnd))) return true;
     if (lt === -1) return false;
     if (source.startsWith("<?", lt)) {
       const end = source.indexOf("?>", lt + 2);
       if (end === -1) return true;
       // The target runs to the first white space; an XML declaration holds no character data.
       const instruction = source.slice(lt + 2, end);
-      const space = instruction.search(XML_SPACE_RE);
+      const space = firstXmlSpace(instruction);
       const target = space === -1 ? instruction : instruction.slice(0, space);
-      if (XML11_BREAK_RE.test(target === "xml" ? instruction : target)) return true;
+      if (hasXml11Break(target === "xml" ? instruction : target)) return true;
       at = end + 2;
       continue;
     }
