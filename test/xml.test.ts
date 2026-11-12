@@ -265,6 +265,55 @@ describe("parseXml reads any XML, not only C-CDA", () => {
   });
 });
 
+/** Texts with character data outside the root element, which XML 1.0 production [1] forbids. */
+const OUTSIDE_ROOT: readonly { readonly name: string; readonly text: string }[] = [
+  { name: "text before the root", text: `Synthetic ${MARKER}<a/>` },
+  { name: "text after the root", text: `<a/>Synthetic ${MARKER}` },
+  { name: "text after the declaration", text: `<?xml version="1.0"?>${MARKER}<a/>` },
+  { name: "text between a prolog comment and the root", text: `<!--c-->${MARKER}<a/>` },
+  { name: "text after the root, before a comment", text: `<a/>${MARKER}<!--c--><?p x?>` },
+  { name: "text, a raw ampersand and a raw less-than after the root", text: "<a/>a & b < c" },
+  { name: "a predefined entity reference after the root", text: "<a/>&amp;" },
+  { name: "a character reference after the root", text: "<a/>&#65;" },
+  { name: "a custom entity reference after the root", text: `<a/>&${MARKER};` },
+  { name: "text after a byte order mark, before the root", text: `\ufeff${MARKER}<a/>` },
+];
+
+describe("parseXml refuses character data outside the root element", () => {
+  it.each(OUTSIDE_ROOT)("refuses $name with NOT_WELL_FORMED_XML", ({ text }) => {
+    const err = thrownBy(() => parseXml(text));
+    expect(err).toBeInstanceOf(CcdaParseError);
+    expect((err as CcdaParseError).code).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+    expect((err as CcdaParseError).message).not.toContain(MARKER);
+    expect((err as CcdaParseError).message).not.toContain("Synthetic");
+  });
+
+  it("reads white space, comments and processing instructions around the root", () => {
+    const text = '\ufeff<?xml version="1.0"?>\n<!--c-->\t<?p x?> \r\n<a/>\n<!--d--> <?q y?>\r\n\t ';
+    const doc = parseXml(text);
+    expect(doc.documentElement?.localName).toBe("a");
+    expect(doc.documentElement?.parentNode).toBe(doc);
+  });
+
+  it("reads text inside the root, and markup characters in comments outside it", () => {
+    const doc = parseXml("<!-- a & b > c --><a>Synthetic text</a><?p x > y?>");
+    expect(doc.documentElement?.textContent).toBe("Synthetic text");
+  });
+
+  it("still reads what xmldom reports for other reasons, such as an undeclared entity", () => {
+    // xmldom reports `&name;` with no declaration as an error too; that one is not outside the
+    // root, is never expanded, and counts toward maxEntityExpansions, so it is read as before.
+    expect(parseXml("<a>Synthetic &undeclared;</a>").documentElement?.localName).toBe("a");
+  });
+
+  it("leaves the C-CDA reader as it was: parseSecureXml still reads such a text", () => {
+    // The internal reader's leniency is unchanged; only the exported parseXml refuses.
+    for (const { text } of OUTSIDE_ROOT) {
+      expect(fatalOf(() => parseSecureXml(text, resolveLimits(), () => {}))).toBe("none");
+    }
+  });
+});
+
 /** A document built with the DOM API, with a root `<root/>`. */
 function newDocument(): ReturnType<typeof parseXml> {
   return new (xmldom().DOMImplementation)().createDocument(null, "root", null);

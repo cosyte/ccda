@@ -10329,12 +10329,15 @@ It throws a [CcdaParseError](#ccdaparseerror), and never returns a partly read d
 - is larger than `limits.maxInputBytes` in UTF-8: `INPUT_SIZE_LIMIT_EXCEEDED`;
 - nests elements deeper than `limits.maxDepth`: `ELEMENT_DEPTH_LIMIT_EXCEEDED`;
 - holds more elements than `limits.maxNodeCount`: `NODE_COUNT_LIMIT_EXCEEDED`;
-- is not well-formed, holds no root element, or holds a character XML 1.0 forbids, written raw
-  or as a character reference: `NOT_WELL_FORMED_XML`.
+- is not well-formed, holds no root element, holds text or a reference other than white space
+  before or after the root element, or holds a character XML 1.0 forbids, written raw or as a
+  character reference: `NOT_WELL_FORMED_XML`.
 
 No message or position names anything the text said. A leading byte order mark is removed and
 reported as `ENCODING_BOM_STRIPPED` through `options.onWarning`. Unlike `parseCcda`, it does not
-check the root element or report namespaces: any well-formed XML is read.
+check the root element or report namespaces: any well-formed XML is read. An entity reference
+with no declaration (`&name;`) is read as `parseCcda` reads it: never expanded, and counted
+toward `limits.maxEntityExpansions`.
 
 A limit of `NaN` is refused with a `TypeError` before the text is read, since it would turn its
 cap off; `Infinity` lifts a cap, as it does for `parseCcda`.

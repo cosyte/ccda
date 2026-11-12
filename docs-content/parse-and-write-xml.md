@@ -47,6 +47,13 @@ five predefined entities (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`) and chara
 (`&#65;`) are read as XML reads them and never count toward `maxEntityExpansions`. No message or
 position names anything the text said, so a refusal is safe to log.
 
+Not well-formed includes text before or after the root element: outside it, XML allows only white
+space, comments and processing instructions, so `parseXml("<a/>Synthetic note")` and
+`parseXml("note<a/>")` throw `NOT_WELL_FORMED_XML` (a reference such as `&amp;` there too) rather
+than return a document with the text dropped. `parseCcda` reads such a text as it always has. An
+entity reference with no declaration (`&name;`) inside the root is read as `parseCcda` reads it:
+never expanded, and counted toward `maxEntityExpansions`.
+
 ```ts runnable
 import { CcdaParseError, FATAL_CODES, parseXml } from "@cosyte/ccda";
 
@@ -134,16 +141,17 @@ these are the trees it refuses before it writes anything:
 
 The read-back is a parse of the output and a walk of both trees on every call, so a write costs
 more than writing alone. `bench/ccda.bench.mjs` measures `serializeXml` beside `parseXml` and
-beside xmldom's own `XMLSerializer`, which checks nothing and reads nothing back. Two readings of
-the same code on a 4-CPU GitHub-hosted runner with Node 22 (Bench reading runs 43181575140 and
-43186834350), each the median of 3 processes, per call:
+beside xmldom's own `XMLSerializer`, which checks nothing and reads nothing back. Every reading of
+the writer as it stands, from commit 2e7ed13 on, on a 4-CPU GitHub-hosted runner with Node 22,
+each the median of 3 processes, per call (Bench reading runs 43181575140 on 2e7ed13, 43186834350 on
+f7450cc and 43191626744 on 6778d43, each measuring the source of 2e7ed13):
 
 | Input                     | `parseXml`          | `serializeXml`      | xmldom `XMLSerializer`, unchecked |
 | ------------------------- | ------------------- | ------------------- | --------------------------------- |
-| Referral Note, 23 KiB     | 1.765 to 1.856 ms   | 4.842 to 5.059 ms   | 0.385 to 0.437 ms                 |
-| CCD, 100 entries, 0.2 MiB | 17.253 to 18.912 ms | 49.755 to 53.266 ms | 4.434 to 5.908 ms                 |
+| Referral Note, 23 KiB     | 1.469 to 1.856 ms   | 4.258 to 5.059 ms   | 0.385 to 0.437 ms                 |
+| CCD, 100 entries, 0.2 MiB | 14.222 to 18.912 ms | 44.062 to 53.266 ms | 4.434 to 5.908 ms                 |
 
-So a checked write took 9.0 to 12.6 times as long as xmldom's unchecked one, and 2.7 to 2.9 times
+So a checked write took 9.0 to 12.6 times as long as xmldom's unchecked one, and 2.7 to 3.1 times
 as long as reading the same text.
 
 The writer does not apply the reader's limits. A tree deeper or larger than the limits you read

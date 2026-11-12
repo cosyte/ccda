@@ -8,14 +8,16 @@
  * `parseXml` is `parseSecureXml` without the C-CDA part: it does not report an element outside the
  * HL7 v3 namespaces (`UNKNOWN_NAMESPACE_PREFIX`), since in another XML format that is no deviation,
  * and it takes its limits as options rather than a resolved record. Every refusal is the same one,
- * the same `CcdaParseError` with the same `FatalCode`, from the same code.
+ * the same `CcdaParseError` with the same `FatalCode`, from the same code, with one more: text
+ * other than white space before or after the root element, which `@xmldom/xmldom` drops and
+ * `parseSecureXml` tolerates, is refused as `NOT_WELL_FORMED_XML` (`readSecureXml`).
  *
  * @packageDocumentation
  */
 
 import type { Document, Element } from "@xmldom/xmldom";
 
-import { parseSecureXml, resolveLimits } from "../parser/secure-xml.js";
+import { readSecureXml, resolveLimits } from "../parser/secure-xml.js";
 import type { CcdaParseLimits, OnWarningCallback } from "../parser/types.js";
 
 import { readBackDifference } from "./same-tree.js";
@@ -59,12 +61,15 @@ export interface ParseXmlOptions {
  * - is larger than `limits.maxInputBytes` in UTF-8: `INPUT_SIZE_LIMIT_EXCEEDED`;
  * - nests elements deeper than `limits.maxDepth`: `ELEMENT_DEPTH_LIMIT_EXCEEDED`;
  * - holds more elements than `limits.maxNodeCount`: `NODE_COUNT_LIMIT_EXCEEDED`;
- * - is not well-formed, holds no root element, or holds a character XML 1.0 forbids, written raw
- *   or as a character reference: `NOT_WELL_FORMED_XML`.
+ * - is not well-formed, holds no root element, holds text or a reference other than white space
+ *   before or after the root element, or holds a character XML 1.0 forbids, written raw or as a
+ *   character reference: `NOT_WELL_FORMED_XML`.
  *
  * No message or position names anything the text said. A leading byte order mark is removed and
  * reported as `ENCODING_BOM_STRIPPED` through `options.onWarning`. Unlike `parseCcda`, it does not
- * check the root element or report namespaces: any well-formed XML is read.
+ * check the root element or report namespaces: any well-formed XML is read. An entity reference
+ * with no declaration (`&name;`) is read as `parseCcda` reads it: never expanded, and counted
+ * toward `limits.maxEntityExpansions`.
  *
  * A limit of `NaN` is refused with a `TypeError` before the text is read, since it would turn its
  * cap off; `Infinity` lifts a cap, as it does for `parseCcda`.
@@ -89,7 +94,7 @@ export interface ParseXmlOptions {
 export function parseXml(text: string, options: ParseXmlOptions = {}): Document {
   refuseNaNLimit(options.limits);
   const emit = options.onWarning ?? ignoreWarning;
-  return parseSecureXml(text, resolveLimits(options.limits), emit, ignoreWarning);
+  return readSecureXml(text, resolveLimits(options.limits), emit, ignoreWarning, true);
 }
 
 /**
