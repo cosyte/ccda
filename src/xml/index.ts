@@ -16,7 +16,7 @@ import type { Document, Element, Node } from "@xmldom/xmldom";
 
 import { parseSecureXml, resolveLimits } from "../parser/secure-xml.js";
 import type { CcdaParseLimits, OnWarningCallback } from "../parser/types.js";
-import { codePointLabel, FORBIDDEN_CHAR_RE } from "../parser/xml-chars.js";
+import { codePointLabel, firstForbiddenIndex } from "../parser/xml-chars.js";
 import { xmldom } from "../parser/xmldom.js";
 import { XML_DECLARATION } from "../serialize/serialize-dom.js";
 
@@ -91,16 +91,18 @@ export function parseXml(text: string, options: ParseXmlOptions = {}): Document 
   return parseSecureXml(text, resolveLimits(options.limits), emit, ignoreWarning);
 }
 
-/** The caps a caller may set, each checked by {@link refuseNaNLimit}. @internal */
-const LIMIT_FIELDS = ["maxInputBytes", "maxDepth", "maxNodeCount", "maxEntityExpansions"] as const;
-
 /**
  * Throw a `TypeError` when a cap is `NaN`: every comparison with `NaN` is false, so the reader
  * would pass every text over that cap, the cap silently off. `Infinity` lifts a cap on purpose and
- * is taken, as `parseCcda` takes it. @internal
+ * is taken, as `parseCcda` takes it.
+ *
+ * The constants and patterns in this module's checks are written inside the functions that use
+ * them, not at the top of the module: StrykerJS cannot judge a mutant in a value computed once when
+ * the module loads, and reports it as surviving. @internal
  */
 function refuseNaNLimit(limits: CcdaParseLimits | undefined): void {
-  for (const field of LIMIT_FIELDS) {
+  const fields = ["maxInputBytes", "maxDepth", "maxNodeCount", "maxEntityExpansions"] as const;
+  for (const field of fields) {
     if (Number.isNaN(limits?.[field])) {
       throw new TypeError(
         `parseXml: options.limits.${field} is NaN, which would turn its cap off; give a number, or leave it out for the default.`,
@@ -113,9 +115,6 @@ function refuseNaNLimit(limits: CcdaParseLimits | undefined): void {
 function ignoreWarning(): void {
   // Nothing to do: a reader of another XML format has no namespace to expect.
 }
-
-/** `Node.ELEMENT_NODE`. @internal */
-const ELEMENT_NODE = 1 as const;
 
 /** `Node.ATTRIBUTE_NODE`. @internal */
 const ATTRIBUTE_NODE = 2 as const;
@@ -150,40 +149,12 @@ class Refusal extends Error {}
  * It reads `value` with a string method, so it takes a string only. @internal
  */
 function refuseForbidden(value: string): void {
-  const at = value.search(FORBIDDEN_CHAR_RE);
+  const at = firstForbiddenIndex(value);
   if (at === -1) return;
   throw new Refusal(
     `holds ${codePointLabel(value.charCodeAt(at))}, a character XML 1.0 does not allow in a document`,
   );
 }
-
-/**
- * A DTD or entity declaration, in any case: the markers `parseXml`'s gate refuses wherever they
- * sit in a text, comments, CDATA sections and processing instructions included. @internal
- */
-const DTD_MARKER_RE = /<!DOCTYPE|<!ENTITY/iu;
-
-/**
- * A character XML's end-of-line handling reads as a line feed: carriage return, NEL, LINE
- * SEPARATOR and PARAGRAPH SEPARATOR. @internal
- */
-const LINE_BREAK_RE = /[\r\u0085\u2028\u2029]/u;
-
-/**
- * NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR, which the serializer writes raw in text and in an
- * attribute value and a parse reads as a line feed. @internal
- */
-const UNICODE_LINE_BREAK_RE = /[\u0085\u2028\u2029]/gu;
-
-/**
- * The data of an XML declaration as a parse keeps it, after `<?xml ` and before `?>`: XML 1.0
- * productions [23] to [26], [32], [80] and [81]: a version `1.` and digits, then an optional
- * encoding name, then an optional `standalone` of `yes` or `no`, in that order, each quoted with
- * matching quotes, then optional space. The space is a space, tab or line feed: a carriage return
- * would be read back as a line feed. @internal
- */
-const XML_DECLARATION_DATA_RE =
-  /^version[ \t\n]*=[ \t\n]*(?:"1\.[0-9]+"|'1\.[0-9]+')(?:[ \t\n]+encoding[ \t\n]*=[ \t\n]*(?:"[A-Za-z][\w.-]*"|'[A-Za-z][\w.-]*'))?(?:[ \t\n]+standalone[ \t\n]*=[ \t\n]*(?:"(?:yes|no)"|'(?:yes|no)'))?[ \t\n]*$/u;
 
 /** The members of a node {@link writeFilter} reads, by its type. @internal */
 type FilteredNode = Node & {
@@ -212,12 +183,10 @@ function writeFilter(node: FilteredNode): Node | string {
   if (uri !== null) refuseForbidden(uri);
   const text = type === ATTRIBUTE_NODE ? node.value : node.data;
   if (text !== undefined) refuseForbidden(text);
-  if (type === ELEMENT_NODE || type === ATTRIBUTE_NODE) refuseUnboundPrefix(node);
+  refuseUnboundPrefix(node);
   if (type === TEXT_NODE) return writeText(node.data as string);
   if (type === ATTRIBUTE_NODE) return writeAttribute(node);
-  if (type === PROCESSING_INSTRUCTION_NODE && isLeadingDeclaration(node)) {
-    return writeDeclaration(node.data as string);
-  }
+  if (isLeadingDeclaration(node)) return writeDeclaration(node.data as string);
   if (
     type === COMMENT_NODE ||
     type === CDATA_SECTION_NODE ||
@@ -232,7 +201,9 @@ function writeFilter(node: FilteredNode): Node | string {
  * Throw a {@link Refusal} when an element or attribute name carries a prefix and the node has no
  * namespace: the serializer writes no declaration for it, and a parse refuses an unbound prefix. A
  * namespace declaration (`xmlns:p`) and an `xml:` attribute set without a namespace are read back
- * as they are, since `xmlns` and `xml` are bound in every document. @internal
+ * as they are, since `xmlns` and `xml` are bound in every document. Every node passes through it:
+ * the other names (`#text`, `#comment`, `#document`) hold no colon, and a processing instruction
+ * target may not hold one (Namespaces in XML 1.0, section 7). @internal
  */
 function refuseUnboundPrefix(node: FilteredNode): void {
   const name = node.nodeName;
@@ -243,16 +214,17 @@ function refuseUnboundPrefix(node: FilteredNode): void {
 
 /**
  * Throw a {@link Refusal} when the data of a comment, CDATA section or processing instruction holds
- * a DTD or entity marker, which `parseXml` refuses wherever it sits, or a line break a parse reads
- * as a line feed, which cannot be written as a reference there. @internal
+ * a DTD or entity marker in any case, which `parseXml`'s gate refuses wherever it sits, or a
+ * character XML's end-of-line handling reads as a line feed (carriage return, NEL, LINE SEPARATOR,
+ * PARAGRAPH SEPARATOR), which cannot be written as a reference there. @internal
  */
 function refuseMarkup(data: string): void {
-  if (DTD_MARKER_RE.test(data)) {
+  if (/<!DOCTYPE|<!ENTITY/iu.test(data)) {
     throw new Refusal(
       "holds '<!DOCTYPE' or '<!ENTITY' in a comment, CDATA section or processing instruction, which parseXml refuses",
     );
   }
-  const at = data.search(LINE_BREAK_RE);
+  const at = data.search(/[\r\u0085\u2028\u2029]/u);
   if (at === -1) return;
   throw new Refusal(
     `holds ${codePointLabel(data.charCodeAt(at))} in a comment, CDATA section or processing instruction, where a parse reads it as a line feed`,
@@ -260,9 +232,9 @@ function refuseMarkup(data: string): void {
 }
 
 /**
- * Whether a processing instruction is the XML declaration a parse keeps: the target `xml`, as the
- * document's first node. Anywhere else the serializer's well-formedness check refuses the target
- * `xml`. @internal
+ * Whether a node is the XML declaration a parse keeps: a processing instruction (the one node with
+ * a `target`) with the target `xml`, as the document's first node. Anywhere else the serializer's
+ * well-formedness check refuses the target `xml`. @internal
  */
 function isLeadingDeclaration(node: FilteredNode): boolean {
   return (
@@ -271,11 +243,17 @@ function isLeadingDeclaration(node: FilteredNode): boolean {
 }
 
 /**
- * The XML declaration, written as it was when its data is an XML declaration's
- * ({@link XML_DECLARATION_DATA_RE}), and refused otherwise. @internal
+ * The XML declaration, written as it was when its data is an XML declaration's, and refused
+ * otherwise. The data, after `<?xml ` and before `?>`, follows XML 1.0 productions [23] to [26],
+ * [32], [80] and [81]: a version `1.` and digits, then an optional encoding name, then an optional
+ * `standalone` of `yes` or `no`, in that order, each quoted with matching quotes, then optional
+ * space. The space is a space, tab or line feed: a carriage return would be read back as a line
+ * feed. @internal
  */
 function writeDeclaration(data: string): string {
-  if (!XML_DECLARATION_DATA_RE.test(data)) {
+  const declaration =
+    /^version[ \t\n]*=[ \t\n]*(?:"1\.[0-9]+"|'1\.[0-9]+')(?:[ \t\n]+encoding[ \t\n]*=[ \t\n]*(?:"[A-Za-z][\w.-]*"|'[A-Za-z][\w.-]*'))?(?:[ \t\n]+standalone[ \t\n]*=[ \t\n]*(?:"(?:yes|no)"|'(?:yes|no)'))?[ \t\n]*$/u;
+  if (!declaration.test(data)) {
     throw new Refusal(
       "holds an XML declaration that is not one (a version, then an optional encoding and standalone)",
     );
@@ -283,9 +261,12 @@ function writeDeclaration(data: string): string {
   return `<?xml ${data}?>`;
 }
 
-/** NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR as a hexadecimal character reference. @internal */
-function lineBreakReference(char: string): string {
-  return `&#x${char.charCodeAt(0).toString(16)};`;
+/**
+ * NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR in `text` written as hexadecimal character
+ * references: the serializer writes them raw, and a parse reads each as a line feed. @internal
+ */
+function referenceLineBreaks(text: string): string {
+  return text.replace(/[\u0085\u2028\u2029]/gu, (char) => `&#x${char.charCodeAt(0).toString(16)};`);
 }
 
 /**
@@ -296,12 +277,13 @@ function lineBreakReference(char: string): string {
  * @internal
  */
 function writeText(data: string): string {
-  return data
-    .replace(/&/gu, "&amp;")
-    .replace(/</gu, "&lt;")
-    .replace(/>/gu, "&gt;")
-    .replace(/\r/gu, "&#13;")
-    .replace(UNICODE_LINE_BREAK_RE, lineBreakReference);
+  return referenceLineBreaks(
+    data
+      .replace(/&/gu, "&amp;")
+      .replace(/</gu, "&lt;")
+      .replace(/>/gu, "&gt;")
+      .replace(/\r/gu, "&#13;"),
+  );
 }
 
 /**
@@ -312,9 +294,9 @@ function writeText(data: string): string {
  * name, so only the value changes. @internal
  */
 function writeAttribute(node: FilteredNode): string {
-  return new (xmldom().XMLSerializer)()
-    .serializeToString(node, { requireWellFormed: true })
-    .replace(UNICODE_LINE_BREAK_RE, lineBreakReference);
+  return referenceLineBreaks(
+    new (xmldom().XMLSerializer)().serializeToString(node, { requireWellFormed: true }),
+  );
 }
 
 /**

@@ -505,6 +505,11 @@ describe("serializeXml writes only what parseXml reads back to the same tree", (
       "version=1.0",
       'version="2.0"',
       'version="1."',
+      'version="1x0"',
+      `version="1.0'`,
+      'version="1.0" encoding=""',
+      'version="1.0" encoding="UTF 8"',
+      'version="1.0" standalone="yes"x',
       'encoding="UTF-8"',
       'version="1.0" standalone="yes" encoding="UTF-8"',
       'version="1.0" standalone="maybe"',
@@ -540,6 +545,10 @@ describe("serializeXml writes only what parseXml reads back to the same tree", (
       'version="1.0" standalone="no"',
       'version="1.0" encoding="UTF-8" standalone="yes"',
       'version="1.0"\tencoding="UTF-8"\n standalone="yes" ',
+      'version="1.10"',
+      "version='1.10'  encoding='UTF-8'  standalone='no'",
+      "version\n=\n'1.0'\n\nencoding\t=\t\"Latin_1.x-y\"",
+      `version="1.0" standalone = 'yes'`,
     ];
     for (const data of good) {
       const doc = newDocument();
@@ -582,6 +591,8 @@ describe("serializeXml writes only what parseXml reads back to the same tree", (
       (doc) => doc.documentElement?.setAttribute(`${MARKER}:xml:b`, "1"),
       (doc) => doc.documentElement?.setAttribute(`${MARKER}:xmlns:b`, "1"),
       (doc) => doc.documentElement?.appendChild(doc.createElement("xml:b")),
+      // A processing instruction target may hold no colon (Namespaces in XML 1.0, section 7).
+      (doc) => doc.documentElement?.appendChild(doc.createProcessingInstruction("app:x", "1")),
     ];
     for (const [index, change] of cases.entries()) {
       const doc = newDocument();

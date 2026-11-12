@@ -23,7 +23,7 @@
  *
  * @internal
  */
-export const FORBIDDEN_CHAR_RE = /[\0-\x08\x0B\x0C\x0E-\x1F\uD800-\uDFFF\uFFFE\uFFFF]/u;
+const FORBIDDEN_CHAR_RE = /[\0-\x08\x0B\x0C\x0E-\x1F\uD800-\uDFFF\uFFFE\uFFFF]/u;
 
 /**
  * Whether a code point is an XML 1.0 `Char`.
@@ -50,6 +50,16 @@ export function isXmlChar(code: number): boolean {
 export function firstForbiddenCodePoint(value: string): number | undefined {
   const match = FORBIDDEN_CHAR_RE.exec(value);
   return match === null ? undefined : match[0].charCodeAt(0);
+}
+
+/**
+ * The index of the first character in `value` that XML 1.0 forbids, or `-1` when it holds none.
+ * It reads `value` with a string method, so it throws on anything but a string.
+ *
+ * @internal
+ */
+export function firstForbiddenIndex(value: string): number {
+  return value.search(FORBIDDEN_CHAR_RE);
 }
 
 /**
