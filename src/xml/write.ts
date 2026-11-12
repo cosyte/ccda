@@ -28,23 +28,29 @@ import { XML_DECLARATION } from "../serialize/serialize-dom.js";
  */
 export class Refusal extends Error {}
 
+/*
+ * Every constant and pattern of the writer is written inside the function that uses it, not at the
+ * top of the module: StrykerJS cannot judge a mutant in a value computed once when the module
+ * loads, and reports it as surviving.
+ */
+
 /**
  * The namespace the `xml` prefix is bound to in every document.
  *
- *
- *
  * @internal
  */
-export const XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace";
+export function xmlNamespace(): string {
+  return "http://www.w3.org/XML/1998/namespace";
+}
 
 /**
  * The namespace of every namespace declaration, `xmlns` and `xmlns:p`.
  *
- *
- *
  * @internal
  */
-export const XMLNS_NAMESPACE = "http://www.w3.org/2000/xmlns/";
+export function xmlnsNamespace(): string {
+  return "http://www.w3.org/2000/xmlns/";
+}
 
 /**
  * The members of a node the writer reads, each read only on the kinds of node that have it: `data`
@@ -64,60 +70,75 @@ export interface XmlNode {
   readonly attributes: ArrayLike<XmlNode>;
 }
 
-/** What `not well-formed` covers, the one refusal shared by the checks of XML's own grammar. */
-const NOT_WELL_FORMED =
-  "is not well-formed XML (a name that is not an XML name, a comment holding '--' or ending in '-', a CDATA section holding ']]>', a processing instruction holding '?>' or with a reserved target, or a document with no root element)";
+/** The refusal shared by the checks of XML's own grammar. */
+function notWellFormed(): Refusal {
+  return new Refusal(
+    "is not well-formed XML (a name that is not an XML name, a comment holding '--' or ending in '-', a CDATA section holding ']]>', a processing instruction holding '?>' or with a reserved target, or a document with no root element)",
+  );
+}
 
 /**
- * XML 1.0 (Fifth Edition) productions [4] and [4a], `NameStartChar` and `NameChar`, without the
- * colon: an `NCName` of Namespaces in XML 1.0. A name is one `NCName`, or two joined by a colon.
+ * Whether `name` is an XML name: an `NCName` of Namespaces in XML 1.0 (XML 1.0 Fifth Edition
+ * productions [4] and [4a], `NameStartChar` and `NameChar`, without the colon), or, when
+ * `qualified`, two joined by a colon.
  */
-const NAME_START =
-  "A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD\\u{10000}-\\u{EFFFF}";
-const NCNAME = `[${NAME_START}][${NAME_START}\\-.0-9\\u00B7\\u0300-\\u036F\\u203F\\u2040]*`;
-// The combining marks (U+0300 to U+036F) and the joiners (U+200C, U+200D) are ranges and single
-// characters of the class here, each one a character a name may hold, never part of a sequence.
-// eslint-disable-next-line no-misleading-character-class -- see above
-const QNAME_RE = new RegExp(`^${NCNAME}(?::${NCNAME})?$`, "u");
-// eslint-disable-next-line no-misleading-character-class -- see above
-const NCNAME_RE = new RegExp(`^${NCNAME}$`, "u");
+function isName(name: string, qualified: boolean): boolean {
+  const start =
+    "A-Z_a-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D\\u037F-\\u1FFF\\u200C\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD\\u{10000}-\\u{EFFFF}";
+  const ncname = `[${start}][${start}\\-.0-9\\u00B7\\u0300-\\u036F\\u203F\\u2040]*`;
+  const pattern = qualified ? `^${ncname}(?::${ncname})?$` : `^${ncname}$`;
+  // V8 keeps one compiled copy of a pattern for each source, so building it here costs no compile.
+  return new RegExp(pattern, "u").test(name);
+}
 
 /**
- * Each character an attribute value or text is written with as a reference, and the reference:
- * the markup characters, and the characters a parse would not keep as they are (XML 1.0 sections
- * 2.11 and 3.3.3: a carriage return, NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR read as a line
- * feed, and in an attribute value a tab and a line feed read as a space).
+ * The reference a character is written as in text or an attribute value: the markup characters by
+ * name, and the characters a parse would not keep as they are (XML 1.0 sections 2.11 and 3.3.3: a
+ * carriage return, NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR read as a line feed, and in an
+ * attribute value a tab and a line feed read as a space) by number.
  */
-const REFERENCES: Readonly<Record<string, string>> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "\t": "&#9;",
-  "\n": "&#10;",
-  "\r": "&#13;",
-  "\u0085": "&#x85;",
-  "\u2028": "&#x2028;",
-  "\u2029": "&#x2029;",
-};
+function reference(char: string): string {
+  switch (char) {
+    case "&":
+      return "&amp;";
+    case "<":
+      return "&lt;";
+    case ">":
+      return "&gt;";
+    case '"':
+      return "&quot;";
+    case "\r":
+      return "&#13;";
+    case "\n":
+      return "&#10;";
+    case "\t":
+      return "&#9;";
+    default:
+      return `&#x${char.charCodeAt(0).toString(16)};`;
+  }
+}
+
+/** Throw a {@link Refusal} naming the code point when `value` holds a character XML 1.0 forbids. */
+function refuseForbidden(value: string): void {
+  const at = firstForbiddenIndex(value);
+  if (at === -1) return;
+  throw new Refusal(
+    `holds ${codePointLabel(value.charCodeAt(at))}, a character XML 1.0 does not allow in a document`,
+  );
+}
 
 /**
  * A value as XML text: refused when it holds a character XML 1.0 forbids, and otherwise written
- * with every character in {@link REFERENCES} that a parse would change as its reference. Text
- * keeps a tab and a line feed as they are; an attribute value (and a namespace, which is one)
- * writes them as references too, and a double quote, which closes it.
+ * with every character a parse would change as its {@link reference}. Text keeps a tab and a line
+ * feed as they are; an attribute value (and a namespace, which is one) writes them as references
+ * too, and a double quote, which closes it.
  *
  * @internal
  */
 export function escapeValue(value: string, inAttribute: boolean): string {
-  const at = firstForbiddenIndex(value);
-  if (at !== -1) {
-    throw new Refusal(
-      `holds ${codePointLabel(value.charCodeAt(at))}, a character XML 1.0 does not allow in a document`,
-    );
-  }
+  refuseForbidden(value);
   const pattern = inAttribute ? /[&<>"\t\n\r\u0085\u2028\u2029]/gu : /[&<>\r\u0085\u2028\u2029]/gu;
-  return value.replace(pattern, (char) => REFERENCES[char] as string);
+  return value.replace(pattern, reference);
 }
 
 /**
@@ -129,7 +150,7 @@ export function escapeValue(value: string, inAttribute: boolean): string {
  * @internal
  */
 function checkMarkup(data: string): void {
-  escapeValue(data, false);
+  refuseForbidden(data);
   if (/<!DOCTYPE|<!ENTITY/iu.test(data)) {
     throw new Refusal(
       "holds '<!DOCTYPE' or '<!ENTITY' in a comment, CDATA section or processing instruction, which parseXml refuses",
@@ -145,7 +166,7 @@ function checkMarkup(data: string): void {
 
 /** Throw a {@link Refusal} when `name` is not an XML name: one `NCName`, or two joined by `:`. */
 function checkName(name: string): void {
-  if (!QNAME_RE.test(name)) throw new Refusal(NOT_WELL_FORMED);
+  if (!isName(name, true)) throw notWellFormed();
 }
 
 /** The prefix of a qualified name, or `""` when it has none. */
@@ -163,35 +184,33 @@ function prefixOf(name: string): string {
 export function declaredPrefix(attr: XmlNode): string | undefined {
   const name = attr.nodeName;
   const uri = attr.namespaceURI;
-  if (uri !== null && uri !== XMLNS_NAMESPACE) return undefined;
+  if (uri !== null && uri !== xmlnsNamespace()) return undefined;
   if (name === "xmlns") return "";
   return name.startsWith("xmlns:") ? name.slice(6) : undefined;
 }
 
 /**
  * The namespaces in scope at an element, each prefix (`""` for the default namespace) to its
- * namespace (`""` for none). An element that declares nothing shares its parent's, so a lookup
- * costs the same at any depth.
+ * namespace (`""` for none), its own declarations over its ancestors', so a lookup costs the same
+ * at any depth.
  */
 type Scope = ReadonlyMap<string, string>;
 
-/** The scope every document starts in: `xml` and `xmlns` bound, no default namespace. */
+/**
+ * The scope every document starts in: `xml` bound, no default namespace. (`xmlns` is bound too,
+ * but only a declaration carries it, and an element with it is refused.)
+ */
 function rootScope(): Scope {
-  return new Map([
-    ["xml", XML_NAMESPACE],
-    ["xmlns", XMLNS_NAMESPACE],
-  ]);
+  return new Map([["xml", xmlNamespace()]]);
 }
 
 /**
- * The namespace `prefix` is bound to in `scope`: `null` for the default namespace when none is
- * declared (or it is undeclared with `xmlns=""`), `undefined` for another prefix no declaration
- * binds.
+ * The namespace `prefix` is bound to in `scope`, or `null` when none is: no declaration binds it,
+ * or it is the default namespace undeclared with `xmlns=""`.
  */
-function lookup(scope: Scope, prefix: string): string | null | undefined {
+function lookup(scope: Scope, prefix: string): string | null {
   const uri = scope.get(prefix);
-  if (uri === undefined) return prefix === "" ? null : undefined;
-  return uri === "" ? null : uri;
+  return uri === undefined || uri === "" ? null : uri;
 }
 
 /**
@@ -202,8 +221,8 @@ function lookup(scope: Scope, prefix: string): string | null | undefined {
 function checkDeclaration(prefix: string, uri: string): void {
   if (
     prefix === "xmlns" ||
-    uri === XMLNS_NAMESPACE ||
-    (prefix === "xml") !== (uri === XML_NAMESPACE) ||
+    uri === xmlnsNamespace() ||
+    (prefix === "xml") !== (uri === xmlNamespace()) ||
     (prefix !== "" && uri === "")
   ) {
     throw new Refusal(
@@ -211,10 +230,6 @@ function checkDeclaration(prefix: string, uri: string): void {
     );
   }
 }
-
-/** The refusal of a prefix bound to two namespaces on one element. */
-const TWO_NAMESPACES =
-  "binds one prefix to two namespaces on one element, which no start tag can declare";
 
 /**
  * The declarations one element is written with: those it carries, then those the writer adds so
@@ -243,7 +258,11 @@ class Declarations {
     const local = this.#local.get(prefix);
     const bound = local === undefined ? lookup(this.scope, prefix) : local === "" ? null : local;
     if (bound === uri) return "";
-    if (local !== undefined) throw new Refusal(TWO_NAMESPACES);
+    if (local !== undefined) {
+      throw new Refusal(
+        "binds one prefix to two namespaces on one element, which no start tag can declare",
+      );
+    }
     const value = uri ?? "";
     checkDeclaration(prefix, value);
     this.#local.set(prefix, value);
@@ -252,7 +271,6 @@ class Declarations {
 
   /** The scope of the element's content. */
   inner(): Scope {
-    if (this.#local.size === 0) return this.scope;
     return new Map([...this.scope, ...this.#local]);
   }
 }
@@ -326,13 +344,10 @@ const DOCTYPE = 10;
 function instruction(node: XmlNode): string {
   const target = node.target;
   const data = node.data;
-  if (target.includes(":")) {
-    // A target may hold no colon (Namespaces in XML 1.0, section 7).
-    throw new Refusal("holds a prefixed name with no namespace, which no declaration binds");
-  }
   checkMarkup(data);
-  if (!NCNAME_RE.test(target) || /^xml$/iu.test(target) || data.includes("?>")) {
-    throw new Refusal(NOT_WELL_FORMED);
+  // A target is a name with no colon (Namespaces in XML 1.0, section 7), and not `xml` in any case.
+  if (!isName(target, false) || /^xml$/iu.test(target) || data.includes("?>")) {
+    throw notWellFormed();
   }
   if (/^[ \t\n]/u.test(data)) {
     throw new Refusal(
@@ -345,14 +360,14 @@ function instruction(node: XmlNode): string {
 /** A comment, `<!--data-->`, checked as {@link checkMarkup} checks it. */
 function comment(data: string): string {
   checkMarkup(data);
-  if (data.includes("--") || data.endsWith("-")) throw new Refusal(NOT_WELL_FORMED);
+  if (data.includes("--") || data.endsWith("-")) throw notWellFormed();
   return `<!--${data}-->`;
 }
 
 /** A CDATA section, `<![CDATA[data]]>`; an empty one, which a parse drops, is not written. */
 function cdata(data: string): string {
   checkMarkup(data);
-  if (data.includes("]]>")) throw new Refusal(NOT_WELL_FORMED);
+  if (data.includes("]]>")) throw notWellFormed();
   return data === "" ? "" : `<![CDATA[${data}]]>`;
 }
 
@@ -417,7 +432,7 @@ function writeElement(root: XmlNode, scope: Scope): string {
  * feed.
  */
 function declaration(data: string): string {
-  escapeValue(data, false);
+  refuseForbidden(data);
   const grammar =
     /^version[ \t\n]*=[ \t\n]*(?:"1\.[0-9]+"|'1\.[0-9]+')(?:[ \t\n]+encoding[ \t\n]*=[ \t\n]*(?:"[A-Za-z][\w.-]*"|'[A-Za-z][\w.-]*'))?(?:[ \t\n]+standalone[ \t\n]*=[ \t\n]*(?:"(?:yes|no)"|'(?:yes|no)'))?[ \t\n]*$/u;
   if (!grammar.test(data)) {
@@ -428,9 +443,12 @@ function declaration(data: string): string {
   return `<?xml ${data}?>`;
 }
 
-/** Whether a node is a processing instruction with the target `xml`. */
+/**
+ * Whether a node is a processing instruction with the target `xml`: the only node with a `target`
+ * is an instruction.
+ */
 function isDeclaration(node: XmlNode | undefined): boolean {
-  return node?.nodeType === INSTRUCTION && node.target === "xml";
+  return node?.target === "xml";
 }
 
 /**
@@ -474,6 +492,6 @@ export function writeXml(node: XmlNode): string {
       out += prolog(child, index === 0);
     }
   }
-  if (!root) throw new Refusal(NOT_WELL_FORMED);
+  if (!root) throw notWellFormed();
   return out;
 }

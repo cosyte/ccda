@@ -18,37 +18,38 @@ import type { Document } from "@xmldom/xmldom";
 
 import type { CcdaParseError } from "../parser/errors.js";
 import { parseSecureXml } from "../parser/secure-xml.js";
-import { XML_NAMESPACE, declaredPrefix, type XmlNode } from "./write.js";
-
-/** No cap: the writer does not apply the reader's limits, so neither does its check. */
-const NO_LIMITS = {
-  maxInputBytes: Number.POSITIVE_INFINITY,
-  maxDepth: Number.POSITIVE_INFINITY,
-  maxNodeCount: Number.POSITIVE_INFINITY,
-  maxEntityExpansions: Number.POSITIVE_INFINITY,
-};
+import { declaredPrefix, xmlNamespace, type XmlNode } from "./write.js";
 
 /** Drop a warning: the check reads text it wrote, and only its tree matters. */
 function ignore(): void {
   // Nothing to report.
 }
 
-/** The node types compared. */
+/** The node types compared; a comment is the one other kind content holds. */
 const ELEMENT = 1;
 const TEXT = 3;
 const CDATA = 4;
 const INSTRUCTION = 7;
-const COMMENT = 8;
 const DOCUMENT = 9;
 
-/** The kind of a node, as a refusal names it. */
-const KINDS: Readonly<Record<number, string>> = {
-  [ELEMENT]: "an element",
-  [TEXT]: "text",
-  [CDATA]: "a CDATA section",
-  [INSTRUCTION]: "a processing instruction",
-  [COMMENT]: "a comment",
-};
+/**
+ * The kind of a node, as a refusal names it. Written in a function, not a table at the top of the
+ * module: StrykerJS cannot judge a mutant in a value computed once when the module loads.
+ */
+function kindOf(type: number): string {
+  switch (type) {
+    case ELEMENT:
+      return "an element";
+    case TEXT:
+      return "text";
+    case CDATA:
+      return "a CDATA section";
+    case INSTRUCTION:
+      return "a processing instruction";
+    default:
+      return "a comment";
+  }
+}
 
 /**
  * The nodes of an element's content as a parse would hold them: adjacent text joined, an empty text
@@ -76,21 +77,24 @@ function prologOf(doc: XmlNode): { node: XmlNode; type: number; data: string }[]
   return contentOf(doc).filter((x) => x.type !== TEXT || !/^[ \t\n\r]*$/u.test(x.data));
 }
 
-/** Whether a node of a document is a processing instruction with the target `xml`. */
-function isDeclaration(x: { node: XmlNode; type: number } | undefined): boolean {
-  return x?.type === INSTRUCTION && x.node.target === "xml";
+/**
+ * Whether a node of a document is a processing instruction with the target `xml`: the only node
+ * with a `target` is an instruction.
+ */
+function isDeclaration(x: { node: XmlNode } | undefined): boolean {
+  return x?.node.target === "xml";
 }
 
 /** An attribute's namespace as a parse gives it: `xml:` is in the xml namespace, set or not. */
 function attributeNamespace(attr: XmlNode): string | null {
   if (attr.namespaceURI !== null) return attr.namespaceURI;
-  return attr.nodeName.startsWith("xml:") ? XML_NAMESPACE : null;
+  return attr.nodeName.startsWith("xml:") ? xmlNamespace() : null;
 }
 
 /** The kind of the first difference between two elements' own names and attributes, if any. */
 function elementDifference(a: XmlNode, b: XmlNode): string | undefined {
   if (a.nodeName !== b.nodeName || a.namespaceURI !== b.namespaceURI) {
-    return KINDS[ELEMENT];
+    return kindOf(ELEMENT);
   }
   const declarations = new Map<string, string>();
   const attributes: string[] = [];
@@ -157,7 +161,7 @@ function sameNodes(
   if (left.length !== right.length) return "the nodes of an element or document";
   for (const [index, x] of left.entries()) {
     const y = right[index] as (typeof right)[number];
-    if (x.type !== y.type || x.data !== y.data) return KINDS[x.type];
+    if (x.type !== y.type || x.data !== y.data) return kindOf(x.type);
     if (x.type === ELEMENT) pairs.push([x.node, y.node]);
   }
   return undefined;
@@ -171,9 +175,16 @@ function sameNodes(
  * @internal
  */
 export function readBackDifference(xml: string, node: XmlNode): string | undefined {
+  // No cap: the writer does not apply the reader's limits, so neither does its check.
+  const limits = {
+    maxInputBytes: Number.POSITIVE_INFINITY,
+    maxDepth: Number.POSITIVE_INFINITY,
+    maxNodeCount: Number.POSITIVE_INFINITY,
+    maxEntityExpansions: Number.POSITIVE_INFINITY,
+  };
   let doc: XmlNode;
   try {
-    doc = parseSecureXml(xml, NO_LIMITS, ignore, ignore) as unknown as XmlNode;
+    doc = parseSecureXml(xml, limits, ignore, ignore) as unknown as XmlNode;
   } catch (err) {
     // The reader throws a CcdaParseError and nothing else; its code names no content.
     return `would be written as text parseXml refuses (${(err as CcdaParseError).code})`;
