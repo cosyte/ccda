@@ -4,7 +4,7 @@
  *
  * A parse reads its tree with `./xml-tree.ts`, and a parsed document writes its XML from that tree
  * (`../serialize/write-tree.ts`); both need `@xmldom/xmldom` only for a text the reader hands back.
- * `buildCcda` and `parseSecureXml` still use it, and so does `editCcda` for a text not in the
+ * `buildCcda`, `parseSecureXml`, `parseXml` and `serializeXml` still use it, and so does `editCcda` for a text not in the
  * writer's form. Loading it costs more than the rest of this package together (most
  * of it the HTML entity table its parser module builds, which an XML parse never reads), so an
  * import that does not need it does not pay for it.
