@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.1.12
+
+### Patch Changes
+
+- 454432b: Check the required sections of a document stamped `2024-05-01` (C-CDA 3.0.0, 4.0.0 or 5.0.0) against C-CDA 5.0.0, and recognize the Patient Generated Document header.
+
+  - A document whose document-type `templateId` carries `2024-05-01`, and no `2015-08-01` on the same root, now has its required sections checked against the C-CDA 5.0.0 document profiles. It can draw `REQUIRED_SECTION_MISSING` where it drew `REQUIRED_SECTIONS_NOT_EVALUATED` before, and under `strict: true` that warning throws like any other, and `editCcda` refuses an edit that leaves such a section missing. A 5.0.0 Discharge Summary also requires Procedures and Results. A Diagnostic Imaging Report stamped `2024-05-01` is still reported not evaluated, because 5.0.0 has no such type, and so is any other unmodelled stamp.
+  - `readTemplateStamp("2024-05-01")` returns the new reading `"r30-stamped"` (it returned `"unmodeled-release"`), and `requiredSectionStatus` takes `{ stamp: "r30-stamped" }`.
+  - `RequiredSectionStatus` gains `release`: `"R2.1"`, `"5.0.0"`, or `undefined` when nothing was evaluated.
+  - A document carrying only the Patient Generated Document header (`2.16.840.1.113883.10.20.29.1`) now reads `documentType: "patientGeneratedDocument"` instead of `undefined` with `UNKNOWN_DOCUMENT_TEMPLATE`. A document that also carries another document-type `templateId` keeps that type. `DOCUMENT_TYPES` has 13 entries.
+  - The `TEMPLATE_EXTENSION_UNMODELED_RELEASE` message for the `2024-05-01` stamp now says the required sections are checked against 5.0.0.
+
+  What a caller must change: a `switch` over `TemplateStampReading` or `DocumentType` that names every member needs a case for `"r30-stamped"` or `"patientGeneratedDocument"`. Code that treated `REQUIRED_SECTIONS_NOT_EVALUATED` as the outcome for every `2024-05-01` document should read `REQUIRED_SECTION_MISSING` and `requiredSectionStatus(...).release` instead.
+
+- 64970f4: The document `editCcda` builds from the read tree no longer reads past the end of the nodes outside the root: when nothing follows the root, it is appended after them. The document built is the same as before, and a caller changes nothing.
+- 17b97db: Four values the parser dropped are now kept or reported.
+
+  - A `REAL` observation value (`<value xsi:type="REAL" value="7.25"/>`) is a new `real` arm of `ObservationValue`, `{ kind: "real", value, raw, nullFlavor }`, shaped like `integer`. It used to be `{ kind: "unsupported", xsiType: "REAL" }` with `RESULT_VALUE_TYPE_UNHANDLED`, and the number was in no field. A caller with an exhaustive `switch` on `kind` adds a `"real"` case; one that read `REAL` values out of `doc.toString()` can read `value` instead.
+  - A section entry whose statement carries no `templateId` now raises `MISSING_TEMPLATE_ID` on that statement, in every section. Entries are recognized by `templateId` alone, so such an entry reaches no model field; before this nothing was said.
+  - A Goal Observation that is a section's direct entry, in a Goals section or any other, now raises `PLAN_ENTRY_NOT_MODELED`. Goals are still not modeled.
+  - A procedure's device participants are kept on a new optional `devices` field of `Procedure`: each one's `ids` (the UDI on a Product Instance) and its device `code`. A Procedure Activity Procedure in a Medical Equipment section, where the C-CDA R2.1 guide names it (CONF:1098-31885), no longer raises `SECTION_PLACEMENT_SUSPECT`.
+
+  The `RESULT_VALUE_TYPE_UNHANDLED` message no longer says the raw value is preserved: it now says the type name and any text content are kept, and content in the value's attributes or child elements is not in the model. A caller that matches on that message text updates it; matching on the code is unchanged. A document with an entry that has no `templateId`, or with a Goal Observation entry, now carries one more warning, so a parse with `strict: true` throws on it where it did not before; a `REAL` value and an implant procedure in Medical Equipment each carry one fewer.
+
+- b326be6: Docs: say which C-CDA and USCDI versions we read and build. Our conformance target is C-CDA R2.1 with Companion Guide R4.1 (USCDI v3); we build R2.1, read documents stamped for 3.0.0 to 5.0.0 leniently, and do not trace the Companion Guide yet. A new page lists the USCDI to C-CDA version table, the stamps we recognize, and the templates added after R2.1 with whether each is modeled (none is yet). The README and the overview say the same in one line each, and Diagnostic Imaging Report is marked R2.1-only. No code changes, so callers change nothing.
+
 ## 0.1.11
 
 ### Patch Changes
