@@ -617,13 +617,9 @@ function buildDom(
           {},
         );
       }
-      if (strict && !isToleratedReport(level, message)) {
-        throw new CcdaParseError(
-          FATAL_CODES.NOT_WELL_FORMED_XML,
-          FATAL_MESSAGES.NOT_WELL_FORMED_XML,
-          {},
-        );
-      }
+      // xmldom throws its own ParseError in place of whatever a report throws, and the catch below
+      // turns that into NOT_WELL_FORMED_XML, so no message is needed and none could leak.
+      if (strict && !isToleratedReport(level, message)) throw new Error();
     },
   });
 
