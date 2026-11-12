@@ -30,6 +30,7 @@ no warning.
 - A vendor profile quiets only codes outside `SAFETY_CRITICAL_CODES` and never changes an extracted value.
 - An Unstructured Document's `nonXMLBody` payload is exposed but never decoded.
 - An element holding one attribute name twice under two prefixes of one namespace is refused with `NOT_WELL_FORMED_XML`, never read with one of the two.
+- Line endings follow XML 1.0: only CR LF and a lone CR become a line feed. NEL, U+2028 and U+2029 are kept in text and attribute values, and refused with `NOT_WELL_FORMED_XML` inside a tag or outside the root.
 - The scope is C-CDA R2.1, US Realm: no transport and no validator suite.
 
 ## Document types

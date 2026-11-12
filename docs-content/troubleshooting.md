@@ -54,6 +54,13 @@ that element or above it) is not well formed under Namespaces in XML 1.0, so `pa
 this release the parser kept the later attribute and dropped the earlier one without a word. Remove
 one of the two, or give it a local name of its own, before you parse.
 
+NEL (U+0085), LINE SEPARATOR (U+2028) and PARAGRAPH SEPARATOR (U+2029) are line breaks in XML 1.1
+but ordinary characters in XML 1.0. Narrative text and attribute values keep them as they were
+written; before this release the parser turned them into line feeds. A text that uses one as the
+white space between the parts of a tag, in an end tag, or before or after the root element is not
+well formed under XML 1.0, so `parseCcda` and `parseSecureXml` throw `NOT_WELL_FORMED_XML` for it.
+Replace such a character with a line feed in those places before you parse.
+
 ## Common symptoms
 
 | Symptom                                         | Likely cause                                                                        | What to do                                                                                                                                                                                             |

@@ -89,8 +89,9 @@ const PREDEFINED_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
  *   surface;
  * - `&`: an entity reference `&name;` (predefined ones are told apart after the match), or, when
  *   `#` follows the `&`, a character reference `&#...;`, whose code point is checked;
- * - a carriage return, NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR: a character XML's end-of-line
- *   handling rewrites;
+ * - a carriage return: the one character XML 1.0's end-of-line handling rewrites (section 2.11);
+ * - NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR: a line break in XML 1.1 and an ordinary character
+ *   in XML 1.0, kept as it is, but allowed only where character data is ({@link breakInMarkup});
  * - anything else: a character XML 1.0 forbids (`./xml-chars.ts`): a C0 control other than tab,
  *   line feed and carriage return, an unpaired surrogate (the `u` flag reads a pair as one
  *   character, so only an unpaired one matches the surrogate range), U+FFFE or U+FFFF.
@@ -126,23 +127,17 @@ const LOWER_X = 0x78;
 /** `X`: `&#X...;` is not a character reference in XML, so the gate leaves it to the parser. @internal */
 const UPPER_X = 0x58;
 
-/** A carriage return, the first character end-of-line handling rewrites. @internal */
+/** A carriage return, the one character end-of-line handling rewrites. @internal */
 const CARRIAGE_RETURN = 0x0d;
 
-/** NEL, rewritten by end-of-line handling. @internal */
+/** NEL: a line break in XML 1.1, an ordinary character in XML 1.0. @internal */
 const NEXT_LINE = 0x85;
 
-/** LINE SEPARATOR, rewritten by end-of-line handling. @internal */
+/** LINE SEPARATOR: a line break in XML 1.1, an ordinary character in XML 1.0. @internal */
 const LINE_SEPARATOR = 0x2028;
 
-/** PARAGRAPH SEPARATOR, rewritten by end-of-line handling. @internal */
+/** PARAGRAPH SEPARATOR: a line break in XML 1.1, an ordinary character in XML 1.0. @internal */
 const PARAGRAPH_SEPARATOR = 0x2029;
-
-/** A carriage return followed by a line feed or NEL: one line break. @internal */
-const LINE_BREAK_PAIR_RE = /\r[\n\u0085]/g;
-
-/** Any other character the end-of-line handling turns into a line feed. @internal */
-const LINE_BREAK_RE = /[\r\u0085\u2028\u2029]/g;
 
 /**
  * Merge caller-supplied limit overrides over {@link DEFAULT_LIMITS}. Honors
@@ -324,14 +319,19 @@ export function parseSecureSource(
 }
 
 /**
- * XML's end-of-line handling as `@xmldom/xmldom` applies it before it parses (its
- * `normalizeLineEndings`, transcribed): a carriage return followed by a line feed or NEL, then any
- * carriage return, NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR left, becomes one line feed.
+ * XML 1.0's end-of-line handling (section 2.11): a carriage return followed by a line feed, and a
+ * carriage return on its own, each become one line feed. Nothing else is rewritten. NEL (U+0085),
+ * LINE SEPARATOR (U+2028) and PARAGRAPH SEPARATOR (U+2029) are line breaks only in XML 1.1; in an
+ * XML 1.0 document they are characters of the text and are kept as they were written.
+ * `@xmldom/xmldom`'s own `normalizeLineEndings` rewrites them too, as XML 1.1 does, so it is never
+ * used: {@link buildDom} hands this function to its parser instead.
  *
  * @internal
  */
 export function normalizeLineEndings(source: string): string {
-  return source.replace(LINE_BREAK_PAIR_RE, "\n").replace(LINE_BREAK_RE, "\n");
+  // A carriage return and the line feed after it, if there is one: one line break. The pattern is
+  // written here, not as a module constant, so a test that calls this function is traced to it.
+  return source.replace(/\r\n?/g, "\n");
 }
 
 /**
@@ -386,8 +386,8 @@ export function rebuildDom(
  * The gate, in one scan of the text ({@link GATE_RE}): throw `XXE_OR_DTD_PRESENT` for a declared
  * DTD or entity anywhere, else `ENTITY_EXPANSION_LIMIT` when the custom entity references exceed
  * the cap, else `NOT_WELL_FORMED_XML` when the text holds a character XML 1.0 forbids, written
- * raw or as a character reference; return whether the text holds a character the end-of-line
- * handling rewrites.
+ * raw or as a character reference; return whether the text holds a carriage return, the one
+ * character the end-of-line handling rewrites.
  *
  * Such a character is refused rather than read with a warning: XML 1.0 makes it a well-formedness
  * error (section 2.2, and the Legal Character constraint of section 4.1), so the text is not XML,
@@ -398,7 +398,8 @@ export function rebuildDom(
  * character reference is refused only where XML expands it, in text content and attribute values:
  * inside a comment, a CDATA section or a processing instruction `&#1;` is plain text, not a
  * reference (XML 1.0 productions [15], [16] and [20], and section 4.4), and the document is
- * well-formed ({@link anyExpanded}).
+ * well-formed ({@link anyExpanded}). NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR are refused with
+ * the same fatal only where XML 1.0 allows no character data ({@link breakInMarkup}).
  *
  * A declared DTD outranks the entity cap wherever it sits, as it did when the two were separate
  * passes with the DTD check first: a count over the cap does not throw until the scan has
@@ -412,6 +413,7 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
   let count = 0;
   let over = false;
   let lineBreaks = false;
+  let xml11Breaks = false;
   let forbidden = false;
   // Where each character reference naming a forbidden code point starts, in text order: one in a
   // comment, a CDATA section or a processing instruction is not a reference, so whether it makes the
@@ -430,13 +432,10 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
       );
     }
     if (first !== AMPERSAND) {
-      if (
-        first === CARRIAGE_RETURN ||
-        first === NEXT_LINE ||
-        first === LINE_SEPARATOR ||
-        first === PARAGRAPH_SEPARATOR
-      ) {
+      if (first === CARRIAGE_RETURN) {
         lineBreaks = true;
+      } else if (isXml11Break(first)) {
+        xml11Breaks = true;
       } else {
         forbidden = true;
       }
@@ -460,7 +459,8 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
   }
   if (
     forbidden ||
-    (forbiddenReferences !== undefined && anyExpanded(source, forbiddenReferences))
+    (forbiddenReferences !== undefined && anyExpanded(source, forbiddenReferences)) ||
+    (xml11Breaks && breakInMarkup(source))
   ) {
     throw new CcdaParseError(
       FATAL_CODES.NOT_WELL_FORMED_XML,
@@ -469,6 +469,101 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
     );
   }
   return lineBreaks;
+}
+
+/** Whether a UTF-16 code unit is NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR. @internal */
+function isXml11Break(code: number): boolean {
+  return code === NEXT_LINE || code === LINE_SEPARATOR || code === PARAGRAPH_SEPARATOR;
+}
+
+/**
+ * Whether a string holds NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR anywhere. The pattern is
+ * written in the function, not as a module constant, so a test that calls it is traced to it.
+ *
+ * @internal
+ */
+function hasXml11Break(text: string): boolean {
+  return /[\u0085\u2028\u2029]/u.test(text);
+}
+
+/**
+ * Where the first XML 1.0 white space (production [3]: space, tab, line feed, carriage return)
+ * sits in a string, or -1. The pattern is written here for the reason {@link hasXml11Break} gives.
+ *
+ * @internal
+ */
+function firstXmlSpace(text: string): number {
+  return text.search(/[ \t\n\r]/u);
+}
+
+/**
+ * Whether NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR sits where XML 1.0 allows no such character:
+ * in a tag outside its attribute values, in an end tag, in a processing instruction's target or an
+ * XML declaration, or outside the root element. Run only when the gate found one of the three, so
+ * a text without one pays nothing.
+ *
+ * XML 1.0 reads each of them as an ordinary character, never as white space (production [3]) and
+ * never in a name, so a text holding one between the parts of a tag is not well-formed, and
+ * libxml2 refuses it. `@xmldom/xmldom` instead reads such a tag as text, `<` and all, without a
+ * word: an element and its attributes would become narrative text. It is refused here, with the
+ * same fatal as any other text that is not XML. Character data, attribute values, comments, CDATA
+ * sections and the data of a processing instruction may hold them, and keep them.
+ *
+ * One walk from the start of the text, `<` by `<`, never revisiting a character, as
+ * {@link anyExpanded} walks. A tag is read to the `>` that closes it outside quotes, and counted
+ * open (a start tag), closed (an end tag) or neither (an empty element), so text outside the root
+ * is known. A construct that never closes ends the walk with a refusal: such a text is not
+ * well-formed either way. Any other `<!` construct is read as a tag; the gate has refused a
+ * declared DTD already, and none other is well-formed.
+ *
+ * @internal
+ */
+export function breakInMarkup(source: string): boolean {
+  let depth = 0;
+  let at = 0;
+  for (;;) {
+    const lt = source.indexOf("<", at);
+    const textEnd = lt === -1 ? source.length : lt;
+    if (depth === 0 && hasXml11Break(source.slice(at, textEnd))) return true;
+    if (lt === -1) return false;
+    if (source.startsWith("<?", lt)) {
+      const end = source.indexOf("?>", lt + 2);
+      if (end === -1) return true;
+      // The target runs to the first white space; an XML declaration holds no character data.
+      const instruction = source.slice(lt + 2, end);
+      const space = firstXmlSpace(instruction);
+      const target = space === -1 ? instruction : instruction.slice(0, space);
+      if (hasXml11Break(target === "xml" ? instruction : target)) return true;
+      at = end + 2;
+      continue;
+    }
+    const skipped = UNEXPANDED.find(({ open }) => source.startsWith(open, lt));
+    if (skipped !== undefined) {
+      const end = source.indexOf(skipped.close, lt + skipped.open.length);
+      if (end === -1) return true;
+      at = end + skipped.close.length;
+      continue;
+    }
+    // A start tag, an end tag or another `<!` construct: read to its `>` outside quotes.
+    let quote = 0;
+    let end = lt + 1;
+    for (; end < source.length; end++) {
+      const code = source.charCodeAt(end);
+      if (quote !== 0) {
+        if (code === quote) quote = 0;
+      } else if (code === 0x22 || code === 0x27) {
+        quote = code;
+      } else if (code === 0x3e) {
+        break;
+      } else if (isXml11Break(code)) {
+        return true;
+      }
+    }
+    if (end === source.length) return true;
+    if (source.charCodeAt(lt + 1) === 0x2f) depth -= 1;
+    else if (source.charCodeAt(end - 1) !== 0x2f) depth += 1;
+    at = end + 1;
+  }
 }
 
 /**
@@ -553,14 +648,15 @@ function keepLineEndings(source: string): string {
  * @internal
  */
 function buildDom(source: string, lineBreaksToNormalize: boolean, locate = true): Document {
-  const { DOMParser, normalizeLineEndings: xmldomLineEndings } = xmldom();
+  const { DOMParser } = xmldom();
   const parser = new DOMParser({
     domHandler: checkingDomBuilder(DOMParser),
     locator: locate,
-    // XML's end-of-line handling, which xmldom applies to the whole text before it parses. On a
-    // text with none of the characters it rewrites, both of its replacements are the identity, so
-    // the text is passed through as it is instead of being scanned twice more.
-    normalizeLineEndings: lineBreaksToNormalize ? xmldomLineEndings : keepLineEndings,
+    // XML 1.0's end-of-line handling, which xmldom applies to the whole text before it parses. Its
+    // own default is XML 1.1's, which also rewrites NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR,
+    // so ours replaces it. On a text with no carriage return the replacement is the identity, so
+    // the text is passed through as it is instead of being scanned again.
+    normalizeLineEndings: lineBreaksToNormalize ? normalizeLineEndings : keepLineEndings,
     onError: (level: "warning" | "error" | "fatalError"): void => {
       if (level === "fatalError") {
         throw new CcdaParseError(
