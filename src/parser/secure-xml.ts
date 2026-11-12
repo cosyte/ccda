@@ -36,6 +36,7 @@ import type { Document, Element } from "@xmldom/xmldom";
 import { positionOf } from "../model/dom.js";
 import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES } from "./errors.js";
 import { isRecognizedNamespace } from "./namespaces.js";
+import { isXmlChar } from "./xml-chars.js";
 import type { CcdaParseLimits } from "./types.js";
 import { encodingBomStripped, unknownNamespacePrefix, type CcdaWarning } from "./warnings.js";
 import { domOfTree } from "./tree-dom.js";
@@ -85,8 +86,12 @@ const PREDEFINED_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
  * - `<`: a declared DTD or entity (`<!DOCTYPE`, `<!ENTITY`), the XXE / external-entity attack
  *   surface;
  * - `&`: an entity reference `&name;` (predefined ones are told apart after the match);
- * - anything else: a character XML's end-of-line handling rewrites (a carriage return, NEL, LINE
- *   SEPARATOR or PARAGRAPH SEPARATOR).
+ *   or, when `&` is followed by `#`, a character reference `&#...;`, whose code point is checked;
+ * - a carriage return, NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR: a character XML's end-of-line
+ *   handling rewrites;
+ * - anything else: a character XML 1.0 forbids (`./xml-chars.ts`): a C0 control other than tab,
+ *   line feed and carriage return, an unpaired surrogate (the `u` flag reads a pair as one
+ *   character, so only an unpaired one matches the surrogate range), U+FFFE or U+FFFF.
  *
  * The first two alternatives are the two patterns this module ran as separate passes before
  * (`/<!DOCTYPE|<!ENTITY/iu`, then `/&[a-z_][\w.-]*;/giu` over the whole text), with the same flags,
@@ -94,17 +99,41 @@ const PREDEFINED_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
  * holds no `&`, the other no `<`), so the references found are the same ones in the same order.
  * One global scan of a string with few matches is several times cheaper than the two passes, and
  * the third alternative lets the parse skip the end-of-line rewrite when there is nothing for it
- * to rewrite.
+ * to rewrite. The character reference and forbidden character alternatives find, in the same
+ * scan, a character no XML parser may accept, which `@xmldom/xmldom` and the compact reader would
+ * otherwise read into the document without a word.
  *
  * @internal
  */
-const GATE_RE = /<!DOCTYPE|<!ENTITY|&[a-z_][\w.-]*;|[\r\u0085\u2028\u2029]/giu;
+const GATE_RE =
+  /<!DOCTYPE|<!ENTITY|&[a-z_][\w.-]*;|&#x?[0-9a-f]+;|[\r\u0085\u2028\u2029]|[\0-\x08\x0B\x0C\x0E-\x1F\uD800-\uDFFF\uFFFE\uFFFF]/giu;
 
 /** `<`, the first character of a {@link GATE_RE} match on a DTD or entity declaration. @internal */
 const LESS_THAN = 0x3c;
 
 /** `&`, the first character of a {@link GATE_RE} match on an entity reference. @internal */
 const AMPERSAND = 0x26;
+
+/** `#`, the second character of a {@link GATE_RE} match on a character reference. @internal */
+const HASH = 0x23;
+
+/** `x`, the third character of a {@link GATE_RE} match on a hexadecimal character reference. @internal */
+const LOWER_X = 0x78;
+
+/** `X`: `&#X...;` is not a character reference in XML, so the gate leaves it to the parser. @internal */
+const UPPER_X = 0x58;
+
+/** A carriage return, the first character end-of-line handling rewrites. @internal */
+const CARRIAGE_RETURN = 0x0d;
+
+/** NEL, rewritten by end-of-line handling. @internal */
+const NEXT_LINE = 0x85;
+
+/** LINE SEPARATOR, rewritten by end-of-line handling. @internal */
+const LINE_SEPARATOR = 0x2028;
+
+/** PARAGRAPH SEPARATOR, rewritten by end-of-line handling. @internal */
+const PARAGRAPH_SEPARATOR = 0x2029;
 
 /** A carriage return followed by a line feed or NEL: one line break. @internal */
 const LINE_BREAK_PAIR_RE = /\r[\n\u0085]/g;
@@ -353,7 +382,17 @@ export function rebuildDom(
 /**
  * The gate, in one scan of the text ({@link GATE_RE}): throw `XXE_OR_DTD_PRESENT` for a declared
  * DTD or entity anywhere, else `ENTITY_EXPANSION_LIMIT` when the custom entity references exceed
- * the cap; return whether the text holds a character the end-of-line handling rewrites.
+ * the cap, else `NOT_WELL_FORMED_XML` when the text holds a character XML 1.0 forbids, written
+ * raw or as a character reference; return whether the text holds a character the end-of-line
+ * handling rewrites.
+ *
+ * Such a character is refused rather than read with a warning: XML 1.0 makes it a well-formedness
+ * error (section 2.2, and the Legal Character constraint of section 4.1), so the text is not XML,
+ * every conforming parser rejects it, and a document read from it would carry the character into
+ * any XML written back out. The fatal names no character and no place, like every other
+ * `NOT_WELL_FORMED_XML`. A character reference inside a comment or a CDATA section is text, not a
+ * reference, but the gate does not tell those apart and refuses one that names a forbidden code
+ * point there too.
  *
  * A declared DTD outranks the entity cap wherever it sits, as it did when the two were separate
  * passes with the DTD check first: a count over the cap does not throw until the scan has
@@ -367,6 +406,7 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
   let count = 0;
   let over = false;
   let lineBreaks = false;
+  let forbidden = false;
   GATE_RE.lastIndex = 0;
   for (let match = GATE_RE.exec(source); match !== null; match = GATE_RE.exec(source)) {
     const token = match[0];
@@ -380,7 +420,18 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
       );
     }
     if (first !== AMPERSAND) {
-      lineBreaks = true;
+      if (
+        first === CARRIAGE_RETURN ||
+        first === NEXT_LINE ||
+        first === LINE_SEPARATOR ||
+        first === PARAGRAPH_SEPARATOR
+      ) {
+        lineBreaks = true;
+      } else {
+        forbidden = true;
+      }
+    } else if (token.charCodeAt(1) === HASH) {
+      forbidden ||= namesForbiddenCharacter(token);
     } else if (!over && !PREDEFINED_ENTITIES.has(token.slice(1, -1).toLowerCase())) {
       // Compared at each custom reference, as the separate pass did, so a cap a caller set below
       // zero is exceeded by the first custom reference and never by a text with none.
@@ -395,7 +446,34 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
       {},
     );
   }
+  if (forbidden) {
+    throw new CcdaParseError(
+      FATAL_CODES.NOT_WELL_FORMED_XML,
+      FATAL_MESSAGES.NOT_WELL_FORMED_XML,
+      {},
+    );
+  }
   return lineBreaks;
+}
+
+/**
+ * Whether a character reference `&#...;` or `&#x...;` (as {@link GATE_RE} matched it) names a code
+ * point XML 1.0 forbids. `&#X...;` (an upper-case X) and decimal digits mixed with letters are
+ * not character references at all; the gate leaves those to the parser, as before.
+ *
+ * @internal
+ */
+function namesForbiddenCharacter(token: string): boolean {
+  const third = token.charCodeAt(2);
+  if (third === UPPER_X) return false;
+  const hex = third === LOWER_X;
+  const digits = token.slice(hex ? 3 : 2, -1);
+  if (!hex && !/^[0-9]+$/u.test(digits)) return false;
+  // Nine or more digits name a number past 0x10FFFF unless they start with zeros, so leading
+  // zeros are dropped first and a longer run is past the last code point without being summed.
+  const significant = digits.replace(/^0+/u, "");
+  if (significant.length > 8) return true;
+  return !isXmlChar(significant === "" ? 0 : Number.parseInt(significant, hex ? 16 : 10));
 }
 
 /** The end-of-line handling for a text with no line break to rewrite: the text itself. @internal */

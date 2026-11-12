@@ -7,12 +7,20 @@
  * arbitrary text (a patient name, a display label) can never break well-formedness
  * or inject markup, the round-trip-through-parse contract holds by construction.
  *
+ * Escaping cannot help a character XML 1.0 forbids outright (a C0 control such as U+0001, an
+ * unpaired surrogate, U+FFFE or U+FFFF): it has no escaped form, and the serializer writes it raw,
+ * so the text would no longer be XML. `buildCcda` refuses such a character in its input before it
+ * builds anything, naming the input field. Every text node and attribute value written here is
+ * checked again as it is set, so a value that reaches the document by another route (a terminology
+ * adapter's translation) is refused too rather than written.
+ *
  * @packageDocumentation
  */
 
-import type { Document, Element } from "@xmldom/xmldom";
+import type { Document, Element, Text } from "@xmldom/xmldom";
 
 import { SDTC_NS, V3_NS, XSI_NS } from "../parser/namespaces.js";
+import { codePointLabel, firstForbiddenCodePoint } from "../parser/xml-chars.js";
 import { xmldom } from "../parser/xmldom.js";
 
 /** The XML Namespaces namespace, used to declare `xmlns:*` prefixes. @internal */
@@ -41,12 +49,42 @@ export function newCdaDocument(): { readonly doc: Document; readonly root: Eleme
   return { doc, root };
 }
 
+/**
+ * Throw when `value` holds a character XML 1.0 forbids. The message names `field` and the code
+ * point, never the value: the value is clinical text, and the caller knows what they passed.
+ * Refusing rather than replacing is deliberate: dropping or substituting a character would change
+ * clinical text without the caller knowing.
+ *
+ * @internal
+ */
+export function refuseForbiddenCharacter(value: string, field: string): void {
+  const code = firstForbiddenCodePoint(value);
+  if (code === undefined) return;
+  throw new TypeError(
+    `buildCcda: ${field} holds ${codePointLabel(code)}, a character XML 1.0 does not allow in a ` +
+      "document. Remove it before building; the builder does not change clinical text for you.",
+  );
+}
+
 /** Set each defined attribute on an element (skipping `undefined`). @internal */
 function setAttrs(target: Element, attrs: Attrs | undefined): void {
   if (attrs === undefined) return;
   for (const [name, value] of Object.entries(attrs)) {
-    if (value !== undefined) target.setAttribute(name, value);
+    if (value === undefined) continue;
+    refuseForbiddenCharacter(value, `the ${name} attribute of <${target.nodeName}>`);
+    target.setAttribute(name, value);
   }
+}
+
+/**
+ * Create a text node holding `value`, refusing a character XML 1.0 forbids. `parent` names the
+ * element it goes in, for the refusal.
+ *
+ * @internal
+ */
+export function textNode(doc: Document, parent: string, value: string): Text {
+  refuseForbiddenCharacter(value, `the text of <${parent}>`);
+  return doc.createTextNode(value);
 }
 
 /**
@@ -75,7 +113,7 @@ export function el(
  */
 export function textEl(doc: Document, name: string, value: string, attrs?: Attrs): Element {
   const e = el(doc, name, attrs);
-  e.appendChild(doc.createTextNode(value));
+  e.appendChild(textNode(doc, name, value));
   return e;
 }
 

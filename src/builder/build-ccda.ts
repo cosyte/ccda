@@ -375,7 +375,17 @@ import {
 } from "../model/entries/shared.js";
 import { serializeDocument } from "../serialize/serialize-dom.js";
 
-import { el, newCdaDocument, sdtcEl, textEl, typedEl, typedValue, type Attrs } from "./dom.js";
+import {
+  el,
+  newCdaDocument,
+  refuseForbiddenCharacter,
+  sdtcEl,
+  textEl,
+  textNode,
+  typedEl,
+  typedValue,
+  type Attrs,
+} from "./dom.js";
 import { assertHl7Ts } from "./hl7-ts.js";
 import type { Document, Element } from "@xmldom/xmldom";
 
@@ -2528,6 +2538,41 @@ function isBuildableDocumentType(value: string): value is BuildableDocumentType 
 }
 
 /**
+ * Refuse any string in the input that holds a character XML 1.0 forbids (a C0 control other than
+ * tab, line feed and carriage return, an unpaired surrogate, U+FFFE or U+FFFF), before anything is
+ * built. The serializer escapes markup but has no escaped form for these: written raw, they make
+ * the output text that no XML parser accepts.
+ *
+ * Every string in the input is checked, wherever it sits, so a field added to
+ * {@link BuildCcdaInit} later is covered without a change here. The refusal names the field as a
+ * path (`problems[0].problem.displayName`) and the code point, never the text. Refusing is the
+ * choice over replacing: a character dropped or swapped without the caller knowing is a change
+ * to clinical text nobody asked for. A `Date` and other non-plain objects are skipped; they reach
+ * the document only through formatting that writes digits.
+ *
+ * @internal
+ */
+function refuseForbiddenCharacters(value: unknown, path: string, seen: Set<object>): void {
+  if (typeof value === "string") {
+    refuseForbiddenCharacter(value, path);
+    return;
+  }
+  if (typeof value !== "object" || value === null || seen.has(value)) return;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    value.forEach((item: unknown, i) => {
+      refuseForbiddenCharacters(item, `${path}[${i.toString()}]`, seen);
+    });
+    return;
+  }
+  const proto: unknown = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return;
+  for (const [key, item] of Object.entries(value)) {
+    refuseForbiddenCharacters(item, path === "" ? key : `${path}.${key}`, seen);
+  }
+}
+
+/**
  * The refusal {@link buildCcda} throws for a `documentType` it does not emit.
  *
  * A string is named in the message, because it is the caller's own argument
@@ -2955,6 +3000,7 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
   }
   const spec = DOC_TYPE_SPECS[documentType];
   refuseContentTheTypeDoesNotCarry(documentType, init);
+  refuseForbiddenCharacters(init, "", new Set());
 
   const { doc, root } = newCdaDocument();
   const id = makeIdGen();
@@ -3726,10 +3772,17 @@ function appendTranslations(
   const result = translate(coding);
   // `undefined` = the adapter has no opinion → emit nothing (unchanged output).
   if (result === undefined) return;
-  for (const match of result.matches) {
+  for (const [i, match] of result.matches.entries()) {
     // A translation needs a concrete system to be an unambiguous CD; a match
     // missing one is dropped rather than emitted half-formed.
     if (match.system === undefined) continue;
+    // The adapter's strings are input too, checked here so the refusal names
+    // the adapter rather than the element they would have gone into.
+    const field = `options.terminology.translate() matches[${i.toString()}]`;
+    for (const key of ["code", "system", "display", "version"] as const) {
+      const v = match[key];
+      if (v !== undefined) refuseForbiddenCharacter(v, `${field}.${key}`);
+    }
     coded.appendChild(
       el(doc, "translation", {
         code: match.code,
@@ -4501,7 +4554,7 @@ function observationValue(doc: Document, testCode: BuildCode, r: BuildCcdaResult
   }
   const st = typedValue(doc, "ST");
   /* v8 ignore next -- the check above admits exactly one non-null form and quantity and codedValue are not it, so stringValue is neither null nor undefined here */
-  st.appendChild(doc.createTextNode(r.stringValue ?? ""));
+  st.appendChild(textNode(doc, "value", r.stringValue ?? ""));
   return st;
 }
 
