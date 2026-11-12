@@ -17,7 +17,7 @@
 import type { Document } from "@xmldom/xmldom";
 
 import type { CcdaParseError } from "../parser/errors.js";
-import { parseSecureXml, resolveLimits } from "../parser/secure-xml.js";
+import { readSecureXml, resolveLimits } from "../parser/secure-xml.js";
 import { declaredPrefix, xmlNamespace, type XmlNode } from "./write.js";
 
 /** Drop a warning: the check reads text it wrote, and only its tree matters. */
@@ -185,7 +185,7 @@ export function readBackDifference(xml: string, node: XmlNode): string | undefin
   });
   let doc: XmlNode;
   try {
-    doc = parseSecureXml(xml, limits, ignore, ignore) as unknown as XmlNode;
+    doc = readSecureXml(xml, limits, ignore, ignore, true) as unknown as XmlNode;
   } catch (err) {
     // The reader throws a CcdaParseError and nothing else; its code names no content.
     return `would be written as text parseXml refuses (${(err as CcdaParseError).code})`;

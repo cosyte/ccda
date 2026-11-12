@@ -23,7 +23,11 @@ import {
   type CcdaWarning,
 } from "../src/index.js";
 import { xmldom } from "../src/parser/xmldom.js";
-import { refuseOutsideRootNodes, refuseOutsideRootText } from "../src/parser/outside-root.js";
+import {
+  refuseOutsideRootNodes,
+  refuseOutsideRootText,
+  rootSpan,
+} from "../src/parser/outside-root.js";
 import { firstDifference, readBackDifference } from "../src/xml/same-tree.js";
 import { declaredPrefix } from "../src/xml/write.js";
 
@@ -327,6 +331,86 @@ const OUTSIDE_ROOT: readonly {
   ]),
 ];
 
+/**
+ * Start tags XML 1.0 makes not well-formed: an attribute is a name, `=` and a quoted value
+ * (productions [40] and [41]), apart from the one before it by white space, named once on its tag
+ * (Unique Att Spec), and its value holds no `<` (production [10]). `@xmldom/xmldom` reads past
+ * several with only a warning, and where its reading of a quote differs from a scan's, the two find
+ * the root's end in different places: the first rows lost the text after the root without a word.
+ * `secure` names what `parseSecureXml` does with each, as it did before `parseXml` existed.
+ */
+const MALFORMED_START_TAGS: readonly {
+  readonly name: string;
+  readonly text: string;
+  readonly secure?: string;
+}[] = [
+  ...(['"', "'"] as const).flatMap((quote) =>
+    ["", "\n"].flatMap((end) => [
+      {
+        name: `a ${quote} after an unquoted value, closing the root early${end === "" ? "" : ", then a line feed"}`,
+        text: `<r x=b${quote}c/>Synthetic ${MARKER}${quote}/>${end}`,
+      },
+      {
+        name: `a ${quote} after an unquoted value, hiding text after the root${end === "" ? "" : ", then a line feed"}`,
+        text: `<r x=b${quote}c></r>${MARKER}<?p ${quote} ></r><?q ?>${end}`,
+      },
+    ]),
+  ),
+  { name: "an unquoted value on a self-closing root", text: "<r x=b/>" },
+  { name: "an unquoted value on a root with an end tag", text: "<r x=b></r>" },
+  { name: "an unquoted value on a child", text: "<r><s x=b/></r>" },
+  { name: "an attribute with no value", text: "<r x/>" },
+  { name: "an attribute with no value before the close", text: "<r x></r>" },
+  { name: "an attribute with no value after one with a value", text: '<r a="1" x/>' },
+  {
+    name: "a quoted string straight after a value",
+    text: '<r x="1""y"/>',
+    secure: FATAL_CODES.NOT_WELL_FORMED_XML,
+  },
+  {
+    name: "a quoted string in the other quote straight after a value",
+    text: "<r x='1''y'/>",
+    secure: FATAL_CODES.NOT_WELL_FORMED_XML,
+  },
+  {
+    name: "a quote after an unquoted value and a space",
+    text: '<r x= b "c"/>',
+    secure: FATAL_CODES.NOT_WELL_FORMED_XML,
+  },
+  { name: "two attributes with no space between", text: '<r a="1"b="2"/>' },
+  { name: "two attributes in single quotes with no space between", text: "<r a='1'b='2'/>" },
+  {
+    name: "a duplicate attribute",
+    text: '<r x="1" x="2"/>',
+    secure: FATAL_CODES.NOT_WELL_FORMED_XML,
+  },
+  {
+    name: "a duplicate attribute in the other quote, after another",
+    text: "<r x='1' y=\"2\" x='3'></r>",
+    secure: FATAL_CODES.NOT_WELL_FORMED_XML,
+  },
+  {
+    name: "a less-than in a value",
+    text: '<r x="a<b"/>',
+    secure: FATAL_CODES.NOT_WELL_FORMED_XML,
+  },
+  {
+    name: "a less-than in a single-quoted value",
+    text: "<r x='<'/>",
+    secure: FATAL_CODES.NOT_WELL_FORMED_XML,
+  },
+  {
+    name: "an equals sign with no value",
+    text: "<r x=/>",
+    secure: FATAL_CODES.NOT_WELL_FORMED_XML,
+  },
+  {
+    name: "an equals sign with no value before the close",
+    text: "<r x=></r>",
+    secure: FATAL_CODES.NOT_WELL_FORMED_XML,
+  },
+];
+
 describe("parseXml refuses character data outside the root element", () => {
   it.each(OUTSIDE_ROOT)("refuses $name with NOT_WELL_FORMED_XML", ({ text }) => {
     const err = thrownBy(() => parseXml(text));
@@ -348,10 +432,31 @@ describe("parseXml refuses character data outside the root element", () => {
     expect(doc.documentElement?.textContent).toBe("Synthetic text");
   });
 
-  it("still reads what xmldom reports for other reasons, such as an undeclared entity", () => {
-    // xmldom reports `&name;` with no declaration as an error too; that one is not outside the
-    // root, is never expanded, and counts toward maxEntityExpansions, so it is read as before.
+  it("still reads the two things xmldom reports in a text parseXml reads", () => {
+    // xmldom reports `&name;` with no declaration as an error; it is never expanded and counts
+    // toward maxEntityExpansions, so it is read as before. It warns on U+FFFD, which XML allows.
     expect(parseXml("<a>Synthetic &undeclared;</a>").documentElement?.localName).toBe("a");
+    expect(parseXml('<a b="&undeclared;"/>').documentElement?.getAttribute("b")).toBe(
+      "&undeclared;",
+    );
+    const doc = parseXml('<a b="�">�</a>');
+    expect(doc.documentElement?.textContent).toBe("�");
+    expect(doc.documentElement?.getAttribute("b")).toBe("�");
+  });
+
+  it("refuses any other text xmldom reports, which parseSecureXml reads", () => {
+    // A reference that is not one by XML's grammar (`&#X41;`, `&b` with no `;`): xmldom reports
+    // each as an error and reads on, and parseXml takes every such report as fatal.
+    for (const text of ["<a>&#X41;</a>", '<a x="&#X41;"/>', "<a>a &b c</a>", '<a x="&b c"/>']) {
+      expect(
+        fatalOf(() => parseXml(text)),
+        text,
+      ).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+      expect(
+        fatalOf(() => parseSecureXml(text, resolveLimits(), () => {})),
+        text,
+      ).toBe("none");
+    }
   });
 
   it.each(OUTSIDE_ROOT)(
@@ -458,6 +563,54 @@ describe("the scan of the text outside the root element", () => {
     expect(scanned("<a x='>/'><b y=\">\"/></a>")).toBe("none");
     expect(scanned("<a x='>'/>z")).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
   });
+
+  it.each(MALFORMED_START_TAGS)("refuses $name itself, before any tree is built", ({ text }) => {
+    expect(scanned(text)).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+  });
+
+  it("passes every well-formed way to write attributes", () => {
+    for (const text of [
+      "<a x = \"1\"\ty\n=\n'2' />",
+      "<a x=\"'\" y='\"'/>",
+      "<a x='' y=\"\"></a >",
+      '<a x=">" y=\'/>\'><b z="&lt;/a>"/></a>',
+      '<a xmlns:p="urn:example:p" p:x="1" x="2"/>',
+      '<a x="&amp;&#62;"/>',
+    ]) {
+      expect(scanned(text), JSON.stringify(text)).toBe("none");
+      expect(
+        fatalOf(() => parseXml(text)),
+        JSON.stringify(text),
+      ).toBe("none");
+    }
+  });
+
+  it("tells a duplicate attribute by its whole name, prefix included", () => {
+    expect(scanned('<a x="1" xx="2" p:x="3" xmlns:p="urn:example:p"/>')).toBe("none");
+    expect(scanned('<a p:x="1" p:x="2"/>')).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+    expect(scanned('<a><b x="1"/><b x="2"/></a>')).toBe("none");
+  });
+
+  it("finds where the root starts and ends", () => {
+    expect(rootSpan("<a/>")).toEqual({ start: 0, end: 4 });
+    expect(rootSpan(' <!--c--> <a x=">"><b/></a> <?p?>')).toEqual({ start: 10, end: 27 });
+  });
+});
+
+describe("parseXml refuses a start tag XML 1.0 makes not well-formed", () => {
+  it.each(MALFORMED_START_TAGS)("refuses $name with NOT_WELL_FORMED_XML", ({ text }) => {
+    const err = thrownBy(() => parseXml(text));
+    expect(err).toBeInstanceOf(CcdaParseError);
+    expect((err as CcdaParseError).code).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+    expect((err as CcdaParseError).message).not.toContain(MARKER);
+  });
+
+  it.each(MALFORMED_START_TAGS)(
+    "leaves the C-CDA reader as it was: parseSecureXml on $name",
+    ({ text, secure }) => {
+      expect(fatalOf(() => parseSecureXml(text, resolveLimits(), () => {}))).toBe(secure ?? "none");
+    },
+  );
 });
 
 describe("the check of the nodes directly under the document", () => {
@@ -1256,6 +1409,19 @@ describe("the tree comparison serializeXml reads back with", () => {
     expect(readBackDifference('<r a="2"/>', parseXml('<r a="1"/>') as never)).toBe(
       "would not read back the same (an attribute differs)",
     );
+  });
+
+  it("reads back with parseXml's own reader, so it never returns text parseXml refuses", () => {
+    // parseSecureXml reads each of these to the same tree; parseXml refuses each.
+    for (const [text, tree] of [
+      ["<r x=b/>", '<r x="b"/>'],
+      ["<r/><![CDATA[ ]]>", "<r/>"],
+      ["<r>&#X41;</r>", "<r>&amp;#X41;</r>"],
+    ] as const) {
+      expect(readBackDifference(text, parseXml(tree) as never), text).toBe(
+        "would be written as text parseXml refuses (NOT_WELL_FORMED_XML)",
+      );
+    }
   });
 
   it("reads back without the reader's limits, which the writer does not apply", () => {

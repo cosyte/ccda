@@ -204,14 +204,17 @@ export function parseSecureXml(
 }
 
 /**
- * {@link parseSecureXml}, with one more refusal when `refuseOutsideRoot` is set: anything outside
+ * {@link parseSecureXml}, with more refusals when `refuseOutsideRoot` is set: anything outside
  * the root element but white space, comments and processing instructions throws
  * `NOT_WELL_FORMED_XML`, as XML 1.0 productions [1], [22] and [27] make such a text not
- * well-formed. `@xmldom/xmldom` drops some of that content, keeps some as a node under the
- * document, and reports only some of it, which `parseSecureXml` (and so `parseCcda`) tolerates.
- * The exported `parseXml` sets the flag, so a sender's content is never lost without a word. The
- * refusal reads the text itself before the tree is built ({@link refuseOutsideRootText}) and the
- * document's own nodes after ({@link refuseOutsideRootNodes}); it never reads what xmldom reports.
+ * well-formed, and so does a start tag XML 1.0 makes not well-formed. `@xmldom/xmldom` drops some
+ * of that content, keeps some as a node under the document, and reports some of it only as a
+ * warning or an error, which `parseSecureXml` (and so `parseCcda`) tolerates. The exported
+ * `parseXml` sets the flag, so a sender's content is never lost without a word. Three guards hold
+ * it, none trusting the others: a scan of the text before the tree is built
+ * ({@link refuseOutsideRootText}), which reads start tags as XML does; xmldom's reports while it
+ * builds, every one fatal but the two a well-formed text can draw ({@link isToleratedReport}); and
+ * a check of the document's own nodes after ({@link refuseOutsideRootNodes}).
  *
  * @internal
  */
@@ -224,10 +227,9 @@ export function readSecureXml(
 ): Document {
   const accepted = acceptSource(raw, limits, emit);
   if (refuseOutsideRoot) refuseOutsideRootText(accepted.source);
-  const doc = buildDom(accepted.source, accepted.lineBreaksToNormalize);
-  // A second guard that does not trust the scan above: every text the scan passes yields a
-  // document this check passes too, so no test can tell a mutant that skips it from the code.
-  // Stryker disable next-line ConditionalExpression,CallExpression: equivalent while the scan holds
+  const doc = buildDom(accepted.source, accepted.lineBreaksToNormalize, true, refuseOutsideRoot);
+  // A guard that trusts neither the scan nor xmldom's reports: a CDATA section after the root is
+  // one text xmldom reports nothing for and keeps under the document (test/xml-guards.test.ts).
   if (refuseOutsideRoot) refuseOutsideRootNodes(doc);
   enforceStructureLimits(doc.documentElement, limits, reportForeignNamespace);
   return doc;
@@ -561,6 +563,21 @@ function anyExpanded(source: string, offsets: readonly number[]): boolean {
   return false;
 }
 
+/**
+ * Whether a report from `@xmldom/xmldom` is one a strict build (`parseXml`) reads past, as either
+ * can come from a text `parseXml` reads: the warning on U+FFFD REPLACEMENT CHARACTER, which XML
+ * 1.0 allows, and the error on an entity reference with no declaration (`&name;`), which is never
+ * expanded and counts toward `maxEntityExpansions`. Each is matched by xmldom's own words, so a
+ * report reworded in another xmldom release is fatal, not read past.
+ *
+ * @internal
+ */
+function isToleratedReport(level: "warning" | "error", message: string): boolean {
+  return level === "warning"
+    ? message === "Unicode replacement character detected, source encoding issues?"
+    : message.startsWith("entity not found:");
+}
+
 /** The end-of-line handling for a text with no line break to rewrite: the text itself. @internal */
 function keepLineEndings(source: string): string {
   return source;
@@ -574,9 +591,17 @@ function keepLineEndings(source: string): string {
  * are caught and normalized to the same fatal. A null document element is left
  * for the caller's root gate to reject.
  *
+ * With `strict` set (`parseXml` only), every report is fatal but the two
+ * {@link isToleratedReport} names, which a well-formed text can draw.
+ *
  * @internal
  */
-function buildDom(source: string, lineBreaksToNormalize: boolean, locate = true): Document {
+function buildDom(
+  source: string,
+  lineBreaksToNormalize: boolean,
+  locate = true,
+  strict = false,
+): Document {
   const { DOMParser, normalizeLineEndings: xmldomLineEndings } = xmldom();
   const parser = new DOMParser({
     locator: locate,
@@ -584,8 +609,8 @@ function buildDom(source: string, lineBreaksToNormalize: boolean, locate = true)
     // text with none of the characters it rewrites, both of its replacements are the identity, so
     // the text is passed through as it is instead of being scanned twice more.
     normalizeLineEndings: lineBreaksToNormalize ? xmldomLineEndings : keepLineEndings,
-    onError: (level: "warning" | "error" | "fatalError"): void => {
-      if (level === "fatalError") {
+    onError: (level: "warning" | "error" | "fatalError", message: string): void => {
+      if (level === "fatalError" || (strict && !isToleratedReport(level, message))) {
         throw new CcdaParseError(
           FATAL_CODES.NOT_WELL_FORMED_XML,
           FATAL_MESSAGES.NOT_WELL_FORMED_XML,
