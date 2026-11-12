@@ -24,6 +24,7 @@ import {
   parseSecureXml,
   resolveLimits,
 } from "../src/index.js";
+import { breakInMarkup, parseSecureDom, parseSecureEditable } from "../src/parser/secure-xml.js";
 
 /** The three characters XML 1.1 reads as line breaks and XML 1.0 does not. */
 const KEPT: readonly (readonly [string, string])[] = [
@@ -195,6 +196,11 @@ describe.each(KEPT)("where XML 1.0 allows no %s", (_name, ch) => {
     ["after a CDATA section that never closes", doc(`<![CDATA[x${ch}`)],
     ["after a processing instruction that never closes", doc(`<?synthetic x${ch}`)],
     ["after a tag that never closes", `${ROOT}<title>x${ch}</title><id root="1"`],
+    ["right after the < of a tag", doc(`<${ch}id root="1"/>`)],
+    ["right after an empty root element", `<ClinicalDocument xmlns="urn:hl7-org:v3"/>${ch}`],
+    ["right after a comment before the root", doc("", `<!--c-->${ch}`)],
+    ["right before the root", doc("", `<?synthetic x?>${ch}`)],
+    ["beside a markup declaration", doc(`<title>x${ch}y</title><!synthetic>`)],
   ])("refuses it %s, as libxml2 does", async (_label, xml) => {
     expect(await wellFormed(xml)).toBe(false);
     expect(outcomeOf(xml)).toBe("NOT_WELL_FORMED_XML");
@@ -215,9 +221,82 @@ describe.each(KEPT)("where XML 1.0 allows no %s", (_name, ch) => {
     ["in an instruction whose target starts with xml", doc(`<?xml-synthetic x${ch}y?>`)],
     ["in text after an XML declaration", doc(`<title>x${ch}y</title>`, '<?xml version="1.0"?>')],
     ["in text deep inside the root", doc(`<a><b><c/>x${ch}y</b></a>`)],
+    ["in a processing instruction's data, after a line feed", doc(`<?synthetic\nx${ch}y?>`)],
+    ["in a processing instruction's data, after a CR", doc(`<?synthetic\rx${ch}y?>`)],
+    ["at the end of an instruction's data, before the root", doc("", `<?synthetic x${ch}?>`)],
+    ["at the end of a comment, before the root", doc("", `<!--x${ch}-->`)],
+    ["at the end of a CDATA section", doc(`<title><![CDATA[x${ch}]]></title>`)],
+    ["in text right before a processing instruction", doc(`<title>x</title>y${ch}<?synthetic x?>`)],
+    ["in text right after an instruction with no data", doc(`<?synthetic?>x${ch}y`)],
+    ["in text right after a comment", doc(`<!--c-->${ch}`)],
+    ["in text right after a CDATA section", doc(`<title><![CDATA[c]]>${ch}</title>`)],
+    ["in text right before an end tag", doc(`<title>x${ch}</title>`)],
+    ["in text right after a start tag", doc(`<title>${ch}x</title>`)],
+    ["in an attribute value right before its closing quote", doc(`<id root="1${ch}"/>`)],
+    ["in an attribute value right after its opening quote", doc(`<id root="${ch}1"/>`)],
   ])("reads it %s, as libxml2 does", async (_label, xml) => {
     expect(await wellFormed(xml)).toBe(true);
     expect(outcomeOf(xml)).toBe("parsed");
+  });
+});
+
+// The walk on its own: `@xmldom/xmldom` refuses some of these texts for another reason, which
+// would hide a wrong answer from the walk behind the same fatal.
+describe.each(KEPT)("the markup walk, for %s", (_name, ch) => {
+  it.each([
+    ["in a tag", `<a${ch}b="1"/>`],
+    ["right after a <", `<${ch}a/>`],
+    ["in an end tag", `<a></a${ch}>`],
+    ["before the root", `${ch}<a/>`],
+    ["after the root", `<a/>${ch}`],
+    ["after a root with content", `<a><b/>x</a>${ch}`],
+    ["after a root that holds a CDATA section with a <", `<a><![CDATA[x<]]></a>${ch}`],
+    ["after a root that holds a comment with a <", `<a><!--x<--></a>${ch}`],
+    ["after a root that holds an instruction with a <", `<a><?p x<?></a>${ch}`],
+    ["after a root that holds an attribute with a >", `<a b=">"></a>${ch}`],
+    ["after a root that holds an attribute with a /", `<a b="/"></a>${ch}`],
+    ["after a comment before the root", `<!--c-->${ch}<a/>`],
+    ["after an instruction before the root", `<?p x?>${ch}<a/>`],
+    ["in an instruction target", `<?p${ch}q x?><a/>`],
+    ["at the end of a target with no data", `<a><?p${ch}?></a>`],
+    ["as a whole target", `<a><?${ch}?></a>`],
+    ["in the XML declaration", `<?xml version="1.0"${ch}?><a/>`],
+    ["in an unclosed comment", `<a/><!--${ch}`],
+    ["in an unclosed CDATA section", `<a><![CDATA[${ch}`],
+    ["in an unclosed instruction", `<a><?p ${ch}`],
+    ["in an unclosed tag", `<a>${ch}<b c="1"`],
+    ["in an unclosed attribute value", `<a>${ch}<b c="1>`],
+  ])("finds it %s", (_label, source) => {
+    expect(breakInMarkup(source)).toBe(true);
+  });
+
+  it.each([
+    ["in text", `<a>x${ch}y</a>`],
+    ["in text right after a start tag", `<a>${ch}</a>`],
+    ["in text after an empty element", `<a><b/>${ch}</a>`],
+    ["in nested text", `<a><b><c>${ch}</c></b>${ch}</a>`],
+    ["in a double-quoted attribute", `<a b="${ch}" c="x${ch}"/>`],
+    ["in a single-quoted attribute", `<a b='${ch}"' c='x'/>`],
+    ["in a double-quoted attribute holding a '", `<a b="'${ch}"/>`],
+    ["in a comment", `<!--${ch}--><a><!--x${ch}--></a><!--${ch}-->`],
+    ["in a comment right after another", `<a/><!--x--><!--${ch}-->`],
+    ["in a CDATA section", `<a><![CDATA[${ch}]]></a>`],
+    ["in a CDATA section right after another", `<a><![CDATA[x]]><![CDATA[${ch}]]></a>`],
+    ["in instruction data after a space", `<?p ${ch}?><a/>`],
+    ["in instruction data after a tab", `<?p\t${ch}?><a/>`],
+    ["in instruction data after a line feed", `<?p\n${ch}?><a/>`],
+    ["in instruction data after a CR", `<?p\r${ch}?><a/>`],
+    ["at the end of instruction data", `<?p x${ch}?><a/>`],
+    ["in instruction data right after another", `<a/><?p x?><?q ${ch}?>`],
+    ["in the data of an instruction whose target starts with xml", `<?xml-p ${ch}?><a/>`],
+    ["in text after the XML declaration", `<?xml version="1.0"?><a>${ch}</a>`],
+    ["in text right before an instruction", `<a>${ch}<?p x?></a>`],
+    ["in text right after an instruction with no data", `<a><?p?>${ch}</a>`],
+    ["in text right after a comment", `<a><!--c-->${ch}</a>`],
+    ["in text right after a CDATA section", `<a><![CDATA[c]]>${ch}</a>`],
+    ["nowhere, in a text without markup", "x"],
+  ])("allows it %s", (_label, source) => {
+    expect(breakInMarkup(source)).toBe(false);
   });
 });
 
@@ -232,5 +311,16 @@ describe("carriage returns", () => {
     expect(
       units(parseCcda(`${ROOT}<title>a\r\nb\rc\r\r\nd</title></ClinicalDocument>`).header.title),
     ).toBe(units("a\nb\nc\n\nd"));
+  });
+
+  // `editCcda` hands this reader only XML the package wrote, which never holds a raw carriage
+  // return (the writer escapes one in text as `&#13;`), so its rewrite is checked here directly.
+  it.each(KEPT)("are rewritten by the editable read, which keeps %s beside them", (_name, ch) => {
+    const xml = `${ROOT}<title>a\r\nb\r${ch}c</title></ClinicalDocument>`;
+    const read = parseSecureEditable(xml, resolveLimits(), () => {});
+    expect(read.text).toBe(`${ROOT}<title>a\nb\n${ch}c</title></ClinicalDocument>`);
+    expect(read.tree).toBeDefined();
+    const dom = parseSecureDom(xml, resolveLimits(), () => {});
+    expect(units(dom.documentElement?.textContent)).toBe(units(`a\nb\n${ch}c`));
   });
 });

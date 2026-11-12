@@ -480,18 +480,11 @@ function isXml11Break(code: number): boolean {
   return code === NEXT_LINE || code === LINE_SEPARATOR || code === PARAGRAPH_SEPARATOR;
 }
 
-/** Whether `source` holds NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR from `from` up to `to`. @internal */
-function holdsXml11Break(source: string, from: number, to: number): boolean {
-  for (let at = from; at < to; at++) {
-    if (isXml11Break(source.charCodeAt(at))) return true;
-  }
-  return false;
-}
+/** NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR, anywhere in a string. @internal */
+const XML11_BREAK_RE = /[\u0085\u2028\u2029]/u;
 
 /** XML 1.0's white space (production [3]): space, tab, line feed, carriage return. @internal */
-function isXmlSpace(code: number): boolean {
-  return code === 0x20 || code === 0x09 || code === 0x0a || code === CARRIAGE_RETURN;
-}
+const XML_SPACE_RE = /[ \t\n\r]/u;
 
 /**
  * Whether NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR sits where XML 1.0 allows no such character:
@@ -508,35 +501,37 @@ function isXmlSpace(code: number): boolean {
  *
  * One walk from the start of the text, `<` by `<`, never revisiting a character, as
  * {@link anyExpanded} walks. A tag is read to the `>` that closes it outside quotes, and counted
- * open or closed, so text outside the root is known. A construct that never closes ends the walk
- * with a refusal: such a text is not well-formed either way.
+ * open (a start tag), closed (an end tag) or neither (an empty element), so text outside the root
+ * is known. A construct that never closes ends the walk with a refusal: such a text is not
+ * well-formed either way. Any other `<!` construct is read as a tag; the gate has refused a
+ * declared DTD already, and none other is well-formed.
  *
  * @internal
  */
-function breakInMarkup(source: string): boolean {
+export function breakInMarkup(source: string): boolean {
   let depth = 0;
   let at = 0;
   for (;;) {
     const lt = source.indexOf("<", at);
     const textEnd = lt === -1 ? source.length : lt;
-    if (depth === 0 && holdsXml11Break(source, at, textEnd)) return true;
+    if (depth === 0 && XML11_BREAK_RE.test(source.slice(at, textEnd))) return true;
     if (lt === -1) return false;
-    const skipped = UNEXPANDED.find(({ open }) => open !== "<?" && source.startsWith(open, lt));
-    if (skipped !== undefined) {
-      const end = source.indexOf(skipped.close, lt + skipped.open.length);
-      if (end === -1) return true;
-      at = end + skipped.close.length;
-      continue;
-    }
     if (source.startsWith("<?", lt)) {
       const end = source.indexOf("?>", lt + 2);
       if (end === -1) return true;
       // The target runs to the first white space; an XML declaration holds no character data.
-      let targetEnd = lt + 2;
-      while (targetEnd < end && !isXmlSpace(source.charCodeAt(targetEnd))) targetEnd++;
-      const declaration = source.slice(lt + 2, targetEnd) === "xml";
-      if (holdsXml11Break(source, lt + 2, declaration ? end : targetEnd)) return true;
+      const instruction = source.slice(lt + 2, end);
+      const space = instruction.search(XML_SPACE_RE);
+      const target = space === -1 ? instruction : instruction.slice(0, space);
+      if (XML11_BREAK_RE.test(target === "xml" ? instruction : target)) return true;
       at = end + 2;
+      continue;
+    }
+    const skipped = UNEXPANDED.find(({ open }) => source.startsWith(open, lt));
+    if (skipped !== undefined) {
+      const end = source.indexOf(skipped.close, lt + skipped.open.length);
+      if (end === -1) return true;
+      at = end + skipped.close.length;
       continue;
     }
     // A start tag, an end tag or another `<!` construct: read to its `>` outside quotes.
@@ -556,7 +551,7 @@ function breakInMarkup(source: string): boolean {
     }
     if (end === source.length) return true;
     if (source.charCodeAt(lt + 1) === 0x2f) depth -= 1;
-    else if (source.charCodeAt(end - 1) !== 0x2f && source.charCodeAt(lt + 1) !== 0x21) depth += 1;
+    else if (source.charCodeAt(end - 1) !== 0x2f) depth += 1;
     at = end + 1;
   }
 }
