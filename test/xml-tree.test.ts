@@ -346,13 +346,19 @@ describe("the tree's own members", () => {
 });
 
 describe("line-ending normalization", () => {
-  it("is @xmldom/xmldom's", () => {
-    for (const sample of [
-      "a\r\nb\rc\nd\u0085e\u2028f\u2029g",
-      "\r\r\n\n\r\u0085\u0085\r",
-      "no breaks",
-      "",
+  it("is XML 1.0's: only CR LF and a lone CR are rewritten", () => {
+    for (const [sample, expected] of [
+      ["a\r\nb\rc\nd\u0085e\u2028f\u2029g", "a\nb\nc\nd\u0085e\u2028f\u2029g"],
+      ["\r\r\n\n\r\u0085\u0085\r", "\n\n\n\n\u0085\u0085\n"],
+      ["no breaks", "no breaks"],
+      ["", ""],
     ]) {
+      expect(normalizeLineEndings(sample as string)).toBe(expected);
+    }
+  });
+
+  it("is @xmldom/xmldom's on a text without NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR", () => {
+    for (const sample of ["a\r\nb\rc\nd", "\r\r\n\n\r\r", "no breaks", ""]) {
       expect(normalizeLineEndings(sample)).toBe(xmldomLineEndings(sample));
     }
   });

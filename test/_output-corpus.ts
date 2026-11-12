@@ -184,6 +184,32 @@ function writtenDocuments(): OutputDocument[] {
   add("ls", base.replace(/\n/gu, "\u2028"));
   add("ps", base.replace(/\n/gu, "\u2029"));
   add("cr-nel", base.replace(/\n/gu, "\r\u0085"));
+  // NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR are line breaks in XML 1.1 only: in XML 1.0 they
+  // are kept where character data is, and the four documents above, which hold them outside the
+  // root, are not XML. These hold them only where XML 1.0 allows them.
+  const rootStart = base.indexOf("<ClinicalDocument");
+  const rootEnd = base.lastIndexOf("</ClinicalDocument>");
+  for (const [name, ch] of [
+    ["nel", "\u0085"],
+    ["ls", "\u2028"],
+    ["ps", "\u2029"],
+  ] as const) {
+    add(
+      `${name}-between-elements`,
+      base.slice(0, rootStart) +
+        base.slice(rootStart, rootEnd).replace(/>\n/gu, `>${ch}`) +
+        base.slice(rootEnd),
+    );
+    add(
+      `${name}-in-every-place`,
+      base
+        .replace(
+          "<title>Synthetic Test Document</title>",
+          `<title>x${ch}y</title><!--x${ch}y--><?synthetic x${ch}y?><![CDATA[x${ch}y]]>`,
+        )
+        .replace('extension="DOC123"', `extension="x${ch}y"`),
+    );
+  }
   add("mixed-endings", titled("a\r\nb\rc\u0085d\u2028e\u2029f"));
   add(
     "line-endings-in-attribute",

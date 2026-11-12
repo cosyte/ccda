@@ -13,6 +13,7 @@ import fc from "fast-check";
 import { DOMParser } from "@xmldom/xmldom";
 import { describe, expect, it } from "vitest";
 
+import { normalizeLineEndings } from "../src/parser/secure-xml.js";
 import { readDocument } from "../src/parser/xml-tree.js";
 import { serializeDocument } from "../src/serialize/serialize-dom.js";
 import { writeSource } from "../src/serialize/write-tree.js";
@@ -20,13 +21,15 @@ import { generatedDocument } from "./_helpers/generated-xml.js";
 import { outputCorpus } from "./_output-corpus.js";
 import { checkProperty, propertyTimeout } from "./property/_property.js";
 
-/** A character XML's end-of-line handling rewrites, as the gate scan looks for them. */
-const LINE_BREAK_RE = /[\r\u0085\u2028\u2029]/u;
+/** A carriage return, the one character XML 1.0's end-of-line handling rewrites. */
+const LINE_BREAK_RE = /\r/u;
 
 /** What `serializeDocument` writes for the `@xmldom/xmldom` tree of `source`, or `"fatal"`. */
 function xmldomWrite(source: string): string {
   try {
+    // XML 1.0 end-of-line handling, as the package reads; xmldom's default is XML 1.1's.
     const doc = new DOMParser({
+      normalizeLineEndings,
       onError: (level: string) => {
         if (level === "fatalError") throw new Error("fatal");
       },

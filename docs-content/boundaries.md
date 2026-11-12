@@ -334,6 +334,15 @@ this page says so instead of resolving it in your favor.
   `parseSecureXml` now throw `NOT_WELL_FORMED_XML` for it, like any other text that is not XML. One
   local name in two different namespaces, or an unprefixed attribute beside a prefixed one, is
   allowed and read as before.
+- **Line endings are read as XML 1.0 reads them.** A carriage return followed by a line feed, and a
+  carriage return on its own, each become one line feed (section 2.11). Nothing else is rewritten:
+  NEL (U+0085), LINE SEPARATOR (U+2028) and PARAGRAPH SEPARATOR (U+2029) are line breaks only in
+  XML 1.1, so in text, attribute values, comments, CDATA sections and processing instructions they
+  are kept as they were written. Up to this release the parser turned each of them into a line feed
+  (and, in an attribute value, a space) without a warning. XML 1.0 does not read them as white
+  space, so one between the parts of a tag, in an end tag, in a processing instruction's target or
+  the XML declaration, or outside the root element makes the text not well formed: `parseCcda`
+  and `parseSecureXml` throw `NOT_WELL_FORMED_XML` for it, as libxml2 does.
 - **Vendor profiles only quiet benign noise.** `parseCcda(xml, { profile })` (or a process default via
   `setDefaultCcdaProfile`) applies a `CcdaProfile` that downgrades the non-safety-critical deviations it
   expects to `PROFILE_QUIRK_APPLIED` (flagged `expected`, carrying the original `toleratedCode`). It
