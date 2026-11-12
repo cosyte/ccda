@@ -38,12 +38,7 @@ import type { Document, Element } from "@xmldom/xmldom";
 import { positionOf } from "../model/dom.js";
 import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES } from "./errors.js";
 import { isRecognizedNamespace } from "./namespaces.js";
-import {
-  hasMarkupExcluded,
-  isMarkupExcluded,
-  isXmlChar,
-  MARKUP_EXCLUDED_CLASS,
-} from "./xml-chars.js";
+import { hasMarkupExcluded, isMarkupExcluded, isXmlChar } from "./xml-chars.js";
 import type { CcdaParseLimits } from "./types.js";
 import { encodingBomStripped, unknownNamespacePrefix, type CcdaWarning } from "./warnings.js";
 import { domOfTree } from "./tree-dom.js";
@@ -87,7 +82,7 @@ const BYTE_ORDER_MARK = 0xfeff;
 const PREDEFINED_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
 
 /**
- * The one scan of the input text before the DOM is built. Each match is one of three things, told
+ * The one scan of the input text before the DOM is built. Each match is one of these, told
  * apart by its first character:
  *
  * - `<`: a declared DTD or entity (`<!DOCTYPE`, `<!ENTITY`), the XXE / external-entity attack
@@ -99,7 +94,7 @@ const PREDEFINED_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
  *   carriage return, an unpaired surrogate (the `u` flag reads a pair as one character, so only an
  *   unpaired one matches the surrogate range), U+FFFE or U+FFFF;
  * - anything else: a character outside ASCII that XML 1.0 allows in a document but neither as
- *   white space nor in a name (`MARKUP_EXCLUDED_RANGES` in `./xml-chars.ts`, read from the XML 1.0
+ *   white space nor in a name (`hasMarkupExcluded` in `./xml-chars.ts`, read from the XML 1.0
  *   productions), such as U+0080, NEL or a no-break space: kept as it is, but allowed only where
  *   character data is ({@link misplacedCharacter}). With the `i` flag the class also matches the
  *   two Greek letters that fold to MICRO SIGN (U+00B5), U+039C and U+03BC; for a text holding one
@@ -117,23 +112,27 @@ const PREDEFINED_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
  * (so does the character reference half of the `&` alternative), and finds the characters the
  * markup walk looks for, so a text without one pays for no walk.
  *
+ * The last class holds the class of `hasMarkupExcluded` (`./xml-chars.ts`), and
+ * `test/markup-set.test.ts` checks the two against every code point. The pattern is written in a
+ * function, not as a module constant, so a test that runs the gate is traced to it; each call
+ * returns a new pattern object, so no scan starts where another stopped.
+ *
  * @internal
  */
-const GATE_RE = new RegExp(
-  `<!DOCTYPE|<!ENTITY|&(?:[a-z_][\\w.-]*|#x?[0-9a-f]+);|[\\0-\\x08\\x0B-\\x1F\\uD800-\\uDFFF\\uFFFE\\uFFFF${MARKUP_EXCLUDED_CLASS}]`,
-  "giu",
-);
+export function gatePattern(): RegExp {
+  return /<!DOCTYPE|<!ENTITY|&(?:[a-z_][\w.-]*|#x?[0-9a-f]+);|[\0-\x08\x0B-\x1F\uD800-\uDFFF\uFFFE\uFFFF\u0080-\u00B6\u00B8-\u00BF\u00D7\u00F7\u037E\u2000-\u200B\u200E-\u203E\u2041-\u206F\u2190-\u2BFF\u2FF0-\u3000\uE000-\uF8FF\uFDD0-\uFDEF\u{F0000}-\u{10FFFF}]/giu;
+}
 
-/** `<`, the first character of a {@link GATE_RE} match on a DTD or entity declaration. @internal */
+/** `<`, the first character of a {@link gatePattern} match on a DTD or entity declaration. @internal */
 const LESS_THAN = 0x3c;
 
-/** `&`, the first character of a {@link GATE_RE} match on an entity reference. @internal */
+/** `&`, the first character of a {@link gatePattern} match on an entity reference. @internal */
 const AMPERSAND = 0x26;
 
-/** `#`, the second character of a {@link GATE_RE} match on a character reference. @internal */
+/** `#`, the second character of a {@link gatePattern} match on a character reference. @internal */
 const HASH = 0x23;
 
-/** `x`, the third character of a {@link GATE_RE} match on a hexadecimal character reference. @internal */
+/** `x`, the third character of a {@link gatePattern} match on a hexadecimal character reference. @internal */
 const LOWER_X = 0x78;
 
 /** `X`: `&#X...;` is not a character reference in XML, so the gate leaves it to the parser. @internal */
@@ -389,7 +388,7 @@ export function rebuildDom(
 }
 
 /**
- * The gate, in one scan of the text ({@link GATE_RE}): throw `XXE_OR_DTD_PRESENT` for a declared
+ * The gate, in one scan of the text ({@link gatePattern}): throw `XXE_OR_DTD_PRESENT` for a declared
  * DTD or entity anywhere, else `ENTITY_EXPANSION_LIMIT` when the custom entity references exceed
  * the cap, else `NOT_WELL_FORMED_XML` when the text holds a character XML 1.0 forbids, written
  * raw or as a character reference; return whether the text holds a carriage return, the one
@@ -426,12 +425,11 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
   // comment, a CDATA section or a processing instruction is not a reference, so whether it makes the
   // text ill-formed is decided after the scan, and only when there is one.
   let forbiddenReferences: number[] | undefined;
-  GATE_RE.lastIndex = 0;
-  for (let match = GATE_RE.exec(source); match !== null; match = GATE_RE.exec(source)) {
+  const gate = gatePattern();
+  for (let match = gate.exec(source); match !== null; match = gate.exec(source)) {
     const token = match[0];
     const first = token.charCodeAt(0);
     if (first === LESS_THAN) {
-      GATE_RE.lastIndex = 0;
       throw new CcdaParseError(
         FATAL_CODES.XXE_OR_DTD_PRESENT,
         FATAL_MESSAGES.XXE_OR_DTD_PRESENT,
@@ -492,7 +490,7 @@ function firstXmlSpace(text: string): number {
 
 /**
  * Whether a character outside ASCII that XML 1.0 allows in a document but neither as white space
- * nor in a name (`MARKUP_EXCLUDED_RANGES` in `./xml-chars.ts`) sits where XML 1.0 allows only
+ * nor in a name (`hasMarkupExcluded` in `./xml-chars.ts`) sits where XML 1.0 allows only
  * those: in a tag outside its attribute values, in an end tag, in a processing instruction's target
  * or an XML declaration, or outside the root element. Run only when the gate found such a
  * character, so a text without one pays nothing.
@@ -512,7 +510,7 @@ function firstXmlSpace(text: string): number {
  * declared DTD already, and none other is well-formed.
  *
  * In a tag each character outside ASCII is looked up by its code point, so a character above
- * U+FFFF is found at its first code unit; its second, a lone surrogate on its own, is in no range.
+ * U+FFFF is found at its first code unit; its second, a lone surrogate on its own, is never found.
  *
  * @internal
  */
@@ -565,7 +563,7 @@ export function misplacedCharacter(source: string): boolean {
 }
 
 /**
- * Whether a character reference `&#...;` or `&#x...;` (as {@link GATE_RE} matched it) names a code
+ * Whether a character reference `&#...;` or `&#x...;` (as {@link gatePattern} matched it) names a code
  * point XML 1.0 forbids. `&#X...;` (an upper-case X) and decimal digits mixed with letters are
  * not character references at all; the gate leaves those to the parser, as before.
  *
