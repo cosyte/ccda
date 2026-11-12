@@ -26,22 +26,33 @@ nothing flags it. So most of what follows checks values, not only that the parse
 | Property-based tests | a whole class of input breaking a stated rule: a spec-clean document survives `toString()` and parsing again, normalizing twice changes nothing a first pass did not, lenient mode never throws except on the fatal codes and every warning it raises carries a registered code, and a parsed document cannot be changed by accident                                                                               | a rule nobody stated; a case outside the cases run; a gap in what the generators produce                                                                                                                                  |
 | Fuzzing              | a crash or an unexpected throw on hostile input: arbitrary strings, a document cut off at a random point and a document with a short random string inserted at a random point, alongside fixed attack inputs (an external entity, an entity-expansion bomb, deep nesting)                                                                                                                                          | a wrong but plausible result, unless a property states what right is                                                                                                                                                      |
 | Coverage gate        | code no test runs: lines, branches, functions and statements, held at a floor of 100% for the whole package                                                                                                                                                                                                                                                                                                        | a test that runs code without checking what it returns                                                                                                                                                                    |
-| Mutation testing     | a test that runs code but would not notice it changing                                                                                                                                                                                                                                                                                                                                                             | not yet run on this package; the numbers below say "not measured" until it is                                                                                                                                             |
+| Mutation testing     | a test that runs code but would not notice it changing                                                                                                                                                                                                                                                                                                                                                             | a mutant StrykerJS does not make (it changes operators, conditions and literals, not whole designs); mutants in code that runs once, when a module loads, which are not scored                                            |
 | Doc samples          | a documentation sample that no longer matches the code: every TypeScript and JavaScript sample on these pages runs against the built package and its `// =>` values are checked, and each TypeScript one also compiles against the package's types. A sample that cannot run says why in its fence and is neither run nor compiled: today, the samples that import `@cosyte/hl7` and the CommonJS `require` sample | prose that is wrong beside a sample that is right                                                                                                                                                                         |
 | PHI scan             | a realistic patient identifier in any tracked file: a C-CDA-aware scan of every C-CDA document in the repository, and a scan for dashed Social Security numbers and email addresses in every other file                                                                                                                                                                                                            | anything outside the fields and formats it knows; it detects after a write, it does not prevent one                                                                                                                       |
 
 ## How each one runs
 
 - **Unit tests, properties, fuzzing and doc samples** run in one Vitest suite on every pull request,
-  on `main` and nightly, on Node.js 22, 24 and 26. The property and fuzz checks run a fixed number
-  of cases each (from 80 to 500 today) and pin no seed, so each run draws new cases; a failure
-  prints the seed that reproduces it. Twelve of them prove the three properties every Cosyte parser
-  proves (round trip, idempotent normalize, and never throws in lenient mode) on the generators we
-  publish at `@cosyte/ccda/arbitraries`; they run 100 cases each, `COSYTE_PROPERTY_RUNS` sets a
-  deeper run, and a failure prints the seed and path that replay it.
-  [Property-test your code](./property-test-your-code.md) shows those generators on code of your
-  own.
-- **The coverage gate** runs with the suite. A floor that is not met fails the pull request.
+  on `main` and nightly, on Node.js 22, 24 and 26, each on Linux, Windows and macOS. The same suite
+  also runs under Bun and under Deno on every pull request.
+- **The properties** run through the shared runners of `@cosyte/test-utils`. The three properties
+  every Cosyte parser proves (round trip, idempotent normalize, and never throws in lenient mode)
+  run on the generators we publish at `@cosyte/ccda/arbitraries`, beside the immutability property
+  of a parsed document. On a pull request each property runs 100 cases (the archetype round trip
+  in `test/property/round-trip.property.test.ts` runs 80); every night `pnpm test:property` runs every property under
+  `test/property/` at 10,000 cases. Each property prints its seed before it runs, so the nightly
+  log records every seed it ran, and a failure prints the seed and path that replay it: set
+  `COSYTE_PROPERTY_SEED` and `COSYTE_PROPERTY_PATH` to them and run `pnpm test:property` to get the
+  same case, already shrunk. [Property-test your code](./property-test-your-code.md) shows those
+  generators on code of your own.
+- **The coverage gate** runs with the suite. A floor that is not met fails the pull request. The
+  coverage ratchet (`cosyte-ratchet`) then holds the coverage to the floor in `quality-floor.json`,
+  fails a pull request whose changed lines a test never runs, and fails one that lowers or removes a
+  floor.
+- **Mutation testing** runs StrykerJS on the shared configuration. On a pull request it mutates the
+  source files the pull request changed, and every mutant in the changed lines must be killed. Twice
+  a week a full run mutates every source file, shared out across 16 parallel jobs, and holds the
+  whole score to the mutation floor in `quality-floor.json`. The floor only rises.
 - **The conformance run** fetches the C-CDA R2.1 Schematron, its vocabulary file and the CDA R2 XML
   schema from pinned, digest-checked references, and runs on every pull request in a job of its
   own, named `conformance`. It writes
@@ -60,6 +71,10 @@ pnpm test               # unit tests, properties, fuzzing and doc samples
 pnpm test:coverage      # the same suite with the coverage gate
 pnpm conformance        # the conformance run; it needs the network
 pnpm phi-scan           # the PHI scan over the repository
+pnpm test:property      # every property; COSYTE_PROPERTY_RUNS=10000 for the nightly depth
+pnpm quality:check      # coverage against quality-floor.json, after pnpm test:coverage
+pnpm mutate changed --base origin/main   # mutate the files a change touched
+pnpm mutate:full        # the full mutation run; it takes hours on one machine
 ```
 
 ## When an upstream artifact is unreachable

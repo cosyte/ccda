@@ -10,7 +10,10 @@ vendor quirks become coded warnings, not errors.
 
 Required on `main`: `ci / verify (22, ubuntu-latest)`, `ci / verify (24, ubuntu-latest)`,
 `ci / actionlint` and `no-emdash / tracked-files`. CI also runs `ci / verify` on Node 26, the
-`conformance`, `examples` and `standards` jobs, and `no-internal-refs / public-surface`. From the
+`conformance`, `examples` and `standards` jobs, and `no-internal-refs / public-surface`, `verify` on
+Windows and macOS, `bun`, `deno`, `coverage-ratchet` and `mutation` (the changed files, held to
+`quality-floor.json`). The full mutation run is `weekly-mutation.yml`; the properties at 10,000
+cases are `nightly-properties.yml`. From the
 repo root, with pnpm 10.34.5 first on PATH (pnpm 12 refuses the frozen install; a test runs a bare
 `pnpm build`):
 

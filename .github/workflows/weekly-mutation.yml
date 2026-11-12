@@ -21,10 +21,6 @@ on:
     - cron: "37 6 * * 0"
     - cron: "37 6 * * 3"
   workflow_dispatch:
-  # TEMPORARY: measures the first full run on this branch before it merges. Removed in the next
-  # commit; never merge it.
-  push:
-    branches: [test/testing-standard]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
