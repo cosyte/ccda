@@ -296,6 +296,7 @@ describe.each(KEPT)("the markup walk, for %s", (_name, ch) => {
     ["in text right after an instruction with no data", `<a><?p?>${ch}</a>`],
     ["in text right after a comment", `<a><!--c-->${ch}</a>`],
     ["in text right after a CDATA section", `<a><![CDATA[c]]>${ch}</a>`],
+    ["in text after a tag whose last character before its > is a <", `<a><b<>${ch}</b<></a>`],
     ["nowhere, in a text without markup", "x"],
   ])("allows it %s", (_label, source) => {
     expect(breakInMarkup(source)).toBe(false);
