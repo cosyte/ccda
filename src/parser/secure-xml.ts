@@ -649,9 +649,15 @@ let checkingBuilder: DomBuilderClass | undefined;
  * @internal
  */
 function checkingDomBuilder(DOMParser: ReturnType<typeof xmldom>["DOMParser"]): DomBuilderClass {
-  if (checkingBuilder !== undefined) return checkingBuilder;
-  const Base = (new DOMParser() as unknown as { readonly domHandler: DomBuilderClass }).domHandler;
-  checkingBuilder = class extends Base {
+  checkingBuilder ??= extendDomBuilder(
+    (new DOMParser() as unknown as { readonly domHandler: DomBuilderClass }).domHandler,
+  );
+  return checkingBuilder;
+}
+
+/** The class {@link checkingDomBuilder} describes, made from `@xmldom/xmldom`'s own. @internal */
+function extendDomBuilder(Base: DomBuilderClass): DomBuilderClass {
+  return class extends Base {
     override startElement(
       namespaceURI: string | null,
       localName: string,
@@ -662,7 +668,6 @@ function checkingDomBuilder(DOMParser: ReturnType<typeof xmldom>["DOMParser"]): 
       if (this.currentElement.attributes.length !== attrs.length) MERGED_ATTRIBUTES.add(this.doc);
     }
   };
-  return checkingBuilder;
 }
 
 /**
