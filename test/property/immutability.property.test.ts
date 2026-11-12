@@ -15,13 +15,14 @@ import { immutabilityProperty } from "@cosyte/test-utils";
 import { parseCcda, type CcdaWarning } from "../../src/index.js";
 
 import { specCleanCcdaXml } from "./_arbitraries.js";
+import { propertyRun, propertyTimeout } from "./_property.js";
 
 // Every test in this file is a property test, and their cost is not fixed: fast-check
 // draws a fresh seed on every run (none is pinned here, by design) and each draw parses
 // and re-serializes a whole generated C-CDA. See `vitest.config.ts` for why the budget is
-// here rather than global, and the CHANGELOG entry for
-// `PARSER-TESTTIMEOUT-ASSERTS-AN-IDLE-BOX` for what it was sized against.
-vi.setConfig({ testTimeout: 60_000 });
+// here rather than global. The budget scales with the depth `COSYTE_PROPERTY_RUNS` sets
+// (see `./_property.ts`), so the nightly run at 10,000 cases is not cut off.
+vi.setConfig({ testTimeout: propertyTimeout() });
 
 const EXTRA_WARNING: CcdaWarning = {
   code: "SECTION_PLACEMENT_SUSPECT",
@@ -32,6 +33,7 @@ const EXTRA_WARNING: CcdaWarning = {
 describe("ccda immutability (archetype invariant)", () => {
   it("withWarnings returns a new document and never perturbs the original", () => {
     immutabilityProperty({
+      ...propertyRun("immutability"),
       arbitrary: specCleanCcdaXml(),
       parse: (raw) => parseCcda(raw),
       // The copy-with is the sanctioned mutation: it returns a new instance,

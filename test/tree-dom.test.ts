@@ -25,7 +25,7 @@ import { readDocument } from "../src/parser/xml-tree.js";
 import { serializeDocument } from "../src/serialize/serialize-dom.js";
 import { generatedDocument } from "./_helpers/generated-xml.js";
 import { outputCorpus } from "./_output-corpus.js";
-import { assertProperty, propertyTimeout } from "./property/_runner.js";
+import { checkProperty, propertyTimeout } from "./property/_property.js";
 
 /** A DOM node, read through the members both documents carry. */
 interface DomNode {
@@ -118,7 +118,7 @@ describe("the document built from the compact tree", () => {
   }, 120_000);
 
   it("is the document DOMParser builds, for generated XML", { timeout: propertyTimeout() }, () => {
-    assertProperty(
+    checkProperty(
       "document from the compact tree agrees with DOMParser",
       fc.property(generatedDocument(), (source) => {
         check(source);
