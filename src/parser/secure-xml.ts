@@ -610,7 +610,14 @@ function buildDom(
     // the text is passed through as it is instead of being scanned twice more.
     normalizeLineEndings: lineBreaksToNormalize ? xmldomLineEndings : keepLineEndings,
     onError: (level: "warning" | "error" | "fatalError", message: string): void => {
-      if (level === "fatalError" || (strict && !isToleratedReport(level, message))) {
+      if (level === "fatalError") {
+        throw new CcdaParseError(
+          FATAL_CODES.NOT_WELL_FORMED_XML,
+          FATAL_MESSAGES.NOT_WELL_FORMED_XML,
+          {},
+        );
+      }
+      if (strict && !isToleratedReport(level, message)) {
         throw new CcdaParseError(
           FATAL_CODES.NOT_WELL_FORMED_XML,
           FATAL_MESSAGES.NOT_WELL_FORMED_XML,

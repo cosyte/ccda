@@ -61,20 +61,19 @@ function namePattern(): string {
 
 /**
  * One attribute as XML 1.0 writes it (productions [41], [25] and [10]), with the white space that
- * must come before it: white space, a name (group 1 when `capture` is set), `=` with optional white
- * space either side, and a value in double or single quotes holding no `<` and not the quote it is
- * in.
+ * must come before it: white space, a name (its one group), `=` with optional white space either
+ * side, and a value in double or single quotes holding no `<` and not the quote it is in.
  */
-function attributePattern(capture: boolean): string {
+function attributePattern(): string {
   const space = "[ \\t\\r\\n]";
-  const name = capture ? `(${namePattern()})` : `(?:${namePattern()})`;
-  return `${space}+${name}${space}*=${space}*(?:"[^<"]*"|'[^<']*')`;
+  return `${space}+(${namePattern()})${space}*=${space}*(?:"[^<"]*"|'[^<']*')`;
 }
 
 /**
  * A sticky pattern for the text inside the root element up to and through its next markup: any
  * characters but `<`, then a comment, a CDATA section, a processing instruction, an end tag (its
- * name in group 1) or a start tag (its name in group 2, its attributes in group 3).
+ * name in group 1) or a start tag (its name in group 2, its attributes in group 3, and the name of
+ * the last of them in group 4, which nothing reads).
  *
  * A start tag matches only as XML 1.0 production [40] or [44] writes it: its name, then attributes
  * each as {@link attributePattern} reads one, then optional white space and `>` or `/>`. So a quote
@@ -85,7 +84,7 @@ function attributePattern(capture: boolean): string {
  */
 function markupPattern(): RegExp {
   const name = namePattern();
-  const attribute = attributePattern(false);
+  const attribute = attributePattern();
   const comment = "!--[^]*?-->";
   const cdata = "!\\[CDATA\\[[^]*?\\]\\]>";
   const instruction = "\\?[^]*?\\?>";
@@ -97,8 +96,8 @@ function markupPattern(): RegExp {
 /**
  * Throw `NOT_WELL_FORMED_XML` when one name is given to two attributes of a start tag (XML 1.0
  * well-formedness constraint Unique Att Spec). `attributes` is group 3 of {@link markupPattern}, so
- * each attribute in it is one match of `attribute`, the global {@link attributePattern} with its
- * name captured. Names are compared whole, prefix included; two prefixes bound to one namespace are
+ * each attribute in it is one match of `attribute`, the global {@link attributePattern}, its name
+ * in group 1. Names are compared whole, prefix included; two prefixes bound to one namespace are
  * left to the tree's builder.
  */
 function refuseDuplicateAttribute(attributes: string, attribute: RegExp): void {
@@ -135,7 +134,7 @@ export function refuseOutsideRootText(source: string): void {
  */
 export function rootSpan(source: string): { readonly start: number; readonly end: number } {
   const markup = markupPattern();
-  const attribute = new RegExp(attributePattern(true), "gu");
+  const attribute = new RegExp(attributePattern(), "gu");
   const start = skipMisc(source, 0);
   markup.lastIndex = start;
   let match = markup.exec(source);
