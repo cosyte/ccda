@@ -17,7 +17,7 @@
 import type { Document } from "@xmldom/xmldom";
 
 import type { CcdaParseError } from "../parser/errors.js";
-import { parseSecureXml } from "../parser/secure-xml.js";
+import { parseSecureXml, resolveLimits } from "../parser/secure-xml.js";
 import { declaredPrefix, xmlNamespace, type XmlNode } from "./write.js";
 
 /** Drop a warning: the check reads text it wrote, and only its tree matters. */
@@ -175,13 +175,14 @@ function sameNodes(
  * @internal
  */
 export function readBackDifference(xml: string, node: XmlNode): string | undefined {
-  // No cap: the writer does not apply the reader's limits, so neither does its check.
-  const limits = {
+  // No cap: the writer does not apply the reader's limits, so neither does its check. Each cap
+  // lifted is named, so the defaults stand for none of them.
+  const limits = resolveLimits({
     maxInputBytes: Number.POSITIVE_INFINITY,
     maxDepth: Number.POSITIVE_INFINITY,
     maxNodeCount: Number.POSITIVE_INFINITY,
     maxEntityExpansions: Number.POSITIVE_INFINITY,
-  };
+  });
   let doc: XmlNode;
   try {
     doc = parseSecureXml(xml, limits, ignore, ignore) as unknown as XmlNode;
