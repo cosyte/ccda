@@ -24,20 +24,28 @@ import { parseCcda } from "@cosyte/ccda";
 parseCcda("<Foo>hello</Foo>"); // throws CcdaParseError (NOT_A_CLINICAL_DOCUMENT)
 ```
 
-| Fatal code (throws)            | Meaning                                                      |
-| ------------------------------ | ------------------------------------------------------------ |
-| `XXE_OR_DTD_PRESENT`           | The document declared a DTD or an external entity.           |
-| `ENTITY_EXPANSION_LIMIT`       | Too many `&…;` entity references (billion-laughs).           |
-| `INPUT_SIZE_LIMIT_EXCEEDED`    | Decoded input exceeds the byte cap.                          |
-| `ELEMENT_DEPTH_LIMIT_EXCEEDED` | Element nesting too deep.                                    |
-| `NODE_COUNT_LIMIT_EXCEEDED`    | Too many element nodes.                                      |
-| `NOT_WELL_FORMED_XML`          | The bytes did not parse as XML.                              |
-| `NOT_A_CLINICAL_DOCUMENT`      | Well-formed, but the root element is not `ClinicalDocument`. |
+| Fatal code (throws)            | Meaning                                                                          |
+| ------------------------------ | -------------------------------------------------------------------------------- |
+| `XXE_OR_DTD_PRESENT`           | The document declared a DTD or an external entity.                               |
+| `ENTITY_EXPANSION_LIMIT`       | Too many `&…;` entity references (billion-laughs).                               |
+| `INPUT_SIZE_LIMIT_EXCEEDED`    | Decoded input exceeds the byte cap.                                              |
+| `ELEMENT_DEPTH_LIMIT_EXCEEDED` | Element nesting too deep.                                                        |
+| `NODE_COUNT_LIMIT_EXCEEDED`    | Too many element nodes.                                                          |
+| `NOT_WELL_FORMED_XML`          | The bytes did not parse as XML, or held a character XML 1.0 forbids (see below). |
+| `NOT_A_CLINICAL_DOCUMENT`      | Well-formed, but the root element is not `ClinicalDocument`.                     |
 
 Narrow on the caught error via `err instanceof CcdaParseError` and `err.code === FATAL_CODES.*` (see
 [Tolerance & the warning model](./spec-notes-tolerance.md)). Everything a real-world EHR does short of
 that (an unknown section code, a missing dose, a code/narrative mismatch, an unexpected code system, a
 non-UCUM unit) is a warning you triage, not an exception you catch.
+
+A text that holds a character XML 1.0 forbids (a control character such as U+0001 other than tab,
+line feed and carriage return, an unpaired surrogate, U+FFFE or U+FFFF), written as it is anywhere or
+as a character reference such as `&#1;` in text content or an attribute value, is not XML, so
+`parseCcda` and `editCcda` throw `NOT_WELL_FORMED_XML` for it rather than reading it. The error names
+neither the character nor where it sits. In a comment, a CDATA section or a processing instruction
+XML does not expand a reference, so `<!-- &#1; -->` is plain text there and the document reads as
+before.
 
 ## Common symptoms
 

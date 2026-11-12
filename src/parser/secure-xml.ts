@@ -36,6 +36,7 @@ import type { Document, Element } from "@xmldom/xmldom";
 import { positionOf } from "../model/dom.js";
 import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES } from "./errors.js";
 import { isRecognizedNamespace } from "./namespaces.js";
+import { isXmlChar } from "./xml-chars.js";
 import type { CcdaParseLimits } from "./types.js";
 import { encodingBomStripped, unknownNamespacePrefix, type CcdaWarning } from "./warnings.js";
 import { domOfTree } from "./tree-dom.js";
@@ -84,27 +85,56 @@ const PREDEFINED_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
  *
  * - `<`: a declared DTD or entity (`<!DOCTYPE`, `<!ENTITY`), the XXE / external-entity attack
  *   surface;
- * - `&`: an entity reference `&name;` (predefined ones are told apart after the match);
- * - anything else: a character XML's end-of-line handling rewrites (a carriage return, NEL, LINE
- *   SEPARATOR or PARAGRAPH SEPARATOR).
+ * - `&`: an entity reference `&name;` (predefined ones are told apart after the match), or, when
+ *   `#` follows the `&`, a character reference `&#...;`, whose code point is checked;
+ * - a carriage return, NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR: a character XML's end-of-line
+ *   handling rewrites;
+ * - anything else: a character XML 1.0 forbids (`./xml-chars.ts`): a C0 control other than tab,
+ *   line feed and carriage return, an unpaired surrogate (the `u` flag reads a pair as one
+ *   character, so only an unpaired one matches the surrogate range), U+FFFE or U+FFFF.
  *
- * The first two alternatives are the two patterns this module ran as separate passes before
- * (`/<!DOCTYPE|<!ENTITY/iu`, then `/&[a-z_][\w.-]*;/giu` over the whole text), with the same flags,
- * so they match exactly what those matched: no DTD match can overlap an entity reference (one
- * holds no `&`, the other no `<`), so the references found are the same ones in the same order.
- * One global scan of a string with few matches is several times cheaper than the two passes, and
- * the third alternative lets the parse skip the end-of-line rewrite when there is nothing for it
- * to rewrite.
+ * The DTD alternatives and the entity half of the `&` alternative are the two patterns this module
+ * ran as separate passes before (`/<!DOCTYPE|<!ENTITY/iu`, then `/&[a-z_][\w.-]*;/giu` over the
+ * whole text), with the same flags, so they match exactly what those matched: no DTD match can
+ * overlap an entity reference (one holds no `&`, the other no `<`), and a character reference
+ * (`&#`) cannot overlap one either, so the references found are the same ones in the same order.
+ * One global scan of a string with few matches is several times cheaper than the two passes. The
+ * last alternative, one character class, lets the parse skip the end-of-line rewrite when there is
+ * nothing for it to rewrite, and finds in the same scan a character no XML parser may accept,
+ * which `@xmldom/xmldom` and the compact reader would otherwise read into the document without a
+ * word; so does the character reference half of the `&` alternative.
  *
  * @internal
  */
-const GATE_RE = /<!DOCTYPE|<!ENTITY|&[a-z_][\w.-]*;|[\r\u0085\u2028\u2029]/giu;
+const GATE_RE =
+  /<!DOCTYPE|<!ENTITY|&(?:[a-z_][\w.-]*|#x?[0-9a-f]+);|[\0-\x08\x0B-\x1F\u0085\u2028\u2029\uD800-\uDFFF\uFFFE\uFFFF]/giu;
 
 /** `<`, the first character of a {@link GATE_RE} match on a DTD or entity declaration. @internal */
 const LESS_THAN = 0x3c;
 
 /** `&`, the first character of a {@link GATE_RE} match on an entity reference. @internal */
 const AMPERSAND = 0x26;
+
+/** `#`, the second character of a {@link GATE_RE} match on a character reference. @internal */
+const HASH = 0x23;
+
+/** `x`, the third character of a {@link GATE_RE} match on a hexadecimal character reference. @internal */
+const LOWER_X = 0x78;
+
+/** `X`: `&#X...;` is not a character reference in XML, so the gate leaves it to the parser. @internal */
+const UPPER_X = 0x58;
+
+/** A carriage return, the first character end-of-line handling rewrites. @internal */
+const CARRIAGE_RETURN = 0x0d;
+
+/** NEL, rewritten by end-of-line handling. @internal */
+const NEXT_LINE = 0x85;
+
+/** LINE SEPARATOR, rewritten by end-of-line handling. @internal */
+const LINE_SEPARATOR = 0x2028;
+
+/** PARAGRAPH SEPARATOR, rewritten by end-of-line handling. @internal */
+const PARAGRAPH_SEPARATOR = 0x2029;
 
 /** A carriage return followed by a line feed or NEL: one line break. @internal */
 const LINE_BREAK_PAIR_RE = /\r[\n\u0085]/g;
@@ -353,7 +383,20 @@ export function rebuildDom(
 /**
  * The gate, in one scan of the text ({@link GATE_RE}): throw `XXE_OR_DTD_PRESENT` for a declared
  * DTD or entity anywhere, else `ENTITY_EXPANSION_LIMIT` when the custom entity references exceed
- * the cap; return whether the text holds a character the end-of-line handling rewrites.
+ * the cap, else `NOT_WELL_FORMED_XML` when the text holds a character XML 1.0 forbids, written
+ * raw or as a character reference; return whether the text holds a character the end-of-line
+ * handling rewrites.
+ *
+ * Such a character is refused rather than read with a warning: XML 1.0 makes it a well-formedness
+ * error (section 2.2, and the Legal Character constraint of section 4.1), so the text is not XML,
+ * every conforming parser rejects it, and a document read from it would carry the character into
+ * any XML written back out. The fatal names no character and no place, like every other
+ * `NOT_WELL_FORMED_XML`. A forbidden character written raw is refused wherever it sits, comments,
+ * CDATA sections and processing instructions included, since none of them may hold one. A
+ * character reference is refused only where XML expands it, in text content and attribute values:
+ * inside a comment, a CDATA section or a processing instruction `&#1;` is plain text, not a
+ * reference (XML 1.0 productions [15], [16] and [20], and section 4.4), and the document is
+ * well-formed ({@link anyExpanded}).
  *
  * A declared DTD outranks the entity cap wherever it sits, as it did when the two were separate
  * passes with the DTD check first: a count over the cap does not throw until the scan has
@@ -367,6 +410,11 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
   let count = 0;
   let over = false;
   let lineBreaks = false;
+  let forbidden = false;
+  // Where each character reference naming a forbidden code point starts, in text order: one in a
+  // comment, a CDATA section or a processing instruction is not a reference, so whether it makes the
+  // text ill-formed is decided after the scan, and only when there is one.
+  let forbiddenReferences: number[] | undefined;
   GATE_RE.lastIndex = 0;
   for (let match = GATE_RE.exec(source); match !== null; match = GATE_RE.exec(source)) {
     const token = match[0];
@@ -380,7 +428,20 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
       );
     }
     if (first !== AMPERSAND) {
-      lineBreaks = true;
+      if (
+        first === CARRIAGE_RETURN ||
+        first === NEXT_LINE ||
+        first === LINE_SEPARATOR ||
+        first === PARAGRAPH_SEPARATOR
+      ) {
+        lineBreaks = true;
+      } else {
+        forbidden = true;
+      }
+    } else if (token.charCodeAt(1) === HASH) {
+      if (!forbidden && namesForbiddenCharacter(token)) {
+        (forbiddenReferences ??= []).push(match.index);
+      }
     } else if (!over && !PREDEFINED_ENTITIES.has(token.slice(1, -1).toLowerCase())) {
       // Compared at each custom reference, as the separate pass did, so a cap a caller set below
       // zero is exceeded by the first custom reference and never by a text with none.
@@ -395,7 +456,81 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
       {},
     );
   }
+  if (
+    forbidden ||
+    (forbiddenReferences !== undefined && anyExpanded(source, forbiddenReferences))
+  ) {
+    throw new CcdaParseError(
+      FATAL_CODES.NOT_WELL_FORMED_XML,
+      FATAL_MESSAGES.NOT_WELL_FORMED_XML,
+      {},
+    );
+  }
   return lineBreaks;
+}
+
+/**
+ * Whether a character reference `&#...;` or `&#x...;` (as {@link GATE_RE} matched it) names a code
+ * point XML 1.0 forbids. `&#X...;` (an upper-case X) and decimal digits mixed with letters are
+ * not character references at all; the gate leaves those to the parser, as before.
+ *
+ * @internal
+ */
+function namesForbiddenCharacter(token: string): boolean {
+  const third = token.charCodeAt(2);
+  if (third === UPPER_X) return false;
+  const hex = third === LOWER_X;
+  const digits = token.slice(hex ? 3 : 2, -1);
+  if (!hex && !/^[0-9]+$/u.test(digits)) return false;
+  // Nine or more digits name a number past 0x10FFFF unless they start with zeros, so leading
+  // zeros are dropped first and a longer run is past the last code point without being summed.
+  const significant = digits.replace(/^0+/u, "");
+  if (significant.length > 8) return true;
+  return !isXmlChar(significant === "" ? 0 : Number.parseInt(significant, hex ? 16 : 10));
+}
+
+/**
+ * A comment, a CDATA section and a processing instruction, each by how it opens and closes: the
+ * three places XML does not expand a character reference. @internal
+ */
+const UNEXPANDED: readonly { readonly open: string; readonly close: string }[] = [
+  { open: "<!--", close: "-->" },
+  { open: "<![CDATA[", close: "]]>" },
+  { open: "<?", close: "?>" },
+];
+
+/**
+ * Whether any of these offsets (each the start of a character reference, in ascending order) lies
+ * outside every comment, CDATA section and processing instruction, where XML expands it. Run only
+ * when the gate found a reference to a forbidden code point, so a text without one pays nothing.
+ *
+ * One walk from the start of the text, `<` by `<`, never revisiting a character: a construct opened
+ * at a `<` is skipped whole to its close, so a `<!--` inside a CDATA section or a `]]>` inside a
+ * comment is read as the text it is. An attribute value cannot hold a `<`, so no construct starts
+ * inside one. A construct that never closes ends the walk with a refusal: such a text is not
+ * well-formed either way, and stopping there keeps a text of many unclosed openers linear (a lazy
+ * regular expression over the same three spans retries from each opener, quadratic in them).
+ *
+ * @internal
+ */
+function anyExpanded(source: string, offsets: readonly number[]): boolean {
+  let at = 0;
+  for (const offset of offsets) {
+    // Past `at`, nothing is read yet; an offset before it sits inside the construct last skipped.
+    while (at <= offset) {
+      const lt = source.indexOf("<", at);
+      if (lt === -1 || lt > offset) return true;
+      const construct = UNEXPANDED.find(({ open }) => source.startsWith(open, lt));
+      if (construct === undefined) {
+        at = lt + 1;
+        continue;
+      }
+      const close = source.indexOf(construct.close, lt + construct.open.length);
+      if (close === -1) return true;
+      at = close + construct.close.length;
+    }
+  }
+  return false;
 }
 
 /** The end-of-line handling for a text with no line break to rewrite: the text itself. @internal */

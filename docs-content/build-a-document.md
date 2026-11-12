@@ -433,6 +433,26 @@ you asked for. Any C-CDA section outside the set listed above cannot be built at
 `buildCcda(init, { terminology })` accepts an optional bring-your-own terminology adapter (see [Code
 systems and provenance](./code-systems.md)). Every code is still emitted verbatim; the adapter can only flag, never coerce.
 
+### Characters XML does not allow
+
+XML 1.0 forbids some characters in a document outright: the control characters U+0000 to U+001F
+other than tab, line feed and carriage return, an unpaired surrogate (U+D800 to U+DFFF), and U+FFFE
+and U+FFFF. Escaping cannot carry them, so a document holding one is not XML and no conforming
+parser reads it. `buildCcda` checks every string you pass, in every field, and every string a
+terminology adapter's `translate` returns, before it writes anything. On the first such character it
+throws a `TypeError` that names the field and the code point, and never the text:
+
+```text
+buildCcda: problems[0].problem.displayName holds U+0001, a character XML 1.0 does not allow in a
+document. Remove it before building; the builder does not change clinical text for you.
+```
+
+The builder refuses rather than removes or replaces the character, because a silent change to
+clinical text is worse than an error you can see. Before this check it wrote the character as it was
+and returned a document no XML parser accepts. If your source text can carry such characters (text
+pasted from another system often holds a stray U+000B or U+000C), clean it before you build, with a
+rule your own review owns.
+
 ## Reference
 
 - [`buildCcda`](./api/README.md#buildccda), its input [`BuildCcdaInit`](./api/README.md#buildccdainit)
