@@ -174,29 +174,8 @@ export function elementChildren(el: Element): Element[] {
 export function text(el: Element): string | undefined {
   const raw = el.nodeType === ELEMENT_NODE ? textContentOf(el) : el.textContent;
   if (raw === null) return undefined;
-  const trimmed = trimValue(raw);
+  const trimmed = raw.trim();
   return trimmed === "" ? undefined : trimmed;
-}
-
-/** NEL, which `String.prototype.trim` keeps. @internal */
-const NEXT_LINE = 0x85;
-
-/**
- * A value with the white space at its ends removed: the one rule the model reads a text or an
- * attribute value's ends by. White space here is every character `String.prototype.trim` removes
- * (the Unicode spaces, tab, line feed, carriage return, LINE SEPARATOR, PARAGRAPH SEPARATOR and
- * U+FEFF) and NEL (U+0085), which `trim` keeps, so the three characters XML 1.1 reads as line
- * breaks are treated alike. Nothing inside the value is touched.
- *
- * @internal
- */
-export function trimValue(value: string): string {
-  let trimmed = value.trim();
-  while (trimmed.charCodeAt(0) === NEXT_LINE) trimmed = trimmed.slice(1).trimStart();
-  while (trimmed.charCodeAt(trimmed.length - 1) === NEXT_LINE) {
-    trimmed = trimmed.slice(0, -1).trimEnd();
-  }
-  return trimmed;
 }
 
 /**

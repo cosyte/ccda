@@ -13,7 +13,7 @@
  * unit string, units are never normalized away.
  */
 
-import { attr, child, positionOf, text, trimValue, xsiType } from "../dom.js";
+import { attr, child, positionOf, text, xsiType } from "../dom.js";
 import { parseCd, type CD } from "../types/cd.js";
 import { parsePq, type PQ } from "../types/pq.js";
 import { parseIvlPq, type IVL_PQ } from "../types/ivl-pq.js";
@@ -262,7 +262,7 @@ function readNumber(
     // An un-parseable @value is read as unsupported and flagged with
     // RESULT_VALUE_TYPE_UNHANDLED, exactly as any other unhandled typed value:
     // no number is invented, and the token itself is only in doc.toString().
-    const trimmed = trimValue(raw);
+    const trimmed = raw.trim();
     const n = trimmed === "" ? Number.NaN : Number(trimmed);
     if (!Number.isFinite(n)) return readUnsupported(valueEl, datatype, position, ctx);
     return {

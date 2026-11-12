@@ -354,10 +354,6 @@ this page says so instead of resolving it in your favor.
   were written. Up to this release the DOM library under the parser read U+0080 inside a tag as
   white space, and read a tag holding most of the others as plain text, `<` and all, so an element
   could gain a wrong attribute split or turn into narrative text without a warning.
-- **A value's ends are trimmed by one rule.** Where the model trims a text or an attribute value
-  (an element's text, a code, a code system, a physical quantity or a number), it removes from
-  both ends every character `String.prototype.trim` removes and NEL (U+0085), which `trim` keeps,
-  so NEL, U+2028 and U+2029 are treated alike. Nothing inside a value is touched.
 - **Vendor profiles only quiet benign noise.** `parseCcda(xml, { profile })` (or a process default via
   `setDefaultCcdaProfile`) applies a `CcdaProfile` that downgrades the non-safety-critical deviations it
   expects to `PROFILE_QUIRK_APPLIED` (flagged `expected`, carrying the original `toleratedCode`). It

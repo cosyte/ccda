@@ -217,7 +217,7 @@ function writtenDocuments(): OutputDocument[] {
         .replace('extension="DOC123"', `extension="x${ch}y"`),
     );
   }
-  // NEL at a value's ends is white space to the model, as the other line breaks are.
+  // NEL at a title's ends: the model's trimming keeps it, where it removes U+2028 and U+2029.
   add("nel-around-title", titled("\u0085 Synthetic \u0085"));
   add("mixed-endings", titled("a\r\nb\rc\u0085d\u2028e\u2029f"));
   add(

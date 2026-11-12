@@ -7,7 +7,7 @@
  * collapsed) and coded-value-vs-narrative (both surfaced, no winner picked).
  */
 
-import { attr, child, children, elementChildren, positionOf, trimValue, xsiType } from "../dom.js";
+import { attr, child, children, elementChildren, positionOf, xsiType } from "../dom.js";
 import { V3_NS } from "../../parser/namespaces.js";
 import { sectionForLoinc, sectionForTemplateRoot } from "../../parser/templates.js";
 import { parseBlAttr } from "../types/bl.js";
@@ -751,9 +751,8 @@ function firstTranslationNamingProduct(
 
 /** The trimmed `@code` of a `<code>` element, or `undefined` when it asserts no symbol. @internal */
 function symbolOf(el: Element): string | undefined {
-  const code = attr(el, "code");
-  const symbol = code === undefined ? "" : trimValue(code);
-  return symbol === "" ? undefined : symbol;
+  const symbol = attr(el, "code")?.trim();
+  return symbol === undefined || symbol === "" ? undefined : symbol;
 }
 
 /**
@@ -781,9 +780,8 @@ interface ProductCoding {
 function codingOf(el: Element): ProductCoding | undefined {
   const symbol = symbolOf(el);
   if (symbol === undefined) return undefined;
-  const codeSystem = attr(el, "codeSystem");
-  const system = codeSystem === undefined ? "" : trimValue(codeSystem);
-  return system === "" ? { symbol } : { symbol, system };
+  const system = attr(el, "codeSystem")?.trim();
+  return system === undefined || system === "" ? { symbol } : { symbol, system };
 }
 
 /**
@@ -1301,10 +1299,9 @@ export function reconcileCode(
 ): void {
   if (narrative === undefined) return;
   const label = code?.displayName ?? code?.originalText;
-  if (label === undefined) return;
-  // A label of nothing but white space is in every narrative, so it is never a mismatch.
-  const a = trimValue(label).toLowerCase();
-  const b = trimValue(narrative).toLowerCase();
+  if (label === undefined || label.trim() === "") return;
+  const a = label.trim().toLowerCase();
+  const b = narrative.trim().toLowerCase();
   if (!b.includes(a) && !a.includes(b)) {
     ctx.emit(codeNarrativeMismatch(position, slot));
   }

@@ -7,7 +7,7 @@
  * alternatives.
  */
 
-import { attr, child, children, text, trimValue } from "../dom.js";
+import { attr, child, children, text } from "../dom.js";
 import { contradictsAssertedValue, readNullFlavor, type ParseCtx } from "./_shared.js";
 import type { Element } from "@xmldom/xmldom";
 
@@ -109,7 +109,7 @@ export function parseCd(el: Element | undefined, ctx: ParseCtx): CD | undefined 
  * @internal
  */
 export function assertsConcept(code: string | undefined): boolean {
-  return code !== undefined && trimValue(code) !== "";
+  return code !== undefined && code.trim() !== "";
 }
 
 /** Parse a coded element without descending into nested translations. @internal */
