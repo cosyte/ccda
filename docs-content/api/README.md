@@ -5536,9 +5536,10 @@ R1.1-origin reduction on a document that release never wrote.
 The three-state reading of the document-level `templateId`'s version stamp.
 Supersedes [RequiredSectionOptions.r21Stamped](#r21stamped) when both are given.
 
-`unmodeled-release` is the state the boolean cannot hold: the obligation is
-**not evaluated**, so the key set is empty and
-[RequiredSectionStatus.evaluation](#evaluation) says which emptiness that is.
+`r30-stamped` reads the C-CDA 5.0.0 table. `unmodeled-release` is a state
+the boolean cannot hold either: the obligation is **not evaluated**, so the
+key set is empty and [RequiredSectionStatus.evaluation](#evaluation) says which
+emptiness that is.
 
 ***
 
@@ -5615,6 +5616,15 @@ never "nothing is required".
 > `readonly` **keys**: readonly `string`[]
 
 The asserted SHALL keys, identical to [requiredSectionKeys](#requiredsectionkeys).
+
+##### release
+
+> `readonly` **release**: `"R2.1"` \| `"5.0.0"` \| `undefined`
+
+The C-CDA release whose required sections `keys` were read against:
+`"R2.1"` for a document stamped `2015-08-01` or carrying no stamp,
+`"5.0.0"` for one stamped `2024-05-01`, and `undefined` when
+`evaluation` is `not-evaluated`. Added in a patch.
 
 ##### source
 
@@ -6237,13 +6247,15 @@ requiredSectionStatus("diagnosticImagingReport").unasserted[0];
 
 > `readonly` **conformanceId**: `string`
 
-The conformance statement that requires it.
+The conformance statement that requires it. A C-CDA 5.0.0 row the source
+states only as a named invariant, with no `CONF:` id, carries that
+invariant's key (for example `ap-or-a-and-p`).
 
 ##### reason
 
 > `readonly` **reason**: [`UnassertedSectionReason`](#unassertedsectionreason)
 
-Which of the two permitted reasons keeps it out of the asserted set.
+Which of the permitted reasons keeps it out of the asserted set.
 
 ##### sourceName
 
@@ -6717,11 +6729,21 @@ const s: ConcernStatus = "active";
 
 ### DocumentType
 
-> **DocumentType** = `"ccd"` \| `"dischargeSummary"` \| `"referralNote"` \| `"consultationNote"` \| `"historyAndPhysical"` \| `"progressNote"` \| `"procedureNote"` \| `"operativeNote"` \| `"carePlan"` \| `"diagnosticImagingReport"` \| `"unstructuredDocument"` \| `"transferSummary"`
+> **DocumentType** = `"ccd"` \| `"dischargeSummary"` \| `"referralNote"` \| `"consultationNote"` \| `"historyAndPhysical"` \| `"progressNote"` \| `"procedureNote"` \| `"operativeNote"` \| `"carePlan"` \| `"diagnosticImagingReport"` \| `"unstructuredDocument"` \| `"transferSummary"` \| `"patientGeneratedDocument"`
 
-Machine keys for the twelve recognized C-CDA R2.1 document types. Stable
+Machine keys for the thirteen recognized document types: the twelve C-CDA
+R2.1 document types and the Patient Generated Document header. Stable
 strings, consumers may branch on `doc.documentType === "ccd"`. Renaming a
 key is a breaking change.
+
+**`patientGeneratedDocument` is a header, not a document type in the guide.**
+The US Realm Header for Patient Generated Document
+(`2.16.840.1.113883.10.20.29.1`) says the patient or a related person wrote
+the document, and the guide lets its body carry any C-CDA content. It names
+the type only of a document that carries no other recognized document-type
+`templateId`: a CCD that also carries the header reads `ccd`. It was added in
+a patch; a `switch` over this union that names every member needs one more
+case.
 
 #### Example
 
@@ -7007,12 +7029,13 @@ stamp supplied put the document inside the tables at all.
 - `evaluated`: the keys below are this type's obligation under the supplied
   stamp reading. An empty set means the type asserts none, and `verification`
   says which emptiness that is.
-- `not-evaluated`: **no obligation was computed.** The only route to it today
-  is `{ stamp: "unmodeled-release" }`: the document names a C-CDA release this
-  package has not read, so `keys` is empty because nothing was asked, not
-  because nothing is required. Reducing the set instead would be a confident
-  wrong statement about conformance, which is the failure this state exists to
-  prevent.
+- `not-evaluated`: **no obligation was computed.** Two routes reach it:
+  `{ stamp: "unmodeled-release" }`, a document naming a C-CDA release this
+  package has not read, and `{ stamp: "r30-stamped" }` for a type C-CDA 5.0.0
+  does not publish (Diagnostic Imaging Report). `keys` is empty because
+  nothing was asked, not because nothing is required. Reducing the set instead
+  would be a confident wrong statement about conformance, which is the failure
+  this state exists to prevent.
 
 #### Example
 
@@ -7031,14 +7054,17 @@ const e: RequiredSectionEvaluation = requiredSectionStatus("ccd", {
 > **RequiredSectionVerification** = `"traced-complete"` \| `"traced-partial"` \| `"untraced"` \| `"not-applicable"`
 
 How much of a [DocumentType](#documenttype-4)'s required-section obligation this package
-has actually read off the normative C-CDA R2.1 base implementation guide (its
-`CONF:1198-` document-level conformance statements and the Schematron HL7
-publishes in that release).
+has actually read off the normative source of the release named in
+[RequiredSectionStatus.release](#release-1): for C-CDA R2.1, its `CONF:1198-`
+document-level conformance statements and the Schematron HL7 publishes in
+that release; for C-CDA 5.0.0, the document profiles HL7 publishes it from.
 
 The four states are exhaustive and mutually exclusive, so an **empty** key set
 is never ambiguous: the value says which emptiness it is.
 
-**A state is about the TYPE, and no option moves it.** The orthogonal question,
+**A state is about the TYPE in one release.** No option moves it within a
+release; the `r30-stamped` reading reports the 5.0.0 row, where the type has
+one. The orthogonal question,
 whether an obligation was computed for the document in front of you at all, is
 [RequiredSectionEvaluation](#requiredsectionevaluation), which is where a stamp naming an unmodelled
 release shows up. Reading `traced-complete` beside an empty key set is not a
@@ -7138,28 +7164,37 @@ const d: StatusDomain = "functional";
 
 ### TemplateStampReading
 
-> **TemplateStampReading** = `"r21-stamped"` \| `"unstamped"` \| `"unmodeled-release"`
+> **TemplateStampReading** = `"r21-stamped"` \| `"r30-stamped"` \| `"unstamped"` \| `"unmodeled-release"`
 
-The three readings a document-level `templateId`'s version stamp can take,
+The four readings a document-level `templateId`'s version stamp can take,
 and the reason a boolean cannot carry them. A `boolean` says "R2.1-stamped or
 not", which reads a document from the future as one from the past: it is the
 distinction between *no stamp at all* (an R1.1-origin document, whose SHALL
-obligations this package deliberately does not narrow) and *a stamp this
-package does not model* (a later release, whose obligations this package has
-not read and therefore must not compute).
+obligations this package deliberately does not narrow), *the stamp of a
+later release this package has read the required sections of* (`2024-05-01`,
+read against C-CDA 5.0.0) and *a stamp this package does not model* (a
+release whose obligations this package has not read and therefore must not
+compute).
 
 - `r21-stamped`: the R2.1 stamp is present, so the R2.1-scoped tables apply.
+- `r30-stamped`: the `2024-05-01` stamp ([R30\_EXTENSION](#r30_extension)) that C-CDA
+  3.0.0 introduced and 4.0.0 and 5.0.0 kept. The required sections are checked
+  against the C-CDA 5.0.0 document profiles, which state the same
+  document-level section requirements as 3.0.0 and 4.0.0.
 - `unstamped`: no `@extension` at all; the pre-R2.1 reading, unchanged.
-- `unmodeled-release`: an `@extension` that is not the R2.1 stamp, whether or
-  not it is a member of [CCDA\_RELEASE\_STAMPS](#ccda_release_stamps). This package has not read
-  that release's obligations and reports them unevaluated rather than reducing
-  them.
+- `unmodeled-release`: any other `@extension`, one that is neither the R2.1
+  stamp nor `2024-05-01`. This package has not read that release's
+  obligations and reports them unevaluated rather than reducing them.
+
+**Added in a patch: `r30-stamped`.** Through the release before it, the
+`2024-05-01` stamp read `unmodeled-release`. A `switch` over this union that
+names every member needs one more case.
 
 #### Example
 
 ```ts
 import type { TemplateStampReading } from "@cosyte/ccda";
-const reading: TemplateStampReading = "unmodeled-release";
+const reading: TemplateStampReading = "r30-stamped";
 ```
 
 ***
@@ -7388,15 +7423,15 @@ console.log(DEFAULT_LIMITS.maxInputBytes); // 30000000
 > `const` **DOCUMENT\_TYPES**: readonly [`DocumentType`](#documenttype-4)[]
 
 Every recognized [DocumentType](#documenttype-4), in the recognition table's own order.
-The runtime enumeration behind the type union: a consumer can walk all twelve
-without hand-writing the list (and without it going stale when a thirteenth
-type is recognized).
+The runtime enumeration behind the type union: a consumer can walk all
+thirteen without hand-writing the list (and without it going stale when
+another type is recognized).
 
 #### Example
 
 ```ts
 import { DOCUMENT_TYPES } from "@cosyte/ccda";
-DOCUMENT_TYPES.length; // 12
+DOCUMENT_TYPES.length; // 13
 DOCUMENT_TYPES.includes("carePlan"); // true
 ```
 
@@ -7574,10 +7609,13 @@ The document-template version stamp C-CDA introduced at Release 3.0.0, when
 StructureDefinitions both pattern `@extension` to this value on the roots this
 package recognizes.
 
-**Recognized, not targeted.** This package's conformance tables are C-CDA
-R2.1 ([CCDA\_CONFORMANCE\_RELEASE](#ccda_conformance_release)) and this constant does not move them.
-It exists so a document written for a later release is *named* accurately
-rather than mistaken for one that pre-dates R2.1.
+**Recognized, and read against 5.0.0's required sections.** This package's
+conformance tables are C-CDA R2.1 ([CCDA\_CONFORMANCE\_RELEASE](#ccda_conformance_release)) and this
+constant does not move them. A document whose document-type `templateId`
+carries this stamp, and no R2.1 stamp on the same root, reads `r30-stamped`
+([TemplateStampReading](#templatestampreading)), and its required sections are checked against
+the C-CDA 5.0.0 document profiles. Its sections and entries are still read
+with the R2.1 catalogs.
 
 #### Example
 
@@ -8545,7 +8583,7 @@ console.log(site.describe?.());
 > **documentTypeForOid**(`oid`): [`DocumentType`](#documenttype-4) \| `undefined`
 
 Resolve a document-template OID to its [DocumentType](#documenttype-4), or `undefined`
-when the OID is not one of the twelve recognized C-CDA R2.1 types.
+when the OID is not one of the thirteen recognized types.
 
 #### Parameters
 
@@ -10413,8 +10451,9 @@ const range = readReferenceRange(resultObs, ctx);
 Read a document-level `templateId/@extension` into a
 [TemplateStampReading](#templatestampreading). `undefined` (the attribute absent, which is how
 `attr` reports an empty one too) reads `unstamped`; the R2.1 stamp reads
-`r21-stamped`; anything else reads `unmodeled-release`. Total and
-deterministic: every input lands in exactly one of the three.
+`r21-stamped`; `2024-05-01` reads `r30-stamped`; anything else reads
+`unmodeled-release`. Total and deterministic: every input lands in exactly one
+of the four.
 
 #### Parameters
 
@@ -10432,7 +10471,8 @@ deterministic: every input lands in exactly one of the three.
 import { readTemplateStamp } from "@cosyte/ccda";
 readTemplateStamp(undefined);      // "unstamped"
 readTemplateStamp("2015-08-01");   // "r21-stamped"
-readTemplateStamp("2024-05-01");   // "unmodeled-release"
+readTemplateStamp("2024-05-01");   // "r30-stamped"
+readTemplateStamp("1999-12-31");   // "unmodeled-release"
 ```
 
 ***
@@ -10500,6 +10540,11 @@ requiredSectionKeys("progressNote"); // []
 requiredSectionKeys("ccd", { r21Stamped: false });
 // ["allergies", "medications", "problems", "results"]
 
+// A Discharge Summary stamped 2024-05-01 is read against C-CDA 5.0.0, which
+// also requires Procedures and Results:
+requiredSectionKeys("dischargeSummary", { stamp: "r30-stamped" });
+// ["allergies", "hospitalDischargeDiagnosis", "planOfTreatment", "procedures", "results"]
+
 // A CCD stamped for a release this package does not model asserts NOTHING,
 // and it is not the R1.1-origin reduction:
 requiredSectionKeys("ccd", { stamp: "unmodeled-release" }); // []
@@ -10517,9 +10562,11 @@ under the same options, plus how much of the obligation was read off the
 normative source and what is deliberately left unasserted.
 
 `options` narrows `keys` (and the `traced` rows beside them) exactly as
-[requiredSectionKeys](#requiredsectionkeys) does, and sets `evaluation`. It does **not** move
-`verification`, nor `unasserted`, nor `source`: those record what was read
-about the type, not what a particular document is asserted against.
+[requiredSectionKeys](#requiredsectionkeys) does, and sets `evaluation` and `release`. Within
+one release it does **not** move `verification`, nor `unasserted`, nor
+`source`: those record what was read about the type. The `r30-stamped`
+reading selects the C-CDA 5.0.0 row, so all of them come from 5.0.0 there,
+where the type has a 5.0.0 row; otherwise they are the R2.1 row's.
 
 #### Parameters
 
@@ -10545,6 +10592,7 @@ requiredSectionStatus("ccd").source?.revision; // "2025-09-08"
 requiredSectionStatus("consultationNote", { r21Stamped: false }).keys; // []
 requiredSectionStatus("ccd", { stamp: "unmodeled-release" }).evaluation;
 // "not-evaluated"
+requiredSectionStatus("ccd", { stamp: "r30-stamped" }).release; // "5.0.0"
 ```
 
 ***
@@ -10555,7 +10603,7 @@ requiredSectionStatus("ccd", { stamp: "unmodeled-release" }).evaluation;
 
 Every recognized document type's [RequiredSectionStatus](#requiredsectionstatus), in
 [DOCUMENT\_TYPES](#document_types) order. The enumeration a consumer uses to see the whole
-picture at once: twelve entries, each carrying exactly one verification state.
+picture at once: thirteen entries, each carrying exactly one verification state.
 
 #### Parameters
 

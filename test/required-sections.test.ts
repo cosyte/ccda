@@ -75,6 +75,7 @@ const DOC_OID: Readonly<Record<DocumentType, string>> = {
   diagnosticImagingReport: "2.16.840.1.113883.10.20.22.1.5",
   unstructuredDocument: "2.16.840.1.113883.10.20.22.1.10",
   transferSummary: "2.16.840.1.113883.10.20.22.1.13",
+  patientGeneratedDocument: "2.16.840.1.113883.10.20.29.1",
 };
 
 /** The five types read off the normative source in the first trace pass. */
@@ -292,14 +293,14 @@ function symmetricDifference(a: readonly string[], b: readonly string[]): string
 }
 
 describe("required-section verification status", () => {
-  it("gives every one of the twelve types exactly one of the four states", () => {
+  it("gives every one of the thirteen types exactly one of the four states", () => {
     const states: readonly RequiredSectionVerification[] = [
       "traced-complete",
       "traced-partial",
       "untraced",
       "not-applicable",
     ];
-    expect(DOCUMENT_TYPES).toHaveLength(12);
+    expect(DOCUMENT_TYPES).toHaveLength(13);
     for (const documentType of DOCUMENT_TYPES) {
       const status = requiredSectionStatus(documentType);
       expect(states).toContain(status.verification);
@@ -309,9 +310,9 @@ describe("required-section verification status", () => {
     expect(new Set(states).size).toBe(4);
   });
 
-  it("enumerates all twelve as traced or not-applicable, and none as untraced", () => {
+  it("enumerates all thirteen as traced or not-applicable, and none as untraced", () => {
     const statuses = requiredSectionStatuses();
-    expect(statuses).toHaveLength(12);
+    expect(statuses).toHaveLength(13);
     expect(statuses.map((s) => s.documentType)).toEqual([...DOCUMENT_TYPES]);
     for (const status of statuses) {
       expect(["traced-complete", "traced-partial", "not-applicable"]).toContain(
@@ -321,18 +322,28 @@ describe("required-section verification status", () => {
     }
     expect(statuses.filter((s) => s.verification === "untraced")).toEqual([]);
 
-    // The three groups partition the twelve: no type is in two, none outside all.
+    // The groups partition the thirteen: no type is in two, none outside all. The
+    // Patient Generated Document header is its own group: its source names no
+    // section, so the (empty) obligation is complete.
     const byState = new Map(statuses.map((s) => [s.documentType, s.verification]));
     for (const documentType of [...TRACED_HERE, ...RETRACED_HERE]) {
       expect(["traced-complete", "traced-partial"]).toContain(byState.get(documentType));
     }
     expect(byState.get("unstructuredDocument")).toBe("not-applicable");
-    expect(new Set([...TRACED_HERE, ...RETRACED_HERE, "unstructuredDocument"]).size).toBe(12);
+    expect(byState.get("patientGeneratedDocument")).toBe("traced-complete");
+    expect(
+      new Set([
+        ...TRACED_HERE,
+        ...RETRACED_HERE,
+        "unstructuredDocument",
+        "patientGeneratedDocument",
+      ]).size,
+    ).toBe(13);
 
     // A completeness claim is only made where the whole obligation is asserted.
     expect(
       statuses.filter((s) => s.verification === "traced-complete").map((s) => s.documentType),
-    ).toEqual(["ccd", "carePlan"]);
+    ).toEqual(["ccd", "carePlan", "patientGeneratedDocument"]);
   });
 
   it("makes an empty asserted key set decidable from the returned value alone", () => {
@@ -1114,15 +1125,22 @@ describe("emit and validate stay in lockstep", () => {
  * the unstamped **reduction** instead, which is a reading of a document that
  * pre-dates R2.1: a `2024-05-01` CCD carrying neither Social History nor Vital
  * Signs drew no `REQUIRED_SECTION_MISSING` at all, in silence.
+ *
+ * `2024-05-01` itself is now read against C-CDA 5.0.0
+ * (`release-5-required-sections.test.ts`), so the cases here use a stamp no
+ * release has used, which is what an unmodelled release now means.
  */
 describe("a stamp naming an unmodelled release is reported, never reduced", () => {
+  /** A synthetic stamp no C-CDA release has used. */
+  const UNMODELED_STAMP = "1999-12-31";
+
   /** The message the pin froze for TEMPLATE_EXTENSION_ABSENT, byte for byte. */
   const ABSENT_MESSAGE_AT_PIN =
     "The recognized templateId carries no @extension version stamp; matched by root alone (may pre-date R2.1).";
 
   /** AC7: neither the six-key R2.1 reading nor the four-key unstamped reduction. */
-  it("reports no missing section for a 2024-05-01 CCD carrying none of the six", () => {
-    const doc = parseCcda(buildCcda({ extension: POST_R21_STAMP, sections: "" }));
+  it("reports no missing section for an unmodelled-release CCD carrying none of the six", () => {
+    const doc = parseCcda(buildCcda({ extension: UNMODELED_STAMP, sections: "" }));
     expect(doc.documentType).toBe("ccd");
     expect(missingKeys(doc.warnings)).toEqual([]);
     for (const key of ["allergies", "medications", "problems", "results"]) {
@@ -1231,7 +1249,7 @@ describe("a stamp naming an unmodelled release is reported, never reduced", () =
 
   /** Fail-safety: a warning, never a fatal, and everything present is still read. */
   it("parses a post-R2.1 document short of every SHALL section, warning only", () => {
-    const xml = buildCcda({ extension: POST_R21_STAMP, sections: PROCEDURES_SECTION });
+    const xml = buildCcda({ extension: UNMODELED_STAMP, sections: PROCEDURES_SECTION });
     expect(() => parseCcda(xml)).not.toThrow();
     const doc = parseCcda(xml);
     expect(doc.findSection("procedures")).toBeDefined();
@@ -1248,7 +1266,7 @@ describe("a stamp naming an unmodelled release is reported, never reduced", () =
     const doc = parseCcda(
       buildCcda({
         docTypeOid: DOC_OID.progressNote,
-        extension: POST_R21_STAMP,
+        extension: UNMODELED_STAMP,
         sections: PROCEDURES_SECTION,
       }),
     );

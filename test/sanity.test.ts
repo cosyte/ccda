@@ -86,10 +86,10 @@ describe("the targeted C-CDA release is an exported value", () => {
     }
   });
 
-  it("reads a version stamp into exactly one of three states", () => {
+  it("reads a version stamp into exactly one of four states", () => {
     expect(readTemplateStamp(undefined)).toBe("unstamped");
     expect(readTemplateStamp(R21_EXTENSION)).toBe("r21-stamped");
-    expect(readTemplateStamp(R30_EXTENSION)).toBe("unmodeled-release");
+    expect(readTemplateStamp(R30_EXTENSION)).toBe("r30-stamped");
     // Including a value the table does not own: not modelling a release and not
     // recognizing a stamp at all land in the same state, because from this
     // package's side they are the same fact.

@@ -325,11 +325,27 @@ describe("editCcda, edits under the rule set the document was parsed under", () 
   });
 
   it("does not evaluate the SHALL set for a CCD stamped for an unmodelled release", () => {
-    const doc = ccdWithNestedVitals("2024-05-01");
+    const doc = ccdWithNestedVitals("1999-12-31");
     expect(doc.warnings.map((w) => w.code)).toContain("REQUIRED_SECTIONS_NOT_EVALUATED");
     const revised = editCcda(doc, REPLACE_PROBLEMS);
     expect(revised.warnings.map((w) => w.code)).toContain("REQUIRED_SECTIONS_NOT_EVALUATED");
     expect(missing(revised)).toEqual([]);
+  });
+
+  it("refuses the same edit on a 2024-05-01 CCD, read against C-CDA 5.0.0's CCD", () => {
+    // C-CDA 5.0.0's CCD requires Vital Signs as R2.1's does, so the edit is refused under the
+    // 5.0.0 set the parse used rather than passed as not evaluated.
+    const doc = ccdWithNestedVitals("2024-05-01");
+    expect(doc.warnings.map((w) => w.code)).not.toContain("REQUIRED_SECTIONS_NOT_EVALUATED");
+    expect(missing(doc)).toEqual([]);
+    try {
+      editCcda(doc, REPLACE_PROBLEMS);
+      throw new Error("expected throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(CcdaEditError);
+      expect((err as CcdaEditError).code).toBe("REQUIRED_SECTION_MISSING");
+      expect((err as CcdaEditError).message).toContain("vitalSigns");
+    }
   });
 
   it("still refuses the same edit on an R2.1-stamped CCD", () => {

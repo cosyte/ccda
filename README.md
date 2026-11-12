@@ -165,7 +165,7 @@ import { parseCcda } from "@cosyte/ccda";
 
 const doc = parseCcda(xml);
 
-doc.documentType; // e.g. "ccd", one of the 12 US Realm document types (or undefined)
+doc.documentType; // e.g. "ccd", one of the 12 US Realm document types, "patientGeneratedDocument", or undefined
 doc.getPatient()?.name?.family; // patient demographics from the recordTarget
 doc.getMrn(); // the patient's medical record number
 doc.findSection("allergies")?.narrativeText; // framed section narrative

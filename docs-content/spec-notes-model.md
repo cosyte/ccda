@@ -16,8 +16,10 @@ scanned document). `parseCcda` frames all three into one immutable `CcdaDocument
 The document **type** is resolved from the root `templateId` OIDs against the 12 recognized US Realm
 types (CCD, Discharge Summary, Referral Note, Consultation Note, History & Physical, Progress Note,
 Procedure Note, Operative Note, Care Plan, Diagnostic Imaging Report, Unstructured Document, Transfer
-Summary). Diagnostic Imaging Report is R2.1-only: C-CDA 3.0.0 removed it, and the other 11 types are
-in 5.0.0 too ([versions we read and build](./spec-notes-versions.md)). Recognition is fail-safe:
+Summary), plus the Patient Generated Document header (`patientGeneratedDocument`), which names the
+type only of a document carrying no other document-type `templateId`. Diagnostic Imaging Report is
+R2.1-only: C-CDA 3.0.0 removed it, and the other 11 types are in 5.0.0 too
+([versions we read and build](./spec-notes-versions.md)). Recognition is fail-safe:
 
 - No `templateId` at all → `MISSING_TEMPLATE_ID`, `documentType` is `undefined`.
 - `templateId`s present but none map to a known type → `UNKNOWN_DOCUMENT_TEMPLATE`, still parsed as a
@@ -29,14 +31,16 @@ in 5.0.0 too ([versions we read and build](./spec-notes-versions.md)). Recogniti
   different document: one written for a release later than the one these tables target.
 
 The generic US Realm Header / CDA-base templates are deliberately **not** in the type table, so they
-are passed over: only a specific document-type `templateId` resolves a `documentType`.
+are passed over: only a specific document-type `templateId` resolves a `documentType`. The Patient
+Generated Document header is the one header that does, and only when nothing else resolves.
 
 ## Which release a document was written for
 
-The stamp on the resolving `templateId` reads into exactly three states, and the third is why a
-boolean was not enough: `r21-stamped`, `unstamped` (no `@extension`, the R1.1-origin shape) and
-`unmodeled-release` (a stamp these tables do not model). C-CDA 3.0.0 restamped every document
-template `2024-05-01` and 4.0.0 and 5.0.0 kept it, so a post-R2.1 document is detectable.
+The stamp on the resolving `templateId` reads into exactly four states, which is why a boolean was
+not enough: `r21-stamped`, `r30-stamped` (`2024-05-01`), `unstamped` (no `@extension`, the
+R1.1-origin shape) and `unmodeled-release` (a stamp these tables do not model). C-CDA 3.0.0 restamped
+every document template `2024-05-01` and 4.0.0 and 5.0.0 kept it, so a post-R2.1 document is
+detectable.
 
 **Recognizing a release is not targeting it.** `CCDA_CONFORMANCE_RELEASE` names the release this
 package's conformance tables are written against, and it does not move because a later stamp is
@@ -62,15 +66,18 @@ releaseForTemplateExtension(R21_EXTENSION); // => "R2.1"
 releaseForTemplateExtension(R30_EXTENSION); // => "R3.0 or later"
 releaseForTemplateExtension("1999-12-31"); // => undefined
 
-// The three-state reading a required-section lookup is carried out under.
+// The four-state reading a required-section lookup is carried out under.
 readTemplateStamp(undefined); // => "unstamped"
 readTemplateStamp(R21_EXTENSION); // => "r21-stamped"
-readTemplateStamp(R30_EXTENSION); // => "unmodeled-release"
+readTemplateStamp(R30_EXTENSION); // => "r30-stamped"
+readTemplateStamp("1999-12-31"); // => "unmodeled-release"
 ```
 
-A document in the third state is still parsed leniently, and its clinical reading is identical to the
-same document stamped `2015-08-01`. What changes is the conformance claim: its required-section
-obligation is reported **unevaluated** (`REQUIRED_SECTIONS_NOT_EVALUATED`, and
+A `2024-05-01` document is parsed leniently, and its clinical reading is identical to the same
+document stamped `2015-08-01`. What changes is the conformance claim: its required sections are
+checked against the C-CDA 5.0.0 document profiles, and `requiredSectionStatus` names
+`release: "5.0.0"`. A document in the `unmodeled-release` state is read the same way, and its
+required-section obligation is reported **unevaluated** (`REQUIRED_SECTIONS_NOT_EVALUATED`, and
 `evaluation: "not-evaluated"` on `requiredSectionStatus`) rather than computed under a reading that
 does not reach it.
 

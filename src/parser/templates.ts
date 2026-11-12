@@ -32,10 +32,13 @@ export const R21_EXTENSION = "2015-08-01";
  * StructureDefinitions both pattern `@extension` to this value on the roots this
  * package recognizes.
  *
- * **Recognized, not targeted.** This package's conformance tables are C-CDA
- * R2.1 ({@link CCDA_CONFORMANCE_RELEASE}) and this constant does not move them.
- * It exists so a document written for a later release is *named* accurately
- * rather than mistaken for one that pre-dates R2.1.
+ * **Recognized, and read against 5.0.0's required sections.** This package's
+ * conformance tables are C-CDA R2.1 ({@link CCDA_CONFORMANCE_RELEASE}) and this
+ * constant does not move them. A document whose document-type `templateId`
+ * carries this stamp, and no R2.1 stamp on the same root, reads `r30-stamped`
+ * ({@link TemplateStampReading}), and its required sections are checked against
+ * the C-CDA 5.0.0 document profiles. Its sections and entries are still read
+ * with the R2.1 catalogs.
  *
  * @example
  * ```ts
@@ -157,53 +160,76 @@ export function releaseForTemplateExtension(extension: string): CcdaRelease | un
 }
 
 /**
- * The three readings a document-level `templateId`'s version stamp can take,
+ * The four readings a document-level `templateId`'s version stamp can take,
  * and the reason a boolean cannot carry them. A `boolean` says "R2.1-stamped or
  * not", which reads a document from the future as one from the past: it is the
  * distinction between *no stamp at all* (an R1.1-origin document, whose SHALL
- * obligations this package deliberately does not narrow) and *a stamp this
- * package does not model* (a later release, whose obligations this package has
- * not read and therefore must not compute).
+ * obligations this package deliberately does not narrow), *the stamp of a
+ * later release this package has read the required sections of* (`2024-05-01`,
+ * read against C-CDA 5.0.0) and *a stamp this package does not model* (a
+ * release whose obligations this package has not read and therefore must not
+ * compute).
  *
  * - `r21-stamped`: the R2.1 stamp is present, so the R2.1-scoped tables apply.
+ * - `r30-stamped`: the `2024-05-01` stamp ({@link R30_EXTENSION}) that C-CDA
+ *   3.0.0 introduced and 4.0.0 and 5.0.0 kept. The required sections are checked
+ *   against the C-CDA 5.0.0 document profiles, which state the same
+ *   document-level section requirements as 3.0.0 and 4.0.0.
  * - `unstamped`: no `@extension` at all; the pre-R2.1 reading, unchanged.
- * - `unmodeled-release`: an `@extension` that is not the R2.1 stamp, whether or
- *   not it is a member of {@link CCDA_RELEASE_STAMPS}. This package has not read
- *   that release's obligations and reports them unevaluated rather than reducing
- *   them.
+ * - `unmodeled-release`: any other `@extension`, one that is neither the R2.1
+ *   stamp nor `2024-05-01`. This package has not read that release's
+ *   obligations and reports them unevaluated rather than reducing them.
+ *
+ * **Added in a patch: `r30-stamped`.** Through the release before it, the
+ * `2024-05-01` stamp read `unmodeled-release`. A `switch` over this union that
+ * names every member needs one more case.
  *
  * @example
  * ```ts
  * import type { TemplateStampReading } from "@cosyte/ccda";
- * const reading: TemplateStampReading = "unmodeled-release";
+ * const reading: TemplateStampReading = "r30-stamped";
  * ```
  */
-export type TemplateStampReading = "r21-stamped" | "unstamped" | "unmodeled-release";
+export type TemplateStampReading =
+  "r21-stamped" | "r30-stamped" | "unstamped" | "unmodeled-release";
 
 /**
  * Read a document-level `templateId/@extension` into a
  * {@link TemplateStampReading}. `undefined` (the attribute absent, which is how
  * `attr` reports an empty one too) reads `unstamped`; the R2.1 stamp reads
- * `r21-stamped`; anything else reads `unmodeled-release`. Total and
- * deterministic: every input lands in exactly one of the three.
+ * `r21-stamped`; `2024-05-01` reads `r30-stamped`; anything else reads
+ * `unmodeled-release`. Total and deterministic: every input lands in exactly one
+ * of the four.
  *
  * @example
  * ```ts
  * import { readTemplateStamp } from "@cosyte/ccda";
  * readTemplateStamp(undefined);      // "unstamped"
  * readTemplateStamp("2015-08-01");   // "r21-stamped"
- * readTemplateStamp("2024-05-01");   // "unmodeled-release"
+ * readTemplateStamp("2024-05-01");   // "r30-stamped"
+ * readTemplateStamp("1999-12-31");   // "unmodeled-release"
  * ```
  */
 export function readTemplateStamp(extension: string | undefined): TemplateStampReading {
   if (extension === undefined) return "unstamped";
-  return extension === R21_EXTENSION ? "r21-stamped" : "unmodeled-release";
+  if (extension === R21_EXTENSION) return "r21-stamped";
+  return extension === R30_EXTENSION ? "r30-stamped" : "unmodeled-release";
 }
 
 /**
- * Machine keys for the twelve recognized C-CDA R2.1 document types. Stable
+ * Machine keys for the thirteen recognized document types: the twelve C-CDA
+ * R2.1 document types and the Patient Generated Document header. Stable
  * strings, consumers may branch on `doc.documentType === "ccd"`. Renaming a
  * key is a breaking change.
+ *
+ * **`patientGeneratedDocument` is a header, not a document type in the guide.**
+ * The US Realm Header for Patient Generated Document
+ * (`2.16.840.1.113883.10.20.29.1`) says the patient or a related person wrote
+ * the document, and the guide lets its body carry any C-CDA content. It names
+ * the type only of a document that carries no other recognized document-type
+ * `templateId`: a CCD that also carries the header reads `ccd`. It was added in
+ * a patch; a `switch` over this union that names every member needs one more
+ * case.
  *
  * @example
  * ```ts
@@ -223,7 +249,14 @@ export type DocumentType =
   | "carePlan"
   | "diagnosticImagingReport"
   | "unstructuredDocument"
-  | "transferSummary";
+  | "transferSummary"
+  | "patientGeneratedDocument";
+
+/**
+ * The US Realm Header for Patient Generated Document `templateId` root, the same
+ * in C-CDA R2.1 and 5.0.0. @internal
+ */
+export const PATIENT_GENERATED_DOCUMENT_OID = "2.16.840.1.113883.10.20.29.1";
 
 /** Document-template OID → {@link DocumentType}. @internal */
 const DOCUMENT_TEMPLATES: ReadonlyMap<string, DocumentType> = new Map([
@@ -239,18 +272,19 @@ const DOCUMENT_TEMPLATES: ReadonlyMap<string, DocumentType> = new Map([
   ["2.16.840.1.113883.10.20.22.1.5", "diagnosticImagingReport"],
   ["2.16.840.1.113883.10.20.22.1.10", "unstructuredDocument"],
   ["2.16.840.1.113883.10.20.22.1.13", "transferSummary"],
+  [PATIENT_GENERATED_DOCUMENT_OID, "patientGeneratedDocument"],
 ]);
 
 /**
  * Every recognized {@link DocumentType}, in the recognition table's own order.
- * The runtime enumeration behind the type union: a consumer can walk all twelve
- * without hand-writing the list (and without it going stale when a thirteenth
- * type is recognized).
+ * The runtime enumeration behind the type union: a consumer can walk all
+ * thirteen without hand-writing the list (and without it going stale when
+ * another type is recognized).
  *
  * @example
  * ```ts
  * import { DOCUMENT_TYPES } from "@cosyte/ccda";
- * DOCUMENT_TYPES.length; // 12
+ * DOCUMENT_TYPES.length; // 13
  * DOCUMENT_TYPES.includes("carePlan"); // true
  * ```
  */
@@ -258,7 +292,7 @@ export const DOCUMENT_TYPES: readonly DocumentType[] = [...DOCUMENT_TEMPLATES.va
 
 /**
  * Resolve a document-template OID to its {@link DocumentType}, or `undefined`
- * when the OID is not one of the twelve recognized C-CDA R2.1 types.
+ * when the OID is not one of the thirteen recognized types.
  *
  * @example
  * ```ts

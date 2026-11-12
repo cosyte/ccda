@@ -3820,11 +3820,12 @@ describe("S0352-ccda-7: buildCcda emits an inpatient Discharge Summary", () => {
       expect(ask).toThrow(/carePlan/);
     });
 
-    it("S0352 AC-9: exactly three of the exported enumeration build, and the other nine throw", () => {
-      // The nine are DERIVED from `DOCUMENT_TYPES`, the package's own exported enumeration,
-      // rather than from a list written into this test: a thirteenth recognized type joins this
-      // walk the moment it is recognized, and it has to be classified deliberately.
-      expect(DOCUMENT_TYPES).toHaveLength(12);
+    it("S0352 AC-9: exactly three of the exported enumeration build, and the other ten throw", () => {
+      // The ten are DERIVED from `DOCUMENT_TYPES`, the package's own exported enumeration,
+      // rather than from a list written into this test: a newly recognized type joins this
+      // walk the moment it is recognized, and it has to be classified deliberately. The
+      // thirteenth, the Patient Generated Document header, is refused like the other nine.
+      expect(DOCUMENT_TYPES).toHaveLength(13);
       const built: string[] = [];
       const refused: string[] = [];
       for (const documentType of DOCUMENT_TYPES) {
@@ -3843,7 +3844,7 @@ describe("S0352-ccda-7: buildCcda emits an inpatient Discharge Summary", () => {
         }
       }
       expect([...built].sort()).toStrictEqual(["ccd", "dischargeSummary", "referralNote"]);
-      expect(refused).toHaveLength(9);
+      expect(refused).toHaveLength(10);
       expect([...built, ...refused].sort()).toStrictEqual([...DOCUMENT_TYPES].sort());
     });
 
