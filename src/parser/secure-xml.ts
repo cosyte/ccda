@@ -582,7 +582,14 @@ function buildDom(
     // the text is passed through as it is instead of being scanned twice more.
     normalizeLineEndings: lineBreaksToNormalize ? xmldomLineEndings : keepLineEndings,
     onError: (level: "warning" | "error" | "fatalError", message: string): void => {
-      if (level === "fatalError" || (refuseOutsideRoot && isOutsideRootReport(message))) {
+      if (level === "fatalError") {
+        throw new CcdaParseError(
+          FATAL_CODES.NOT_WELL_FORMED_XML,
+          FATAL_MESSAGES.NOT_WELL_FORMED_XML,
+          {},
+        );
+      }
+      if (refuseOutsideRoot && isOutsideRootReport(message)) {
         throw new CcdaParseError(
           FATAL_CODES.NOT_WELL_FORMED_XML,
           FATAL_MESSAGES.NOT_WELL_FORMED_XML,
@@ -609,8 +616,9 @@ function buildDom(
  * Whether an `error` `@xmldom/xmldom` reported is character data outside the root element: its
  * sax reader reports text before the root, or between the root and later markup, as "Unexpected
  * content outside root element", and text after the root with no markup after it as "Extra
- * content at the end of the document" (lib/sax.js). Only the start of each message is compared;
- * the rest quotes the text, which is never read further or passed on. White space alone is
+ * content at the end of the document" (lib/sax.js). The first quotes the text after its fixed
+ * start, so only that start is compared, and the text is never read further or passed on; the
+ * second quotes nothing and is compared whole. White space alone is
  * reported as neither. test/xml.test.ts pins both reports, so a version of xmldom that words them
  * otherwise fails there rather than reading such a text.
  *
@@ -619,7 +627,7 @@ function buildDom(
 function isOutsideRootReport(message: string): boolean {
   return (
     message.startsWith("Unexpected content outside root element") ||
-    message.startsWith("Extra content at the end of the document")
+    message === "Extra content at the end of the document"
   );
 }
 
