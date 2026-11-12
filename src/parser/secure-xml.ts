@@ -36,11 +36,7 @@ import type { Document, Element } from "@xmldom/xmldom";
 import { positionOf } from "../model/dom.js";
 import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES } from "./errors.js";
 import { isRecognizedNamespace } from "./namespaces.js";
-import {
-  refuseOutsideRootNodes,
-  refuseOutsideRootText,
-  type TopLevelNode,
-} from "./outside-root.js";
+import { refuseOutsideRootNodes, refuseOutsideRootText } from "./outside-root.js";
 import { isXmlChar } from "./xml-chars.js";
 import type { CcdaParseLimits } from "./types.js";
 import { encodingBomStripped, unknownNamespacePrefix, type CcdaWarning } from "./warnings.js";
@@ -231,9 +227,8 @@ export function readSecureXml(
   const doc = buildDom(accepted.source, accepted.lineBreaksToNormalize);
   // A second guard that does not trust the scan above: every text the scan passes yields a
   // document this check passes too, so no test can tell a mutant that skips it from the code.
-  // Stryker disable next-line ConditionalExpression: equivalent while the text scan holds
-  if (refuseOutsideRoot)
-    refuseOutsideRootNodes(doc as unknown as { childNodes: ArrayLike<TopLevelNode> });
+  // Stryker disable next-line ConditionalExpression,CallExpression: equivalent while the scan holds
+  if (refuseOutsideRoot) refuseOutsideRootNodes(doc);
   enforceStructureLimits(doc.documentElement, limits, reportForeignNamespace);
   return doc;
 }

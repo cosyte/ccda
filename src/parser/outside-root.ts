@@ -112,11 +112,10 @@ export interface TopLevelNode {
  *
  * @internal
  */
-export function refuseOutsideRootNodes(doc: {
-  readonly childNodes: ArrayLike<TopLevelNode>;
-}): void {
+export function refuseOutsideRootNodes(doc: { readonly childNodes: ArrayLike<unknown> }): void {
   let elements = 0;
-  for (const node of Array.from(doc.childNodes)) {
+  // Every node xmldom builds has a nodeType, and a text node its data.
+  for (const node of Array.from(doc.childNodes) as TopLevelNode[]) {
     if (node.nodeType === 1) elements += 1;
     else if (!isMisc(node)) throw notWellFormed();
   }
