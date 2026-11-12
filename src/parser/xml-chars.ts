@@ -23,7 +23,7 @@
  *
  * @internal
  */
-const FORBIDDEN_CHAR_RE = /[\0-\x08\x0B\x0C\x0E-\x1F\uD800-\uDFFF\uFFFE\uFFFF]/u;
+export const FORBIDDEN_CHAR_RE = /[\0-\x08\x0B\x0C\x0E-\x1F\uD800-\uDFFF\uFFFE\uFFFF]/u;
 
 /**
  * Whether a code point is an XML 1.0 `Char`.

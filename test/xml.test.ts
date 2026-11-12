@@ -415,14 +415,10 @@ describe("serializeXml refuses a tree parseXml would not read back", () => {
         doc.documentElement?.appendChild(pi);
       },
       (doc) => doc.documentElement?.appendChild(doc.createElement(`${MARKER} x`)),
-      // A declaration anywhere but first, or one its data would close early.
+      // A declaration anywhere but first. One first whose data would close it early is an XML
+      // declaration that is not one, refused below.
       (doc) => doc.documentElement?.appendChild(doc.createProcessingInstruction("xml", MARKER)),
       (doc) => doc.appendChild(doc.createProcessingInstruction("xml", MARKER)),
-      (doc) => {
-        const pi = doc.createProcessingInstruction("xml", MARKER);
-        pi.data = `${MARKER}?>`;
-        doc.insertBefore(pi, doc.firstChild);
-      },
       (doc) => {
         const root = doc.documentElement;
         if (root !== null) doc.removeChild(root);
@@ -436,5 +432,235 @@ describe("serializeXml refuses a tree parseXml would not read back", () => {
       expect(message, String(index)).not.toContain(MARKER);
       expect("cause" in (thrownBy(() => serializeXml(doc)) as Error), String(index)).toBe(false);
     }
+  });
+});
+
+/** NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR: XML's end-of-line handling reads each as a line feed. */
+const NEL = String.fromCharCode(0x85);
+const LINE_SEPARATOR = String.fromCharCode(0x2028);
+const PARAGRAPH_SEPARATOR = String.fromCharCode(0x2029);
+
+describe("serializeXml writes only what parseXml reads back to the same tree", () => {
+  it("refuses a DTD or entity marker, in any case, in a comment, CDATA section or instruction", () => {
+    const places: ((doc: ReturnType<typeof newDocument>, data: string) => void)[] = [
+      (doc, data) => doc.documentElement?.appendChild(doc.createComment(data)),
+      (doc, data) => doc.documentElement?.appendChild(doc.createCDATASection(data)),
+      (doc, data) => doc.documentElement?.appendChild(doc.createProcessingInstruction("app", data)),
+      (doc, data) => doc.insertBefore(doc.createProcessingInstruction("app", data), doc.firstChild),
+    ];
+    for (const marker of ["<!DOCTYPE x", "<!ENTITY x", "<!doctype", "<!eNtItY"]) {
+      for (const [index, place] of places.entries()) {
+        const doc = newDocument();
+        place(doc, `${MARKER} ${marker}`);
+        const message = refusalOf(doc);
+        expect(message, `${marker} ${String(index)}`).toBe(
+          "serializeXml: the tree holds '<!DOCTYPE' or '<!ENTITY' in a comment, CDATA section or processing instruction, which parseXml refuses, so it was not written.",
+        );
+        expect(message).not.toContain(MARKER);
+      }
+    }
+  });
+
+  it("refuses a line break a parse rewrites, in a comment, CDATA section or instruction", () => {
+    const places: ((doc: ReturnType<typeof newDocument>, data: string) => void)[] = [
+      (doc, data) => doc.documentElement?.appendChild(doc.createComment(data)),
+      (doc, data) => doc.documentElement?.appendChild(doc.createCDATASection(data)),
+      (doc, data) => doc.documentElement?.appendChild(doc.createProcessingInstruction("app", data)),
+    ];
+    const breaks = [
+      ["\r", "U+000D"],
+      [NEL, "U+0085"],
+      [LINE_SEPARATOR, "U+2028"],
+      [PARAGRAPH_SEPARATOR, "U+2029"],
+    ] as const;
+    for (const [char, label] of breaks) {
+      for (const [index, place] of places.entries()) {
+        const doc = newDocument();
+        place(doc, `${MARKER}${char}x`);
+        const message = refusalOf(doc);
+        expect(message, `${label} ${String(index)}`).toBe(
+          `serializeXml: the tree holds ${label} in a comment, CDATA section or processing instruction, where a parse reads it as a line feed, so it was not written.`,
+        );
+        expect(message).not.toContain(MARKER);
+      }
+    }
+  });
+
+  it("keeps a line feed and a tab in a comment, CDATA section and instruction", () => {
+    const doc = newDocument();
+    doc.documentElement?.appendChild(doc.createComment("a\nb\tc"));
+    doc.documentElement?.appendChild(doc.createCDATASection("a\nb\tc"));
+    doc.documentElement?.appendChild(doc.createProcessingInstruction("app", "a\nb\tc"));
+    const out = serializeXml(doc);
+    expect(out).toContain("<!--a\nb\tc--><![CDATA[a\nb\tc]]><?app a\nb\tc?>");
+    expect(serializeXml(parseXml(out))).toBe(out);
+  });
+
+  it("refuses a leading xml declaration whose data is not an XML declaration", () => {
+    const bad = [
+      "garbage",
+      'version="1.0" ?',
+      'version="1.0"><!DOCTYPE r',
+      'version="1.0',
+      "version=1.0",
+      'version="2.0"',
+      'version="1."',
+      'encoding="UTF-8"',
+      'version="1.0" standalone="yes" encoding="UTF-8"',
+      'version="1.0" standalone="maybe"',
+      'version="1.0" encoding="8bit"',
+      'version="1.0"encoding="UTF-8"',
+      `version="1.0" encoding='UTF-8"`,
+      'version="1.0"\r',
+      ' version="1.0"',
+      `version="1.0" ${MARKER}`,
+      `version="1.0" ${MARKER}?>`,
+    ];
+    for (const data of bad) {
+      const doc = newDocument();
+      const pi = doc.createProcessingInstruction("xml", "placeholder");
+      // Set after creation: createProcessingInstruction itself refuses data holding '?>'.
+      pi.data = data;
+      doc.insertBefore(pi, doc.firstChild);
+      const message = refusalOf(doc);
+      expect(message, data).toBe(
+        "serializeXml: the tree holds an XML declaration that is not one (a version, then an optional encoding and standalone), so it was not written.",
+      );
+    }
+  });
+
+  it("writes a leading xml declaration that matches the grammar, as it is", () => {
+    const good = [
+      'version="1.0"',
+      "version='1.0'",
+      'version = "1.0"',
+      'version="1.1"',
+      'version="1.0" encoding="UTF-8"',
+      `version="1.0" encoding='iso-8859-1'`,
+      'version="1.0" standalone="no"',
+      'version="1.0" encoding="UTF-8" standalone="yes"',
+      'version="1.0"\tencoding="UTF-8"\n standalone="yes" ',
+    ];
+    for (const data of good) {
+      const doc = newDocument();
+      doc.insertBefore(doc.createProcessingInstruction("xml", data), doc.firstChild);
+      const out = serializeXml(doc);
+      expect(out, data).toBe(`<?xml ${data}?><root/>`);
+      expect(parseXml(out).documentElement?.localName, data).toBe("root");
+    }
+  });
+
+  it("writes NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR as references, in text and attributes", () => {
+    // Each separator twice, so a writer that replaces only the first one is caught.
+    const value = `a${LINE_SEPARATOR}b${NEL}c${PARAGRAPH_SEPARATOR}d\r\ne${LINE_SEPARATOR}${NEL}${PARAGRAPH_SEPARATOR}`;
+    const doc = newDocument();
+    doc.documentElement?.setAttribute("v", value);
+    doc.documentElement?.appendChild(doc.createTextNode(value));
+    const out = serializeXml(doc);
+    const refs = "&#x2028;&#x85;&#x2029;";
+    expect(out).toBe(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<root v="a&#x2028;b&#x85;c&#x2029;d&#13;&#10;e${refs}">a&#x2028;b&#x85;c&#x2029;d&#13;\ne${refs}</root>`,
+    );
+    const back = parseXml(out).documentElement;
+    expect(back?.getAttribute("v")).toBe(value);
+    expect(back?.textContent).toBe(value);
+  });
+
+  it("still refuses an attribute name that is not an XML name when its value holds a line separator", () => {
+    const doc = newDocument();
+    doc.documentElement?.setAttribute(`${MARKER} x`, `a${LINE_SEPARATOR}b`);
+    const message = refusalOf(doc);
+    expect(message).toMatch(/^serializeXml: the tree is not well-formed XML /u);
+    expect(message).not.toContain(MARKER);
+  });
+
+  it("refuses a prefixed element or attribute name with no namespace", () => {
+    const cases: ((doc: ReturnType<typeof newDocument>) => void)[] = [
+      (doc) => doc.documentElement?.setAttribute(`${MARKER}:b`, "1"),
+      (doc) => doc.documentElement?.appendChild(doc.createElement(`${MARKER}:b`)),
+      // Only a name that starts with `xmlns:` or `xml:` is bound in every document.
+      (doc) => doc.documentElement?.setAttribute(`${MARKER}:xml:b`, "1"),
+      (doc) => doc.documentElement?.setAttribute(`${MARKER}:xmlns:b`, "1"),
+      (doc) => doc.documentElement?.appendChild(doc.createElement("xml:b")),
+    ];
+    for (const [index, change] of cases.entries()) {
+      const doc = newDocument();
+      change(doc);
+      const message = refusalOf(doc);
+      expect(message, String(index)).toBe(
+        "serializeXml: the tree holds a prefixed name with no namespace, which no declaration binds, so it was not written.",
+      );
+    }
+  });
+
+  it("writes a namespace declaration and an xml: attribute set without a namespace", () => {
+    const doc = newDocument();
+    doc.documentElement?.setAttribute("xmlns:p", "urn:example:p");
+    doc.documentElement?.setAttribute("xml:lang", "en");
+    const out = serializeXml(doc);
+    expect(out).toBe(
+      '<?xml version="1.0" encoding="UTF-8"?>\n<root xmlns:p="urn:example:p" xml:lang="en"/>',
+    );
+    const back = parseXml(out).documentElement;
+    expect(back?.getAttribute("xmlns:p")).toBe("urn:example:p");
+    expect(back?.getAttribute("xml:lang")).toBe("en");
+  });
+
+  it("round-trips text and attribute values rich in line breaks and markup (property)", () => {
+    const allowedChar = fc
+      .string({ unit: "binary", minLength: 1, maxLength: 1 })
+      .filter((s) => !/[\0-\x08\x0B\x0C\x0E-\x1F\uD800-\uDFFF￾￿]/u.test(s));
+    const unit = fc.oneof(
+      fc.constantFrom(
+        "\r",
+        "\n",
+        "\r\n",
+        "\t",
+        NEL,
+        LINE_SEPARATOR,
+        PARAGRAPH_SEPARATOR,
+        "&",
+        "<",
+        ">",
+        '"',
+        "'",
+        "]]>",
+      ),
+      allowedChar,
+    );
+    const rich = fc.array(unit, { maxLength: 24 }).map((parts) => parts.join(""));
+    fc.assert(
+      fc.property(rich, rich, (text, value) => {
+        const doc = newDocument();
+        doc.documentElement?.setAttribute("v", value);
+        doc.documentElement?.appendChild(doc.createTextNode(text));
+        const back = parseXml(serializeXml(doc)).documentElement;
+        expect(back?.getAttribute("v")).toBe(value);
+        expect(back?.textContent).toBe(text);
+      }),
+      { numRuns: 300 },
+    );
+  });
+});
+
+describe("parseXml refuses a limit that is NaN", () => {
+  for (const field of [
+    "maxInputBytes",
+    "maxDepth",
+    "maxNodeCount",
+    "maxEntityExpansions",
+  ] as const) {
+    it(`refuses ${field}: NaN with a TypeError, rather than lifting the cap`, () => {
+      const err = thrownBy(() => parseXml("<a><b/></a>", { limits: { [field]: Number.NaN } }));
+      expect(err).toBeInstanceOf(TypeError);
+      expect((err as TypeError).message).toBe(
+        `parseXml: options.limits.${field} is NaN, which would turn its cap off; give a number, or leave it out for the default.`,
+      );
+    });
+  }
+
+  it("still takes a cap of Infinity, which lifts it, as parseCcda does", () => {
+    const limits = { maxDepth: Number.POSITIVE_INFINITY };
+    expect(parseXml("<a><b/></a>", { limits }).documentElement?.localName).toBe("a");
   });
 });

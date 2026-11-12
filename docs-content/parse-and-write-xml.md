@@ -82,6 +82,9 @@ try {
 refused; // => "ELEMENT_DEPTH_LIMIT_EXCEEDED"
 ```
 
+A limit of `NaN` throws a `TypeError` before anything is read, since every comparison with `NaN`
+is false and the cap would be off; leave a limit out to keep its default. `Infinity` lifts a cap.
+
 The one warning the reader raises is `ENCODING_BOM_STRIPPED`, when the text starts with a byte order
 mark, which it removes. It goes to `options.onWarning`; without one it is dropped. Unlike
 `parseCcda`, `parseXml` does not check the root element and raises no `UNKNOWN_NAMESPACE_PREFIX`:
@@ -90,14 +93,26 @@ any namespace is as expected as any other in a format that is not C-CDA.
 ## What the writer refuses
 
 `serializeXml` writes a document with an XML declaration first, unless it already carries one, and
-an element alone. A carriage return in text is written as `&#13;`, so a parse keeps it. It throws a
-`TypeError` instead of writing text a reader would reject or read differently:
+an element alone. In text and attribute values, a carriage return, NEL, LINE SEPARATOR and
+PARAGRAPH SEPARATOR are written as character references, so a parse keeps each of them rather than
+reading a line feed. It throws a `TypeError` instead of writing text a reader would reject or read
+differently:
 
 - a character XML 1.0 forbids in text, an attribute value, a comment, a CDATA section, a processing
   instruction or a namespace (the message names the code point, never the text);
-- a DOCTYPE, which `parseXml` refuses;
+- a DOCTYPE, which `parseXml` refuses, and `<!DOCTYPE` or `<!ENTITY` (in any case) inside a
+  comment, a CDATA section or a processing instruction, which `parseXml` refuses wherever it sits;
+- a carriage return, NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR in a comment, a CDATA section or a
+  processing instruction, where no reference can be written and a parse would read a line feed;
+- an XML declaration (an instruction with the target `xml` first in the document) that is not a
+  version, then an optional encoding and an optional standalone;
+- a prefixed element or attribute name with no namespace, which no declaration would bind;
 - a name that is not an XML name, a comment holding `--` or ending in `-`, a CDATA section holding
   `]]>`, a processing instruction holding `?>`, or a document with no root element.
+
+The writer does not apply the reader's limits. A tree deeper or larger than the limits you read
+with, or a comment holding more `&name;` strings than `maxEntityExpansions` (the reader counts them
+wherever they sit), is written, and `parseXml` with those limits refuses it.
 
 ```ts runnable throws
 import { parseXml, serializeXml } from "@cosyte/ccda";

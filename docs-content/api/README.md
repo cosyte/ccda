@@ -10336,6 +10336,9 @@ No message or position names anything the text said. A leading byte order mark i
 reported as `ENCODING_BOM_STRIPPED` through `options.onWarning`. Unlike `parseCcda`, it does not
 check the root element or report namespaces: any well-formed XML is read.
 
+A limit of `NaN` is refused with a `TypeError` before the text is read, since it would turn its
+cap off; `Infinity` lifts a cap, as it does for `parseCcda`.
+
 #### Parameters
 
 ##### text
@@ -10359,6 +10362,8 @@ The document, with line and column positions on its elements.
 #### Throws
 
 [CcdaParseError](#ccdaparseerror) For each refusal above.
+
+When a limit in `options.limits` is `NaN`.
 
 #### Example
 
@@ -10966,13 +10971,27 @@ rather than writing text a reader would reject or read differently:
 
 - a character XML 1.0 forbids anywhere: in text, an attribute value, a comment, a CDATA section,
   a processing instruction or a namespace (the message names the code point, never the text);
-- a DOCTYPE, which `parseXml` refuses;
+- a DOCTYPE, which `parseXml` refuses, and `<!DOCTYPE` or `<!ENTITY` (in any case) in a comment,
+  a CDATA section or a processing instruction, which `parseXml` refuses wherever it sits;
+- a carriage return, NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR in a comment, a CDATA section or
+  a processing instruction, which a parse reads as a line feed and which cannot be written as a
+  reference there;
+- an XML declaration (an instruction with the target `xml` first in the document) whose data is
+  not a version, then an optional encoding and an optional standalone, in that order;
+- a prefixed element or attribute name with no namespace, which no declaration binds (an
+  `xmlns:` or `xml:` attribute is written as it is);
 - a name that is not an XML name, a comment holding `--` or ending in `-`, a CDATA section
   holding `]]>`, a processing instruction holding `?>`, or a document with no root element.
 
-No message names anything the tree holds. A carriage return in text is written as `&#13;`, so a
-parse keeps it; `<`, `>` and `&` in text and `<`, `>`, `&`, `"`, tab, line feed and carriage
-return in an attribute value are written as references.
+No message names anything the tree holds. In text, a carriage return is written as `&#13;`,
+NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR as `&#x85;`, `&#x2028;` and `&#x2029;`, and `<`, `>`
+and `&` as references; in an attribute value, `<`, `>`, `&`, `"`, tab, line feed, carriage
+return and those three are written as references. So a parse keeps each of them.
+
+The writer does not apply the reader's limits: a tree deeper or larger than a reader's limits,
+or a comment, CDATA section or processing instruction holding more `&name;` strings than its
+`maxEntityExpansions` (the reader counts them wherever they sit), is written, and that reader
+refuses it.
 
 #### Parameters
 
