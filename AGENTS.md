@@ -35,6 +35,8 @@ and 26.
 12. `pnpm check:readme`, `pnpm check:claude-card`, `pnpm check:catalog`, `pnpm check:process`
     (the `standards` job)
 13. `pnpm check:no-emdash`, `pnpm check:no-internal-refs`
+14. `pnpm exec cosyte-docs-content` (the docs-content structure check: the sidebar, front matter and
+    links into the generated reference; CI does not run it yet)
 
 ## Data
 

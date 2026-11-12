@@ -190,31 +190,22 @@ the value out or comparing it as text, and for `toDate` when you need an instant
 say which zone an offset-less value was written in.
 
 Because all six `@cosyte/*` parsers export these three names, a file consuming two of them has to
-alias the imports or namespace them:
+alias the imports or namespace them. The namespace form reads better when a file uses several of the
+conversions from each package. Here is the `@cosyte/ccda` half of both forms:
 
-```ts no-run it imports @cosyte/hl7, a second package these docs do not install
-import { parseCcda, toISO as ccdaToISO } from "@cosyte/ccda";
-import { parseDtm, toISO as hl7ToISO } from "@cosyte/hl7";
-
-const document = parseCcda(xml);
-
-// A C-CDA encounter period: `effectiveTime` is an `IVL_TS`, so each bound is a `TS`.
-const admitted = ccdaToISO(document.getEncounters()[0]?.effectiveTime?.low);
-
-// The same conversion, over the value the v2 parser read out of an OBX-14.
-const observedAt = hl7ToISO(parseDtm("20260628153045-0500"));
-```
-
-The namespace form is the alternative, and reads better when a file uses several of the conversions
-from each package:
-
-```ts no-run it imports @cosyte/hl7, a second package these docs do not install
+```ts runnable
 import * as ccda from "@cosyte/ccda";
-import * as hl7 from "@cosyte/hl7";
+import { toISO as ccdaToISO } from "@cosyte/ccda";
 
-ccda.toObject(effectiveTime);
-hl7.toObject(dtm);
+// A C-CDA timestamp with its offset, as an encounter's `effectiveTime.low` carries it.
+const admitted = { raw: "20260628153045-0500" };
+
+ccdaToISO(admitted); // => "2026-06-28T15:30:45-05:00"
+ccda.toObject(admitted)?.offsetMinutes; // => -300
 ```
+
+The other package's half is the same shape: `import { toISO as hl7ToISO } from "@cosyte/hl7"`, or
+`import * as hl7 from "@cosyte/hl7"` and then `hl7.toISO(...)`.
 
 ## Code systems: recognition, not membership
 

@@ -33,13 +33,14 @@
         "dates-and-times",
         "code-systems",
         "validation",
-        "parser-archetype"
+        "parser-archetype",
+        "boundaries"
       ]
     },
     {
       "type": "category",
       "label": "Reference",
-      "items": ["what-it-extracts", "limitations"]
+      "items": ["what-it-extracts", "warning-codes", "limitations"]
     },
     { "type": "category", "label": "Troubleshooting", "items": ["troubleshooting"] },
     "testing-and-quality",

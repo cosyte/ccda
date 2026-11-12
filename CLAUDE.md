@@ -24,7 +24,7 @@ pnpm test && pnpm test:coverage && pnpm build && pnpm attw
 pnpm conformance # fetches its pinned artifacts, so it needs the network
 pnpm typecheck:examples && pnpm lint:examples && pnpm examples
 pnpm check:readme && pnpm check:claude-card && pnpm check:catalog && pnpm check:process
-pnpm check:no-emdash && pnpm check:no-internal-refs
+pnpm check:no-emdash && pnpm check:no-internal-refs && pnpm exec cosyte-docs-content
 ```
 
 ## Hazard

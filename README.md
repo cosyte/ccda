@@ -46,9 +46,8 @@ silence.
 **The `0.1` line.** From 0.1 the public API is settled and safe to depend on:
 the behavior documented on this page is implemented and covered by tests, the exported names,
 options, return shapes, and warning codes are the surface we keep stable, and below 1.0 a breaking
-change bumps the minor version and is called out in the changelog with its migration. On a `0.0.x`
-version, pin an exact version rather than a range. Some surfaces are still partial, and they are
-named rather than implied:
+change bumps the minor version and is called out in the changelog with its migration. Some
+surfaces are still partial, and they are named rather than implied:
 
 - **The conformance target is C-CDA R2.1 with Companion Guide R4.1** (USCDI v3): we build R2.1,
   read 3.0.0 to 5.0.0 documents leniently, and do not trace the Companion Guide yet
@@ -68,8 +67,9 @@ named rather than implied:
   value-set binding, and a value-set source you supply is what checks it: this package ships value
   set identifiers, never their member codes.
 
-[Known limitations](https://docs.cosyte.com/ccda/limitations) carries the boundaries in full, and
-each is stated under-warning rather than talked around.
+[Known limitations](https://docs.cosyte.com/ccda/limitations) lists every boundary, and
+[the boundaries of reading, building and editing](https://docs.cosyte.com/ccda/boundaries) explains
+each one rather than talking around it.
 
 ## Install
 
@@ -267,10 +267,12 @@ The full reference is on [docs.cosyte.com/ccda](https://docs.cosyte.com/ccda):
   [clinical entries](https://docs.cosyte.com/ccda/spec-notes-clinical),
   [datatypes](https://docs.cosyte.com/ccda/spec-notes-datatypes),
   [dates and times](https://docs.cosyte.com/ccda/dates-and-times),
+  [the boundaries of reading, building and editing](https://docs.cosyte.com/ccda/boundaries),
   [code systems and provenance](https://docs.cosyte.com/ccda/code-systems),
   [validation against C-CDA R2.1](https://docs.cosyte.com/ccda/validation), and
   [the parser archetype](https://docs.cosyte.com/ccda/parser-archetype).
-- Reference: [what it extracts](https://docs.cosyte.com/ccda/what-it-extracts), the
+- Reference: [what it extracts](https://docs.cosyte.com/ccda/what-it-extracts),
+  [warning and error codes](https://docs.cosyte.com/ccda/warning-codes), the
   [known limitations](https://docs.cosyte.com/ccda/limitations), and the API reference, generated
   from the TSDoc comments in the source.
 - [Testing and quality](https://docs.cosyte.com/ccda/testing-and-quality) and

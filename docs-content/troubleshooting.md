@@ -86,7 +86,9 @@ version at or before `0.0.4`, treat those log lines as potentially carrying docu
 ## Where to look next
 
 - [Known limitations](./limitations.md) states exactly what the parser, the builder and the editor
-  do and do not do today, section by section.
+  do and do not do today.
+- [Warning and error codes](./warning-codes.md) gives the meaning of every warning, fatal and edit
+  error code.
 - [Tolerance and the warning model](./spec-notes-tolerance.md) explains the warning codes, and the
   reference lists every one under [`WARNING_CODES`](./api/README.md#warning_codes) and every fatal
   code under [`FATAL_CODES`](./api/README.md#fatal_codes).
