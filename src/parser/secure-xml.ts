@@ -85,28 +85,29 @@ const PREDEFINED_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
  *
  * - `<`: a declared DTD or entity (`<!DOCTYPE`, `<!ENTITY`), the XXE / external-entity attack
  *   surface;
- * - `&`: an entity reference `&name;` (predefined ones are told apart after the match);
- *   or, when `&` is followed by `#`, a character reference `&#...;`, whose code point is checked;
+ * - `&`: an entity reference `&name;` (predefined ones are told apart after the match), or, when
+ *   `#` follows the `&`, a character reference `&#...;`, whose code point is checked;
  * - a carriage return, NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR: a character XML's end-of-line
  *   handling rewrites;
  * - anything else: a character XML 1.0 forbids (`./xml-chars.ts`): a C0 control other than tab,
  *   line feed and carriage return, an unpaired surrogate (the `u` flag reads a pair as one
  *   character, so only an unpaired one matches the surrogate range), U+FFFE or U+FFFF.
  *
- * The first two alternatives are the two patterns this module ran as separate passes before
- * (`/<!DOCTYPE|<!ENTITY/iu`, then `/&[a-z_][\w.-]*;/giu` over the whole text), with the same flags,
- * so they match exactly what those matched: no DTD match can overlap an entity reference (one
- * holds no `&`, the other no `<`), so the references found are the same ones in the same order.
- * One global scan of a string with few matches is several times cheaper than the two passes, and
- * the third alternative lets the parse skip the end-of-line rewrite when there is nothing for it
- * to rewrite. The character reference and forbidden character alternatives find, in the same
- * scan, a character no XML parser may accept, which `@xmldom/xmldom` and the compact reader would
- * otherwise read into the document without a word.
+ * The DTD alternatives and the entity half of the `&` alternative are the two patterns this module
+ * ran as separate passes before (`/<!DOCTYPE|<!ENTITY/iu`, then `/&[a-z_][\w.-]*;/giu` over the
+ * whole text), with the same flags, so they match exactly what those matched: no DTD match can
+ * overlap an entity reference (one holds no `&`, the other no `<`), and a character reference
+ * (`&#`) cannot overlap one either, so the references found are the same ones in the same order.
+ * One global scan of a string with few matches is several times cheaper than the two passes. The
+ * last alternative, one character class, lets the parse skip the end-of-line rewrite when there is
+ * nothing for it to rewrite, and finds in the same scan a character no XML parser may accept,
+ * which `@xmldom/xmldom` and the compact reader would otherwise read into the document without a
+ * word; so does the character reference half of the `&` alternative.
  *
  * @internal
  */
 const GATE_RE =
-  /<!DOCTYPE|<!ENTITY|&[a-z_][\w.-]*;|&#x?[0-9a-f]+;|[\r\u0085\u2028\u2029]|[\0-\x08\x0B\x0C\x0E-\x1F\uD800-\uDFFF\uFFFE\uFFFF]/giu;
+  /<!DOCTYPE|<!ENTITY|&(?:[a-z_][\w.-]*|#x?[0-9a-f]+);|[\0-\x08\x0B-\x1F\u0085\u2028\u2029\uD800-\uDFFF\uFFFE\uFFFF]/giu;
 
 /** `<`, the first character of a {@link GATE_RE} match on a DTD or entity declaration. @internal */
 const LESS_THAN = 0x3c;
