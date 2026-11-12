@@ -10964,10 +10964,25 @@ const xmlOut = serializeCcda(doc); // spec-clean, declaration-prefixed
 
 Write an `@xmldom/xmldom` document or element as XML text that [parseXml](#parsexml) reads back to the
 same tree. A document is written with an XML declaration (`<?xml version="1.0"
-encoding="UTF-8"?>`) first when it carries none; an element is written alone.
+encoding="UTF-8"?>`) and a line feed first when it carries none; an element is written alone,
+with a declaration for each namespace its names need.
 
-It refuses, with a `TypeError`, a tree it cannot write as well-formed XML that `parseXml` accepts,
-rather than writing text a reader would reject or read differently:
+It holds that promise by construction. It writes the tree with a writer of its own, which copies
+every attribute value, namespace and text through one escaping path and declares every namespace
+itself. Then, before it returns, it reads its own text back with the reader `parseXml` uses (its
+limits lifted) and compares that tree with the input: element and attribute names, namespaces,
+attribute values in order, the namespace declarations the input carries, text, CDATA sections,
+comments and processing instructions, in order. A refusal or any difference throws a
+`TypeError` naming the kind of node, never its content. Adjacent text nodes compare as one text
+and an empty text node or CDATA section as none, as a parse reads them; outside the root element,
+white space is not compared (the XML Infoset holds no text there), nor is the declaration
+the writer adds.
+
+The read-back costs a parse of the output and a walk of both trees on every call, which is most
+of what `serializeXml` costs: bench/ccda.bench.mjs measures it beside `parseXml` and beside
+xmldom's own `XMLSerializer`, which checks nothing.
+
+It refuses, with a `TypeError`, a tree it cannot write as text that reads back the same:
 
 - a character XML 1.0 forbids anywhere: in text, an attribute value, a comment, a CDATA section,
   a processing instruction or a namespace (the message names the code point, never the text);
@@ -10976,17 +10991,28 @@ rather than writing text a reader would reject or read differently:
 - a carriage return, NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR in a comment, a CDATA section or
   a processing instruction, which a parse reads as a line feed and which cannot be written as a
   reference there;
+- a processing instruction whose data starts with a space, tab or line feed, which a parse
+  drops;
+- text other than white space, or a CDATA section, directly under the document, which a parse
+  drops or refuses;
 - an XML declaration (an instruction with the target `xml` first in the document) whose data is
   not a version, then an optional encoding and an optional standalone, in that order;
 - a prefixed element or attribute name with no namespace, which no declaration binds (an
   `xmlns:` or `xml:` attribute is written as it is);
+- one prefix bound to two namespaces on one element (by the element's name, its attributes'
+  names or a declaration it carries), or declared twice on it;
+- an element with the prefix `xmlns`, an attribute in a namespace with no prefix, and a
+  declaration Namespaces in XML 1.0 forbids (the prefix `xmlns`, the xml or xmlns namespace
+  under another prefix, or a prefix bound to no namespace);
 - a name that is not an XML name, a comment holding `--` or ending in `-`, a CDATA section
-  holding `]]>`, a processing instruction holding `?>`, or a document with no root element.
+  holding `]]>`, a processing instruction holding `?>` or with the target `xml` anywhere but
+  first, or a document with no root element;
+- anything else whose text the read-back refuses or reads as another tree.
 
 No message names anything the tree holds. In text, a carriage return is written as `&#13;`,
 NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR as `&#x85;`, `&#x2028;` and `&#x2029;`, and `<`, `>`
-and `&` as references; in an attribute value, `<`, `>`, `&`, `"`, tab, line feed, carriage
-return and those three are written as references. So a parse keeps each of them.
+and `&` as references; in an attribute value or a namespace, `<`, `>`, `&`, `"`, tab, line feed,
+carriage return and those three are written as references. So a parse keeps each of them.
 
 The writer does not apply the reader's limits: a tree deeper or larger than a reader's limits,
 or a comment, CDATA section or processing instruction holding more `&name;` strings than its

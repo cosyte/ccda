@@ -23,6 +23,7 @@ import {
   type CcdaWarning,
 } from "../src/index.js";
 import { xmldom } from "../src/parser/xmldom.js";
+import { firstDifference, readBackDifference } from "../src/xml/same-tree.js";
 
 /** What `run` threw, or `undefined` when it returned. */
 function thrownBy(run: () => unknown): unknown {
@@ -620,7 +621,7 @@ describe("serializeXml writes only what parseXml reads back to the same tree", (
   it("round-trips text and attribute values rich in line breaks and markup (property)", () => {
     const allowedChar = fc
       .string({ unit: "binary", minLength: 1, maxLength: 1 })
-      .filter((s) => !/[\0-\x08\x0B\x0C\x0E-\x1F\uD800-\uDFFF￾￿]/u.test(s));
+      .filter((s) => !/[\0-\x08\x0B\x0C\x0E-\x1F\uD800-\uDFFF\uFFFE\uFFFF]/u.test(s));
     const unit = fc.oneof(
       fc.constantFrom(
         "\r",
@@ -673,5 +674,351 @@ describe("parseXml refuses a limit that is NaN", () => {
   it("still takes a cap of Infinity, which lifts it, as parseCcda does", () => {
     const limits = { maxDepth: Number.POSITIVE_INFINITY };
     expect(parseXml("<a><b/></a>", { limits }).documentElement?.localName).toBe("a");
+  });
+});
+
+/** The `TypeError` message `serializeXml` throws for a reason. */
+function refused(why: string): string {
+  return `serializeXml: the tree ${why}, so it was not written.`;
+}
+
+const TWO_NAMESPACES = refused(
+  "binds one prefix to two namespaces on one element, which no start tag can declare",
+);
+
+const XMLNS = "http://www.w3.org/2000/xmlns/";
+const XML = "http://www.w3.org/XML/1998/namespace";
+
+describe("serializeXml writes namespaces itself, through one escaping path", () => {
+  it("writes NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR in a namespace as references", () => {
+    const places: ((doc: ReturnType<typeof newDocument>, uri: string) => () => unknown)[] = [
+      (doc, uri) => {
+        doc.documentElement?.appendChild(doc.createElementNS(uri, "p:c"));
+        return () => doc.documentElement?.firstChild;
+      },
+      (doc, uri) => {
+        doc.documentElement?.appendChild(doc.createElementNS(uri, "c"));
+        return () => doc.documentElement?.firstChild;
+      },
+      (doc, uri) => {
+        doc.documentElement?.setAttributeNS(uri, "p:x", "1");
+        return () => doc.documentElement?.getAttributeNode("p:x");
+      },
+    ];
+    for (const [char, ref] of [
+      [NEL, "&#x85;"],
+      [LINE_SEPARATOR, "&#x2028;"],
+      [PARAGRAPH_SEPARATOR, "&#x2029;"],
+    ] as const) {
+      for (const [index, place] of places.entries()) {
+        const uri = `urn:a${char}b`;
+        const doc = newDocument();
+        place(doc, uri);
+        const out = serializeXml(doc);
+        expect(out, `${ref} ${String(index)}`).toContain(`="urn:a${ref}b"`);
+        const back = parseXml(out);
+        const node = place(back, "urn:unused")() as { namespaceURI: string | null };
+        expect(node.namespaceURI, `${ref} ${String(index)}`).toBe(uri);
+      }
+    }
+  });
+
+  it("refuses one prefix bound to two namespaces on one element", () => {
+    const cases: ((doc: ReturnType<typeof newDocument>) => void)[] = [
+      (doc) => {
+        const e = doc.createElementNS("urn:example:a", "p:e");
+        e.setAttributeNS("urn:example:b", "p:c", "2");
+        doc.documentElement?.appendChild(e);
+      },
+      (doc) => {
+        doc.documentElement?.setAttributeNS("urn:example:a", "p:b", "1");
+        doc.documentElement?.setAttributeNS("urn:example:b", "p:c", "2");
+      },
+      // A declaration the element carries, against its own namespace.
+      (doc) => {
+        const e = doc.createElementNS("urn:example:a", "p:e");
+        e.setAttribute("xmlns:p", "urn:example:z");
+        doc.documentElement?.appendChild(e);
+      },
+      (doc) => {
+        const e = doc.createElementNS(null, "e");
+        e.setAttribute("xmlns", "urn:example:z");
+        doc.documentElement?.appendChild(e);
+      },
+    ];
+    for (const [index, change] of cases.entries()) {
+      const doc = newDocument();
+      change(doc);
+      expect(refusalOf(doc), String(index)).toBe(TWO_NAMESPACES);
+    }
+  });
+
+  it("refuses one prefix declared twice on one element", () => {
+    for (const uri of ["urn:example:a", "urn:example:b"]) {
+      const doc = newDocument();
+      doc.documentElement?.setAttribute("xmlns:p", "urn:example:a");
+      doc.documentElement?.setAttributeNS(XMLNS, "xmlns:p", uri);
+      expect(refusalOf(doc), uri).toBe(
+        refused("declares one prefix twice on one element, which a parse refuses"),
+      );
+    }
+  });
+
+  it("rebinds a prefix on a child, and undeclares the default namespace, so each reads back", () => {
+    const doc = parseXml('<r xmlns:p="urn:example:a" xmlns="urn:example:d"><p:c/></r>');
+    doc.documentElement?.setAttribute("xmlns:p", "urn:example:z");
+    doc.documentElement?.appendChild(doc.createElementNS(null, "n"));
+    const out = serializeXml(doc);
+    expect(out).toBe(
+      '<?xml version="1.0" encoding="UTF-8"?>\n<r xmlns:p="urn:example:z" xmlns="urn:example:d"><p:c xmlns:p="urn:example:a"/><n xmlns=""/></r>',
+    );
+    const back = parseXml(out).documentElement;
+    expect((back?.firstChild as { namespaceURI: string | null }).namespaceURI).toBe(
+      "urn:example:a",
+    );
+    expect((back?.lastChild as { namespaceURI: string | null }).namespaceURI).toBeNull();
+  });
+
+  it("keeps a default namespace undeclared on an element, and on what it holds", () => {
+    const text =
+      '<?xml version="1.0" encoding="UTF-8"?>\n<r xmlns="urn:example:d"><c xmlns=""><d/></c></r>';
+    expect(serializeXml(parseXml(text))).toBe(text);
+  });
+
+  it("refuses an element with the prefix xmlns", () => {
+    const doc = newDocument();
+    doc.documentElement?.appendChild(doc.createElementNS(XMLNS, "xmlns:foo"));
+    expect(refusalOf(doc)).toBe(
+      refused(
+        "holds an element with the prefix xmlns, which only a namespace declaration may carry",
+      ),
+    );
+  });
+
+  it("refuses a declaration or a name Namespaces in XML 1.0 forbids", () => {
+    const cases: ((doc: ReturnType<typeof newDocument>) => void)[] = [
+      (doc) => doc.documentElement?.setAttribute("xmlns:xmlns", "urn:example:a"),
+      (doc) => doc.documentElement?.setAttribute("xmlns:p", ""),
+      (doc) => doc.documentElement?.setAttribute("xmlns:p", XML),
+      (doc) => doc.documentElement?.setAttribute("xmlns:xml", "urn:example:a"),
+      (doc) => doc.documentElement?.setAttribute("xmlns", XMLNS),
+    ];
+    for (const [index, change] of cases.entries()) {
+      const doc = newDocument();
+      change(doc);
+      expect(refusalOf(doc), String(index)).toBe(
+        refused(
+          "holds a name or declaration Namespaces in XML 1.0 forbids (the prefix xmlns, the xml or xmlns namespace under another prefix, or a prefix bound to no namespace)",
+        ),
+      );
+    }
+  });
+
+  it("writes the xml namespace under its own prefix, declared or not", () => {
+    const doc = newDocument();
+    doc.documentElement?.setAttribute("xmlns:xml", XML);
+    doc.documentElement?.setAttributeNS(XML, "xml:space", "preserve");
+    doc.documentElement?.appendChild(doc.createElementNS(XML, "xml:c"));
+    const out = serializeXml(doc);
+    expect(out).toBe(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<root xmlns:xml="${XML}" xml:space="preserve"><xml:c/></root>`,
+    );
+  });
+
+  it("refuses an attribute in a namespace with no prefix", () => {
+    const doc = newDocument();
+    doc.documentElement?.setAttributeNS("urn:example:a", "y", "1");
+    expect(refusalOf(doc)).toBe(
+      refused("holds an attribute in a namespace with no prefix, which no declaration can give it"),
+    );
+  });
+});
+
+describe("serializeXml refuses a node outside the root that a parse drops or rewrites", () => {
+  it("refuses text that is not white space directly under the document", () => {
+    for (const before of [true, false]) {
+      const doc = newDocument();
+      const text = doc.createTextNode(`${MARKER} note`);
+      if (before) doc.insertBefore(text, doc.documentElement);
+      else doc.appendChild(text);
+      const message = refusalOf(doc);
+      expect(message).toBe(refused("holds text outside the root element, which a parse drops"));
+      expect(message).not.toContain(MARKER);
+    }
+  });
+
+  it("refuses a CDATA section directly under the document", () => {
+    for (const before of [true, false]) {
+      const doc = newDocument();
+      const cdata = doc.createCDATASection("note");
+      if (before) doc.insertBefore(cdata, doc.documentElement);
+      else doc.appendChild(cdata);
+      expect(refusalOf(doc)).toBe(
+        refused("holds a CDATA section outside the root element, which a parse refuses"),
+      );
+    }
+  });
+
+  it("writes white space, a comment and an instruction outside the root as they are", () => {
+    const doc = newDocument();
+    doc.insertBefore(doc.createTextNode(" \n\t"), doc.documentElement);
+    doc.appendChild(doc.createTextNode("\r\n"));
+    doc.appendChild(doc.createComment("after"));
+    doc.appendChild(doc.createProcessingInstruction("app", "x"));
+    const out = serializeXml(doc);
+    expect(out).toBe(
+      '<?xml version="1.0" encoding="UTF-8"?>\n \n\t<root/>\r\n<!--after--><?app x?>',
+    );
+  });
+
+  it("refuses an instruction whose data starts with white space, which a parse drops", () => {
+    for (const data of [" x", "\tx", "\nx", " "]) {
+      const doc = newDocument();
+      doc.documentElement?.appendChild(doc.createProcessingInstruction("foo", data));
+      expect(refusalOf(doc), JSON.stringify(data)).toBe(
+        refused(
+          "holds a processing instruction whose data starts with white space, which a parse drops",
+        ),
+      );
+    }
+  });
+
+  it("writes an instruction with no data, or data with inner white space, so it reads back", () => {
+    const doc = newDocument();
+    doc.documentElement?.appendChild(doc.createProcessingInstruction("foo", ""));
+    doc.documentElement?.appendChild(doc.createProcessingInstruction("bar", "x  y "));
+    const out = serializeXml(doc);
+    expect(out).toContain("<root><?foo?><?bar x  y ?></root>");
+    const back = parseXml(out).documentElement;
+    expect((back?.firstChild as unknown as { data: string }).data).toBe("");
+    expect((back?.lastChild as unknown as { data: string }).data).toBe("x  y ");
+  });
+});
+
+describe("serializeXml reads its own output back before it returns it", () => {
+  it("refuses a tree whose text parseXml refuses, naming the code and nothing of the tree", () => {
+    const doc = newDocument();
+    doc.documentElement?.setAttribute("xml:lang", MARKER);
+    doc.documentElement?.setAttributeNS(XML, "xml:lang", MARKER);
+    const message = refusalOf(doc);
+    expect(message).toBe(
+      refused("would be written as text parseXml refuses (NOT_WELL_FORMED_XML)"),
+    );
+    expect(message).not.toContain(MARKER);
+  });
+
+  it("joins adjacent text and drops an empty text node or CDATA section, as a parse does", () => {
+    const doc = newDocument();
+    const root = doc.documentElement;
+    root?.appendChild(doc.createTextNode("a"));
+    root?.appendChild(doc.createCDATASection(""));
+    root?.appendChild(doc.createTextNode("b"));
+    root?.appendChild(doc.createTextNode(""));
+    expect(serializeXml(doc)).toBe('<?xml version="1.0" encoding="UTF-8"?>\n<root>ab</root>');
+  });
+
+  it("writes a tree far deeper than the call stack allows recursion for", () => {
+    const doc = newDocument();
+    let at = doc.documentElement;
+    for (let depth = 0; depth < 10_000; depth += 1) {
+      const child = doc.createElement("a");
+      at?.appendChild(child);
+      at = child;
+    }
+    const out = serializeXml(doc);
+    expect(out).toBe(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<root>${"<a>".repeat(9_999)}<a/>${"</a>".repeat(9_999)}</root>`,
+    );
+  });
+
+  it("refuses a node that is not a document or an element, or one no DOM built", () => {
+    const text = parseXml("<r>x</r>").documentElement?.firstChild;
+    expect(refusalOf(text as never)).toBe(refused("is not a document or an element"));
+    const entity = {
+      nodeType: 1,
+      nodeName: "r",
+      namespaceURI: null,
+      attributes: [],
+      childNodes: [{ nodeType: 5, nodeName: MARKER, childNodes: [] }],
+    };
+    expect(refusalOf(entity as never)).toBe(
+      refused("holds a node of a kind XML text cannot hold there (such as an entity reference)"),
+    );
+    const broken = {
+      nodeType: 1,
+      get nodeName(): string {
+        throw new Error(MARKER);
+      },
+    };
+    const message = refusalOf(broken as never);
+    expect(message).toBe(refused("could not be read as a DOM tree"));
+    expect("cause" in (thrownBy(() => serializeXml(broken as never)) as Error)).toBe(false);
+  });
+});
+
+describe("the tree comparison serializeXml reads back with", () => {
+  /** The first difference between the tree of text `a` (or a node) and the document of text `b`. */
+  function differs(
+    a: string | Parameters<typeof firstDifference>[0],
+    b: string,
+  ): string | undefined {
+    const left = typeof a === "string" ? (parseXml(a) as never) : a;
+    return firstDifference(left, parseXml(b) as never);
+  }
+
+  it("finds no difference between a tree and itself, or the declaration the writer adds", () => {
+    const text =
+      '<r xmlns:p="urn:example:a" p:a="1" b="2"><!--c--><?app x?><![CDATA[d]]>e<p:f/></r>';
+    expect(differs(text, text)).toBeUndefined();
+    expect(differs(text, `<?xml version="1.0"?>\n${text}`)).toBeUndefined();
+    expect(differs(`<!--c-->\n${text}\n`, `<!--c-->${text}`)).toBeUndefined();
+    expect(differs('<r a="1"/>', '<r xmlns:p="urn:example:a" a="1"/>')).toBeUndefined();
+  });
+
+  it("names the kind of the first node that differs, and nothing it holds", () => {
+    const rows: [string, string, string][] = [
+      ["<r/>", "<s/>", "an element"],
+      ["<r/>", '<r xmlns="urn:example:a"/>', "an element"],
+      ['<r a="1"/>', '<r a="2"/>', "an attribute"],
+      ['<r a="1" b="2"/>', '<r a="1"/>', "an attribute"],
+      ['<r a="1"/>', '<r a="1" b="2"/>', "an attribute"],
+      ['<r xmlns:p="urn:example:a"/>', '<r xmlns:p="urn:example:b"/>', "a namespace declaration"],
+      ['<r xmlns:p="urn:example:a"/>', "<r/>", "a namespace declaration"],
+      ["<r>a</r>", "<r>b</r>", "text"],
+      ["<r><![CDATA[a]]></r>", "<r><![CDATA[b]]></r>", "a CDATA section"],
+      ["<r><!--a--></r>", "<r><!--b--></r>", "a comment"],
+      ["<r><?a x?></r>", "<r><?b x?></r>", "a processing instruction"],
+      ["<r><?a x?></r>", "<r><?a y?></r>", "a processing instruction"],
+      ["<r>a</r>", "<r><![CDATA[a]]></r>", "text"],
+      ["<r><a/></r>", "<r><a/><a/></r>", "the nodes of an element or document"],
+      ["<r><a><b/></a></r>", "<r><a><c/></a></r>", "an element"],
+      ["<!--a--><r/>", "<r/>", "the nodes of an element or document"],
+      ['<?xml version="1.0"?><r/>', "<r/>", "the nodes of an element or document"],
+    ];
+    for (const [a, b, kind] of rows) {
+      expect(differs(a, b), `${a} / ${b}`).toBe(kind);
+    }
+  });
+
+  it("compares an element with the root of the text it was written as", () => {
+    const element = parseXml('<r><c a="1">x</c></r>').documentElement?.firstChild;
+    expect(differs(element as never, '<c a="1">x</c>')).toBeUndefined();
+    expect(differs(element as never, '<c a="1">y</c>')).toBe("text");
+  });
+
+  it("reports text parseXml refuses by its fatal code", () => {
+    expect(readBackDifference("<r", parseXml("<r/>") as never)).toBe(
+      "would be written as text parseXml refuses (NOT_WELL_FORMED_XML)",
+    );
+    expect(readBackDifference('<r a="2"/>', parseXml('<r a="1"/>') as never)).toBe(
+      "would not read back the same (an attribute differs)",
+    );
+  });
+
+  it("reads back without the reader's limits, which the writer does not apply", () => {
+    const deep = `${"<a>".repeat(1_200)}${"</a>".repeat(1_200)}`;
+    expect(readBackDifference(deep, parseXml(deep, { limits: { maxDepth: 2_000 } }) as never)).toBe(
+      undefined,
+    );
   });
 });

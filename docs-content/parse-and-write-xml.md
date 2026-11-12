@@ -92,11 +92,23 @@ any namespace is as expected as any other in a format that is not C-CDA.
 
 ## What the writer refuses
 
-`serializeXml` writes a document with an XML declaration first, unless it already carries one, and
-an element alone. In text and attribute values, a carriage return, NEL, LINE SEPARATOR and
-PARAGRAPH SEPARATOR are written as character references, so a parse keeps each of them rather than
-reading a line feed. It throws a `TypeError` instead of writing text a reader would reject or read
-differently:
+`serializeXml` writes a document with an XML declaration and a line feed first, unless it already
+carries one, and an element alone, with a declaration for each namespace its names need. It writes
+with a writer of its own: every attribute value, namespace and text goes through one escaping path,
+and it declares every namespace itself. In text, attribute values and namespaces, a carriage
+return, NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR are written as character references, so a parse
+keeps each of them rather than reading a line feed.
+
+Then, before it returns, it reads its own text back with the reader `parseXml` uses (its limits
+lifted) and compares that tree with yours: names, namespaces, attributes in order, the namespace
+declarations you set, text, CDATA sections, comments and processing instructions, in order. If the
+reader refuses the text or reads another tree, it throws a `TypeError` naming the kind of node that
+differs, never what it holds. Adjacent text nodes compare as one text, and an empty text node or
+CDATA section as none, as a parse reads them. Outside the root element, white space is not
+compared, nor is the declaration the writer adds.
+
+So it throws a `TypeError` instead of writing text a reader would reject or read differently, and
+these are the trees it refuses before it writes anything:
 
 - a character XML 1.0 forbids in text, an attribute value, a comment, a CDATA section, a processing
   instruction or a namespace (the message names the code point, never the text);
@@ -104,11 +116,25 @@ differently:
   comment, a CDATA section or a processing instruction, which `parseXml` refuses wherever it sits;
 - a carriage return, NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR in a comment, a CDATA section or a
   processing instruction, where no reference can be written and a parse would read a line feed;
+- a processing instruction whose data starts with a space, tab or line feed, which a parse drops;
+- text other than white space, or a CDATA section, directly under the document, which a parse
+  drops or refuses;
 - an XML declaration (an instruction with the target `xml` first in the document) that is not a
   version, then an optional encoding and an optional standalone;
 - a prefixed element or attribute name with no namespace, which no declaration would bind;
+- one prefix bound to two namespaces on one element, by its name, its attributes' names or a
+  declaration it carries, or declared twice on it; a child may rebind a prefix, and is written
+  with its own declaration;
+- an element with the prefix `xmlns`, an attribute in a namespace with no prefix, and a declaration
+  Namespaces in XML 1.0 forbids (the prefix `xmlns`, the xml or xmlns namespace under another
+  prefix, or a prefix bound to no namespace);
 - a name that is not an XML name, a comment holding `--` or ending in `-`, a CDATA section holding
-  `]]>`, a processing instruction holding `?>`, or a document with no root element.
+  `]]>`, a processing instruction holding `?>` or with the target `xml` anywhere but first, or a
+  document with no root element.
+
+The read-back is a parse of the output and a walk of both trees on every call, so a write costs
+more than writing alone. `bench/ccda.bench.mjs` measures `serializeXml` beside `parseXml` and
+beside xmldom's own `XMLSerializer`, which checks nothing and reads nothing back.
 
 The writer does not apply the reader's limits. A tree deeper or larger than the limits you read
 with, or a comment holding more `&name;` strings than `maxEntityExpansions` (the reader counts them
