@@ -18,11 +18,13 @@ import { describe, expect, it } from "vitest";
 import { validateXML } from "xmllint-wasm";
 
 import {
+  CcdaDocument,
   CcdaParseError,
   editCcda,
   parseCcda,
   parseSecureXml,
   resolveLimits,
+  type CcdaDocumentInit,
 } from "../src/index.js";
 import { breakInMarkup, parseSecureDom, parseSecureEditable } from "../src/parser/secure-xml.js";
 
@@ -323,4 +325,23 @@ describe("carriage returns", () => {
     const dom = parseSecureDom(xml, resolveLimits(), () => {});
     expect(units(dom.documentElement?.textContent)).toBe(units(`a\nb\n${ch}c`));
   });
+
+  it.each(KEPT)(
+    "are rewritten when an edit reads XML that holds one raw, keeping %s",
+    (_name, ch) => {
+      // A document the package parsed or built never writes a raw carriage return (text holds it
+      // as `&#13;`), so one is handed in here as the XML a hand-constructed document retains.
+      const raw = `${ROOT}<title>a${ch}b</title><!--c\r\nd${ch}e--></ClinicalDocument>`;
+      const parsed = parseCcda(raw);
+      // The parsed fields, less the optional ones it left unset, which the init may not name.
+      const fields = Object.fromEntries(
+        Object.entries(parsed).filter(([, value]) => value !== undefined),
+      ) as unknown as CcdaDocumentInit;
+      const handed = new CcdaDocument({ ...fields, serialized: raw });
+      const edited = editCcda(handed, { revision: false }).toString();
+      expect(edited).toBe(editCcda(parsed, { revision: false }).toString());
+      expect(edited).toContain(`<!--c\nd${ch}e-->`);
+      expect(edited).toContain(`<title>a${ch}b</title>`);
+    },
+  );
 });
