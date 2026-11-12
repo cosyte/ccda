@@ -257,6 +257,7 @@ The full reference is on [docs.cosyte.com/ccda](https://docs.cosyte.com/ccda):
   [build a document](https://docs.cosyte.com/ccda/build-a-document),
   [edit a document](https://docs.cosyte.com/ccda/edit-a-document),
   [serialize a document](https://docs.cosyte.com/ccda/serialize-a-document),
+  [parse and write any XML safely](https://docs.cosyte.com/ccda/parse-and-write-xml),
   [apply a vendor profile](https://docs.cosyte.com/ccda/apply-a-vendor-profile),
   [check codes with your own terminology service](https://docs.cosyte.com/ccda/check-codes-with-your-terminology),
   [check value-set membership](https://docs.cosyte.com/ccda/check-value-set-membership), and

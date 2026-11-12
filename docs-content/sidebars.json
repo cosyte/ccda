@@ -13,6 +13,7 @@
         "build-a-document",
         "edit-a-document",
         "serialize-a-document",
+        "parse-and-write-xml",
         "apply-a-vendor-profile",
         "check-codes-with-your-terminology",
         "check-value-set-membership",

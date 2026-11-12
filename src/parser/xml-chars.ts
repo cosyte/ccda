@@ -53,6 +53,16 @@ export function firstForbiddenCodePoint(value: string): number | undefined {
 }
 
 /**
+ * The index of the first character in `value` that XML 1.0 forbids, or `-1` when it holds none.
+ * It reads `value` with a string method, so it throws on anything but a string.
+ *
+ * @internal
+ */
+export function firstForbiddenIndex(value: string): number {
+  return value.search(FORBIDDEN_CHAR_RE);
+}
+
+/**
  * A code point written as Unicode writes it: `U+` and at least four upper-case hexadecimal digits
  * (`U+0001`, `U+FFFE`).
  *

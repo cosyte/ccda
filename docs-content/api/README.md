@@ -1146,15 +1146,19 @@ The integer answer/score (`xsi:type="INT"`). Omit → `value nullFlavor="UNK"`.
 ### BuildCcdaEncompassingEncounter
 
 The `componentOf/encompassingEncounter` frame a Discharge Summary SHALL carry
-(CONF:1198-8471, -8472): the inpatient stay the document summarises. Ignored
-for a document type whose rule does not require the frame, because emitting an
-encounter a CCD never claimed would be asserting one.
+(CONF:1198-8471, -8472): the inpatient stay the document summarises. A
+Progress Note, a History and Physical and a Consultation Note carry the frame
+too, for the visit they document. Refused for a CCD and a Referral Note, whose
+rules do not carry the frame, because emitting an encounter a document never
+claimed would be asserting one.
 
-**NOTHING HERE IS EVER FABRICATED, AND EVERY SLOT IS REQUIRED BY THE
-TEMPLATE.** The encounter's `effectiveTime` SHALL carry a `low` and a `high`
-(CONF:1198-8473, -8475) and the encounter SHALL carry a
+**NOTHING HERE IS EVER FABRICATED.** For a Discharge Summary every slot is
+required by the template: the encounter's `effectiveTime` SHALL carry a `low`
+and a `high` (CONF:1198-8473, -8475) and the encounter SHALL carry a
 `dischargeDispositionCode` (CONF:1198-8476), so all three elements are always
-emitted. A bound or a disposition the caller did not supply is emitted as an
+emitted. For the three office-visit types only the `low` is always emitted
+(the Progress Note's CONF:1198-7599 names it); the `high` and the disposition
+are emitted only when supplied. A bound or a disposition the caller did not supply is emitted as an
 **explicit** `nullFlavor="UNK"`, which satisfies the cardinality without
 stating a clinical fact and which [parseCcda](#parseccda) reads back as absent
 rather than as a date or a code. An admission date, a discharge date and a
@@ -1183,18 +1187,21 @@ const stay: BuildCcdaEncompassingEncounter = {
 The discharge disposition. `codeSystem` defaults to the NUBC UB-04 Patient
 Discharge Status code set, the system every member of the value set the
 template names carries; supply your own to code it elsewhere, since that
-binding is a SHOULD. Omitted entirely, the element is emitted
+binding is a SHOULD. Omitted on a Discharge Summary, the element is emitted
 `nullFlavor="UNK"`: the builder has no defensible default for where a
-patient went.
+patient went. Omitted on the other framed types, whose rules do not require
+it, the element is not emitted.
 
 ##### period?
 
 > `readonly` `optional` **period?**: `object`
 
 The encounter period as HL7 date strings (an `IVL_TS` low/high), the
-admission and discharge times. Either bound may be omitted and an omitted
-one is emitted `nullFlavor="UNK"`; the element itself is always emitted,
-because the template requires both bounds to be present.
+admission and discharge times for a Discharge Summary, the visit for the
+other framed types. Either bound may be omitted. An omitted `low` is
+emitted `nullFlavor="UNK"`; so is an omitted `high` on a Discharge Summary,
+whose template requires both bounds, while on the other types an omitted
+`high` is not emitted.
 
 ###### high?
 
@@ -1620,8 +1627,8 @@ backing a CCD SHALL section (`problems`, `allergies`, `medications`, `results`,
 `vitalSigns`, `smokingStatus`) defaults to empty, in which case its section is
 emitted as a spec-clean empty `nullFlavor="NI"` section. `immunizations` is optional, its section is emitted
 only when populated (Immunizations is not a CCD SHALL section). `documentType`
-is `"ccd"` (the default), `"referralNote"` or `"dischargeSummary"`; the other
-nine C-CDA R2.1 document types are not implemented.
+is `"ccd"` (the default) or one of the five other [BuildableDocumentType](#buildabledocumenttype)s;
+the other six US Realm document types are not implemented.
 
 #### Example
 
@@ -1646,13 +1653,25 @@ Allergy Concerns for the Allergies section; empty section when omitted.
 
 > `readonly` `optional` **assessment?**: `string`
 
-The Assessment Section narrative (`documentType: "referralNote"` only; with
-Plan of Treatment it satisfies the Referral Note's Assessment/Plan choice,
-CONF:1198-29102). Narrative-only, so this is a free-text
-clinician summary; when omitted the section is emitted as a spec-clean
-empty `nullFlavor="NI"` section (never a fabricated assessment). Ignored for
-a CCD; refused with a `TypeError` for a Discharge Summary, which carries no
-Assessment Section.
+The Assessment Section narrative. A SHALL section, through the
+Assessment/Plan choice, for a Referral Note (CONF:1198-29102), a Progress
+Note (-30657), a History and Physical (-30614) and a Consultation Note
+(-9501): with Plan of Treatment it satisfies that choice. Narrative-only, so
+this is a free-text clinician summary; when omitted the section is emitted as
+a spec-clean empty `nullFlavor="NI"` section (never a fabricated assessment).
+Ignored for a CCD; refused with a `TypeError` for a Discharge Summary, which
+carries no Assessment Section.
+
+##### chiefComplaintAndReasonForVisit?
+
+> `readonly` `optional` **chiefComplaintAndReasonForVisit?**: `string`
+
+The Chief Complaint and Reason for Visit Section narrative
+(`2.16.840.1.113883.10.20.22.2.13`, LOINC `46239-0`). It satisfies the
+History and Physical's chief-complaint choice (CONF:1198-30613), so for that
+type it is always emitted, as an empty `nullFlavor="NI"` section when
+omitted. Carried, and emitted only when supplied, by a Progress Note and a
+Consultation Note. Refused with a `TypeError` for the other three types.
 
 ##### confidentiality?
 
@@ -1690,10 +1709,11 @@ The document `id`'s extension; a synthetic id is generated when omitted.
 
 > `readonly` `optional` **documentType?**: [`BuildableDocumentType`](#buildabledocumenttype)
 
-The document type, `"ccd"` (default), `"referralNote"` or
-`"dischargeSummary"`. Each specializes the US Realm Header (its own document
-`templateId` + LOINC `code`) and its SHALL section set; the other nine C-CDA
-R2.1 document types are not emitted, and asking for one throws rather than
+The document type: `"ccd"` (default), `"referralNote"`,
+`"dischargeSummary"`, `"progressNote"`, `"historyAndPhysical"` or
+`"consultationNote"`. Each specializes the US Realm Header (its own document
+`templateId` + LOINC `code`) and its SHALL section set; the other six US
+Realm document types are not emitted, and asking for one throws rather than
 emitting a document that merely resembles it.
 
 ##### effectiveTime?
@@ -1706,14 +1726,14 @@ The document `effectiveTime` (a `Date` is formatted to UTC); defaults to now.
 
 > `readonly` `optional` **encompassingEncounter?**: [`BuildCcdaEncompassingEncounter`](#buildccdaencompassingencounter)
 
-The `componentOf/encompassingEncounter` frame
-(`documentType: "dischargeSummary"` only, CONF:1198-8471). Supplies the
-encounter period's two bounds and the discharge disposition; each slot the
-caller omits is emitted as an explicit `nullFlavor="UNK"` rather than
-guessed. When the whole field is omitted the frame is still emitted, with
-every slot unknown, because the document type's rule requires it. Refused
-with a `TypeError` for the other document types, whose rules do not carry
-the frame, rather than dropped.
+The `componentOf/encompassingEncounter` frame. Required by the Discharge
+Summary (CONF:1198-8471), the Progress Note (-7595), the History and
+Physical (-8338) and the Consultation Note (-8386), so for those four the
+frame is always emitted, with every slot the caller omits written as an
+explicit `nullFlavor="UNK"` rather than guessed; see
+[BuildCcdaEncompassingEncounter](#buildccdaencompassingencounter) for which slots each type requires.
+Refused with a `TypeError` for a CCD and a Referral Note, whose rules do not
+carry the frame, rather than dropped.
 
 ##### encounters?
 
@@ -1726,7 +1746,9 @@ Encounter Activities; the Encounters section is emitted only when non-empty (a C
 > `readonly` `optional` **familyHistory?**: readonly [`BuildCcdaFamilyHistory`](#buildccdafamilyhistory)[]
 
 Family history for the Family History section; the section is emitted only
-when non-empty (a CCD SHOULD section). Each entry is one relative (a Family
+when non-empty (a CCD SHOULD section), except for a History and Physical,
+whose SHALL set includes it (CONF:1198-30584) and which emits an empty
+`nullFlavor="NI"` section when this is omitted. Each entry is one relative (a Family
 History Organizer) carrying that relative's conditions, read back via
 `getFamilyHistory`, grouped by relative.
 
@@ -1756,6 +1778,27 @@ read back tagged `assessmentScale: true`, `domain: "functional"`. The
 Functional Status section is emitted when this, [functionalStatus](#functionalstatus-1), or
 [functionalStatusOrganizers](#functionalstatusorganizers) is non-empty.
 
+##### generalStatus?
+
+> `readonly` `optional` **generalStatus?**: `string`
+
+The General Status Section narrative (`2.16.840.1.113883.10.20.2.5`, LOINC
+`10210-3`). A SHALL section for a History and Physical (CONF:1198-30586),
+emitted as an empty `nullFlavor="NI"` section when omitted. Carried, and
+emitted only when supplied, by a Progress Note and a Consultation Note.
+Refused with a `TypeError` for the other three types.
+
+##### historyOfPresentIllness?
+
+> `readonly` `optional` **historyOfPresentIllness?**: `string`
+
+The History of Present Illness Section narrative
+(`1.3.6.1.4.1.19376.1.5.3.1.3.4`, LOINC `10164-2`). A SHALL section for a
+Consultation Note (CONF:1198-28907), emitted as an empty `nullFlavor="NI"`
+section when omitted. Carried, and emitted only when supplied, by a Progress
+Note and a History and Physical. Refused with a `TypeError` for the other
+three types rather than dropped.
+
 ##### hospitalCourse?
 
 > `readonly` `optional` **hospitalCourse?**: `string`
@@ -1784,10 +1827,10 @@ The document language; defaults to `"en-US"`.
 > `readonly` `optional` **medications?**: readonly [`BuildCcdaMedication`](#buildccdamedication)[]
 
 Medication Activities for the Medications section; an empty section when
-omitted for a CCD or a Referral Note, whose SHALL sets include it. A
-Discharge Summary's does not, so for that type the section is emitted only
-when this is non-empty, and always as the Medications Section, never as the
-Discharge Medications Section.
+omitted for a CCD, a Referral Note or a History and Physical, whose SHALL
+sets include it. For the other types the section is emitted only when this
+is non-empty, and for a Discharge Summary always as the Medications Section,
+never as the Discharge Medications Section.
 
 ##### mentalStatus?
 
@@ -1820,7 +1863,9 @@ non-empty.
 > `readonly` `optional` **pastMedicalHistory?**: readonly [`BuildCcdaProblem`](#buildccdaproblem)[]
 
 Historical problems for the Past Medical History section; the section is
-emitted only when non-empty (a CCD MAY section). Each is a bare Problem
+emitted only when non-empty (a CCD MAY section), except for a History and
+Physical, whose SHALL set includes it (CONF:1198-30588) and which emits an
+empty `nullFlavor="NI"` section when this is omitted. Each is a bare Problem
 Observation (not a concern act), read back via `getPastMedicalHistory`, never
 conflated with the active Problems returned by `getProblems`.
 
@@ -1829,6 +1874,16 @@ conflated with the active Problems returned by `getProblems`.
 > `readonly` **patient**: [`BuildCcdaPatient`](#buildccdapatient)
 
 The single record-target patient (required).
+
+##### physicalExam?
+
+> `readonly` `optional` **physicalExam?**: `string`
+
+The Physical Exam Section (V3) narrative (`2.16.840.1.113883.10.20.2.10`,
+LOINC `29545-1`). A SHALL section for a History and Physical
+(CONF:1198-30598), emitted as an empty `nullFlavor="NI"` section when
+omitted. Carried, and emitted only when supplied, by a Progress Note and a
+Consultation Note. Refused with a `TypeError` for the other three types.
 
 ##### planOfTreatment?
 
@@ -1844,9 +1899,8 @@ with the performed Procedures/Encounters.
 > `readonly` `optional` **problems?**: readonly [`BuildCcdaProblem`](#buildccdaproblem)[]
 
 Problem Concerns for the Problems section; an empty section when omitted
-for a CCD or a Referral Note, whose SHALL sets include it. A Discharge
-Summary's does not, so for that type the section is emitted only when this
-is non-empty.
+for a CCD, a Referral Note or a Consultation Note, whose SHALL sets include
+it. For the other types the section is emitted only when this is non-empty.
 
 ##### procedures?
 
@@ -1858,27 +1912,40 @@ Procedures; the Procedures section is emitted only when non-empty (a CCD SHOULD 
 
 > `readonly` `optional` **reasonForReferral?**: `string`
 
-The Reason for Referral Section narrative (`documentType: "referralNote"`
-only, a Referral Note SHALL section). Narrative-only free text; when omitted
-the SHALL section is emitted as an empty `nullFlavor="NI"` section (never a
-fabricated reason). Ignored for a CCD; refused with a `TypeError` for a
-Discharge Summary, which carries no Reason for Referral Section.
+The Reason for Referral Section narrative, a SHALL section for a Referral
+Note (CONF:1198-30925) and, through its reason choice (-9504), for a
+Consultation Note. Narrative-only free text; when omitted the SHALL section
+is emitted as an empty `nullFlavor="NI"` section (never a fabricated reason).
+Ignored for a CCD; refused with a `TypeError` for a Discharge Summary, a
+Progress Note and a History and Physical, which carry no Reason for Referral
+Section here.
 
 ##### results?
 
 > `readonly` `optional` **results?**: readonly [`BuildCcdaResultPanel`](#buildccdaresultpanel)[]
 
 Result panels for the Results section; an empty section when omitted for a
-CCD, whose SHALL set includes it. For a Referral Note or a Discharge Summary
-the section is emitted only when this is non-empty.
+CCD or a History and Physical, whose SHALL sets include it. For the other
+types the section is emitted only when this is non-empty.
+
+##### reviewOfSystems?
+
+> `readonly` `optional` **reviewOfSystems?**: `string`
+
+The Review of Systems Section narrative (`1.3.6.1.4.1.19376.1.5.3.1.3.18`,
+LOINC `10187-3`). A SHALL section for a History and Physical
+(CONF:1198-30608), emitted as an empty `nullFlavor="NI"` section when
+omitted. Carried, and emitted only when supplied, by a Progress Note and a
+Consultation Note. Refused with a `TypeError` for the other three types.
 
 ##### smokingStatus?
 
 > `readonly` `optional` **smokingStatus?**: readonly [`BuildCcdaSmokingStatus`](#buildccdasmokingstatus)[]
 
 Smoking Status observations for the Social History section. Social History is
-a **CCD SHALL** section (CONF:1198-30688), so for a CCD the section is always
-emitted, as a `nullFlavor="NI"` shell when this is empty. For document types
+a **CCD SHALL** section (CONF:1198-30688), and a History and Physical SHALL
+section (-30610), so for those two the section is always emitted, as a
+`nullFlavor="NI"` shell when this is empty. For document types
 whose SHALL set excludes it, the section is emitted only when non-empty.
 
 ##### title?
@@ -1892,8 +1959,8 @@ The document title; defaults to the document type's own title ("Summarization of
 > `readonly` `optional` **vitalSigns?**: readonly [`BuildCcdaVitalsPanel`](#buildccdavitalspanel)[]
 
 Vital Signs panels for the Vital Signs section; an empty section when omitted
-for a CCD, whose SHALL set includes it. For a Referral Note or a Discharge
-Summary the section is emitted only when this is non-empty.
+for a CCD or a History and Physical, whose SHALL sets include it. For the
+other types the section is emitted only when this is non-empty.
 
 ***
 
@@ -4983,6 +5050,38 @@ both or neither.
 
 ***
 
+### ParseXmlOptions
+
+Options for [parseXml](#parsexml). Every field is optional; `parseXml(text)` applies the library's
+default limits ([DEFAULT\_LIMITS](#default_limits)).
+
+#### Example
+
+```ts
+import { parseXml, type ParseXmlOptions } from "@cosyte/ccda";
+const options: ParseXmlOptions = { limits: { maxInputBytes: 1_000_000, maxDepth: 64 } };
+const doc = parseXml("<pathway/>", options);
+console.log(doc.documentElement?.localName); // "pathway"
+```
+
+#### Properties
+
+##### limits?
+
+> `readonly` `optional` **limits?**: [`CcdaParseLimits`](#ccdaparselimits)
+
+Override one or more of the safety caps: input size, element depth, element count and custom
+entity references. An omitted cap keeps its default ([DEFAULT\_LIMITS](#default_limits)).
+
+##### onWarning?
+
+> `readonly` `optional` **onWarning?**: [`OnWarningCallback`](#onwarningcallback)
+
+Called for each warning the reader raises. The only one it raises is `ENCODING_BOM_STRIPPED`,
+when the text starts with a byte order mark, which is removed before the text is read.
+
+***
+
 ### PlannedItem
 
 A single planned item from the Plan of Treatment. `kind` is the template
@@ -6611,17 +6710,17 @@ const vs: BoundValueSet = "2.16.840.1.113762.1.4.1010.4";
 
 ### BuildableDocumentType
 
-> **BuildableDocumentType** = `Extract`\<[`DocumentType`](#documenttype-4), `"ccd"` \| `"referralNote"` \| `"dischargeSummary"`\>
+> **BuildableDocumentType** = `Extract`\<[`DocumentType`](#documenttype-4), `"ccd"` \| `"referralNote"` \| `"dischargeSummary"` \| `"progressNote"` \| `"historyAndPhysical"` \| `"consultationNote"`\>
 
-The document types [buildCcda](#buildccda) can emit, three of the twelve
+The document types [buildCcda](#buildccda) can emit, six of the twelve US Realm
 [DocumentType](#documenttype-4)s `parseCcda` recognizes.
 
 **Declared as a subset of the recognized enumeration rather than as its own
 union of strings.** `Extract` fails to compile if any member stops being a
 recognized document type, so the builder's surface cannot drift from the
 parser's: renaming a key in `DOCUMENT_TYPES` is already a breaking change and
-this makes it a compile error here too. The other nine are refused at run
-time by [buildCcda](#buildccda), and the refusal is derived from
+this makes it a compile error here too. The other seven recognized types are
+refused at run time by [buildCcda](#buildccda), and the refusal is derived from
 DOC\_TYPE\_SPECS rather than from a second list, so a thirteenth
 recognized type is refused the moment it is recognized.
 
@@ -7219,9 +7318,10 @@ a judgement call; the third is a decision, and says so:
   asserting it would newly report `REQUIRED_SECTION_MISSING` on documents this
   parser reads without that warning today (and, under `strict: true`, refuse
   them). Making the parser stricter is its own change with its own blast
-  radius, so it is not taken as a side effect of recognizing a section. One
-  section carries this reason today: the Discharge Summary's Hospital Course
-  Section.
+  radius, so it is not taken as a side effect of recognizing a section. Four
+  sections carry this reason today: the Discharge Summary's Hospital Course
+  Section and the History and Physical's General Status, Physical Exam and
+  Review of Systems Sections.
 
 #### Example
 
@@ -7737,7 +7837,7 @@ console.log(V3_NS); // "urn:hl7-org:v3"
 
 ### VERSION
 
-> `const` **VERSION**: `string` = `"0.1.11"`
+> `const` **VERSION**: `string` = `"0.1.12"`
 
 Library version string, synced with `package.json#version` at build time.
 
@@ -8082,8 +8182,10 @@ const root = attr(el, "root"); // string | undefined
 
 Build a spec-clean C-CDA R2.1 document from structured input and return the
 parsed [CcdaDocument](#ccdadocument). Emits a **CCD** by default, a **Referral Note**
-when `documentType: "referralNote"`, or a **Discharge Summary** when
-`documentType: "dischargeSummary"`, each with its own US Realm Header
+when `documentType: "referralNote"`, a **Discharge Summary** when
+`documentType: "dischargeSummary"`, or a **Progress Note**, **History and
+Physical** or **Consultation Note** for `"progressNote"`,
+`"historyAndPhysical"` or `"consultationNote"`, each with its own US Realm Header
 specialization (document `templateId` + LOINC `code`) and SHALL section set.
 The emitted document round-trips through [parseCcda](#parseccda) by construction (see
 the module doc); a clean build carries zero warnings.
@@ -8119,12 +8221,14 @@ The parsed document, the parse of the spec-clean XML just emitted,
 #### Throws
 
 When `documentType` is anything other than a
-  [BuildableDocumentType](#buildabledocumenttype) (the three types this builder supports; only an
+  [BuildableDocumentType](#buildabledocumenttype) (the six types this builder supports; only an
   omitted, `undefined` one defaults to a CCD, and `null` or a non-string is
   refused), when a type-specific input is supplied to a type that does not
-  carry it (`hospitalCourse`, `dischargeDiagnoses` or `encompassingEncounter`
-  on anything but a Discharge Summary; `assessment` or `reasonForReferral` on a
-  Discharge Summary), when an allergy
+  carry it (`hospitalCourse` or `dischargeDiagnoses` on anything but a
+  Discharge Summary; `encompassingEncounter` on a CCD or a Referral Note;
+  `assessment` on a Discharge Summary; `reasonForReferral` on a Discharge
+  Summary, a Progress Note or a History and Physical; an office-visit
+  narrative on a CCD, a Referral Note or a Discharge Summary), when an allergy
   is neither an `allergen` nor `noKnownAllergy`, when a result does not carry
   exactly one value form (`quantity` / `codedValue` / `stringValue`), when a
   `"observation"`-variant procedure omits its SHALL `value`, when a
@@ -10209,6 +10313,98 @@ parseV3DateTime("not-a-date");                      // undefined
 
 ***
 
+### parseXml()
+
+> **parseXml**(`text`, `options?`): `Document`
+
+Read an XML text into an `@xmldom/xmldom` Document, refusing what makes XML unsafe to
+read. This is the reader `parseCcda` uses, for any XML format.
+
+It throws a [CcdaParseError](#ccdaparseerror), and never returns a partly read document, when the text:
+
+- declares a DTD or an entity anywhere (`<!DOCTYPE`, `<!ENTITY`, in any case):
+  `XXE_OR_DTD_PRESENT`. No external entity is ever fetched, and no entity is ever expanded;
+- holds more custom entity references (`&name;` other than the five XML predefines) than
+  `limits.maxEntityExpansions`: `ENTITY_EXPANSION_LIMIT`;
+- is larger than `limits.maxInputBytes` in UTF-8: `INPUT_SIZE_LIMIT_EXCEEDED`;
+- nests elements deeper than `limits.maxDepth`: `ELEMENT_DEPTH_LIMIT_EXCEEDED`;
+- holds more elements than `limits.maxNodeCount`: `NODE_COUNT_LIMIT_EXCEEDED`;
+- is not well-formed, holds no root element, holds anything before or after the root element
+  but white space (space, tab, carriage return, line feed), comments and processing
+  instructions (text, a reference, a stray `<`, a CDATA section, a second element), holds a
+  start tag XML 1.0 makes not well-formed (an unquoted value, an attribute with no value, a
+  quote that does not open or close a value, two attributes with no white space between them,
+  one attribute named twice, a `<` in a value), holds an `&` that starts no reference (`&`,
+  `&;`, `& name;`, `&#;`, in text or in a value), holds `]]>` in text, or holds a character XML
+  1.0 forbids, written raw or as a character reference: `NOT_WELL_FORMED_XML`;
+- breaks Namespaces in XML 1.0: two attributes of one element with one namespace and local name
+  (`p:x` and `q:x`, with `p` and `q` bound to one namespace), a prefix bound to no namespace
+  (`xmlns:p=""`), a declaration of the prefix `xmlns`, the prefix `xml` bound to another
+  namespace, the xml namespace bound to another prefix or as the default, the xmlns namespace
+  bound to any prefix, a prefix used but not declared, a name with more than one colon or an
+  empty prefix or local name, or a colon in a processing instruction's target:
+  `NOT_WELL_FORMED_XML`.
+
+Anything else `@xmldom/xmldom` reports while it reads, even as a warning, is refused the same
+way, but for U+FFFD and an undeclared entity reference, below. And before it returns, it checks
+that the tree holds, on each element, as many attributes and child nodes as the text does, so
+nothing the DOM library drops is lost without a word.
+
+No message or position names anything the text said. A leading byte order mark is removed and
+reported as `ENCODING_BOM_STRIPPED` through `options.onWarning`. Unlike `parseCcda`, it does not
+check the root element or report namespaces, so a text in any XML format is read. U+FFFD
+REPLACEMENT CHARACTER, which XML allows, is read.
+
+One form that is not well-formed is read: an entity reference with no declaration (`&name;`,
+which XML 1.0's constraint Entity Declared forbids in a text with no DTD), when its name is ASCII
+letters, digits and `_` and does not start with a digit. It is read as `parseCcda` reads it: kept
+as the text `&name;`, never expanded, and counted toward `limits.maxEntityExpansions`. One with
+any other character in its name (`&café;`, `&a-b;`) is refused as `NOT_WELL_FORMED_XML`.
+
+A limit of `NaN` is refused with a `TypeError` before the text is read, since it would turn its
+cap off; `Infinity` lifts a cap, as it does for `parseCcda`.
+
+#### Parameters
+
+##### text
+
+`string`
+
+The XML text.
+
+##### options?
+
+[`ParseXmlOptions`](#parsexmloptions) = `{}`
+
+Limits and a warning callback; see [ParseXmlOptions](#parsexmloptions).
+
+#### Returns
+
+`Document`
+
+The document, with line and column positions on its elements.
+
+#### Throws
+
+[CcdaParseError](#ccdaparseerror) For each refusal above.
+
+When a limit in `options.limits` is `NaN`.
+
+#### Example
+
+```ts
+import { parseXml, CcdaParseError, FATAL_CODES } from "@cosyte/ccda";
+const doc = parseXml('<pathway id="example-1"><step order="1"/></pathway>');
+console.log(doc.documentElement?.getAttribute("id")); // "example-1"
+try {
+  parseXml('<!DOCTYPE p [<!ENTITY x SYSTEM "file:///etc/passwd">]><p>&x;</p>');
+} catch (err) {
+  console.log(err instanceof CcdaParseError && err.code === FATAL_CODES.XXE_OR_DTD_PRESENT); // true
+}
+```
+
+***
+
 ### pickMrn()
 
 > **pickMrn**(`identifiers`): `string` \| `undefined`
@@ -10783,6 +10979,98 @@ If `doc` was hand-constructed (neither produced by
 import { parseCcda, serializeCcda } from "@cosyte/ccda";
 const doc = parseCcda(xml);
 const xmlOut = serializeCcda(doc); // spec-clean, declaration-prefixed
+```
+
+***
+
+### serializeXml()
+
+> **serializeXml**(`node`): `string`
+
+Write an `@xmldom/xmldom` document or element as XML text that [parseXml](#parsexml) reads back to the
+same tree. A document is written with an XML declaration (`<?xml version="1.0"
+encoding="UTF-8"?>`) and a line feed first when it carries none; an element is written alone,
+with a declaration for each namespace its names need.
+
+It holds that promise by construction. It writes the tree with a writer of its own, which copies
+every attribute value, namespace and text through one escaping path and declares every namespace
+itself. Then, before it returns, it reads its own text back with the reader `parseXml` uses (its
+limits lifted) and compares that tree with the input: element and attribute names, namespaces,
+attribute values in order, the namespace declarations the input carries, text, CDATA sections,
+comments and processing instructions, in order. A refusal or any difference throws a
+`TypeError` naming the kind of node, never its content. Adjacent text nodes compare as one text
+and an empty text node or CDATA section as none, as a parse reads them; outside the root element,
+white space is not compared (the XML Infoset holds no text there), nor is the declaration
+the writer adds.
+
+The read-back costs a parse of the output and a walk of both trees on every call, which is most
+of what `serializeXml` costs: bench/ccda.bench.mjs measures it beside `parseXml` and beside
+xmldom's own `XMLSerializer`, which checks nothing.
+
+It refuses, with a `TypeError`, a tree it cannot write as text that reads back the same:
+
+- a character XML 1.0 forbids anywhere: in text, an attribute value, a comment, a CDATA section,
+  a processing instruction or a namespace (the message names the code point, never the text);
+- a DOCTYPE, which `parseXml` refuses, and `<!DOCTYPE` or `<!ENTITY` (in any case) in a comment,
+  a CDATA section or a processing instruction, which `parseXml` refuses wherever it sits;
+- a carriage return, NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR in a comment, a CDATA section or
+  a processing instruction, which a parse reads as a line feed and which cannot be written as a
+  reference there;
+- a processing instruction whose data starts with a space, tab or line feed, which a parse
+  drops;
+- text other than white space, or a CDATA section, directly under the document, which
+  `parseXml` refuses;
+- an XML declaration (an instruction with the target `xml` first in the document) whose data is
+  not a version, then an optional encoding and an optional standalone, in that order;
+- a prefixed element or attribute name with no namespace, which no declaration binds (an
+  `xmlns:` or `xml:` attribute is written as it is);
+- one prefix bound to two namespaces on one element (by the element's name, its attributes'
+  names or a declaration it carries), or declared twice on it;
+- an element with the prefix `xmlns`, an attribute in a namespace with no prefix, and a
+  declaration Namespaces in XML 1.0 forbids (the prefix `xmlns`, the xml or xmlns namespace
+  under another prefix, or a prefix bound to no namespace);
+- a name that is not an XML name, a comment holding `--` or ending in `-`, a CDATA section
+  holding `]]>`, a processing instruction holding `?>` or with the target `xml` anywhere but
+  first, or a document with no root element;
+- anything else whose text the read-back refuses or reads as another tree.
+
+No message names anything the tree holds. In text, a carriage return is written as `&#13;`,
+NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR as `&#x85;`, `&#x2028;` and `&#x2029;`, and `<`, `>`
+and `&` as references; in an attribute value or a namespace, `<`, `>`, `&`, `"`, tab, line feed,
+carriage return and those three are written as references. So a parse keeps each of them.
+
+The writer does not apply the reader's limits: a tree deeper or larger than a reader's limits,
+or a comment, CDATA section or processing instruction holding more `&name;` strings than its
+`maxEntityExpansions` (the reader counts them wherever they sit), is written, and that reader
+refuses it.
+
+#### Parameters
+
+##### node
+
+`Document` \| `Element`
+
+A document or an element, from [parseXml](#parsexml) or built with the DOM API.
+
+#### Returns
+
+`string`
+
+The XML text.
+
+#### Throws
+
+For each refusal above.
+
+#### Example
+
+```ts
+import { parseXml, serializeXml } from "@cosyte/ccda";
+const doc = parseXml('<pathway id="example-1"><step order="1"/></pathway>');
+doc.documentElement?.setAttribute("status", "active");
+console.log(serializeXml(doc));
+// <?xml version="1.0" encoding="UTF-8"?>
+// <pathway id="example-1" status="active"><step order="1"/></pathway>
 ```
 
 ***

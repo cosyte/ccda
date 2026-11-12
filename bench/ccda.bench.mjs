@@ -27,6 +27,7 @@
 // is edited on a DOM instead; bench/profile.mjs shows which way each edit here went.
 
 import { defineBenchmark, defineSuite } from "@cosyte/bench";
+import { XMLSerializer } from "@xmldom/xmldom";
 
 import {
   KIB,
@@ -154,6 +155,75 @@ for (const shape of SHAPES) {
       bind: (ccda) => {
         const doc = documentOf(ccda, new WeakMap());
         return (x) => ccda.editCcda(doc(x), x.edit).toString();
+      },
+      weigh: (text) => text.length,
+    }),
+  );
+}
+
+// The XML reader and writer for any format, `parseXml` and `serializeXml`, on the same documents
+// read as plain XML. `serializeXml` writes the tree, then reads its own text back with the reader
+// `parseXml` uses and compares the two trees before it returns, so its time holds a parse. xmldom's
+// own `XMLSerializer` on the same tree, which checks nothing and reads nothing back, is the floor
+// it is measured against. Reading only: the base of a pull request that adds them has neither.
+const XML_SIZES = [
+  { name: "Referral Note", label: "23 KiB", inputs: 64, build: (i) => referralNote(i) },
+  { name: "CCD", label: "100 entries, 0.2 MiB", inputs: 4, build: (i) => ccd(i, 100) },
+];
+
+/** The sizes of one shape for the XML benchmarks: each input a text, built in code. */
+function xmlSizes(shape) {
+  return [
+    {
+      label: shape.label,
+      compare: false,
+      build: () => {
+        const inputs = Array.from({ length: shape.inputs }, (_v, i) => ({ text: shape.build(i) }));
+        return { inputs, bytes: inputs.reduce((n, x) => n + Buffer.byteLength(x.text), 0) };
+      },
+    },
+  ];
+}
+
+/** The tree of an input, read once with `parseXml` and kept, so a write benchmark times the write. */
+function treeOf(ccda, trees) {
+  return (x) => {
+    let doc = trees.get(x);
+    if (doc === undefined) {
+      doc = ccda.parseXml(x.text);
+      trees.set(x, doc);
+    }
+    return doc;
+  };
+}
+
+for (const shape of XML_SIZES) {
+  benchmarks.push(
+    defineBenchmark({
+      // The hardened read of any XML: the same gate and limits as parseCcda's, no C-CDA model.
+      name: `parseXml: ${shape.name}`,
+      sizes: xmlSizes(shape),
+      bind: (ccda) => (x) => ccda.parseXml(x.text),
+      weigh: (doc) => doc.childNodes.length,
+    }),
+    defineBenchmark({
+      // The checked write: the writer, then the read-back and the tree comparison.
+      name: `serializeXml: ${shape.name}`,
+      sizes: xmlSizes(shape),
+      bind: (ccda) => {
+        const tree = treeOf(ccda, new WeakMap());
+        return (x) => ccda.serializeXml(tree(x));
+      },
+      weigh: (text) => text.length,
+    }),
+    defineBenchmark({
+      // xmldom's serializer on the same tree: no check and no read-back, the floor.
+      name: `xmldom XMLSerializer, unchecked: ${shape.name}`,
+      sizes: xmlSizes(shape),
+      bind: (ccda) => {
+        const tree = treeOf(ccda, new WeakMap());
+        const serializer = new XMLSerializer();
+        return (x) => serializer.serializeToString(tree(x));
       },
       weigh: (text) => text.length,
     }),

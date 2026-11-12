@@ -42,6 +42,10 @@ export type {
 export { parseSecureXml, resolveLimits, DEFAULT_LIMITS } from "./parser/secure-xml.js";
 export type { ResolvedLimits } from "./parser/secure-xml.js";
 
+// The same reader and its writer for any XML, not only C-CDA, with the limits as options.
+export { parseXml, serializeXml } from "./xml/index.js";
+export type { ParseXmlOptions } from "./xml/index.js";
+
 // Tier-2 warning registry + Tier-3 fatal registry (stable public contract).
 export {
   WARNING_CODES,
