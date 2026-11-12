@@ -19,6 +19,9 @@ the keys **plus** the provenance of each one, plus two independent state axes.
   `not-applicable`. How much of that type's obligation was read off the normative artifact.
 - **`evaluation`** is a claim about the _lookup_: `evaluated` or `not-evaluated`. Whether the version
   stamp you supplied put the document inside the tables at all.
+- **`release`** names the C-CDA release the keys were read against: `"R2.1"` for a document stamped
+  `2015-08-01` or carrying no stamp, `"5.0.0"` for one stamped `2024-05-01` (pass
+  `{ stamp: "r30-stamped" }`), and `undefined` when nothing was evaluated.
 
 That split is the point. An empty `keys` set is never ambiguous, because the two states together say
 **which** emptiness it is: nothing required, nothing asserted, or nothing asked.
@@ -31,6 +34,7 @@ import { requiredSectionKeys, missingRequiredSections, requiredSectionStatus } f
 const ccd = requiredSectionStatus("ccd");
 ccd.verification; // => "traced-complete"
 ccd.evaluation; // => "evaluated"
+ccd.release; // => "R2.1"
 ccd.keys; // => ["allergies", "medications", "problems", "results", "socialHistory", "vitalSigns"]
 ccd.traced[0]?.conformanceId; // => "CONF:1198-30662"
 ccd.source?.revision; // => "2025-09-08"
@@ -47,11 +51,19 @@ const unstructured = requiredSectionStatus("unstructuredDocument");
 unstructured.verification; // => "not-applicable"
 unstructured.keys; // => []
 
+// A document stamped 2024-05-01 (C-CDA 3.0.0 to 5.0.0) is read against the
+// C-CDA 5.0.0 document profiles. A 5.0.0 Discharge Summary also requires
+// Procedures and Results.
+const r5 = requiredSectionStatus("dischargeSummary", { stamp: "r30-stamped" });
+r5.release; // => "5.0.0"
+r5.keys; // => ["allergies", "hospitalDischargeDiagnosis", "planOfTreatment", "procedures", "results"]
+
 // EMPTY BECAUSE NOTHING WAS ASKED: the document names a C-CDA release this
 // package has not read. Reducing the obligation instead would be a confident
 // wrong statement about conformance.
 const future = requiredSectionStatus("ccd", { stamp: "unmodeled-release" });
 future.evaluation; // => "not-evaluated"
+future.release; // => undefined
 future.keys; // => []
 ```
 

@@ -116,7 +116,8 @@ parse, a non-`ClinicalDocument` root) always throws.
 
 ## What it extracts today
 
-- **Document type**: all 12 US Realm document types resolved from the root `templateId`.
+- **Document type**: all 12 US Realm document types resolved from the root `templateId`, and the
+  Patient Generated Document header for a document that carries no other.
 - **US Realm header**: document identity and the `recordTarget` patient (demographics + identifiers),
   via `getPatient()` / `getMrn()`.
 - **Sections**: framed by `templateId` with a LOINC-code fallback, with nested subsections, narrative

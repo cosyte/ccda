@@ -49,7 +49,8 @@ instead of resolving it in your favor.
   slot-checked. A clean run means those five slots passed, **not** that the document was
   terminology-verified.
 - **Required-section (SHALL) validation under-warns, and every type says by how much**: CCD and Care
-  Plan report `traced-complete`; the other nine structured types report `traced-partial`, naming the
+  Plan report `traced-complete`, as does the Patient Generated Document header, which requires no
+  section; the other nine structured types report `traced-partial`, naming the
   SHALL sections they do not assert and why; Unstructured Document reports `not-applicable` because it
   carries no section; no type reports `untraced`. Progress Note, Procedure Note, Operative Note, and
   Diagnostic Imaging Report assert nothing, because every SHALL section their template names is either
@@ -117,7 +118,8 @@ instead of resolving it in your favor.
 ## Reading a document
 
 - **All twelve document types are recognized; fourteen entry families are decoded.** `parseCcda`
-  resolves every C-CDA R2.1 US Realm document type from the root `templateId`. Problems,
+  resolves every C-CDA R2.1 US Realm document type from the root `templateId`, and reads a document
+  that carries only the Patient Generated Document header as `patientGeneratedDocument`. Problems,
   Medications, Allergies, Results, Vital Signs, Immunizations, Procedures, Encounters,
   Social-History smoking status, Plan of Treatment, Functional Status, Mental Status, Family
   History, and Past Medical History decode to structured entries. Every other section is framed and
@@ -432,7 +434,8 @@ instead of resolving it in your favor.
   `verification` state, so an empty set is never ambiguous:
   - **`traced-complete`** for CCD and Care Plan: every SHALL section the source names for those two
     is in this parser's catalog and is asserted, so `status.unasserted` is empty because there is
-    nothing left over.
+    nothing left over. The Patient Generated Document header reports it too: its source names no
+    section at all.
   - **`traced-partial`** for the other nine structured types. Their SHALL sections were read off the
     normative C-CDA R2.1 source, and one or more of them cannot be asserted. Consultation Note
     asserts History of Present Illness (CONF:1198-28907), Allergies (-28911), and Problems (-28929),
@@ -463,8 +466,8 @@ instead of resolving it in your favor.
     DOCUMENT_TYPES,
   } from "@cosyte/ccda";
 
-  DOCUMENT_TYPES.length; // => 12
-  requiredSectionStatuses().length; // => 12
+  DOCUMENT_TYPES.length; // => 13
+  requiredSectionStatuses().length; // => 13
   requiredSectionStatuses().filter((s) => s.verification === "untraced").length; // => 0
 
   const consult = requiredSectionStatus("consultationNote");

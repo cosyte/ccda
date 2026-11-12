@@ -12,7 +12,7 @@ has reviewed this software or this result, and a green run is not a statement ab
 CDA R2 XML schema and then the error-severity phase of the C-CDA R2.1 Schematron, and it measures
 whether parsing and re-serializing a public sample changes that sample's Schematron error set. It
 does not measure value-set membership beyond what the Schematron's own vocabulary file asserts, it
-does not measure the 9 document types `buildCcda` does not emit, and it says nothing about
+does not measure the 10 document types `buildCcda` does not emit, and it says nothing about
 documents this library has not been pointed at.
 
 ## Measured against

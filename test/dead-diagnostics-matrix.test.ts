@@ -117,7 +117,8 @@ const ROWS: readonly { readonly name: string; readonly xml: string }[] = [
   // root are the ones a profile `match` can be keyed on, and the matrix is where
   // that set is measured rather than asserted from memory. Both are on the QUIET
   // document type, so the only other diagnostic either draws is the
-  // non-evaluation the stamp itself causes.
+  // non-evaluation the stamp itself causes. The `2024-05-01` stamp draws none: a
+  // Progress Note is evaluated against C-CDA 5.0.0, which requires no section of it.
   { name: "post-R2.1 version stamp", xml: doc({ ext: "2024-05-01" }) },
   { name: "unrecognized version stamp", xml: doc({ ext: "1999-12-31" }) },
   { name: "version stamp not shaped like one", xml: doc({ ext: "Doe^Jane^1980" }) },
@@ -186,7 +187,7 @@ describe("dead-diagnostics behaviour matrix", () => {
     expect(table.join("\n")).toMatchInlineSnapshot(`
       "clean CCD                            | no throw                 | silent
       no R2.1 version stamp                | TEMPLATE_EXTENSION_ABSENT | TEMPLATE_EXTENSION_ABSENT@tid=2.16.840.1.113883.10.20.22.1.9
-      post-R2.1 version stamp              | TEMPLATE_EXTENSION_UNMODELED_RELEASE | TEMPLATE_EXTENSION_UNMODELED_RELEASE@tid=2.16.840.1.113883.10.20.22.1.9, REQUIRED_SECTIONS_NOT_EVALUATED
+      post-R2.1 version stamp              | TEMPLATE_EXTENSION_UNMODELED_RELEASE | TEMPLATE_EXTENSION_UNMODELED_RELEASE@tid=2.16.840.1.113883.10.20.22.1.9
       unrecognized version stamp           | TEMPLATE_EXTENSION_UNMODELED_RELEASE | TEMPLATE_EXTENSION_UNMODELED_RELEASE@tid=2.16.840.1.113883.10.20.22.1.9, REQUIRED_SECTIONS_NOT_EVALUATED
       version stamp not shaped like one    | TEMPLATE_EXTENSION_UNMODELED_RELEASE | TEMPLATE_EXTENSION_UNMODELED_RELEASE@tid=2.16.840.1.113883.10.20.22.1.9, REQUIRED_SECTIONS_NOT_EVALUATED
       unknown document template            | UNKNOWN_DOCUMENT_TEMPLATE | UNKNOWN_DOCUMENT_TEMPLATE
