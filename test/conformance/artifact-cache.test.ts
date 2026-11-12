@@ -26,7 +26,7 @@ import { CONFORMANCE_CODES, ConformanceError } from "../../scripts/conformance/e
 import { cachePathFor, fetchArtifact, fetchCorpus } from "../../scripts/conformance/fetch.js";
 import { runConformance } from "../../scripts/conformance/run.js";
 import { buildCcda, serializeCcda } from "../../src/index.js";
-import { ON_WINDOWS } from "../_helpers/runtime.js";
+import { ON_DENO, ON_WINDOWS } from "../_helpers/runtime.js";
 import {
   SELF_TEST_URLS,
   fullyServingFetcher,
@@ -57,11 +57,12 @@ function plantCacheEntry(url: string, bytes: Uint8Array): void {
 }
 
 /**
- * Not on Windows: the conformance run is a Linux job of its own (`conformance` in ci.yml), and these
- * tests of its cache write and read a gzipped tar archive per case, which ran past Vitest's default
- * 5 s budget on a Windows runner. They run on Linux and macOS.
+ * Not on Windows or under Deno: the conformance run is a job of its own on Linux and Node.js
+ * (`conformance` in ci.yml), and these tests of its cache run the whole conformance pipeline over a
+ * gzipped tar archive per case, which ran past Vitest's default 5 s budget on a Windows runner and
+ * under Deno. They run on Node.js on Linux and macOS, and under Bun.
  */
-const describe = suite.skipIf(ON_WINDOWS);
+const describe = suite.skipIf(ON_WINDOWS || ON_DENO);
 
 describe("a warm cache needs no network", () => {
   it("asks the network for nothing on a second run over the same working directory", async () => {

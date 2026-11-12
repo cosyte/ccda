@@ -34,7 +34,12 @@ nothing flags it. So most of what follows checks values, not only that the parse
 
 - **Unit tests, properties, fuzzing and doc samples** run in one Vitest suite on every pull request,
   on `main` and nightly, on Node.js 22, 24 and 26, each on Linux, Windows and macOS. The same suite
-  also runs under Bun and under Deno on every pull request.
+  also runs under Bun and under Deno on every pull request. A few tests skip where they cannot run,
+  each with its reason beside the skip: on Windows, the tests of our own PHI scanner, the doc
+  samples, one compile check of the builder's types and the conformance cache; under Bun, the
+  checks of V8's heap and the samples of one doc page; under Deno, the checks of V8's heap, a probe
+  started with Node's own flags and the conformance cache. Each of them runs on Node.js on Linux
+  and macOS.
 - **The properties** run through the shared runners of `@cosyte/test-utils`. The three properties
   every Cosyte parser proves (round trip, idempotent normalize, and never throws in lenient mode)
   run on the generators we publish at `@cosyte/ccda/arbitraries`, beside the immutability property
