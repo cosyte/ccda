@@ -70,17 +70,18 @@ function declare(
   attributes: ArrayLike<BuiltAttribute>,
   bindings: Map<string, string | undefined>,
 ): Restore {
-  const restore: [string, string | undefined][] = [];
-  for (const attribute of Array.from(attributes)) {
-    if (attribute.prefix === "xmlns") {
-      refuseForbiddenDeclaration(attribute.localName, attribute.value);
-      restore.push([attribute.localName, bindings.get(attribute.localName)]);
-      bindings.set(attribute.localName, attribute.value);
-    } else if (attribute.name === "xmlns") {
-      refuseForbiddenDeclaration("", attribute.value);
-    }
+  const all = Array.from(attributes);
+  for (const attribute of all) {
+    if (attribute.name === "xmlns") refuseForbiddenDeclaration("", attribute.value);
   }
-  return restore;
+  return all
+    .filter((attribute) => attribute.prefix === "xmlns")
+    .map((attribute) => {
+      refuseForbiddenDeclaration(attribute.localName, attribute.value);
+      const previous = bindings.get(attribute.localName);
+      bindings.set(attribute.localName, attribute.value);
+      return [attribute.localName, previous] as const;
+    });
 }
 
 /**

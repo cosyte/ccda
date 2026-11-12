@@ -217,6 +217,10 @@ describe("what the scan counts inside the root", () => {
       '<a p:x="1"><b p:x="1" q:x="2" y="3" xmlns:x="u" xml:x="4" r:y="5"/></a>',
     );
     expect([...tree.sharedLocalNames]).toEqual([[1, ["p:x", "q:x", "r:y"]]]);
+    // Prefixes of two lengths: the local name is what follows the colon, wherever it sits.
+    expect([...refuseOutsideRootText('<a ab:x="1" b:x="2"/>').sharedLocalNames]).toEqual([
+      [0, ["ab:x", "b:x"]],
+    ]);
     for (const text of [
       '<a p:x="1" x="2"/>',
       '<a xmlns:x="u" p:x="1"/>',
