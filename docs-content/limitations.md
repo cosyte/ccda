@@ -31,6 +31,8 @@ no warning.
 - An Unstructured Document's `nonXMLBody` payload is exposed but never decoded.
 - An element holding one attribute name twice under two prefixes of one namespace is refused with `NOT_WELL_FORMED_XML`, never read with one of the two.
 - Line endings follow XML 1.0: only CR LF and a lone CR become a line feed. NEL, U+2028 and U+2029 are kept in text and attribute values, and refused with `NOT_WELL_FORMED_XML` inside a tag or outside the root.
+- Every other character outside ASCII that XML 1.0 allows neither as white space nor in a name (a no-break space, U+0080, the Unicode spaces, the private use characters) is refused the same way inside a tag or outside the root, and kept in text and attribute values.
+- An ASCII character that is neither white space nor a name character inside a tag (`<a b="1";c="2"/>`) is still read as the DOM library under the parser reads it: the tag becomes plain text, with no warning.
 - The scope is C-CDA R2.1, US Realm: no transport and no validator suite.
 
 ## Document types

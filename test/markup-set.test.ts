@@ -8,6 +8,7 @@
  * every block of 8,192 are checked this way, and the parse is checked to agree.
  */
 
+import type { Element } from "@xmldom/xmldom";
 import { describe, expect, it } from "vitest";
 import { validateXML } from "xmllint-wasm";
 
@@ -134,6 +135,10 @@ describe.each(
 
   it.each([
     ["in text", `<a>x${ch}y</a>`],
+    [
+      "in text, beside a tag whose names hold name characters outside ASCII",
+      `<a\u00b7\u00c0 b\u0300="1">${ch}</a\u00b7\u00c0>`,
+    ],
     ["in a double-quoted attribute", `<a b="${ch}" c="x${ch}'"/>`],
     ["in a single-quoted attribute", `<a b='${ch}"' c='x'/>`],
     ["in a comment", `<!--${ch}--><a><!--x${ch}--></a>`],
@@ -141,5 +146,24 @@ describe.each(
     ["in instruction data", `<?p ${ch}?><a/>`],
   ])("allows it %s", (_label, source) => {
     expect(misplacedCharacter(source)).toBe(false);
+  });
+});
+
+describe("the gate's case-insensitive scan", () => {
+  // With the `i` flag, MICRO SIGN (U+00B5) in the gate's class also matches the Greek letters that
+  // fold to it. A text holding one runs the walk, which finds nothing, and reads as it did.
+  it.each([
+    ["GREEK SMALL LETTER MU (U+03BC)", "\u03bc"],
+    ["GREEK CAPITAL LETTER MU (U+039C)", "\u039c"],
+  ])("reads %s in a name as the name character it is", (_name, ch) => {
+    const doc = parseSecureXml(
+      `<r><a${ch} b${ch}="1">${ch}</a${ch}></r>`,
+      resolveLimits(),
+      () => {},
+    );
+    const element = doc.documentElement?.firstChild as Element | null;
+    expect(element?.nodeName).toBe(`a${ch}`);
+    expect(element?.getAttribute(`b${ch}`)).toBe("1");
+    expect(element?.textContent).toBe(ch);
   });
 });
