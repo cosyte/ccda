@@ -2,7 +2,7 @@
 id: performance
 title: Performance
 sidebar_label: Performance
-description: "What we measure on @cosyte/ccda and how: the benchmark suite and scaling gate, the limits that bound what a document can cost, and the guards against slow hostile input."
+description: "What we measure on @cosyte/ccda and how: the benchmarks, the scaling gate, the limits on what a document can cost, and the guards against slow hostile input."
 ---
 
 # Performance

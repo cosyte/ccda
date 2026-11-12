@@ -2,7 +2,7 @@
 id: build-a-document
 title: Build a document
 sidebar_label: Build a document
-description: "Build a spec-clean C-CDA R2.1 CCD, Referral Note, Discharge Summary, Progress Note, History and Physical or Consultation Note from structured data, with no hand-written XML."
+description: "Build a spec-clean C-CDA R2.1 document of any of six types, a CCD or a Discharge Summary among them, from structured data, with no hand-written XML."
 ---
 
 # Build a document
@@ -463,4 +463,4 @@ rule your own review owns.
 ## Related
 
 - [Edit a document](./edit-a-document.md), to change a section of a document you already have.
-- [Known limitations](./limitations.md#building-a-document) lists every boundary of the builder.
+- [The boundaries of building](./boundaries.md#building-a-document) explains every boundary of the builder.

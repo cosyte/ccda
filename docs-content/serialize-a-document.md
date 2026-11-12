@@ -43,7 +43,7 @@ serializeCcda(parseCcda(out)) === out; // => true
 > `serializeCcda` re-emits a **parsed** document. To construct one from scratch, use `buildCcda`
 > ([Build a document](./build-a-document.md)); to change a section of a document you already parsed,
 > use `editCcda` ([Edit a document](./edit-a-document.md)). For exactly which document types and
-> sections each one covers, see [Known limitations](./limitations.md#building-a-document).
+> sections each one covers, see [the boundaries of building](./boundaries.md#building-a-document).
 
 ## What the output keeps
 

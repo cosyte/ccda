@@ -139,4 +139,4 @@ relationships are not implemented: an edit stamps `RPLC` only.
 ## Related
 
 - [Build a document](./build-a-document.md), which uses the same section emitters.
-- [Known limitations](./limitations.md#editing-a-document) lists every boundary of the editor.
+- [The boundaries of editing](./boundaries.md#editing-a-document) explains every boundary of the editor.
