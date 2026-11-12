@@ -193,6 +193,13 @@ function writtenDocuments(): OutputDocument[] {
     ["nel", "\u0085"],
     ["ls", "\u2028"],
     ["ps", "\u2029"],
+    // The other characters outside ASCII that XML 1.0 allows in a document but neither as white
+    // space nor in a name: one of each kind, kept in the same places.
+    ["c1", "\u0080"],
+    ["nbsp", "\u00a0"],
+    ["em-space", "\u2003"],
+    ["private-use", "\ue000"],
+    ["plane-15", "\u{f0000}"],
   ] as const) {
     add(
       `${name}-between-elements`,
@@ -210,11 +217,14 @@ function writtenDocuments(): OutputDocument[] {
         .replace('extension="DOC123"', `extension="x${ch}y"`),
     );
   }
+  // NEL at a title's ends: the model's trimming keeps it, where it removes U+2028 and U+2029.
+  add("nel-around-title", titled("\u0085 Synthetic \u0085"));
   add("mixed-endings", titled("a\r\nb\rc\u0085d\u2028e\u2029f"));
   add(
     "line-endings-in-attribute",
     base.replace('extension="DOC123"', 'extension="a\r\nb\tc\u2028d"'),
   );
+  add("nbsp-after-root", `${base}\u00a0`);
   add("bom", `\uFEFF${base}`);
   add("bom-only", "\uFEFF");
   add("empty", "");
@@ -277,6 +287,12 @@ function writtenDocuments(): OutputDocument[] {
     ["nel-in-tag", "<a\u0085b='1'/>"],
     ["c1-in-tag", "<a\u0080b='1'/>"],
     ["nbsp-in-tag", "<a\u00a0b='1'/>"],
+    ["nbsp-in-end-tag", "<a></a\u00a0>"],
+    ["nbsp-after-element", "<a/>\u00a0"],
+    ["em-space-in-tag", "<a\u2003b='1'/>"],
+    ["private-use-in-tag", "<a\ue000/>"],
+    ["plane-15-in-tag", "<a\u{f0000}/>"],
+    ["nbsp-in-attribute-value", "<a b='\u00a0'/>"],
     ["control-in-tag", "<a\u0001b='1'/>"],
     ["no-space-between-attributes", `<a b="1"c="2"/>`],
     ["unquoted-attribute", "<a b=1/>"],

@@ -26,7 +26,11 @@ import {
   resolveLimits,
   type CcdaDocumentInit,
 } from "../src/index.js";
-import { breakInMarkup, parseSecureDom, parseSecureEditable } from "../src/parser/secure-xml.js";
+import {
+  misplacedCharacter,
+  parseSecureDom,
+  parseSecureEditable,
+} from "../src/parser/secure-xml.js";
 
 /** The three characters XML 1.1 reads as line breaks and XML 1.0 does not. */
 const KEPT: readonly (readonly [string, string])[] = [
@@ -269,7 +273,7 @@ describe.each(KEPT)("the markup walk, for %s", (_name, ch) => {
     ["in an unclosed tag", `<a>${ch}<b c="1"`],
     ["in an unclosed attribute value", `<a>${ch}<b c="1>`],
   ])("finds it %s", (_label, source) => {
-    expect(breakInMarkup(source)).toBe(true);
+    expect(misplacedCharacter(source)).toBe(true);
   });
 
   it.each([
@@ -299,7 +303,7 @@ describe.each(KEPT)("the markup walk, for %s", (_name, ch) => {
     ["in text after a tag whose last character before its > is a <", `<a><b<>${ch}</b<></a>`],
     ["nowhere, in a text without markup", "x"],
   ])("allows it %s", (_label, source) => {
-    expect(breakInMarkup(source)).toBe(false);
+    expect(misplacedCharacter(source)).toBe(false);
   });
 });
 

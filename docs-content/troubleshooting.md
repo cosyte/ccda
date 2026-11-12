@@ -61,6 +61,13 @@ white space between the parts of a tag, in an end tag, or before or after the ro
 well formed under XML 1.0, so `parseCcda` and `parseSecureXml` throw `NOT_WELL_FORMED_XML` for it.
 Replace such a character with a line feed in those places before you parse.
 
+The same holds for every other character outside ASCII that XML 1.0 allows in a document but
+neither as white space nor in a name, such as U+0080, a no-break space (U+00A0), an em space
+(U+2003) or a private use character. A tag that holds one outside its attribute values, or a text
+that holds one before or after the root element, now throws `NOT_WELL_FORMED_XML`; before this
+release U+0080 was read as a space and a tag holding the others was read as plain text. Replace
+such a character with a space inside a tag, or remove it outside the root, before you parse.
+
 ## Common symptoms
 
 | Symptom                                         | Likely cause                                                                        | What to do                                                                                                                                                                                             |

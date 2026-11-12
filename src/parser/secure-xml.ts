@@ -38,7 +38,7 @@ import type { Document, Element } from "@xmldom/xmldom";
 import { positionOf } from "../model/dom.js";
 import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES } from "./errors.js";
 import { isRecognizedNamespace } from "./namespaces.js";
-import { isXmlChar } from "./xml-chars.js";
+import { hasMarkupExcluded, isMarkupExcluded, isXmlChar } from "./xml-chars.js";
 import type { CcdaParseLimits } from "./types.js";
 import { encodingBomStripped, unknownNamespacePrefix, type CcdaWarning } from "./warnings.js";
 import { domOfTree } from "./tree-dom.js";
@@ -82,7 +82,7 @@ const BYTE_ORDER_MARK = 0xfeff;
 const PREDEFINED_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
 
 /**
- * The one scan of the input text before the DOM is built. Each match is one of three things, told
+ * The one scan of the input text before the DOM is built. Each match is one of these, told
  * apart by its first character:
  *
  * - `<`: a declared DTD or entity (`<!DOCTYPE`, `<!ENTITY`), the XXE / external-entity attack
@@ -90,11 +90,15 @@ const PREDEFINED_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
  * - `&`: an entity reference `&name;` (predefined ones are told apart after the match), or, when
  *   `#` follows the `&`, a character reference `&#...;`, whose code point is checked;
  * - a carriage return: the one character XML 1.0's end-of-line handling rewrites (section 2.11);
- * - NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR: a line break in XML 1.1 and an ordinary character
- *   in XML 1.0, kept as it is, but allowed only where character data is ({@link breakInMarkup});
- * - anything else: a character XML 1.0 forbids (`./xml-chars.ts`): a C0 control other than tab,
- *   line feed and carriage return, an unpaired surrogate (the `u` flag reads a pair as one
- *   character, so only an unpaired one matches the surrogate range), U+FFFE or U+FFFF.
+ * - a character XML 1.0 forbids (`./xml-chars.ts`): a C0 control other than tab, line feed and
+ *   carriage return, an unpaired surrogate (the `u` flag reads a pair as one character, so only an
+ *   unpaired one matches the surrogate range), U+FFFE or U+FFFF;
+ * - anything else: a character outside ASCII that XML 1.0 allows in a document but neither as
+ *   white space nor in a name (`hasMarkupExcluded` in `./xml-chars.ts`, read from the XML 1.0
+ *   productions), such as U+0080, NEL or a no-break space: kept as it is, but allowed only where
+ *   character data is ({@link misplacedCharacter}). With the `i` flag the class also matches the
+ *   two Greek letters that fold to MICRO SIGN (U+00B5), U+039C and U+03BC; for a text holding one
+ *   of those the walk runs, finds nothing, and the text reads as it did.
  *
  * The DTD alternatives and the entity half of the `&` alternative are the two patterns this module
  * ran as separate passes before (`/<!DOCTYPE|<!ENTITY/iu`, then `/&[a-z_][\w.-]*;/giu` over the
@@ -103,25 +107,32 @@ const PREDEFINED_ENTITIES = new Set(["amp", "lt", "gt", "quot", "apos"]);
  * (`&#`) cannot overlap one either, so the references found are the same ones in the same order.
  * One global scan of a string with few matches is several times cheaper than the two passes. The
  * last alternative, one character class, lets the parse skip the end-of-line rewrite when there is
- * nothing for it to rewrite, and finds in the same scan a character no XML parser may accept,
- * which `@xmldom/xmldom` and the compact reader would otherwise read into the document without a
- * word; so does the character reference half of the `&` alternative.
+ * nothing for it to rewrite, finds in the same scan a character no XML parser may accept, which
+ * `@xmldom/xmldom` and the compact reader would otherwise read into the document without a word
+ * (so does the character reference half of the `&` alternative), and finds the characters the
+ * markup walk looks for, so a text without one pays for no walk.
+ *
+ * The last class holds the class of `hasMarkupExcluded` (`./xml-chars.ts`), and
+ * `test/markup-set.test.ts` checks the two against every code point. The pattern is written in a
+ * function, not as a module constant, so a test that runs the gate is traced to it; each call
+ * returns a new pattern object, so no scan starts where another stopped.
  *
  * @internal
  */
-const GATE_RE =
-  /<!DOCTYPE|<!ENTITY|&(?:[a-z_][\w.-]*|#x?[0-9a-f]+);|[\0-\x08\x0B-\x1F\u0085\u2028\u2029\uD800-\uDFFF\uFFFE\uFFFF]/giu;
+export function gatePattern(): RegExp {
+  return /<!DOCTYPE|<!ENTITY|&(?:[a-z_][\w.-]*|#x?[0-9a-f]+);|[\0-\x08\x0B-\x1F\uD800-\uDFFF\uFFFE\uFFFF\u0080-\u00B6\u00B8-\u00BF\u00D7\u00F7\u037E\u2000-\u200B\u200E-\u203E\u2041-\u206F\u2190-\u2BFF\u2FF0-\u3000\uE000-\uF8FF\uFDD0-\uFDEF\u{F0000}-\u{10FFFF}]/giu;
+}
 
-/** `<`, the first character of a {@link GATE_RE} match on a DTD or entity declaration. @internal */
+/** `<`, the first character of a {@link gatePattern} match on a DTD or entity declaration. @internal */
 const LESS_THAN = 0x3c;
 
-/** `&`, the first character of a {@link GATE_RE} match on an entity reference. @internal */
+/** `&`, the first character of a {@link gatePattern} match on an entity reference. @internal */
 const AMPERSAND = 0x26;
 
-/** `#`, the second character of a {@link GATE_RE} match on a character reference. @internal */
+/** `#`, the second character of a {@link gatePattern} match on a character reference. @internal */
 const HASH = 0x23;
 
-/** `x`, the third character of a {@link GATE_RE} match on a hexadecimal character reference. @internal */
+/** `x`, the third character of a {@link gatePattern} match on a hexadecimal character reference. @internal */
 const LOWER_X = 0x78;
 
 /** `X`: `&#X...;` is not a character reference in XML, so the gate leaves it to the parser. @internal */
@@ -130,14 +141,8 @@ const UPPER_X = 0x58;
 /** A carriage return, the one character end-of-line handling rewrites. @internal */
 const CARRIAGE_RETURN = 0x0d;
 
-/** NEL: a line break in XML 1.1, an ordinary character in XML 1.0. @internal */
-const NEXT_LINE = 0x85;
-
-/** LINE SEPARATOR: a line break in XML 1.1, an ordinary character in XML 1.0. @internal */
-const LINE_SEPARATOR = 0x2028;
-
-/** PARAGRAPH SEPARATOR: a line break in XML 1.1, an ordinary character in XML 1.0. @internal */
-const PARAGRAPH_SEPARATOR = 0x2029;
+/** The first code point outside ASCII. @internal */
+const FIRST_NON_ASCII = 0x80;
 
 /**
  * Merge caller-supplied limit overrides over {@link DEFAULT_LIMITS}. Honors
@@ -383,7 +388,7 @@ export function rebuildDom(
 }
 
 /**
- * The gate, in one scan of the text ({@link GATE_RE}): throw `XXE_OR_DTD_PRESENT` for a declared
+ * The gate, in one scan of the text ({@link gatePattern}): throw `XXE_OR_DTD_PRESENT` for a declared
  * DTD or entity anywhere, else `ENTITY_EXPANSION_LIMIT` when the custom entity references exceed
  * the cap, else `NOT_WELL_FORMED_XML` when the text holds a character XML 1.0 forbids, written
  * raw or as a character reference; return whether the text holds a carriage return, the one
@@ -398,8 +403,9 @@ export function rebuildDom(
  * character reference is refused only where XML expands it, in text content and attribute values:
  * inside a comment, a CDATA section or a processing instruction `&#1;` is plain text, not a
  * reference (XML 1.0 productions [15], [16] and [20], and section 4.4), and the document is
- * well-formed ({@link anyExpanded}). NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR are refused with
- * the same fatal only where XML 1.0 allows no character data ({@link breakInMarkup}).
+ * well-formed ({@link anyExpanded}). A character outside ASCII that XML 1.0 allows in a document
+ * but neither as white space nor in a name is refused with the same fatal only where XML 1.0 allows
+ * no character data ({@link misplacedCharacter}).
  *
  * A declared DTD outranks the entity cap wherever it sits, as it did when the two were separate
  * passes with the DTD check first: a count over the cap does not throw until the scan has
@@ -413,18 +419,17 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
   let count = 0;
   let over = false;
   let lineBreaks = false;
-  let xml11Breaks = false;
+  let markupExcluded = false;
   let forbidden = false;
   // Where each character reference naming a forbidden code point starts, in text order: one in a
   // comment, a CDATA section or a processing instruction is not a reference, so whether it makes the
   // text ill-formed is decided after the scan, and only when there is one.
   let forbiddenReferences: number[] | undefined;
-  GATE_RE.lastIndex = 0;
-  for (let match = GATE_RE.exec(source); match !== null; match = GATE_RE.exec(source)) {
+  const gate = gatePattern();
+  for (let match = gate.exec(source); match !== null; match = gate.exec(source)) {
     const token = match[0];
     const first = token.charCodeAt(0);
     if (first === LESS_THAN) {
-      GATE_RE.lastIndex = 0;
       throw new CcdaParseError(
         FATAL_CODES.XXE_OR_DTD_PRESENT,
         FATAL_MESSAGES.XXE_OR_DTD_PRESENT,
@@ -434,8 +439,9 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
     if (first !== AMPERSAND) {
       if (first === CARRIAGE_RETURN) {
         lineBreaks = true;
-      } else if (isXml11Break(first)) {
-        xml11Breaks = true;
+      } else if (isXmlChar(token.codePointAt(0) as number)) {
+        // A character XML 1.0 allows: one the markup walk looks for (or a letter that folds to one).
+        markupExcluded = true;
       } else {
         forbidden = true;
       }
@@ -460,7 +466,7 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
   if (
     forbidden ||
     (forbiddenReferences !== undefined && anyExpanded(source, forbiddenReferences)) ||
-    (xml11Breaks && breakInMarkup(source))
+    (markupExcluded && misplacedCharacter(source))
   ) {
     throw new CcdaParseError(
       FATAL_CODES.NOT_WELL_FORMED_XML,
@@ -471,24 +477,10 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
   return lineBreaks;
 }
 
-/** Whether a UTF-16 code unit is NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR. @internal */
-function isXml11Break(code: number): boolean {
-  return code === NEXT_LINE || code === LINE_SEPARATOR || code === PARAGRAPH_SEPARATOR;
-}
-
-/**
- * Whether a string holds NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR anywhere. The pattern is
- * written in the function, not as a module constant, so a test that calls it is traced to it.
- *
- * @internal
- */
-function hasXml11Break(text: string): boolean {
-  return /[\u0085\u2028\u2029]/u.test(text);
-}
-
 /**
  * Where the first XML 1.0 white space (production [3]: space, tab, line feed, carriage return)
- * sits in a string, or -1. The pattern is written here for the reason {@link hasXml11Break} gives.
+ * sits in a string, or -1. The pattern is written in the function, not as a module constant, so a
+ * test that calls it is traced to it.
  *
  * @internal
  */
@@ -497,16 +489,17 @@ function firstXmlSpace(text: string): number {
 }
 
 /**
- * Whether NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR sits where XML 1.0 allows no such character:
- * in a tag outside its attribute values, in an end tag, in a processing instruction's target or an
- * XML declaration, or outside the root element. Run only when the gate found one of the three, so
- * a text without one pays nothing.
+ * Whether a character outside ASCII that XML 1.0 allows in a document but neither as white space
+ * nor in a name (`hasMarkupExcluded` in `./xml-chars.ts`) sits where XML 1.0 allows only
+ * those: in a tag outside its attribute values, in an end tag, in a processing instruction's target
+ * or an XML declaration, or outside the root element. Run only when the gate found such a
+ * character, so a text without one pays nothing.
  *
- * XML 1.0 reads each of them as an ordinary character, never as white space (production [3]) and
- * never in a name, so a text holding one between the parts of a tag is not well-formed, and
- * libxml2 refuses it. `@xmldom/xmldom` instead reads such a tag as text, `<` and all, without a
- * word: an element and its attributes would become narrative text. It is refused here, with the
- * same fatal as any other text that is not XML. Character data, attribute values, comments, CDATA
+ * Such a character between the parts of a tag makes the text not well-formed, and libxml2 refuses
+ * it. `@xmldom/xmldom` reads U+0080 there as white space, and reads a tag holding any other of them
+ * (a no-break space, NEL, LINE SEPARATOR) as text, `<` and all, without a word: an element and its
+ * attributes would gain a wrong split or become narrative text. It is refused here, with the same
+ * fatal as any other text that is not XML. Character data, attribute values, comments, CDATA
  * sections and the data of a processing instruction may hold them, and keep them.
  *
  * One walk from the start of the text, `<` by `<`, never revisiting a character, as
@@ -516,15 +509,18 @@ function firstXmlSpace(text: string): number {
  * well-formed either way. Any other `<!` construct is read as a tag; the gate has refused a
  * declared DTD already, and none other is well-formed.
  *
+ * In a tag each character outside ASCII is looked up by its code point, so a character above
+ * U+FFFF is found at its first code unit; its second, a lone surrogate on its own, is never found.
+ *
  * @internal
  */
-export function breakInMarkup(source: string): boolean {
+export function misplacedCharacter(source: string): boolean {
   let depth = 0;
   let at = 0;
   for (;;) {
     const lt = source.indexOf("<", at);
     const textEnd = lt === -1 ? source.length : lt;
-    if (depth === 0 && hasXml11Break(source.slice(at, textEnd))) return true;
+    if (depth === 0 && hasMarkupExcluded(source.slice(at, textEnd))) return true;
     if (lt === -1) return false;
     if (source.startsWith("<?", lt)) {
       const end = source.indexOf("?>", lt + 2);
@@ -533,7 +529,7 @@ export function breakInMarkup(source: string): boolean {
       const instruction = source.slice(lt + 2, end);
       const space = firstXmlSpace(instruction);
       const target = space === -1 ? instruction : instruction.slice(0, space);
-      if (hasXml11Break(target === "xml" ? instruction : target)) return true;
+      if (hasMarkupExcluded(target === "xml" ? instruction : target)) return true;
       at = end + 2;
       continue;
     }
@@ -549,14 +545,14 @@ export function breakInMarkup(source: string): boolean {
     let end = lt + 1;
     for (; end < source.length; end++) {
       const code = source.charCodeAt(end);
-      if (quote !== 0) {
+      if (code >= FIRST_NON_ASCII) {
+        if (quote === 0 && isMarkupExcluded(source.codePointAt(end) as number)) return true;
+      } else if (quote !== 0) {
         if (code === quote) quote = 0;
       } else if (code === 0x22 || code === 0x27) {
         quote = code;
       } else if (code === 0x3e) {
         break;
-      } else if (isXml11Break(code)) {
-        return true;
       }
     }
     if (end === source.length) return true;
@@ -567,7 +563,7 @@ export function breakInMarkup(source: string): boolean {
 }
 
 /**
- * Whether a character reference `&#...;` or `&#x...;` (as {@link GATE_RE} matched it) names a code
+ * Whether a character reference `&#...;` or `&#x...;` (as {@link gatePattern} matched it) names a code
  * point XML 1.0 forbids. `&#X...;` (an upper-case X) and decimal digits mixed with letters are
  * not character references at all; the gate leaves those to the parser, as before.
  *
