@@ -296,6 +296,23 @@ const ENCOMPASSING_ENCOUNTER: NonNullable<BuildCcdaInit["encompassingEncounter"]
   dischargeDisposition: { code: "01", displayName: "Discharged to Home or Self Care" },
 };
 
+/** The report-key stem of each office-visit document type. */
+const OFFICE_CASE_NAMES = {
+  progressNote: "progress-note",
+  historyAndPhysical: "history-and-physical",
+  consultationNote: "consultation-note",
+} as const;
+
+/** Every office-visit narrative, as an invented clinician would write it. */
+const OFFICE_NARRATIVES = {
+  assessment: "Blood pressure above goal. Continue current therapy.",
+  historyOfPresentIllness: "Two weeks of morning headaches, no visual change.",
+  chiefComplaintAndReasonForVisit: "Headaches. Follow-up of blood pressure.",
+  reviewOfSystems: "Negative except as noted in the history.",
+  physicalExam: "Alert, no distress. Heart regular. Lungs clear.",
+  generalStatus: "Well appearing adult in no acute distress.",
+} as const;
+
 /** The fixed document time every case carries. See {@link BUILT_DOCUMENT_CASES}. */
 const WHEN = "20240102030405+0000";
 
@@ -382,6 +399,38 @@ export const BUILT_DOCUMENT_CASES: readonly BuiltDocumentCase[] = [
       encompassingEncounter: ENCOMPASSING_ENCOUNTER,
     },
   },
+  // The three office-visit types, each at both ends of its input range. The minimal ones are
+  // what measure that every SHALL narrative the caller did not write still satisfies its
+  // section's rule as an empty `nullFlavor="NI"` section, and that the header slots each type
+  // requires (the encounter frame, a Progress Note's facility, a Consultation Note's order) are
+  // conformant with nothing supplied. The populated ones carry every optional narrative too.
+  ...(["progressNote", "historyAndPhysical", "consultationNote"] as const).flatMap(
+    (documentType): BuiltDocumentCase[] => {
+      const name = OFFICE_CASE_NAMES[documentType];
+      return [
+        {
+          name: `${name}-minimal`,
+          documentType,
+          init: { patient: PATIENT, documentType, effectiveTime: WHEN },
+        },
+        {
+          name: `${name}-populated`,
+          documentType,
+          init: {
+            ...POPULATED,
+            documentType,
+            effectiveTime: WHEN,
+            planOfTreatment: PLAN_OF_TREATMENT,
+            ...OFFICE_NARRATIVES,
+            ...(documentType === "consultationNote"
+              ? { reasonForReferral: "Referred for evaluation of blood pressure control." }
+              : {}),
+            encompassingEncounter: { period: { low: "20240102", high: "20240102" } },
+          },
+        },
+      ];
+    },
+  ),
   sectionCase("ccd-past-medical-history", { pastMedicalHistory: PAST_MEDICAL_HISTORY }),
   sectionCase("ccd-plan-of-treatment", { planOfTreatment: PLAN_OF_TREATMENT }),
   sectionCase("ccd-family-history", { familyHistory: FAMILY_HISTORY }),

@@ -221,7 +221,14 @@ describe("documentInit and document", () => {
   it("every input builds, at every document type, with the same bytes each time", () => {
     const inits = draw(documentInit(), 30);
     expect(new Set(inits.map((i) => i.documentType))).toEqual(
-      new Set(["ccd", "referralNote", "dischargeSummary"]),
+      new Set([
+        "ccd",
+        "referralNote",
+        "dischargeSummary",
+        "progressNote",
+        "historyAndPhysical",
+        "consultationNote",
+      ]),
     );
     for (const init of inits) {
       expect(buildCcda(init).toString()).toBe(buildCcda(init).toString());
@@ -240,7 +247,9 @@ describe("documentInit and document", () => {
   it("gives parsed documents of the main entry point's class, recognized as their type", () => {
     for (const doc of draw(document({ maxEntries: 1 }), 30)) {
       expect(doc).toBeInstanceOf(CcdaDocument);
-      expect(doc.documentType).toMatch(/^(?:ccd|referralNote|dischargeSummary)$/u);
+      expect(doc.documentType).toMatch(
+        /^(?:ccd|referralNote|dischargeSummary|progressNote|historyAndPhysical|consultationNote)$/u,
+      );
       expect(doc.getPatient()).toBeDefined();
     }
   });

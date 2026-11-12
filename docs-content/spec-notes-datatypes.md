@@ -301,7 +301,8 @@ serializeCcda(parseCcda(out)) === out; // => true
 
 > A hand-constructed `CcdaDocument` (not produced by `parseCcda` or `buildCcda`) retains no source XML,
 > so `toString()` throws. To construct a document from scratch, use `buildCcda`: it emits a spec-clean
-> CCD, Referral Note, or inpatient Discharge Summary with a US Realm header and the clinical sections
+> CCD, Referral Note, inpatient Discharge Summary, Progress Note, History and Physical, or
+> Consultation Note with a US Realm header and the clinical sections
 > you supply. See [Known limitations](./limitations.md) for exactly what the parser, builder, and
 > editor do and do not do today.
 

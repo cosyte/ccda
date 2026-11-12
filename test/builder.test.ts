@@ -2378,12 +2378,10 @@ describe("buildCcda, defaults, escaping, and input validation", () => {
   });
 
   it("rejects an unsupported document type", () => {
-    // `consultationNote` rather than `dischargeSummary`: the latter is a type the
-    // builder emits now, so asking for it is no longer the unhappy path.
-    // @ts-expect-error, documentType is typed to the three buildable types; exercise the runtime guard.
-    expect(() => buildCcda({ documentType: "consultationNote", patient: { mrn: "M" } })).toThrow(
-      TypeError,
-    );
+    // `carePlan` rather than `consultationNote`: the latter is a type the builder
+    // emits now, so asking for it is no longer the unhappy path.
+    // @ts-expect-error, documentType is typed to the buildable types; exercise the runtime guard.
+    expect(() => buildCcda({ documentType: "carePlan", patient: { mrn: "M" } })).toThrow(TypeError);
   });
 });
 
@@ -3111,12 +3109,10 @@ describe("buildCcda, Referral Note document type", () => {
   });
 
   it("rejects an unsupported document type with a TypeError", () => {
-    // `consultationNote` rather than `dischargeSummary`: the latter is a type the
-    // builder emits now, so asking for it is no longer the unhappy path.
+    // `carePlan` rather than `consultationNote`: the latter is a type the builder
+    // emits now, so asking for it is no longer the unhappy path.
     // @ts-expect-error, exercise the runtime guard for untyped (JS) callers.
-    expect(() => buildCcda({ documentType: "consultationNote", patient: { mrn: "X" } })).toThrow(
-      TypeError,
-    );
+    expect(() => buildCcda({ documentType: "carePlan", patient: { mrn: "X" } })).toThrow(TypeError);
   });
 });
 
@@ -3762,7 +3758,7 @@ describe("S0352-ccda-7: buildCcda emits an inpatient Discharge Summary", () => {
         const ask = (): unknown => buildCcda({ ...extra, documentType, patient: { mrn: "M" } });
         expect(ask, `${field} on ${documentType}`).toThrow(TypeError);
         expect(ask, `${field} on ${documentType}`).toThrow(
-          new RegExp(`\`${field}\` is \\w+ content and documentType "${documentType}"`),
+          new RegExp(`\`${field}\` is not carried by documentType "${documentType}"`),
         );
       }
     });
@@ -3820,11 +3816,11 @@ describe("S0352-ccda-7: buildCcda emits an inpatient Discharge Summary", () => {
       expect(ask).toThrow(/carePlan/);
     });
 
-    it("S0352 AC-9: exactly three of the exported enumeration build, and the other ten throw", () => {
-      // The ten are DERIVED from `DOCUMENT_TYPES`, the package's own exported enumeration,
+    it("S0352 AC-9: exactly six of the exported enumeration build, and the other seven throw", () => {
+      // The seven are DERIVED from `DOCUMENT_TYPES`, the package's own exported enumeration,
       // rather than from a list written into this test: a newly recognized type joins this
       // walk the moment it is recognized, and it has to be classified deliberately. The
-      // thirteenth, the Patient Generated Document header, is refused like the other nine.
+      // thirteenth, the Patient Generated Document header, is refused like the other six.
       expect(DOCUMENT_TYPES).toHaveLength(13);
       const built: string[] = [];
       const refused: string[] = [];
@@ -3843,8 +3839,15 @@ describe("S0352-ccda-7: buildCcda emits an inpatient Discharge Summary", () => {
           refused.push(documentType);
         }
       }
-      expect([...built].sort()).toStrictEqual(["ccd", "dischargeSummary", "referralNote"]);
-      expect(refused).toHaveLength(10);
+      expect([...built].sort()).toStrictEqual([
+        "ccd",
+        "consultationNote",
+        "dischargeSummary",
+        "historyAndPhysical",
+        "progressNote",
+        "referralNote",
+      ]);
+      expect(refused).toHaveLength(7);
       expect([...built, ...refused].sort()).toStrictEqual([...DOCUMENT_TYPES].sort());
     });
 
@@ -4078,9 +4081,12 @@ describe("S0352-ccda-7: buildCcda emits an inpatient Discharge Summary", () => {
   });
 
   describe("S0352 AC-10: the CCD and the Referral Note are byte-identical to the pre-change builder", () => {
-    /** Every conformance case that is not a Discharge Summary, which is what AC-10 freezes. */
+    /**
+     * Every CCD and Referral Note conformance case, which is what AC-10 freezes. The types the
+     * builder learned later are not in the baseline, and a later type joins none of it.
+     */
     const frozen = BUILT_DOCUMENT_CASES.filter(
-      (entry) => entry.documentType !== "dischargeSummary",
+      (entry) => entry.documentType === "ccd" || entry.documentType === "referralNote",
     );
 
     it("S0352 AC-10: every CCD and Referral Note conformance init emits its committed baseline bytes", () => {

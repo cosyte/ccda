@@ -27,8 +27,9 @@ loads it; the main entry point never does, so code that only parses documents do
 
 ## Check that your code handles any document
 
-`document()` generates a parsed `CcdaDocument`: a CCD, a Referral Note or a Discharge Summary that
-`buildCcda` builds from generated input, with problems, allergies, medications, results, vital
+`document()` generates a parsed `CcdaDocument`: a CCD, a Referral Note, a Discharge Summary, a
+Progress Note, a History and Physical or a Consultation Note that `buildCcda` builds from generated
+input, with problems, allergies, medications, results, vital
 signs, immunizations, procedures, encounters, social history, functional and mental status, past
 medical history, plan of treatment and family history. Any list may be empty, any optional field
 may be missing, and the text in it carries the characters XML has to escape, line breaks and

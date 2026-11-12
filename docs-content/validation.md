@@ -68,8 +68,10 @@ data that _is_ present. `requiredSectionKeys(documentType)` and
 
 The table is **conservative**: it asserts only unconditional, in-catalog, high-confidence SHALL
 constraints and deliberately omits choice constraints (`SHALL contain A OR B`), SHOULD/MAY sections,
-SHALL sections outside the recognized catalog (e.g. Physical Exam), and the one SHALL section the
-parser recognizes but does not yet assert (the Discharge Summary's Hospital Course, below). A document
+SHALL sections outside the recognized catalog (e.g. an Operative Note's Anesthesia Section), and
+the four SHALL sections the parser recognizes but does not yet assert (the Discharge Summary's
+Hospital Course and the History and Physical's General Status, Physical Exam and Review of Systems,
+below). A document
 type with an empty table therefore means _"no unconditional in-catalog SHALL section is asserted yet"_,
 not _"this type has no requirements"_. Broadening a table is additive, and it makes the check stricter
 on documents that omit the section, which is why it is never done as a side effect.
@@ -126,8 +128,9 @@ unasserted, with the reason `assertion-would-tighten-parse`, rather than silentl
 A **History and Physical** asserts seven of the ten sections its errors rule names: Allergies
 (-30572), Family History (-30584), Past Medical History (-30588), Medications (-30596), Results
 (-30606), Social History (-30610), and Vital Signs (-30612). General Status (-30586), Physical Exam
-(-30598) and Review of Systems (-30608) are outside the recognized catalog, and its two choices
-(-30613, -30614) assert neither half. A **Transfer Summary** asserts all six of its named SHALL
+(-30598) and Review of Systems (-30608) are recognized by their roots when a document carries them
+(so none draws `UNKNOWN_SECTION_CODE`) but are not asserted, with the reason
+`assertion-would-tighten-parse`, and its two choices (-30613, -30614) assert neither half. A **Transfer Summary** asserts all six of its named SHALL
 sections: Allergies (-28256), Medications (-28278), Problems (-28284), Results (-28288), Vital Signs
 (-28292) and Reason for Referral (-31343); its Assessment/Plan choice (-31582) stays out. A **Care
 Plan** asserts both of its named SHALL sections, Health Concerns (-28756) and Goals (-28762).
@@ -183,7 +186,7 @@ changes nothing does not move the date.
 | Care Plan                 | `traced-complete` | Health Concerns (-28756), Goals (-28762)                                                                                                                                                                      | nothing: both of its SHALL sections are asserted                                                                                                                                                                                                                                             |
 | Discharge Summary         | `traced-partial`  | Allergies (-30520), Discharge Diagnosis (-30524), Plan of Treatment (-30528, scoped to the R2.1 stamp)                                                                                                        | Hospital Course (-30522), recognized but not asserted (`assertion-would-tighten-parse`). Discharge Medications is a SHOULD (-30525) and is therefore not required at all                                                                                                                     |
 | Referral Note             | `traced-partial`  | Allergies (-30912), Medications (-30923), Problems (-29087), Reason for Referral (-30925)                                                                                                                     | the Assessment/Plan choice (-29102)                                                                                                                                                                                                                                                          |
-| History and Physical      | `traced-partial`  | Allergies (-30572), Family History (-30584), Past Medical History (-30588), Medications (-30596), Results (-30606), Social History (-30610), Vital Signs (-30612); all but Allergies scoped to the R2.1 stamp | General Status (-30586), Physical Exam (-30598), Review of Systems (-30608), all outside the recognized catalog; the chief-complaint/reason-for-visit choice (-30613) and the Assessment/Plan choice (-30614)                                                                                |
+| History and Physical      | `traced-partial`  | Allergies (-30572), Family History (-30584), Past Medical History (-30588), Medications (-30596), Results (-30606), Social History (-30610), Vital Signs (-30612); all but Allergies scoped to the R2.1 stamp | General Status (-30586), Physical Exam (-30598), Review of Systems (-30608), all recognized but not asserted (`assertion-would-tighten-parse`); the chief-complaint/reason-for-visit choice (-30613) and the Assessment/Plan choice (-30614)                                                 |
 | Transfer Summary          | `traced-partial`  | Allergies (-28256), Medications (-28278), Problems (-28284), Results (-28288), Vital Signs (-28292), Reason for Referral (-31343); the last three scoped to the R2.1 stamp                                    | the Assessment/Plan choice (-31582)                                                                                                                                                                                                                                                          |
 
 **This check still under-warns, and the state says where.** A `traced-partial` type is not checking

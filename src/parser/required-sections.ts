@@ -27,17 +27,19 @@
  *   Schematron marks them SHOULD, CONF:1198-29090 / -29066, not SHALL. For the
  *   Discharge Summary it is why *Discharge Medications* is absent: that section
  *   is in the document's *warnings* rule, CONF:1198-30525, not its errors rule.)
- * - **SHALL sections outside the recognized catalog** (e.g. Physical Exam), the
- *   parser cannot recognize them, so it does not pretend to validate them. They
- *   are still enumerated, by the source's own name and id.
- * - **One SHALL section the parser recognizes and still does not assert**: the
- *   Discharge Summary's Hospital Course Section, framed by its root (see
- *   `FRAMING_ONLY_SECTIONS` in `./templates.ts`) so that a document carrying it
- *   no longer warns about it. Asserting it would newly report
- *   `REQUIRED_SECTION_MISSING` on a Discharge Summary this parser reads without
- *   that warning today, and under `strict: true` refuse one, so it is enumerated
- *   with its own reason rather than asserted as a side effect of being
- *   recognized.
+ * - **SHALL sections outside the recognized catalog** (e.g. an Operative Note's
+ *   Anesthesia Section), the parser cannot recognize them, so it does not
+ *   pretend to validate them. They are still enumerated, by the source's own
+ *   name and id.
+ * - **Four SHALL sections the parser recognizes and still does not assert**: the
+ *   Discharge Summary's Hospital Course Section and the History and Physical's
+ *   General Status, Physical Exam and Review of Systems Sections, each framed by
+ *   its root (see `FRAMING_ONLY_SECTIONS` in `./templates.ts`) so that a
+ *   document carrying it no longer warns about it. Asserting one would newly
+ *   report `REQUIRED_SECTION_MISSING` on a document this parser reads without
+ *   that warning today, and under `strict: true` refuse it, so each is
+ *   enumerated with its own reason rather than asserted as a side effect of
+ *   being recognized.
  *
  * A document type with an **empty** list is therefore *"no unconditional,
  * in-catalog SHALL section is asserted yet"*, **not** *"this type has no
@@ -68,21 +70,23 @@
  * from a `2024-05-01` CCD through `0.0.15`.
  *
  * **Keep the builder in lockstep.** This table and the builder's
- * `DOC_TYPE_SPECS.*.shallSections` name the same sections for the three document
- * types the builder emits (CCD, Referral Note, Discharge Summary). If they
- * drift, `buildCcda` emits a set the parser will not validate, or vice versa.
+ * `DOC_TYPE_SPECS.*.shallSections` name the same sections for the six document
+ * types the builder emits (CCD, Referral Note, Discharge Summary, Progress Note,
+ * History and Physical, Consultation Note). If they drift, `buildCcda` emits a
+ * set the parser will not validate, or vice versa.
  *
- * **With ONE deliberate asymmetry, on the Discharge Summary.** The builder's
- * SHALL set for that type has four entries and this table asserts three: the
- * builder also emits the **Hospital Course Section**, because the document's
- * normative errors rule requires it (CONF:1198-30522) and `pnpm conformance`
- * fails without it, while this table does not assert it (reason
- * `assertion-would-tighten-parse`, above) and enumerates it in `unasserted`
- * instead. The two are therefore in lockstep on what is VALIDATED and not on
- * what is EMITTED, and the difference is exactly that one section. The parser
- * does recognize it when framing, so a built Discharge Summary reparses with no
- * warning about it; what the reparse cannot do is report it MISSING, which is
- * why `pnpm conformance` stays the check on its presence.
+ * **Lockstep on what is VALIDATED, not on what is EMITTED.** The builder also
+ * emits every SHALL section this table names and does not assert: the
+ * Discharge Summary's **Hospital Course Section** (CONF:1198-30522), the History
+ * and Physical's **General Status**, **Physical Exam** and **Review of Systems**
+ * Sections (-30586, -30598, -30608), and one alternative of every choice a type
+ * names (Assessment plus Plan of Treatment for each Assessment/Plan choice, the
+ * Chief Complaint and Reason for Visit Section for the History and Physical's
+ * -30613, Reason for Referral for the Consultation Note's -9504), because the
+ * normative errors rules require them and `pnpm conformance` fails without
+ * them. The parser frames each of those by its root, so a built document
+ * reparses with no warning about it; what the reparse cannot do is report one
+ * MISSING, which is why `pnpm conformance` stays the check on its presence.
  */
 
 import { DOCUMENT_TYPES, type DocumentType, type TemplateStampReading } from "./templates.js";
@@ -143,9 +147,9 @@ const REQUIRED_SECTIONS: Readonly<Record<DocumentType, readonly string[]>> = {
   // Intolerances (entries optional) (V3) (CONF:1198-30572), Family History (V3)
   // (-30584), Past Medical History (V3) (-30588), Medications (entries optional)
   // (V2) (-30596), Results (entries optional) (V3) (-30606), Social History (V3)
-  // (-30610), Vital Signs (entries optional) (V3) (-30612). Three are outside the
-  // catalog and are enumerated instead: General Status (-30586), Physical Exam
-  // (V3) (-30598), Review of Systems (-30608). The rule's two choices (-30613
+  // (-30610), Vital Signs (entries optional) (V3) (-30612). Three are framed by
+  // root but kept out of the catalog, and are enumerated instead: General Status
+  // (-30586), Physical Exam (V3) (-30598), Review of Systems (-30608). The rule's two choices (-30613
   // chief-complaint/reason-for-visit, -30614 assessment/plan) assert neither
   // half. Only `allergies` was asserted before this trace, so the other six are
   // stamp-scoped (see R21_SCOPED_SECTIONS).
@@ -498,9 +502,10 @@ export interface TracedRequiredSection {
  *   asserting it would newly report `REQUIRED_SECTION_MISSING` on documents this
  *   parser reads without that warning today (and, under `strict: true`, refuse
  *   them). Making the parser stricter is its own change with its own blast
- *   radius, so it is not taken as a side effect of recognizing a section. One
- *   section carries this reason today: the Discharge Summary's Hospital Course
- *   Section.
+ *   radius, so it is not taken as a side effect of recognizing a section. Four
+ *   sections carry this reason today: the Discharge Summary's Hospital Course
+ *   Section and the History and Physical's General Status, Physical Exam and
+ *   Review of Systems Sections.
  *
  * @example
  * ```ts
@@ -863,17 +868,17 @@ const REQUIRED_SECTION_TRACE: Readonly<Record<DocumentType, DocumentTypeTrace>> 
       {
         sourceName: "General Status Section",
         conformanceId: "CONF:1198-30586",
-        reason: "outside-section-catalog",
+        reason: "assertion-would-tighten-parse",
       },
       {
         sourceName: "Physical Exam Section (V3)",
         conformanceId: "CONF:1198-30598",
-        reason: "outside-section-catalog",
+        reason: "assertion-would-tighten-parse",
       },
       {
         sourceName: "Review of Systems Section",
         conformanceId: "CONF:1198-30608",
-        reason: "outside-section-catalog",
+        reason: "assertion-would-tighten-parse",
       },
       {
         sourceName:
@@ -1293,17 +1298,17 @@ const R5_REQUIRED_SECTION_TRACE: Partial<Readonly<Record<DocumentType, DocumentT
       {
         sourceName: "General Status Section",
         conformanceId: "CONF:1198-30586",
-        reason: "outside-section-catalog",
+        reason: "assertion-would-tighten-parse",
       },
       {
         sourceName: "Physical Exam Section",
         conformanceId: "CONF:1198-30598",
-        reason: "outside-section-catalog",
+        reason: "assertion-would-tighten-parse",
       },
       {
         sourceName: "Review of Systems Section",
         conformanceId: "CONF:1198-30608",
-        reason: "outside-section-catalog",
+        reason: "assertion-would-tighten-parse",
       },
       {
         sourceName:

@@ -455,8 +455,9 @@ const assessmentScale: Arbitrary<BuildCcdaAssessmentScale> = fc
 /** Options for {@link documentInit} and {@link document}. */
 export interface DocumentOptions {
   /**
-   * The document types to build. Defaults to all three the builder emits: `"ccd"`,
-   * `"referralNote"` and `"dischargeSummary"`.
+   * The document types to build. Defaults to all six the builder emits: `"ccd"`,
+   * `"referralNote"`, `"dischargeSummary"`, `"progressNote"`, `"historyAndPhysical"` and
+   * `"consultationNote"`.
    */
   readonly documentTypes?: readonly BuildableDocumentType[];
   /** The most entries in each clinical list. Defaults to 2. */
@@ -482,7 +483,14 @@ export interface DocumentOptions {
  * ```
  */
 export function documentInit(options: DocumentOptions = {}): Arbitrary<BuildCcdaInit> {
-  const types = options.documentTypes ?? ["ccd", "referralNote", "dischargeSummary"];
+  const types = options.documentTypes ?? [
+    "ccd",
+    "referralNote",
+    "dischargeSummary",
+    "progressNote",
+    "historyAndPhysical",
+    "consultationNote",
+  ];
   const max = Math.max(0, options.maxEntries ?? 2);
   const common = {
     documentId: token(),
@@ -511,6 +519,18 @@ export function documentInit(options: DocumentOptions = {}): Arbitrary<BuildCcda
     planOfTreatment: maybe(list(plannedItem, max)),
     familyHistory: maybe(list(familyHistory, max)),
   };
+  const narrative = (): Arbitrary<string | undefined> => maybe(text({ maxLength: 60 }));
+  const officeVisit = {
+    assessment: narrative(),
+    historyOfPresentIllness: narrative(),
+    chiefComplaintAndReasonForVisit: narrative(),
+    reviewOfSystems: narrative(),
+    physicalExam: narrative(),
+    generalStatus: narrative(),
+    encompassingEncounter: maybe(
+      fc.record({ period: maybe(period), dischargeDisposition: maybe(code()) }).map(compact),
+    ),
+  };
   const byType: Record<BuildableDocumentType, Arbitrary<BuildCcdaInit>> = {
     ccd: fc.record({ documentType: fc.constant("ccd" as const), ...common }).map(compact),
     referralNote: fc
@@ -530,6 +550,24 @@ export function documentInit(options: DocumentOptions = {}): Arbitrary<BuildCcda
         encompassingEncounter: maybe(
           fc.record({ period: maybe(period), dischargeDisposition: maybe(code()) }).map(compact),
         ),
+      })
+      .map(compact),
+    progressNote: fc
+      .record({ documentType: fc.constant("progressNote" as const), ...common, ...officeVisit })
+      .map(compact),
+    historyAndPhysical: fc
+      .record({
+        documentType: fc.constant("historyAndPhysical" as const),
+        ...common,
+        ...officeVisit,
+      })
+      .map(compact),
+    consultationNote: fc
+      .record({
+        documentType: fc.constant("consultationNote" as const),
+        ...common,
+        ...officeVisit,
+        reasonForReferral: narrative(),
       })
       .map(compact),
   };
@@ -553,8 +591,9 @@ export function builtDocument(init: BuildCcdaInit): CcdaDocument {
 }
 
 /**
- * Generate a spec-clean C-CDA R2.1 document: a CCD, a Referral Note or a Discharge Summary that
- * `buildCcda` builds from {@link documentInit}, with its patient, problems, allergies,
+ * Generate a spec-clean C-CDA R2.1 document: a CCD, a Referral Note, a Discharge Summary, a
+ * Progress Note, a History and Physical or a Consultation Note that `buildCcda` builds from
+ * {@link documentInit}, with its patient, problems, allergies,
  * medications, results, vital signs, immunizations, procedures, encounters, social history,
  * functional and mental status, past medical history, plan of treatment and family history.
  * Every value in it is synthetic and random.

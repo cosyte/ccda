@@ -25,11 +25,12 @@ configured XXE-safe.
 > Functional Status / Mental Status / Family History / Past Medical History), per-document-type
 > required-section (SHALL)
 > validation, and a **round-trip serializer** (`serializeCcda` / `toString()`). A document **builder**
-> (`buildCcda`) emits a spec-clean **CCD**, **Referral Note**, or inpatient **Discharge Summary**, a
+> (`buildCcda`) emits a spec-clean **CCD**, **Referral Note**, inpatient **Discharge Summary**,
+> **Progress Note**, **History and Physical**, or **Consultation Note**, a
 > document **editor** (`editCcda`)
 > re-emits a parsed document with a section added or replaced (every untouched section byte-preserved),
 > and a **bring-your-own terminology adapter** semantically validates coded values against your own
-> licensed service. The builder emits three of the twelve document types; the other nine are not
+> licensed service. The builder emits six of the twelve document types; the other six are not
 > implemented. See [Known limitations](./limitations.md) for exactly what the parser, builder, and
 > editor do and do not do today.
 
@@ -130,8 +131,9 @@ parse, a non-`ClinicalDocument` root) always throws.
   variable-precision v3 datetime parsing and null-flavor handling.
 - **Serialize**: `serializeCcda(doc)` / `doc.toString()` re-emits a **parsed** document as spec-clean
   XML (a fixed point), with no silent loss.
-- **Build**: `buildCcda(init)` constructs a spec-clean **CCD**, **Referral Note**, or inpatient
-  **Discharge Summary** from structured input, round-tripping through the same parse model;
+- **Build**: `buildCcda(init)` constructs a spec-clean **CCD**, **Referral Note**, inpatient
+  **Discharge Summary**, **Progress Note**, **History and Physical**, or **Consultation Note** from
+  structured input, round-tripping through the same parse model;
   `editCcda(doc, …)` re-emits a parsed document with a section added or replaced, byte-preserving
   every untouched section.
 

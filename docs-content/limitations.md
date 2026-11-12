@@ -58,15 +58,19 @@ instead of resolving it in your favor.
   missing a section its type requires and parse clean: read `requiredSectionStatus(documentType)`
   rather than treating a quiet parse as a conformance result.
 - **Editing is whole-section, across twelve kinds**: Functional Status and Mental Status are buildable
-  but **not editable** (each takes three separate content lists), as are the Referral Note's
-  narrative-only Assessment and Reason for Referral sections. There is no entry-level append (a
+  but **not editable** (each takes three separate content lists), as are the narrative-only
+  Assessment and Reason for Referral sections and the five office-visit narratives (History of
+  Present Illness, Chief Complaint and Reason for Visit, Review of Systems, Physical Exam, General
+  Status). There is no entry-level append (a
   `replace` rebuilds the section from your typed input, dropping unmodeled detail in it), no section
   removal, and no `APND` / `XFRM` relationship: an edit stamps `RPLC` only.
 - **Serializer re-emits a parsed document; the builder constructs one**: `serializeCcda` / `toString()`
   faithfully re-emit a _parsed_ document (the spec-clean emit half of Postel's Law). To construct a
   document from scratch, `buildCcda` emits a spec-clean **CCD**, **Referral Note**
-  (`documentType: "referralNote"`) or inpatient **Discharge Summary**
-  (`documentType: "dischargeSummary"`) with the US Realm header. A CCD always carries its six SHALL
+  (`documentType: "referralNote"`), inpatient **Discharge Summary**
+  (`documentType: "dischargeSummary"`), **Progress Note** (`"progressNote"`), **History and
+  Physical** (`"historyAndPhysical"`) or **Consultation Note** (`"consultationNote"`) with the US
+  Realm header. A CCD always carries its six SHALL
   sections (**Problems, Allergies, Medications, Results, Vital Signs, and Social History**), plus
   **Immunizations, Procedures, Encounters, Functional
   Status, Mental Status, Past Medical History, Plan of Treatment, and Family History** emitted only
@@ -82,13 +86,16 @@ instead of resolving it in your favor.
   one type carries is **refused**, never dropped: `hospitalCourse`, `dischargeDiagnoses`, and
   `encompassingEncounter` throw on a CCD or a Referral Note, and `assessment` and `reasonForReferral`
   throw on a Discharge Summary. (A CCD still ignores `assessment` and `reasonForReferral`, as it
-  always has.)
-  To change a section of a document you already parsed, use `editCcda`. The remaining nine document
+  always has.) The three office-visit types are described under
+  [Building a document](#building-a-document) below.
+  To change a section of a document you already parsed, use `editCcda`. The remaining six document
   types are not implemented. "Spec-clean" here means well-formed,
-  correctly-templated, and **round-tripping** through `parseCcda` with zero warnings, for all three
-  types. A Discharge Summary's **Hospital Course** section (CONF:1198-30522) is an IHE PCC template
-  the parser recognizes by its root but does not assert as required, so a reparse will not report it
-  missing: the conformance run in our repository (`pnpm conformance`) is what checks that it is there.
+  correctly-templated, and **round-tripping** through `parseCcda` with zero warnings, for all six
+  types. A Discharge Summary's **Hospital Course** section (CONF:1198-30522) and a History and
+  Physical's **General Status**, **Physical Exam** and **Review of Systems** sections (-30586,
+  -30598, -30608) are recognized by their roots but not asserted as required, so a reparse will not
+  report one missing: the conformance run in our repository (`pnpm conformance`) is what checks that
+  they are there.
   Every entry
   emits the `SHALL`-cardinality `effectiveTime` its C-CDA R2.1 template requires: the Problems/Allergies
   concern acts + observations, the Medication Activity `IVL_TS` duration, and the Results/Vital Signs
@@ -129,13 +136,17 @@ instead of resolving it in your favor.
   warning. A catalog section matched only by its LOINC code also gets its `key`, but raises
   `SECTION_MATCHED_BY_LOINC_FALLBACK`; Reason for Visit and Chief Complaint carry no recognized
   `templateId` at all, so they always take this path. A section the catalog does not recognize
-  (Physical Exam among them) reads back with `key: undefined` and raises `UNKNOWN_SECTION_CODE`, or,
-  if it carries no section `code` to match on, silently. None of the three drops anything: the
-  narrative and the raw structure are preserved, and the document still re-serializes faithfully.
-  The Hospital Course Section is the one exception to the third outcome: a section carrying its
-  root (`1.3.6.1.4.1.19376.1.5.3.1.3.5`) and matching nothing in the catalog gets
-  `key: "hospitalCourse"` and no warning. It is matched by that root only, never by its LOINC code
-  `8648-8`, so a section carrying the code without the root still raises `UNKNOWN_SECTION_CODE`.
+  (a Procedure Note's Complications Section among them) reads back with `key: undefined` and raises
+  `UNKNOWN_SECTION_CODE`, or, if it carries no section `code` to match on, silently. None of the
+  three drops anything: the narrative and the raw structure are preserved, and the document still
+  re-serializes faithfully. Five sections the builder writes are the exception to the third outcome:
+  a section carrying the root of Hospital Course (`1.3.6.1.4.1.19376.1.5.3.1.3.5`), General Status
+  (`2.16.840.1.113883.10.20.2.5`), Physical Exam (`2.16.840.1.113883.10.20.2.10`), Review of Systems
+  (`1.3.6.1.4.1.19376.1.5.3.1.3.18`) or Chief Complaint and Reason for Visit
+  (`2.16.840.1.113883.10.20.22.2.13`), and matching nothing in the catalog, gets its key
+  (`hospitalCourse`, `generalStatus`, `physicalExam`, `reviewOfSystems`,
+  `chiefComplaintAndReasonForVisit`) and no warning. Each is matched by its root only, never by its
+  LOINC code, so a section carrying the code without the root still raises `UNKNOWN_SECTION_CODE`.
 - **An entry another subject governs is withheld, not attributed.** CDA R2 makes `Section.subject` the
   "primary target of the entries recorded in a section" and C-CDA admits the same override on a
   clinical statement, so a document can carry a relative's or a donor's statement inside the patient's
@@ -430,8 +441,9 @@ instead of resolving it in your favor.
   document from that vendor grounds the quirk, never from an invented one.
 - **The required-section (SHALL) table is conservative, and every type reports how far it was
   verified.** It asserts only unconditional, in-catalog, high-confidence SHALL constraints; it omits
-  choice constraints (`SHALL contain A OR B`), SHOULD/MAY sections, and SHALL sections outside the
-  recognized catalog. `requiredSectionStatus(documentType)` returns the asserted keys with a
+  choice constraints (`SHALL contain A OR B`), SHOULD/MAY sections, SHALL sections outside the
+  recognized catalog, and four SHALL sections it recognizes by root but does not assert (Hospital
+  Course, General Status, Physical Exam, Review of Systems, reason `assertion-would-tighten-parse`). `requiredSectionStatus(documentType)` returns the asserted keys with a
   `verification` state, so an empty set is never ambiguous:
   - **`traced-complete`** for CCD and Care Plan: every SHALL section the source names for those two
     is in this parser's catalog and is asserted, so `status.unasserted` is empty because there is
@@ -530,29 +542,52 @@ Product Instance's `scopingEntity`, the organization that issued the device id, 
 
 ## Building a document
 
-- **`buildCcda` emits three of the twelve document types.** A **CCD** (the default), a **Referral
-  Note** (`documentType: "referralNote"`) and an inpatient **Discharge Summary**
-  (`documentType: "dischargeSummary"`). Any other value throws a `TypeError` rather than emitting
-  something that merely resembles the type you asked for. The other nine types are not implemented.
+- **`buildCcda` emits six of the twelve document types.** A **CCD** (the default), a **Referral
+  Note** (`documentType: "referralNote"`), an inpatient **Discharge Summary**
+  (`documentType: "dischargeSummary"`), a **Progress Note** (`"progressNote"`), a **History and
+  Physical** (`"historyAndPhysical"`) and a **Consultation Note** (`"consultationNote"`). Any other
+  value throws a `TypeError` rather than emitting something that merely resembles the type you asked
+  for. The other six types (Procedure Note, Operative Note, Care Plan, Diagnostic Imaging Report,
+  Unstructured Document, Transfer Summary) are not implemented.
   Only an omitted (`undefined`) `documentType` means a CCD: `null`, and any value that is not a
   string, is refused.
-- **A clean Discharge Summary build reparses with zero warnings**, like the other two types. Its
+- **A clean build of any of the six types reparses with zero warnings.** A Discharge Summary's
   SHALL set includes the Hospital Course Section (`1.3.6.1.4.1.19376.1.5.3.1.3.5`, LOINC `8648-8`),
   an IHE PCC template the parser recognizes by its root, so `findSection("hospitalCourse")`
   resolves. The parser does **not** assert it as required, though: a reparse of a Discharge Summary
   that lacks it does not report it missing. The conformance run in our repository (`pnpm conformance`)
-  is the check on its presence.
+  is the check on its presence. The same holds for the History and Physical's General Status
+  (`2.16.840.1.113883.10.20.2.5`), Physical Exam (`2.16.840.1.113883.10.20.2.10`) and Review of
+  Systems (`1.3.6.1.4.1.19376.1.5.3.1.3.18`) sections, and for the Chief Complaint and Reason for
+  Visit section (`2.16.840.1.113883.10.20.22.2.13`) the builder writes for its chief-complaint
+  choice: each is recognized by its root (`findSection("physicalExam")` resolves), and none is
+  asserted. A third-party document carrying one of these four sections no longer draws
+  `UNKNOWN_SECTION_CODE` for it.
 - **Content you supply is emitted or refused, never dropped.** A Discharge Summary emits the
   `problems` and `medications` you hand it, the medications in the Medications Section (it never
   emits the Discharge Medications Section, which would assert they are discharge medications).
-  `hospitalCourse`, `dischargeDiagnoses`, and `encompassingEncounter` throw a `TypeError` on a CCD or
-  a Referral Note, and `assessment` and `reasonForReferral` throw on a Discharge Summary. A CCD
-  still ignores `assessment` and `reasonForReferral`, as it always has.
+  `hospitalCourse` and `dischargeDiagnoses` throw a `TypeError` on every type but a Discharge
+  Summary, `encompassingEncounter` throws on a CCD or a Referral Note, `assessment` throws on a
+  Discharge Summary, `reasonForReferral` throws on a Discharge Summary, a Progress Note or a History
+  and Physical, and the five office-visit narratives (`historyOfPresentIllness`,
+  `chiefComplaintAndReasonForVisit`, `reviewOfSystems`, `physicalExam`, `generalStatus`) throw on a
+  CCD, a Referral Note or a Discharge Summary. A CCD still ignores `assessment` and
+  `reasonForReferral`, as it always has.
 - **A Discharge Summary's encounter frame is never guessed.** `componentOf/encompassingEncounter`
   is always emitted for that type, because its template requires it, and each slot the caller did
   not supply through `encompassingEncounter` (either period bound, the discharge disposition) is
   emitted `nullFlavor="UNK"` and reparses as absent. None of the three is ever derived from the
   document `effectiveTime` or from a `documentationOf` service event.
+- **The office-visit types carry the header slots their rules require, and nothing is guessed.**
+  A Progress Note, a History and Physical and a Consultation Note each carry the
+  `componentOf/encompassingEncounter` frame their templates require, with an encounter `id` and an
+  `effectiveTime` whose `low` is the period start you supply or `nullFlavor="UNK"`. Their rules do
+  not require a `high` or a discharge disposition, so each is written only when you supply it. A
+  Progress Note's encounter also carries the `location/healthCareFacility` its rule requires
+  (CONF:1198-30879), and a Consultation Note carries the `inFulfillmentOf/order` its rule requires
+  (CONF:1198-8382); both of those ids are `nullFlavor="UNK"`, because the builder takes no facility
+  or order input and an invented identifier would name a place or a request that does not exist.
+  None of the three emits `documentationOf`, which their rules do not require.
 - **Which sections a build can carry.** For a CCD, its six SHALL sections are always emitted, as
   spec-clean empty `nullFlavor="NI"` sections when you supply no content: Problems, Allergies,
   Medications, Results, Vital Signs, and Social History (smoking status). Immunizations, Procedures,
@@ -562,7 +597,17 @@ Product Instance's `scopingEntity`, the organization that issued the device id, 
   Treatment, and demotes Results, Vital Signs, and Social History to populated-only. A Discharge
   Summary always emits Allergies, Hospital Course, Discharge Diagnosis, and Plan of Treatment, and
   forces nothing else: neither Problems nor Medications is in its SHALL set, so both are
-  populated-only there. Any C-CDA section outside that set cannot be built.
+  populated-only there. A Progress Note always emits Assessment and Plan of Treatment, its one
+  section obligation being that choice (CONF:1198-30657). A History and Physical always emits its
+  ten SHALL sections (Allergies, Family History, General Status, Past Medical History, Medications,
+  Physical Exam, Results, Review of Systems, Social History, Vital Signs) plus Chief Complaint and
+  Reason for Visit, Assessment, and Plan of Treatment for its two choices. A Consultation Note always
+  emits History of Present Illness, Allergies, Problems, Reason for Referral, Assessment, and Plan of
+  Treatment. Each narrative it requires and you leave out is an empty `nullFlavor="NI"` section, and
+  a Progress Note or Consultation Note emits a narrative it does not require only when you supply it.
+  Each type meets an Assessment/Plan choice with the separate Assessment and Plan of Treatment
+  sections; the combined Assessment and Plan Section cannot be built. Any C-CDA section outside these
+  sets cannot be built.
 - **Every coded value that reaches the narrative needs a `displayName`, and a missing one is
   refused.** Each populated section regenerates its `<text>` narrative from the same
   `BuildCode.displayName` the coded entry carries, and links the two with a `<reference>`, so the
@@ -598,7 +643,7 @@ Product Instance's `scopingEntity`, the organization that issued the device id, 
   green run is not a green run over a subset of what the builder can emit. The current result is zero
   error-severity results.
   **What that does and does not tell you, stated here rather than left to be assumed.** It covers the
-  three document types the builder emits and says nothing about the other nine, which it does not emit.
+  six document types the builder emits and says nothing about the other six, which it does not emit.
   It covers the error-severity phase; the warning phase is not run. It checks value-set membership
   only where the Schematron's own vocabulary file checks it, so it is not a terminology verification.
   It is an assessment against a published artifact, **not a certification**, and no accredited body
