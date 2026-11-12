@@ -33,14 +33,14 @@ serializeXml(doc); // => '<?xml version="1.0" encoding="UTF-8"?>\n<pathway id="e
 Each refusal throws a `CcdaParseError` and never returns part of a document. The `code` is the
 same one `parseCcda` throws for the same text, from the same code:
 
-| Code                           | When                                                                                     |
-| ------------------------------ | ---------------------------------------------------------------------------------------- |
-| `XXE_OR_DTD_PRESENT`           | The text declares a DTD or an entity anywhere (`<!DOCTYPE`, `<!ENTITY`, in any case).    |
-| `ENTITY_EXPANSION_LIMIT`       | More custom entity references (`&name;`) than `maxEntityExpansions`.                     |
-| `INPUT_SIZE_LIMIT_EXCEEDED`    | More UTF-8 bytes than `maxInputBytes`.                                                   |
-| `ELEMENT_DEPTH_LIMIT_EXCEEDED` | Elements nested deeper than `maxDepth`.                                                  |
-| `NODE_COUNT_LIMIT_EXCEEDED`    | More elements than `maxNodeCount`.                                                       |
-| `NOT_WELL_FORMED_XML`          | Not well-formed, no root element, or a character XML 1.0 forbids, raw or as a reference. |
+| Code                           | When                                                                                    |
+| ------------------------------ | --------------------------------------------------------------------------------------- |
+| `XXE_OR_DTD_PRESENT`           | The text declares a DTD or an entity anywhere (`<!DOCTYPE`, `<!ENTITY`, in any case).   |
+| `ENTITY_EXPANSION_LIMIT`       | More custom entity references (`&name;`) than `maxEntityExpansions`.                    |
+| `INPUT_SIZE_LIMIT_EXCEEDED`    | More UTF-8 bytes than `maxInputBytes`.                                                  |
+| `ELEMENT_DEPTH_LIMIT_EXCEEDED` | Elements nested deeper than `maxDepth`.                                                 |
+| `NODE_COUNT_LIMIT_EXCEEDED`    | More elements than `maxNodeCount`.                                                      |
+| `NOT_WELL_FORMED_XML`          | Not well-formed (XML 1.0 or its namespaces), a forbidden character, or no root element. |
 
 No DTD is ever read, so no external entity is ever fetched and no entity is ever expanded. The
 five predefined entities (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`) and character references
@@ -54,9 +54,7 @@ first character count as text. So `parseXml("<a/>Synthetic note")`, `parseXml("n
 reference such as `&amp;`, a stray `<`, a CDATA section or a second element there all throw
 `NOT_WELL_FORMED_XML` rather than return a document with the content dropped or kept beside the
 root. `parseXml` finds this by reading the text itself, before the tree is built, and checks the
-document's own nodes after. `parseCcda` reads such a text as it always has. An entity reference
-with no declaration (`&name;`) inside the root is read as `parseCcda` reads it: never expanded, and
-counted toward `maxEntityExpansions`.
+document's own nodes after. `parseCcda` reads such a text as it always has.
 
 Not well-formed also includes a start tag XML 1.0 forbids: an unquoted value (`<a x=b/>`), an
 attribute with no value (`<a x/>`), a quote that does not open or close a value, two attributes
@@ -64,7 +62,33 @@ with no white space between them, one attribute named twice, or a `<` in a value
 some of these, as it always has; `parseXml` refuses each, since a quote read one way by the scan
 and another by the tree's builder would put the end of the root in two places. Anything else
 `@xmldom/xmldom` reports while it builds the tree, even as a warning, is refused too, except the
-undeclared entity reference above and U+FFFD REPLACEMENT CHARACTER, which XML allows.
+undeclared entity reference below and U+FFFD REPLACEMENT CHARACTER, which XML allows.
+
+Not well-formed also includes these, which `@xmldom/xmldom` reads with no report and `parseCcda`
+reads as it always has:
+
+- an `&` that starts no reference, in text or in a value: `<a>&</a>`, `<a>x & y</a>`,
+  `<a x="&"/>`, `<a>&;</a>`, `<a>& foo;</a>`, `<a>&#;</a>`;
+- `]]>` in text, as in `<a>]]></a>` (it may sit in a value, a comment or an instruction);
+- two attributes of one element with one namespace and local name, through two prefixes bound to
+  one namespace: `<a xmlns:p="urn:example:x" xmlns:q="urn:example:x" p:x="1" q:x="2"/>`, which the
+  tree's builder reads as one attribute, dropping the other;
+- a namespace declaration Namespaces in XML 1.0 forbids: a prefix bound to no namespace
+  (`xmlns:p=""`), the prefix `xml` bound to another namespace, a declaration of the prefix
+  `xmlns`, the xml namespace under another prefix or as the default, and the xmlns namespace under
+  any prefix;
+- a colon in a processing instruction's target (`<?p:q x?>`).
+
+A prefix used but not declared, a name with more than one colon, and an empty prefix or local name
+are refused too. Before it returns, `parseXml` checks that the tree holds, on each element, as many
+attributes and child nodes as the text does, so nothing the tree's builder drops is lost without a
+word.
+
+One form that is not well-formed is read. An entity reference with no declaration (`&name;`, which
+XML 1.0's constraint Entity Declared forbids in a text with no DTD) inside the root is read as
+`parseCcda` reads it, when its name is ASCII letters, digits and `_` and does not start with a
+digit: kept as the text `&name;`, never expanded, and counted toward `maxEntityExpansions`. One
+with any other character in its name, such as `&a-b;`, throws `NOT_WELL_FORMED_XML`.
 
 ```ts runnable
 import { CcdaParseError, FATAL_CODES, parseXml } from "@cosyte/ccda";

@@ -10334,16 +10334,32 @@ It throws a [CcdaParseError](#ccdaparseerror), and never returns a partly read d
   instructions (text, a reference, a stray `<`, a CDATA section, a second element), holds a
   start tag XML 1.0 makes not well-formed (an unquoted value, an attribute with no value, a
   quote that does not open or close a value, two attributes with no white space between them,
-  one attribute named twice, a `<` in a value), or holds a character XML 1.0 forbids, written
-  raw or as a character reference: `NOT_WELL_FORMED_XML`. Anything else `@xmldom/xmldom`
-  reports while it reads, even as a warning, is refused the same way, but for U+FFFD and an
-  undeclared entity reference, below.
+  one attribute named twice, a `<` in a value), holds an `&` that starts no reference (`&`,
+  `&;`, `& name;`, `&#;`, in text or in a value), holds `]]>` in text, or holds a character XML
+  1.0 forbids, written raw or as a character reference: `NOT_WELL_FORMED_XML`;
+- breaks Namespaces in XML 1.0: two attributes of one element with one namespace and local name
+  (`p:x` and `q:x`, with `p` and `q` bound to one namespace), a prefix bound to no namespace
+  (`xmlns:p=""`), a declaration of the prefix `xmlns`, the prefix `xml` bound to another
+  namespace, the xml namespace bound to another prefix or as the default, the xmlns namespace
+  bound to any prefix, a prefix used but not declared, a name with more than one colon or an
+  empty prefix or local name, or a colon in a processing instruction's target:
+  `NOT_WELL_FORMED_XML`.
+
+Anything else `@xmldom/xmldom` reports while it reads, even as a warning, is refused the same
+way, but for U+FFFD and an undeclared entity reference, below. And before it returns, it checks
+that the tree holds, on each element, as many attributes and child nodes as the text does, so
+nothing the DOM library drops is lost without a word.
 
 No message or position names anything the text said. A leading byte order mark is removed and
 reported as `ENCODING_BOM_STRIPPED` through `options.onWarning`. Unlike `parseCcda`, it does not
-check the root element or report namespaces: any well-formed XML is read. An entity reference
-with no declaration (`&name;`) is read as `parseCcda` reads it: never expanded, and counted
-toward `limits.maxEntityExpansions`. U+FFFD REPLACEMENT CHARACTER, which XML allows, is read.
+check the root element or report namespaces, so a text in any XML format is read. U+FFFD
+REPLACEMENT CHARACTER, which XML allows, is read.
+
+One form that is not well-formed is read: an entity reference with no declaration (`&name;`,
+which XML 1.0's constraint Entity Declared forbids in a text with no DTD), when its name is ASCII
+letters, digits and `_` and does not start with a digit. It is read as `parseCcda` reads it: kept
+as the text `&name;`, never expanded, and counted toward `limits.maxEntityExpansions`. One with
+any other character in its name (`&café;`, `&a-b;`) is refused as `NOT_WELL_FORMED_XML`.
 
 A limit of `NaN` is refused with a `TypeError` before the text is read, since it would turn its
 cap off; `Infinity` lifts a cap, as it does for `parseCcda`.
