@@ -4,7 +4,7 @@
  * parsed number so a non-numeric `@value` is never silently coerced.
  */
 
-import { attr } from "../dom.js";
+import { attr, trimValue } from "../dom.js";
 import { contradictsAssertedValue, readNullFlavor, type ParseCtx } from "./_shared.js";
 import type { Element } from "@xmldom/xmldom";
 
@@ -88,8 +88,9 @@ export function parsePq(el: Element | undefined, ctx: ParseCtx): PQ | undefined 
   // beside a nullFlavor rather than contradictory, so only `@value` counts.
   const contradicted = contradictsAssertedValue(el, "PQ", nullFlavor, raw !== undefined, ctx);
   if (raw !== undefined && !contradicted) {
-    const num = Number(raw);
-    if (!Number.isNaN(num) && raw.trim() !== "") out.value = num;
+    const value = trimValue(raw);
+    const num = Number(value);
+    if (!Number.isNaN(num) && value !== "") out.value = num;
   }
   return out;
 }

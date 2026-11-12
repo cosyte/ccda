@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { normalizeLineEndings } from "../src/parser/secure-xml.js";
 import { readDocument } from "../src/parser/xml-tree.js";
 import { serializeDocument } from "../src/serialize/serialize-dom.js";
-import { writeSource } from "../src/serialize/write-tree.js";
+import { attributeText, textData, writeSource } from "../src/serialize/write-tree.js";
 import { generatedDocument } from "./_helpers/generated-xml.js";
 import { outputCorpus } from "./_output-corpus.js";
 import { checkProperty, propertyTimeout } from "./property/_property.js";
@@ -161,4 +161,27 @@ describe("the compact tree's writer against serializeDocument", () => {
     );
     expect(written / total).toBeGreaterThan(0.3);
   });
+});
+
+// Both escape patterns carry the `g` flag, which `.replace` needs and which makes `.test` keep
+// `lastIndex` between calls. Each function sets `lastIndex` to 0 before its `.test`, and `.replace`
+// with a global pattern starts at 0 and leaves it at 0, so no call starts where the last one
+// stopped. A call that found its character far into a long value is followed here by calls whose
+// only character sits before that place: a pattern that kept its place would miss it and leave it
+// unescaped.
+describe("the escape patterns keep no place between calls", () => {
+  it.each([
+    ["attributeText", attributeText, `${"x".repeat(20)}"`, '<a"', "&lt;a&quot;"],
+    ["textData", textData, `${"x".repeat(20)}&`, "<a", "&lt;a"],
+  ])(
+    "%s escapes a character before where the last call found one",
+    (_name, write, far, near, out) => {
+      expect(write(far)).toContain("&");
+      expect(write(near)).toBe(out);
+      expect(write("x")).toBe("x");
+      expect(write(near)).toBe(out);
+      expect(write(far.slice(0, 20))).toBe("x".repeat(20));
+      expect(write(near)).toBe(out);
+    },
+  );
 });
