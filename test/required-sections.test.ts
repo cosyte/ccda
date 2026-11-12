@@ -12,6 +12,8 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
+import { UNDER_MUTATION } from "./_helpers/runtime.js";
+
 import {
   parseCcda,
   buildCcda as buildRealCcda,
@@ -600,39 +602,43 @@ describe("required-section provenance invariants", () => {
     expect(new Set(description.map((row) => row.id)).size).toBe(2);
   });
 
-  it("keeps every conformance id the repository recorded before the trace", () => {
-    const source = readFileSync(
-      new URL("../src/parser/required-sections.ts", import.meta.url),
-      "utf8",
-    );
-    // The CCD's six, the Referral Note's four, and the exclusions cited beside
-    // them. A state is never made easier to report by deleting a citation.
-    for (const id of [
-      "CONF:1198-30662",
-      "-30664",
-      "-30666",
-      "-30670",
-      "-30688",
-      "-30690",
-      "CONF:1198-29087",
-      "-30912",
-      "-30923",
-      "-30925",
-      "CONF:1198-29102",
-      "CONF:1198-29090",
-      "-29066",
-    ]) {
-      expect(source, `citation ${id} was dropped from required-sections.ts`).toContain(id);
-    }
-    // And the citation behind the one WITHDRAWAL this change makes. Discharge
-    // Medications is no longer an asserted key, so no `traced` row carries its
-    // id; the file must still say which sentence took it out, or the withdrawal
-    // becomes unreviewable.
-    expect(
-      source,
-      "the Discharge Medications SHOULD finding (CONF:1198-30525) was dropped",
-    ).toContain("CONF:1198-30525");
-  });
+  // Reads the source as text, which StrykerJS rewrites in a mutation run (see test/_helpers/runtime.ts).
+  it.skipIf(UNDER_MUTATION)(
+    "keeps every conformance id the repository recorded before the trace",
+    () => {
+      const source = readFileSync(
+        new URL("../src/parser/required-sections.ts", import.meta.url),
+        "utf8",
+      );
+      // The CCD's six, the Referral Note's four, and the exclusions cited beside
+      // them. A state is never made easier to report by deleting a citation.
+      for (const id of [
+        "CONF:1198-30662",
+        "-30664",
+        "-30666",
+        "-30670",
+        "-30688",
+        "-30690",
+        "CONF:1198-29087",
+        "-30912",
+        "-30923",
+        "-30925",
+        "CONF:1198-29102",
+        "CONF:1198-29090",
+        "-29066",
+      ]) {
+        expect(source, `citation ${id} was dropped from required-sections.ts`).toContain(id);
+      }
+      // And the citation behind the one WITHDRAWAL this change makes. Discharge
+      // Medications is no longer an asserted key, so no `traced` row carries its
+      // id; the file must still say which sentence took it out, or the withdrawal
+      // becomes unreviewable.
+      expect(
+        source,
+        "the Discharge Medications SHOULD finding (CONF:1198-30525) was dropped",
+      ).toContain("CONF:1198-30525");
+    },
+  );
 });
 
 describe("required-section compatibility with the 0.0.15 surface", () => {

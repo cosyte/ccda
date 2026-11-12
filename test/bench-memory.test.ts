@@ -27,6 +27,8 @@ import {
   type HeapSnapshot,
 } from "../bench/memory.mjs";
 
+import { ON_NODE } from "./_helpers/runtime.js";
+
 describe("median and theilSenSlope", () => {
   it("takes the middle value, or the mean of the middle two", () => {
     expect(median([3, 1, 2])).toBe(2);
@@ -114,7 +116,9 @@ describe("codeBytes", () => {
     expect(codeBytes(stats)).toBe(345);
   });
 
-  it("finds the code spaces this Node names", () => {
+  // V8's own heap spaces: Bun runs JavaScriptCore and Deno reports no code space here, and
+  // bench/long-run.mjs runs on Node.js only.
+  it.skipIf(!ON_NODE)("finds the code spaces this Node names", () => {
     const stats = getHeapSpaceStatistics();
     expect(stats.some((s) => s.space_name === "code_space")).toBe(true);
     expect(codeBytes(stats)).toBeGreaterThan(0);
@@ -151,6 +155,11 @@ describe("nodeKey", () => {
 });
 
 describe("summarizeSnapshot and diffSummaries", () => {
+  // The snapshot is V8's, written by a Node.js process started with `process.execPath`: under Bun
+  // and Deno that is another runtime, with another snapshot format or none. bench/long-run.mjs runs
+  // on Node.js only; the arithmetic below runs everywhere.
+  const onNode = it.skipIf(!ON_NODE);
+
   const dir = mkdtempSync(join(tmpdir(), "ccda-bench-memory-"));
   afterAll(() => {
     rmSync(dir, { recursive: true, force: true });
@@ -168,22 +177,26 @@ describe("summarizeSnapshot and diffSummaries", () => {
     writeHeapSnapshot(join(process.argv[1], "b.heapsnapshot"));
   `;
 
-  it("counts the objects a process keeps, by constructor, and names what grew", () => {
-    const run = spawnSync(process.execPath, ["-e", script, dir], { encoding: "utf8" });
-    expect(run.status).toBe(0);
-    const read = (name: string) =>
-      summarizeSnapshot(JSON.parse(readFileSync(join(dir, name), "utf8")) as HeapSnapshot);
-    const a = read("a.heapsnapshot");
-    const b = read("b.heapsnapshot");
-    expect(a.get("object: SyntheticKept")?.count).toBe(1_000);
-    expect(b.get("object: SyntheticKept")?.count).toBe(1_500);
+  onNode(
+    "counts the objects a process keeps, by constructor, and names what grew",
+    () => {
+      const run = spawnSync(process.execPath, ["-e", script, dir], { encoding: "utf8" });
+      expect(run.status).toBe(0);
+      const read = (name: string) =>
+        summarizeSnapshot(JSON.parse(readFileSync(join(dir, name), "utf8")) as HeapSnapshot);
+      const a = read("a.heapsnapshot");
+      const b = read("b.heapsnapshot");
+      expect(a.get("object: SyntheticKept")?.count).toBe(1_000);
+      expect(b.get("object: SyntheticKept")?.count).toBe(1_500);
 
-    const diff = diffSummaries(a, b);
-    const kept = diff.rows.find((r) => r.key === "object: SyntheticKept");
-    expect(kept?.count).toBe(500);
-    expect(kept?.bytes).toBeGreaterThan(0);
-    expect(diff.after.count).toBeGreaterThan(diff.before.count);
-  }, 30_000); // of a few megabytes, well under a second on an idle machine and several under load. // Two snapshots of a bare Node process, in a process of its own: its start-up and two writes
+      const diff = diffSummaries(a, b);
+      const kept = diff.rows.find((r) => r.key === "object: SyntheticKept");
+      expect(kept?.count).toBe(500);
+      expect(kept?.bytes).toBeGreaterThan(0);
+      expect(diff.after.count).toBeGreaterThan(diff.before.count);
+    },
+    30_000,
+  ); // of a few megabytes, well under a second on an idle machine and several under load. // Two snapshots of a bare Node process, in a process of its own: its start-up and two writes
 
   it("puts the largest growth first and leaves out what did not change", () => {
     const before = new Map([

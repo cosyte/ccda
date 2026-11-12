@@ -59,6 +59,17 @@ import { configDefaults } from "vitest/config";
  */
 const WORKING_TREE_SNAPSHOT = "test/conformance/working-tree-is-clean.test.ts";
 
+/**
+ * Left out on Windows only: `test/scripts/phi-scan.test.ts` tests our own PHI scanner through POSIX
+ * means (a `git` found by walking a `:`-separated PATH, shell shims for `git`, a directory made
+ * unreadable with `chmod`, the `tsx` launcher started without a shell). The scanner runs on Linux in
+ * CI and in the pre-commit hook, and the file runs on Linux and macOS. It is left out here rather
+ * than skipped inside it, because the file holds the scanner's adversarial inputs and an edit to it
+ * is refused by the scan at push time.
+ */
+const WINDOWS_ONLY_EXCLUDE: readonly string[] =
+  process.platform === "win32" ? ["test/scripts/phi-scan.test.ts"] : [];
+
 const config = cosyteVitest({
   coverageDirs: [
     "parser",
@@ -87,7 +98,7 @@ const config = cosyteVitest({
         test: {
           name: "suite",
           include: ["test/**/*.test.ts", "src/**/*.test.ts"],
-          exclude: [...configDefaults.exclude, WORKING_TREE_SNAPSHOT],
+          exclude: [...configDefaults.exclude, WORKING_TREE_SNAPSHOT, ...WINDOWS_ONLY_EXCLUDE],
           sequence: { groupOrder: 0 },
         },
       },

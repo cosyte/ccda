@@ -25,7 +25,10 @@ const config = base as ViteUserConfig;
  *   `test/release-workflow-contract.test.ts`: they read source, docs and workflow files as text,
  *   and StrykerJS rewrites the source files in its sandbox.
  *
- * What they prove is proved by `pnpm test` on every pull request.
+ * What they prove is proved by `pnpm test` on every pull request. `CCDA_MUTATION_RUN` (read as
+ * `UNDER_MUTATION` in `test/_helpers/runtime.ts`) skips the few tests elsewhere that read a file
+ * under `src/` as text, while the rest of their files run: StrykerJS rewrites those files to switch
+ * mutants on, so their text is not the committed text.
  *
  * The working-tree project of `vitest.config.ts` is left out with the rest of `test/conformance/`,
  * so this run has one project and the globs live here.
@@ -61,6 +64,7 @@ const mutation: ViteUserConfig = {
       ...suite.env,
       COSYTE_PROPERTY_SEED: "424242",
       COSYTE_PROPERTY_RUNS: "100",
+      CCDA_MUTATION_RUN: "1",
     },
     testTimeout: 60_000,
     hookTimeout: 60_000,

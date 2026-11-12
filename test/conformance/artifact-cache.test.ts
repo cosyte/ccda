@@ -19,13 +19,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe as suite, expect, it } from "vitest";
 
 import { BUILT_DOCUMENT_CASES, writeTarGz } from "../__fixtures__/conformance.js";
 import { CONFORMANCE_CODES, ConformanceError } from "../../scripts/conformance/errors.js";
 import { cachePathFor, fetchArtifact, fetchCorpus } from "../../scripts/conformance/fetch.js";
 import { runConformance } from "../../scripts/conformance/run.js";
 import { buildCcda, serializeCcda } from "../../src/index.js";
+import { ON_WINDOWS } from "../_helpers/runtime.js";
 import {
   SELF_TEST_URLS,
   fullyServingFetcher,
@@ -54,6 +55,13 @@ function plantCacheEntry(url: string, bytes: Uint8Array): void {
   mkdirSync(directory, { recursive: true });
   writeFileSync(cachePathFor(directory, url), bytes);
 }
+
+/**
+ * Not on Windows: the conformance run is a Linux job of its own (`conformance` in ci.yml), and these
+ * tests of its cache write and read a gzipped tar archive per case, which ran past Vitest's default
+ * 5 s budget on a Windows runner. They run on Linux and macOS.
+ */
+const describe = suite.skipIf(ON_WINDOWS);
 
 describe("a warm cache needs no network", () => {
   it("asks the network for nothing on a second run over the same working directory", async () => {

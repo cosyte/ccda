@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "nod
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe as suite, expect, test } from "vitest";
 
 import {
   docSnippetSuite,
@@ -21,6 +21,15 @@ import {
   section,
 } from "./_helpers/first-use.js";
 import * as firstUseFixtures from "./__fixtures__/first-use.js";
+import { ON_BUN, ON_DENO, ON_WINDOWS } from "./_helpers/runtime.js";
+
+/**
+ * Not on Windows: the file builds `dist/` with a bare `pnpm build`, and `pnpm` there is a `.cmd` shim
+ * a process started without a shell cannot run; the samples import the build by absolute path,
+ * which Node's ES module loader refuses on Windows unless it is a `file:` URL. Every sample runs on
+ * Linux and macOS against the same built files.
+ */
+const describe = suite.skipIf(ON_WINDOWS);
 
 /**
  * Doc/code-agreement gate. Every TypeScript and JavaScript sample on a hand-written page of
@@ -66,6 +75,7 @@ const ARBITRARIES = join(root, "dist", "arbitraries.mjs");
 const README = join(root, "README.md");
 
 beforeAll(() => {
+  if (ON_WINDOWS) return;
   execFileSync("pnpm", ["build"], { cwd: root, stdio: "inherit" });
 }, 180_000);
 
@@ -85,7 +95,11 @@ const PAGES = readdirSync(DOCS_DIR)
  * as the test below holds.
  */
 const pageSuite = {
-  files: PAGES,
+  // Under Bun, `property-test-your-code.md` is left out: its first sample checks that a generated
+  // document is an `instanceof CcdaDocument` across the two built entry points, and in this harness
+  // under Bun the subpath's import of the package and the sample's own are two module instances.
+  // The page runs on Node.js on Linux and macOS.
+  files: ON_BUN ? PAGES.filter((path) => !path.endsWith("property-test-your-code.md")) : PAGES,
   every: true,
   resolve: (specifier: string) =>
     specifier === "@cosyte/ccda"
@@ -94,14 +108,15 @@ const pageSuite = {
         ? ARBITRARIES
         : undefined,
 };
-docSnippetSuite(pageSuite);
+if (!ON_WINDOWS) docSnippetSuite(pageSuite);
 
-docSnippetSuite({
-  name: "doc/code agreement (README)",
-  files: [README],
-  requireSnippet: true,
-  resolve: (specifier) => (specifier === "@cosyte/ccda" ? ENTRY : undefined),
-});
+if (!ON_WINDOWS)
+  docSnippetSuite({
+    name: "doc/code agreement (README)",
+    files: [README],
+    requireSnippet: true,
+    resolve: (specifier) => (specifier === "@cosyte/ccda" ? ENTRY : undefined),
+  });
 
 /**
  * The README's `## Status` section names the release line this package is on (`The 0.1 line` for any
@@ -476,7 +491,9 @@ describe("the built package loads @xmldom/xmldom on first use", () => {
     "console.log(JSON.stringify({ afterImport, afterParse, afterWrite, afterEdit: loaded() }));",
   ].join("\n");
 
-  test.each(["index.mjs", "index.cjs"])("dist/%s", (entry) => {
+  // The probe is started with `process.execPath` and Node's own `--input-type` flag, and reads
+  // Node's CommonJS cache; under Deno `process.execPath` is `deno`, which takes neither.
+  test.skipIf(ON_DENO).each(["index.mjs", "index.cjs"])("dist/%s", (entry) => {
     const out = execFileSync(
       process.execPath,
       [
