@@ -114,20 +114,18 @@ function refuseDuplicateAttribute(attributes: string, attribute: RegExp): string
 }
 
 /**
- * Whether two of `names` share a local name under two prefixes, neither of them `xmlns`: only
- * such a pair can name one attribute twice once the prefixes are resolved (Namespaces in XML 1.0,
- * constraint Attributes Unique).
+ * The names among `names` (one start tag's attribute names) that two prefixes bound to one
+ * namespace could make one attribute twice (Namespaces in XML 1.0, constraint Attributes Unique):
+ * every prefixed name but an `xml:` or `xmlns:` one, when two of them share a local name; else
+ * `undefined`. An `xmlns:` name is a declaration, and `xml` is the only prefix the xml namespace
+ * may have (the tree check refuses another), so neither can name an attribute twice.
  */
-function sharesLocalName(names: readonly string[]): boolean {
-  const locals = new Set<string>();
-  for (const name of names) {
-    const colon = name.indexOf(":");
-    if (colon === -1 || name.startsWith("xmlns:")) continue;
-    const local = name.slice(colon + 1);
-    if (locals.has(local)) return true;
-    locals.add(local);
-  }
-  return false;
+function sharedLocalNames(names: readonly string[]): readonly string[] | undefined {
+  const prefixed = names.filter(
+    (name) => name.includes(":") && !name.startsWith("xml:") && !name.startsWith("xmlns:"),
+  );
+  const locals = new Set(prefixed.map((name) => name.slice(name.indexOf(":") + 1)));
+  return locals.size < prefixed.length ? prefixed : undefined;
 }
 
 /**
@@ -152,7 +150,8 @@ function bareAmpersandPattern(): RegExp {
  * What the scan read inside the root element, element by element in document order (the order of
  * their start tags), for the check after the tree is built (`./built-tree.ts`): the number of
  * attributes each start tag holds, the number of child nodes a DOM builds under each element, and
- * the attribute names of each element where two prefixes give one local name.
+ * the prefixed attribute names of each element where two prefixes give one local name (see
+ * `sharedLocalNames`).
  *
  * A child node is an element, a comment, a processing instruction, a CDATA section that is not
  * empty, or a run of text: text broken only by empty CDATA sections is one node, as a DOM
@@ -223,47 +222,52 @@ function scanRoot(source: string): {
   if (match?.[2] === undefined || !match[0].startsWith("<")) throw notWellFormed();
   const attributeCounts: number[] = [];
   const children: number[] = [];
-  const sharedLocalNames = new Map<number, string[]>();
+  const shared = new Map<number, readonly string[]>();
   // The index of each open element in the two arrays, innermost last.
   const open: { readonly name: string; readonly index: number }[] = [];
+  /** Read a start tag: refuse what it must not hold, count it, and open it unless it closes. */
+  const startTag = (whole: string, name: string, attributes: string): void => {
+    const names = refuseDuplicateAttribute(attributes, attribute);
+    refuseBareMarkup(attributes, reference, false);
+    const index = attributeCounts.push(names.length) - 1;
+    children.push(0);
+    const sharing = sharedLocalNames(names);
+    if (sharing !== undefined) shared.set(index, sharing);
+    if (!whole.endsWith("/>")) open.push({ name, index });
+  };
+  startTag(match[0], match[2], match[3] as string);
   // Whether the last child counted under the innermost open element is a run of text.
   let afterText = false;
-  do {
+  while (open.length > 0) {
+    match = markup.exec(source);
+    if (match === null) throw notWellFormed();
     const [whole, endName, startName, attributes] = match;
     const at = whole.indexOf("<");
-    const parent = open.at(-1)?.index;
+    // The loop runs only while an element is open.
+    const parent = (open.at(-1) as { readonly index: number }).index;
     if (at > 0) {
       refuseBareMarkup(whole.slice(0, at), reference, true);
-      if (!afterText) addChild(children, parent as number);
+      if (!afterText) addChild(children, parent);
       afterText = true;
     }
     if (startName !== undefined) {
-      const names = refuseDuplicateAttribute(attributes as string, attribute);
-      refuseBareMarkup(attributes as string, reference, false);
-      if (parent !== undefined) addChild(children, parent);
-      const index = attributeCounts.push(names.length) - 1;
-      children.push(0);
-      if (sharesLocalName(names)) sharedLocalNames.set(index, names);
-      if (!whole.endsWith("/>")) open.push({ name: startName, index });
+      addChild(children, parent);
+      startTag(whole, startName, attributes as string);
       afterText = false;
     } else if (endName !== undefined) {
-      if (open.pop()?.name !== endName) throw notWellFormed();
+      if ((open.pop() as { readonly name: string }).name !== endName) throw notWellFormed();
       afterText = false;
     } else if (whole.slice(at) !== "<![CDATA[]]>") {
       // A comment, an instruction, or a CDATA section that is not empty; an empty one is no node.
-      addChild(children, parent as number);
+      addChild(children, parent);
       afterText = false;
     }
-    if (open.length === 0) {
-      return {
-        start,
-        end: markup.lastIndex,
-        tree: { attributes: attributeCounts, children, sharedLocalNames },
-      };
-    }
-    match = markup.exec(source);
-  } while (match !== null);
-  throw notWellFormed();
+  }
+  return {
+    start,
+    end: markup.lastIndex,
+    tree: { attributes: attributeCounts, children, sharedLocalNames: shared },
+  };
 }
 
 /** A node directly under a document, as {@link refuseOutsideRootNodes} reads it. @internal */

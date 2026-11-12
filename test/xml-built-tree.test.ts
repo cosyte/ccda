@@ -134,20 +134,19 @@ describe("the check of the built tree against the scan", () => {
   });
 
   it("refuses one attribute named through two prefixes for one namespace", () => {
-    const names = ["xmlns:p", "xmlns:q", "p:x", "q:x"];
+    const names = ["p:x", "q:x"];
     const one = documentOf(
       element([attr("xmlns:p", "urn:example:x"), attr("xmlns:q", "urn:example:x"), attr("q:x")]),
     );
     // The scan saw four attributes and xmldom kept three; the names are refused first.
     expect(checked(one, scanned([4], [0], [[0, names]]))).toBe(NOT_WELL_FORMED);
-    // Two namespaces: two names. An unprefixed name beside them is in no namespace.
     const two = documentOf(
       element([attr("xmlns:p", "urn:example:x"), attr("xmlns:q", "urn:example:y"), attr("p:x")]),
     );
-    expect(checked(two, scanned([3], [0], [[0, [...names, "x"]]]))).toBe("none");
+    expect(checked(two, scanned([3], [0], [[0, names]]))).toBe("none");
   });
 
-  it("resolves each prefix to its innermost binding, and unbinds it when the element ends", () => {
+  it("resolves each prefix to its innermost binding, and restores it when the element ends", () => {
     const names = ["p:x", "q:x"];
     // p is bound to x on the root, to y on the first child only; q to x on the second child.
     const doc = documentOf(
@@ -162,10 +161,20 @@ describe("the check of the built tree against the scan", () => {
     expect(checked(doc, scanned([1, 1, 1, 1], [2, 1, 0, 0], [[3, names]]))).toBe(NOT_WELL_FORMED);
   });
 
-  it("reads xml as bound to the xml namespace from the start", () => {
-    const names = ["xml:lang", "p:lang"];
-    const doc = documentOf(element([attr("xmlns:p", "urn:example:x")]));
-    expect(checked(doc, scanned([1], [0], [[0, names]]))).toBe("none");
+  it("drops a binding when the element that declared it ends", () => {
+    // q is bound to x on the first child only, so on the second it is out of scope, and q:x is
+    // not p:x. (xmldom refuses a prefix out of scope; the tree here is written by hand.)
+    const doc = documentOf(
+      element(
+        [attr("xmlns:p", "urn:example:x")],
+        element([attr("xmlns:q", "urn:example:x")]),
+        element([]),
+      ),
+    );
+    expect(checked(doc, scanned([1, 1, 0], [2, 0, 0], [[2, ["p:x", "q:x"]]]))).toBe("none");
+    expect(checked(doc, scanned([1, 1, 0], [2, 0, 0], [[1, ["p:x", "q:x"]]]))).toBe(
+      NOT_WELL_FORMED,
+    );
   });
 
   it("walks a tree far deeper than the call stack allows recursion for", () => {
@@ -203,12 +212,15 @@ describe("what the scan counts inside the root", () => {
     expect(refuseOutsideRootText("<a><b>x</b>y<c>z</c><!--c-->w</a>").children).toEqual([5, 1, 1]);
   });
 
-  it("keeps the names of a start tag where two prefixes give one local name", () => {
-    const tree = refuseOutsideRootText('<a p:x="1"><b p:x="1" q:x="2" y="3" xmlns:x="u"/></a>');
-    expect([...tree.sharedLocalNames]).toEqual([[1, ["p:x", "q:x", "y", "xmlns:x"]]]);
+  it("keeps the prefixed names of a start tag where two prefixes give one local name", () => {
+    const tree = refuseOutsideRootText(
+      '<a p:x="1"><b p:x="1" q:x="2" y="3" xmlns:x="u" xml:x="4" r:y="5"/></a>',
+    );
+    expect([...tree.sharedLocalNames]).toEqual([[1, ["p:x", "q:x", "r:y"]]]);
     for (const text of [
       '<a p:x="1" x="2"/>',
       '<a xmlns:x="u" p:x="1"/>',
+      '<a xml:lang="en" p:lang="fr"/>',
       '<a p:x="1" p:y="2"/>',
       '<a xmlns:p="u" xmlns:q="u"/>',
     ]) {

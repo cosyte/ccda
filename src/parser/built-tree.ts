@@ -59,46 +59,44 @@ function refuseForbiddenDeclaration(prefix: string, uri: string): void {
   }
 }
 
+/** The prefixes an element declared, each with the namespace it had before, to restore. */
+type Restore = readonly (readonly [string, string | undefined])[];
+
 /**
- * Check the namespace declarations among `attributes`, bind each declared prefix in `bindings`
- * (each prefix's namespaces, innermost last), and return the prefixes bound, to unbind when the
- * element ends.
+ * Check the namespace declarations among `attributes`, bind each declared prefix in `bindings`,
+ * and return what to restore when the element ends.
  */
 function declare(
   attributes: ArrayLike<BuiltAttribute>,
-  bindings: Map<string, string[]>,
-): readonly string[] {
-  const declared: string[] = [];
+  bindings: Map<string, string | undefined>,
+): Restore {
+  const restore: [string, string | undefined][] = [];
   for (const attribute of Array.from(attributes)) {
     if (attribute.prefix === "xmlns") {
       refuseForbiddenDeclaration(attribute.localName, attribute.value);
-      let uris = bindings.get(attribute.localName);
-      if (uris === undefined) {
-        uris = [];
-        bindings.set(attribute.localName, uris);
-      }
-      uris.push(attribute.value);
-      declared.push(attribute.localName);
+      restore.push([attribute.localName, bindings.get(attribute.localName)]);
+      bindings.set(attribute.localName, attribute.value);
     } else if (attribute.name === "xmlns") {
       refuseForbiddenDeclaration("", attribute.value);
     }
   }
-  return declared;
+  return restore;
 }
 
 /**
  * Throw `NOT_WELL_FORMED_XML` when two of `names` (prefixed attribute names the scan read on one
- * start tag) name one namespace and local name, their prefixes resolved through `bindings`.
+ * start tag, `xml:` and `xmlns:` ones left out) name one namespace and local name, their prefixes
+ * resolved through `bindings`. Every prefix the tree holds is bound: xmldom refuses an undeclared
+ * one.
  */
-function refuseSharedName(names: readonly string[], bindings: Map<string, string[]>): void {
+function refuseSharedName(
+  names: readonly string[],
+  bindings: ReadonlyMap<string, string | undefined>,
+): void {
   const seen = new Set<string>();
   for (const name of names) {
     const colon = name.indexOf(":");
-    if (colon === -1 || name.startsWith("xmlns:")) continue;
-    // Every prefix the tree holds is bound: xmldom refuses an undeclared one, and `xml` is bound
-    // from the start.
-    const uri = (bindings.get(name.slice(0, colon)) as string[]).at(-1) as string;
-    const key = `${uri} ${name.slice(colon + 1)}`;
+    const key = `${bindings.get(name.slice(0, colon))} ${name.slice(colon + 1)}`;
     if (seen.has(key)) throw notWellFormed();
     seen.add(key);
   }
@@ -115,19 +113,21 @@ function refuseSharedName(names: readonly string[], bindings: Map<string, string
  * @internal
  */
 export function refuseTreeDifference(doc: BuiltNode, scanned: ScannedTree): void {
-  const bindings = new Map<string, string[]>([["xml", ["http://www.w3.org/XML/1998/namespace"]]]);
-  // Nodes to visit, the next last, and, after each element's children, the prefixes it bound. The
+  // Each prefix's namespace in scope; a prefix out of scope maps to undefined or is absent.
+  const bindings = new Map<string, string | undefined>();
+  // Nodes to visit, the next last, and, after each element's children, what to restore. The
   // nodes under the document are taken in any order: one element, and nothing else counted.
-  const pending: (BuiltNode | readonly string[])[] = Array.from(doc.childNodes);
+  const pending: (BuiltNode | Restore)[] = Array.from(doc.childNodes);
   let index = 0;
   for (let item = pending.pop(); item !== undefined; item = pending.pop()) {
     if (Array.isArray(item)) {
-      for (const prefix of item as readonly string[]) (bindings.get(prefix) as string[]).pop();
+      for (const [prefix, uri] of item as Restore) bindings.set(prefix, uri);
     } else if ((item as BuiltNode).nodeType === 1) {
       const node = item as BuiltNode;
       const attributes = node.attributes as ArrayLike<BuiltAttribute>;
       pending.push(declare(attributes, bindings));
-      refuseSharedName(scanned.sharedLocalNames.get(index) ?? [], bindings);
+      const names = scanned.sharedLocalNames.get(index);
+      if (names !== undefined) refuseSharedName(names, bindings);
       if (
         attributes.length !== scanned.attributes[index] ||
         node.childNodes.length !== scanned.children[index]
