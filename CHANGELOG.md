@@ -1,5 +1,68 @@
 # Changelog
 
+## 0.1.13
+
+### Patch Changes
+
+- 8136f19: `buildCcda` builds three more document types: a Progress Note (`documentType: "progressNote"`), a History and Physical (`"historyAndPhysical"`) and a Consultation Note (`"consultationNote"`). It now emits six of the twelve US Realm document types.
+
+  - Each carries its own document `templateId` (R2.1 `2015-08-01`) and LOINC document code (`11506-3`, `34117-2`, `11488-4`) and always emits the sections its C-CDA R2.1 errors rule requires, an empty `nullFlavor="NI"` section for any you leave out. A Progress Note emits Assessment and Plan of Treatment. A History and Physical emits Allergies, Family History, General Status, Past Medical History, Medications, Physical Exam, Results, Review of Systems, Social History, Vital Signs, Chief Complaint and Reason for Visit, Assessment and Plan of Treatment. A Consultation Note emits History of Present Illness, Allergies, Problems, Reason for Referral, Assessment and Plan of Treatment.
+  - `BuildCcdaInit` has five new optional narrative fields: `historyOfPresentIllness`, `chiefComplaintAndReasonForVisit`, `reviewOfSystems`, `physicalExam` and `generalStatus`. `assessment` is carried by all three new types, `reasonForReferral` by the Consultation Note, and `encompassingEncounter` by all three.
+  - Each new type carries the `componentOf/encompassingEncounter` frame its rule requires, with the period start you supply or `nullFlavor="UNK"`; the end and a discharge disposition are written only when you supply them. A Progress Note's encounter carries `location/healthCareFacility` and a Consultation Note carries `inFulfillmentOf/order`, each id `nullFlavor="UNK"` because the builder is told of no facility or order.
+  - Every built document of the three types reparses with zero warnings, and `pnpm conformance` validates a minimal and a populated document of each against the pinned R2.1 Schematron and the CDA R2 schema with zero error-severity results.
+  - `document()` and `documentInit()` from `@cosyte/ccda/arbitraries` now generate all six types by default. Pass `documentTypes` to keep the old three.
+
+  What a caller may need to change:
+
+  - `BuildableDocumentType` has three more members, so an exhaustive `switch` over it needs three more cases.
+  - Every input the builder refuses on a type that does not carry it now throws with one message shape, `` `field` is not carried by documentType "type" ``, naming the types that do carry it. A caller that matched the old text (`is dischargeSummary content and documentType`) updates the match; the error is still a `TypeError`.
+  - The parser now recognizes four sections by their `templateId` root that it used to report as `UNKNOWN_SECTION_CODE`: General Status (`2.16.840.1.113883.10.20.2.5`), Physical Exam (`2.16.840.1.113883.10.20.2.10`), Review of Systems (`1.3.6.1.4.1.19376.1.5.3.1.3.18`) and Chief Complaint and Reason for Visit (`2.16.840.1.113883.10.20.22.2.13`). A document carrying one gets the section's key (`generalStatus`, `physicalExam`, `reviewOfSystems`, `chiefComplaintAndReasonForVisit`) and one fewer warning, so a parse with `strict: true` that threw on it now succeeds. None of the four is asserted as a required section, and `requiredSectionStatus("historyAndPhysical")` now reports the first three with the reason `assertion-would-tighten-parse` instead of `outside-section-catalog`.
+
+- 69b5c5b: The README no longer tells a reader to pin an exact `0.0.x` version, which no longer applies on the
+  `0.1` line, and it links two new pages: a reference of every warning, fatal and edit error code, and
+  an explanation of the boundaries of reading, building and editing, split out of the known limitations
+  page. No code changed, and a caller changes nothing.
+- c76e039: `parseCcda`, `parseSecureXml` and `editCcda` now read line endings as XML 1.0 does, and keep NEL (U+0085), LINE SEPARATOR (U+2028) and PARAGRAPH SEPARATOR (U+2029) as they were written.
+
+  - XML 1.0 (section 2.11) rewrites only a carriage return followed by a line feed, and a carriage return on its own, each to one line feed. The parser also rewrote the three characters above, as XML 1.1 does: each became a line feed in text, comments, CDATA sections and processing instructions, and a space in an attribute value, with no warning. Narrative text holding one was changed without a word.
+  - Each of them is now kept in text, attribute values, comments, CDATA sections and processing instruction data, in the model and in the XML the document writes back out. CR LF and a lone CR still become one line feed.
+  - XML 1.0 does not read them as white space. A text that holds one between the parts of a tag, in an end tag, in a processing instruction's target or the XML declaration, or outside the root element is not well formed, and now throws `CcdaParseError` with code `NOT_WELL_FORMED_XML`, as libxml2 refuses it. Before, such a text was read as if the character were a line feed; without the rewrite, the DOM library under the parser would read such a tag as plain text.
+
+  What a caller may need to change:
+
+  - Code that relied on these characters arriving as line feeds now receives them as they were written. Replace them after the parse if you want line feeds.
+  - A text that uses one of them as white space inside markup or outside the root used to parse and now throws `NOT_WELL_FORMED_XML`. Replace the character with a line feed in those places before you parse.
+
+- ebf3599: `parseCcda` and `parseSecureXml` now refuse an element that holds one attribute name twice under two prefixes of one namespace, where they used to read it with one of the two values missing.
+
+  - Namespaces in XML 1.0 (section 6.3) makes an element not well formed when two of its attributes share a local name and their prefixes are bound to the same namespace, for example `xsi:type="CD"` beside `t:type="PQ"` with `t` also bound to the XML Schema instance namespace, on the element or above it. `@xmldom/xmldom` builds such an element with the later attribute only and reports nothing, so a C-CDA document that carried a value in the earlier attribute was read with that value missing and no warning.
+  - Such a document now throws `CcdaParseError` with code `NOT_WELL_FORMED_XML`, the same fatal any other text that is not XML gets, with no position and no document text in the message. The check is one comparison per element as it is built, so a parse stays linear and inside the limits it already has.
+  - One local name in two different namespaces, and an unprefixed attribute beside a prefixed one, are allowed by XML and read as before.
+
+  What a caller may need to change: a parse of such a document used to return it and now throws `NOT_WELL_FORMED_XML`. If a sender produces one, remove one of the two attributes, or rename it, before you parse.
+
+- 4df1f78: `buildCcda` no longer writes a character XML 1.0 forbids, and `parseCcda` no longer reads one.
+
+  - XML 1.0 forbids the control characters U+0000 to U+001F other than tab, line feed and carriage return, an unpaired surrogate, and U+FFFE and U+FFFF. Escaping cannot carry them. `buildCcda` used to write such a character from its input as it was, so it returned a document no XML parser accepts, and its own reparse read it without a warning.
+  - `buildCcda` now checks every string in its input, in every field, and every string a terminology adapter's `translate` returns, before it writes anything. On the first such character it throws a `TypeError` naming the field and the code point, for example `buildCcda: problems[0].problem.displayName holds U+0001, ...`. The message never carries the text. It refuses rather than removes or replaces the character, because a silent change to clinical text is worse than an error.
+  - `parseCcda` and `editCcda` now throw `CcdaParseError` with code `NOT_WELL_FORMED_XML` for a text that holds such a character written as it is, anywhere, or as a character reference (`&#1;`, `&#xFFFE;`, `&#x110000;`) in text content or an attribute value, where they used to read it into the document and write it back out. In a comment, a CDATA section or a processing instruction XML does not expand a reference, so `&#1;` there is plain text and the document is read as before.
+  - The `TypeError` for a `documentType` the builder does not emit no longer quotes a value the package does not recognize: it names a recognized document type it does not build (`documentType "carePlan"`) and describes any other value by its kind (`documentType of type string is not supported yet`), so no caller text reaches the message.
+
+  What a caller may need to change:
+
+  - A build whose input held such a character used to return a document and now throws a `TypeError`. Clean the text before you build if your source can carry one.
+  - A parse or an edit of such a text used to succeed and now throws `NOT_WELL_FORMED_XML`, the same fatal any other text that is not XML gets.
+  - Code that matched an unrecognized value quoted in the unsupported `documentType` message now matches `of type string`.
+
+- d47071e: `parseCcda`, `parseSecureXml` and `editCcda` now refuse, with `NOT_WELL_FORMED_XML`, a character outside ASCII that XML 1.0 allows in a document but neither as white space nor in a name, wherever XML 1.0 allows only those.
+
+  - The new refusals. Such a character between the parts of a start tag, in an element or attribute name, in an end tag, in a processing instruction's target, in the XML declaration, or before or after the root element now throws `CcdaParseError` with code `NOT_WELL_FORMED_XML`, as libxml2 refuses it. The characters are U+0080 to U+00BF but U+00B7, U+00D7, U+00F7, U+037E, U+2000 to U+200B, U+200E to U+203E, U+2041 to U+206F, U+2190 to U+2BFF, U+2FF0 to U+3000, U+E000 to U+F8FF, U+FDD0 to U+FDEF and U+F0000 to U+10FFFF, read from XML 1.0's productions for a character, white space and a name character. They include U+0080, the no-break space (U+00A0), the other Unicode spaces and the private use characters. Before, the DOM library under the parser read U+0080 inside a tag as white space, and read a tag holding most of the others as plain text, `<` and all, with no warning, so an element could gain a wrong attribute split or become narrative text.
+  - Text, attribute values, comments, CDATA sections and processing instruction data keep these characters as they were written, as before.
+
+  What a caller may need to change:
+
+  - A text that uses one of these characters as white space inside a tag, or holds one outside the root, used to parse and now throws `NOT_WELL_FORMED_XML`. Replace the character with a space inside the tag, or remove it outside the root, before you parse.
+
 ## 0.1.12
 
 ### Patch Changes
