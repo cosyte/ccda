@@ -12,7 +12,7 @@ has reviewed this software or this result, and a green run is not a statement ab
 CDA R2 XML schema and then the error-severity phase of the C-CDA R2.1 Schematron, and it measures
 whether parsing and re-serializing a public sample changes that sample's Schematron error set. It
 does not measure value-set membership beyond what the Schematron's own vocabulary file asserts, it
-does not measure the 10 document types `buildCcda` does not emit, and it says nothing about
+does not measure the 7 document types `buildCcda` does not emit, and it says nothing about
 documents this library has not been pointed at.
 
 ## Measured against
@@ -26,7 +26,7 @@ Assertions compiled from the Schematron: 4102.
 
 ## Documents `buildCcda` emits
 
-15 documents validated, covering document types `ccd` and `dischargeSummary` and `referralNote`. Error-severity results: 0.
+21 documents validated, covering document types `ccd` and `consultationNote` and `dischargeSummary` and `historyAndPhysical` and `progressNote` and `referralNote`. Error-severity results: 0.
 
 | document | type | schema | schematron |
 | --- | --- | ---: | ---: |
@@ -36,6 +36,12 @@ Assertions compiled from the Schematron: 4102.
 | `referral-note-populated` | `referralNote` | 0 | 0 |
 | `discharge-summary-minimal` | `dischargeSummary` | 0 | 0 |
 | `discharge-summary-populated` | `dischargeSummary` | 0 | 0 |
+| `progress-note-minimal` | `progressNote` | 0 | 0 |
+| `progress-note-populated` | `progressNote` | 0 | 0 |
+| `history-and-physical-minimal` | `historyAndPhysical` | 0 | 0 |
+| `history-and-physical-populated` | `historyAndPhysical` | 0 | 0 |
+| `consultation-note-minimal` | `consultationNote` | 0 | 0 |
+| `consultation-note-populated` | `consultationNote` | 0 | 0 |
 | `ccd-past-medical-history` | `ccd` | 0 | 0 |
 | `ccd-plan-of-treatment` | `ccd` | 0 | 0 |
 | `ccd-family-history` | `ccd` | 0 | 0 |
@@ -65,12 +71,15 @@ unless the README's conformance statement agrees with it.
   "artifactRevision": "6d3ed96160b45a111895da4df5510c7fad9de01f",
   "documentTypes": [
     "ccd",
+    "consultationNote",
     "dischargeSummary",
+    "historyAndPhysical",
+    "progressNote",
     "referralNote"
   ],
   "builtErrorSeverityResults": 0,
   "roundTripDocumentsDiffering": 0,
-  "builtDocuments": 15,
+  "builtDocuments": 21,
   "roundTripDocuments": 20,
   "artifacts": {
     "schematron": "6d3ed96160b45a111895da4df5510c7fad9de01f",

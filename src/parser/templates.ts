@@ -612,14 +612,27 @@ export function sectionForTemplateRoot(root: string): SectionInfo | undefined {
  * - It is never a required-section key: `src/parser/required-sections.ts` names
  *   it and does not assert it.
  *
- * **One entry today: the Hospital Course Section.** An IHE PCC template
- * (`1.3.6.1.4.1.19376.1.5.3.1.3.5`, LOINC `8648-8`, unversioned) that the R2.1
- * Discharge Summary SHALL carry (CONF:1198-30522), read off the normative R2.1
- * Schematron the conformance harness pins rather than from memory. `buildCcda`
- * emits it in every Discharge Summary, so without this entry every Discharge
- * Summary the library itself built reparsed with a warning about a section the
- * library wrote. Promoting it into the catalog, or asserting it, is a change to
- * how third-party documents parse and is its own item.
+ * **Five entries, each a section `buildCcda` writes.** Without an entry here,
+ * every document the library itself built carrying one reparsed with a warning
+ * about a section the library wrote. Each is read off the normative R2.1
+ * Schematron the conformance harness pins rather than from memory:
+ *
+ * - the Hospital Course Section (`1.3.6.1.4.1.19376.1.5.3.1.3.5`, LOINC
+ *   `8648-8`), which a Discharge Summary SHALL carry (CONF:1198-30522);
+ * - the General Status Section (`2.16.840.1.113883.10.20.2.5`, LOINC `10210-3`,
+ *   CONF:81-15473), the Physical Exam Section (`2.16.840.1.113883.10.20.2.10`,
+ *   LOINC `29545-1`, CONF:1198-15398) and the Review of Systems Section
+ *   (`1.3.6.1.4.1.19376.1.5.3.1.3.18`, LOINC `10187-3`, CONF:81-15436), which a
+ *   History and Physical SHALL carry (CONF:1198-30586, -30598, -30608);
+ * - the Chief Complaint and Reason for Visit Section
+ *   (`2.16.840.1.113883.10.20.22.2.13`, LOINC `46239-0`, CONF:81-15450), one
+ *   alternative of the History and Physical's chief-complaint choice
+ *   (CONF:1198-30613).
+ *
+ * None of the five LOINC codes is a catalog code, so the LOINC fallback never
+ * resolves one of these sections first. Promoting any of them into the catalog,
+ * or asserting it, is a change to how third-party documents parse and is its
+ * own item.
  * @internal
  */
 const FRAMING_ONLY_SECTIONS: readonly SectionInfo[] = [
@@ -628,6 +641,30 @@ const FRAMING_ONLY_SECTIONS: readonly SectionInfo[] = [
     title: "Hospital Course",
     loinc: "8648-8",
     templateRoots: ["1.3.6.1.4.1.19376.1.5.3.1.3.5"],
+  },
+  {
+    key: "generalStatus",
+    title: "General Status",
+    loinc: "10210-3",
+    templateRoots: ["2.16.840.1.113883.10.20.2.5"],
+  },
+  {
+    key: "physicalExam",
+    title: "Physical Exam",
+    loinc: "29545-1",
+    templateRoots: ["2.16.840.1.113883.10.20.2.10"],
+  },
+  {
+    key: "reviewOfSystems",
+    title: "Review of Systems",
+    loinc: "10187-3",
+    templateRoots: ["1.3.6.1.4.1.19376.1.5.3.1.3.18"],
+  },
+  {
+    key: "chiefComplaintAndReasonForVisit",
+    title: "Chief Complaint and Reason for Visit",
+    loinc: "46239-0",
+    templateRoots: ["2.16.840.1.113883.10.20.22.2.13"],
   },
 ];
 

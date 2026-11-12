@@ -221,6 +221,15 @@ describe("a document stamped 2024-05-01 is checked against C-CDA 5.0.0", () => {
     expect(status.verification).toBe("not-applicable");
   });
 
+  it("names the 5.0.0 History and Physical sections the parser frames and does not assert", () => {
+    const status = requiredSectionStatus("historyAndPhysical", { stamp: "r30-stamped" });
+    expect(
+      status.unasserted
+        .filter((u) => u.reason === "assertion-would-tighten-parse")
+        .map((u) => u.sourceName),
+    ).toEqual(["General Status Section", "Physical Exam Section", "Review of Systems Section"]);
+  });
+
   it("names the 5.0.0 Discharge Summary sections it does not assert, with the reason", () => {
     const status = requiredSectionStatus("dischargeSummary", { stamp: "r30-stamped" });
     expect(status.verification).toBe("traced-partial");

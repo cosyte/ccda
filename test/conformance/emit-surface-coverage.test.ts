@@ -96,7 +96,14 @@ describe("AC-1: the built-document set covers the whole emit surface", () => {
 
   it("every document type the builder emits is built", () => {
     const types = new Set(BUILT_DOCUMENT_CASES.map((entry) => entry.documentType));
-    expect([...types].sort()).toStrictEqual(["ccd", "dischargeSummary", "referralNote"]);
+    expect([...types].sort()).toStrictEqual([
+      "ccd",
+      "consultationNote",
+      "dischargeSummary",
+      "historyAndPhysical",
+      "progressNote",
+      "referralNote",
+    ]);
   });
 
   it("every exempt field is a real field of the input type", () => {

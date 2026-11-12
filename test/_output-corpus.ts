@@ -453,7 +453,17 @@ function drawnDocuments(): OutputDocument[] {
       docs.push({ name: `${family}:${String(i)}`, text });
     });
   };
-  add("document", draw(documentText({ maxEntries: 3 }), 101, 60));
+  // The three document types the digests were first captured over, named rather than left to
+  // the generator's default: the default grows when the builder learns a type, and a drawn
+  // corpus that moves with it would turn every builder addition into a digest re-capture.
+  add(
+    "document",
+    draw(
+      documentText({ maxEntries: 3, documentTypes: ["ccd", "referralNote", "dischargeSummary"] }),
+      101,
+      60,
+    ),
+  );
   add("hostile", draw(hostileInput(), 202, 150));
   return docs;
 }

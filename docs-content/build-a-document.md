@@ -2,7 +2,7 @@
 id: build-a-document
 title: Build a document
 sidebar_label: Build a document
-description: "Build a spec-clean C-CDA R2.1 CCD, Referral Note or Discharge Summary from structured data, with no hand-written XML."
+description: "Build a spec-clean C-CDA R2.1 CCD, Referral Note, Discharge Summary, Progress Note, History and Physical or Consultation Note from structured data, with no hand-written XML."
 ---
 
 # Build a document
@@ -134,8 +134,9 @@ doc.getSmokingStatus()[1]?.unknown; // => true
 ```
 
 > Current builder scope: `buildCcda` emits a **CCD** (the default), a **Referral Note**
-> (`documentType: "referralNote"`) or an inpatient **Discharge Summary**
-> (`documentType: "dischargeSummary"`). A CCD carries the US Realm header, the six CCD SHALL sections
+> (`documentType: "referralNote"`), an inpatient **Discharge Summary**
+> (`documentType: "dischargeSummary"`), a **Progress Note** (`"progressNote"`), a **History and
+> Physical** (`"historyAndPhysical"`) or a **Consultation Note** (`"consultationNote"`). A CCD carries the US Realm header, the six CCD SHALL sections
 > (Problems, Allergies, Medications, Results, Vital Signs, and **Social History** (Smoking Status),
 > emitted empty as `nullFlavor="NI"` when no
 > content is supplied), and **Immunizations**, **Procedures**, **Encounters**,
@@ -148,9 +149,10 @@ doc.getSmokingStatus()[1]?.unknown; // => true
 > Allergies, Medications, **Reason for Referral**, **Assessment**, and Plan of Treatment, which makes
 > Results, Vital Signs, and Social History populated-only. A Discharge Summary specializes it again
 > and always emits Allergies, **Hospital Course**, **Discharge Diagnosis**, and Plan of Treatment,
-> plus the `componentOf/encompassingEncounter` frame its template requires. All three accept an
-> optional bring-your-own `terminology`
-> adapter. The other nine C-CDA R2.1 document types are not implemented.
+> plus the `componentOf/encompassingEncounter` frame its template requires. The three office-visit
+> types are described in [their own recipe](#build-a-progress-note-a-history-and-physical-or-a-consultation-note).
+> All six accept an optional bring-your-own `terminology` adapter. The other six US Realm document
+> types are not implemented.
 
 ## Build a CCD with medications, results and vital signs
 
@@ -217,11 +219,13 @@ doc.warnings.length; // => 0
 
 ## Build a Discharge Summary, with its encounter frame
 
-`BuildableDocumentType` is the union of the three types `buildCcda` emits (`"ccd"`,
-`"referralNote"`, `"dischargeSummary"`); ask for any of the other nine and you get a `TypeError`
-naming what you asked for, never a document that merely resembles it.
+`BuildableDocumentType` is the union of the six types `buildCcda` emits (`"ccd"`,
+`"referralNote"`, `"dischargeSummary"`, `"progressNote"`, `"historyAndPhysical"`,
+`"consultationNote"`); ask for any other type and you get a `TypeError` naming what you asked for,
+never a document that merely resembles it.
 
-A Discharge Summary carries one more thing than the other two types: the encounter it summarizes.
+A Discharge Summary carries one more thing than a CCD or a Referral Note: the encounter it
+summarizes.
 Supply the period and the discharge disposition through `encompassingEncounter`, a
 `BuildCcdaEncompassingEncounter`. Any slot you leave out is emitted as an explicit
 `nullFlavor="UNK"` and reparses as absent, never as a guessed date or a guessed disposition; an
@@ -258,9 +262,79 @@ summary.findSection("hospitalCourse")?.narrativeText; // => "Admitted for observ
 >
 > **What you supply is emitted or refused.** `problems` and `medications` are emitted when you pass
 > them (the medications in the Medications Section, not the Discharge Medications Section). Passing
-> `assessment` or `reasonForReferral`, which are Referral Note sections, throws a `TypeError`, as
-> does passing `hospitalCourse`, `dischargeDiagnoses`, or `encompassingEncounter` to a CCD or a
-> Referral Note.
+> `assessment` or `reasonForReferral`, which a Discharge Summary does not carry, throws a
+> `TypeError`, as does passing `hospitalCourse` or `dischargeDiagnoses` to any other type, or
+> `encompassingEncounter` to a CCD or a Referral Note.
+
+## Build a Progress Note, a History and Physical or a Consultation Note
+
+The three office-visit types each carry their own document `templateId` (R2.1 `2015-08-01`) and
+LOINC document `code`: a **Progress Note** `2.16.840.1.113883.10.20.22.1.9` with `11506-3`, a
+**History and Physical** `2.16.840.1.113883.10.20.22.1.3` with `34117-2`, and a **Consultation
+Note** `2.16.840.1.113883.10.20.22.1.4` with `11488-4`. Each always emits the sections its rule
+requires, an empty `nullFlavor="NI"` section for each you leave out:
+
+- **Progress Note**: Assessment and Plan of Treatment, the pair that meets its Assessment/Plan
+  choice (CONF:1198-30657). It requires no other section.
+- **History and Physical**: Allergies, Family History, General Status, Past Medical History,
+  Medications, Physical Exam, Results, Review of Systems, Social History and Vital Signs, plus Chief
+  Complaint and Reason for Visit, Assessment and Plan of Treatment for its two choices.
+- **Consultation Note**: History of Present Illness, Allergies, Problems, Reason for Referral,
+  Assessment and Plan of Treatment.
+
+The narratives are plain strings: `historyOfPresentIllness`, `chiefComplaintAndReasonForVisit`,
+`reviewOfSystems`, `physicalExam` and `generalStatus`, beside `assessment` and (for a Consultation
+Note) `reasonForReferral`. A Progress Note or a Consultation Note emits one it does not require only
+when you supply it. A CCD, a Referral Note or a Discharge Summary refuses all five with a
+`TypeError`.
+
+Each of the three carries the `componentOf/encompassingEncounter` frame its rule requires. The
+period start you supply is emitted, and an omitted one is `nullFlavor="UNK"`; the end and a
+discharge disposition are emitted only when you supply them. A Progress Note's encounter also
+carries the `location/healthCareFacility` its rule requires, and a Consultation Note carries the
+`inFulfillmentOf/order` its rule requires. The builder takes no facility or order input, so both ids
+are `nullFlavor="UNK"` rather than invented.
+
+```ts runnable
+import { buildCcda } from "@cosyte/ccda";
+
+const hp = buildCcda({
+  documentType: "historyAndPhysical",
+  patient: { mrn: "MRN001", given: ["Jane"], family: "Doe", gender: "F" },
+  chiefComplaintAndReasonForVisit: "Headaches for two weeks.",
+  physicalExam: "Alert, no distress. Heart regular. Lungs clear.",
+  assessment: "Tension-type headache.",
+  pastMedicalHistory: [
+    { problem: { code: "59621000", displayName: "Essential hypertension" }, onset: "20150101" },
+  ],
+  encompassingEncounter: { period: { low: "20240102" } },
+});
+
+hp.documentType; // => "historyAndPhysical"
+hp.warnings.length; // => 0
+hp.sections.length; // => 13
+hp.findSection("physicalExam")?.narrativeText; // => "Alert, no distress. Heart regular. Lungs clear."
+hp.findSection("reviewOfSystems")?.narrativeText; // => "No information"
+hp.getPastMedicalHistory()[0]?.value?.code; // => "59621000"
+hp.header.encompassingEncounter?.effectiveTime?.low?.raw; // => "20240102"
+
+const consult = buildCcda({
+  documentType: "consultationNote",
+  patient: { mrn: "MRN001" },
+  historyOfPresentIllness: "Referred for blood pressure above goal on two agents.",
+  reasonForReferral: "Evaluation of resistant hypertension.",
+});
+
+consult.documentType; // => "consultationNote"
+consult.warnings.length; // => 0
+consult.findSection("historyOfPresentIllness")?.narrativeText; // => "Referred for blood pressure above goal on two agents."
+```
+
+> **Recognized, and not all asserted.** The parser recognizes every section these types emit, so
+> each reparses with zero warnings. The History and Physical's General Status, Physical Exam and
+> Review of Systems sections are recognized by their roots but not asserted as required, so a reparse
+> will not report one missing; the conformance run in our repository (`pnpm conformance`) is the
+> check on their presence.
 
 ## Build a Referral Note
 
@@ -350,9 +424,10 @@ condition is resolved, per Problem Observation `…22.4.4`) is emitted only for 
 keeps the `nullFlavor="UNK"` high, never a fabricated date. Each CCD SHALL section for which no content
 is supplied is emitted as a spec-clean empty `nullFlavor="NI"` section; the non-required Immunizations /
 Procedures / Encounters / Functional Status / Mental Status / Past Medical History /
-Plan of Treatment / Family History sections are emitted only when populated. The builder emits three of
-the twelve document types (**CCD**, **Referral Note**, and inpatient **Discharge Summary**); the other
-nine are **not implemented**, and any
+Plan of Treatment / Family History sections are emitted only when populated. The builder emits six of
+the twelve document types (**CCD**, **Referral Note**, inpatient **Discharge Summary**, **Progress
+Note**, **History and Physical**, and **Consultation Note**); the other six are **not implemented**,
+and any
 other `documentType` throws a `TypeError` rather than emitting something that merely resembles the type
 you asked for. Any C-CDA section outside the set listed above cannot be built at all.
 `buildCcda(init, { terminology })` accepts an optional bring-your-own terminology adapter (see [Code

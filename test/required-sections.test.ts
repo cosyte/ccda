@@ -438,17 +438,23 @@ describe("required-section verification status", () => {
       },
     ]);
 
-    // A History and Physical names three of them at once.
+    // A History and Physical names three of them at once. `buildCcda` emits all three, so the
+    // parser frames each by its root (a built History and Physical reparses with zero warnings),
+    // and none is asserted, for the same reason Hospital Course is not.
     const hp = requiredSectionStatus("historyAndPhysical");
     expect(
       hp.unasserted
-        .filter((u) => u.reason === "outside-section-catalog")
+        .filter((u) => u.reason === "assertion-would-tighten-parse")
         .map((u) => [u.sourceName, u.conformanceId]),
     ).toEqual([
       ["General Status Section", "CONF:1198-30586"],
       ["Physical Exam Section (V3)", "CONF:1198-30598"],
       ["Review of Systems Section", "CONF:1198-30608"],
     ]);
+    expect(hp.unasserted.filter((u) => u.reason === "outside-section-catalog")).toEqual([]);
+    for (const key of ["generalStatus", "physicalExam", "reviewOfSystems"]) {
+      expect(hp.keys).not.toContain(key);
+    }
   });
 
   it("reports every named alternative of a choice as unasserted, and none as missing", () => {
@@ -1110,11 +1116,18 @@ describe("emit and validate stay in lockstep", () => {
         expect(back.findSection(key)).toBeDefined();
       }
     }
-    // Guard against the loop going quiet: the builder emits three types today, in the
-    // recognition enumeration's own order. S0352-ccda-7 added the Discharge Summary, and this
-    // walk covered it without a line of its own, which is what discovering the set rather than
-    // listing it buys.
-    expect(emittable).toEqual(["ccd", "dischargeSummary", "referralNote"]);
+    // Guard against the loop going quiet: the builder emits six types today, in the
+    // recognition enumeration's own order. The Discharge Summary, and then the Progress Note,
+    // the History and Physical and the Consultation Note, joined this walk without a line of
+    // their own, which is what discovering the set rather than listing it buys.
+    expect(emittable).toEqual([
+      "ccd",
+      "dischargeSummary",
+      "referralNote",
+      "consultationNote",
+      "historyAndPhysical",
+      "progressNote",
+    ]);
   });
 });
 

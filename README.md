@@ -53,12 +53,14 @@ named rather than implied:
 - **The conformance target is C-CDA R2.1 with Companion Guide R4.1** (USCDI v3): we build R2.1,
   read 3.0.0 to 5.0.0 documents leniently, and do not trace the Companion Guide yet
   ([versions we read and build](https://docs.cosyte.com/ccda/spec-notes-versions)).
-- **Building is partial.** `buildCcda` emits three of the twelve US Realm document types (CCD,
-  Referral Note, and inpatient Discharge Summary); the other nine throw rather than emitting
-  something that merely resembles the type you asked for.
+- **Building is partial.** `buildCcda` emits six of the twelve US Realm document types (CCD,
+  Referral Note, inpatient Discharge Summary, Progress Note, History and Physical, and Consultation
+  Note); the other six throw rather than emitting something that merely resembles the type you
+  asked for.
 - **Editing is whole-section.** `editCcda` covers twelve section kinds. Functional Status, Mental
-  Status, and the Referral Note's narrative-only sections are buildable but not editable, and there is
-  no entry-level append and no section removal.
+  Status, and the narrative-only sections (Assessment, Reason for Referral, and the office notes'
+  history, review of systems, examination, and status narratives) are buildable but not editable, and
+  there is no entry-level append and no section removal.
 - **Required-section validation under-warns**, and every document type reports how much of its
   obligation has been read off the normative source. A quiet parse is not a conformance result.
 - **A terminology adapter is consulted at five coded slots only**, so a clean run means those five
@@ -227,14 +229,14 @@ every run, and a run fails if the committed bytes disagree with what it just pro
 **Measured against Schematron revision `6d3ed96160b45a111895da4df5510c7fad9de01f`**, the document
 types validated are
 
-<!-- conformance-statement:document-types:start -->`ccd`, `dischargeSummary`, and `referralNote`<!-- conformance-statement:document-types:end -->,
+<!-- conformance-statement:document-types:start -->`ccd`, `consultationNote`, `dischargeSummary`, `historyAndPhysical`, `progressNote`, and `referralNote`<!-- conformance-statement:document-types:end -->,
 
 with **0** error-severity results on the built side
 and **0** round-trip documents whose Schematron error set differed.
 **This is an assessment against a published artifact, not a certification**, and no accredited body
 has reviewed this software or this result.
 **Limits, and they sit here beside the capability rather than in a footer.** The measurement covers
-the three document types `buildCcda` emits and says nothing about the other nine, which it does not
+the six document types `buildCcda` emits and says nothing about the other six, which it does not
 emit. It covers the error-severity phase; the Schematron's warning phase is not run and a clean
 result is not a claim about it. Value-set membership is checked only where the Schematron's own
 vocabulary file checks it, so a clean result is not a terminology verification. The round-trip half

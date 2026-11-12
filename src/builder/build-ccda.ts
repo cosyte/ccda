@@ -259,7 +259,22 @@
  * will not report the section MISSING either: `pnpm conformance` is the only
  * thing that catches an omission or a wrong identifier.
  *
- * The remaining nine document types are not emitted, and asking for one throws
+ * **Three office-visit types: the Progress Note, the History and Physical and
+ * the Consultation Note.** Each has its own document `templateId` root
+ * (`…22.1.9`, `…22.1.3`, `…22.1.4`, the R2.1 `2015-08-01` stamp) and LOINC
+ * document `code` (`11506-3`, `34117-2`, `11488-4`), and the SHALL set its
+ * errors rule names (see {@link DOC_TYPE_SPECS}). They add five narrative-only
+ * sections ({@link OFFICE_NARRATIVE_SECTIONS}): History of Present Illness,
+ * Chief Complaint and Reason for Visit, Review of Systems, Physical Exam (V3)
+ * and General Status, each an empty `nullFlavor="NI"` section when required and
+ * not supplied, and emitted only when supplied otherwise. Each meets its
+ * Assessment/Plan choice with the separate Assessment and Plan of Treatment
+ * sections. All three carry the `componentOf/encompassingEncounter` frame; a
+ * Progress Note's encounter adds the `location/healthCareFacility` its rule
+ * requires and a Consultation Note adds the `inFulfillmentOf/order`, both with
+ * `nullFlavor="UNK"` ids because the builder is told of no facility or order.
+ *
+ * The remaining six US Realm document types are not emitted, and asking for one throws
  * rather than producing a document that resembles it.
  *
  * **The bring-your-own terminology adapter (validation path).**
@@ -492,6 +507,103 @@ const REASON_FOR_REFERRAL_SECTION_BASE = "1.3.6.1.4.1.19376.1.5.3.1.3.1";
 const REASON_FOR_REFERRAL_EXT = "2014-06-09";
 /** The LOINC `code` + title for the Reason for Referral Section. @internal */
 const REASON_FOR_REFERRAL_CODE = { code: "42349-1", displayName: "Reason for Referral" } as const;
+/**
+ * The Progress Note document template OID (root); the R2.1 stamp lives in
+ * `@extension`. Read off the pinned normative R2.1 Schematron, rule
+ * `r-urn-hl7ii-2.16.840.1.113883.10.20.22.1.9-2015-08-01-errors`
+ * (CONF:1198-7588 / -10052 / -32521). @internal
+ */
+const PROGRESS_NOTE_TEMPLATE = "2.16.840.1.113883.10.20.22.1.9";
+/**
+ * The LOINC document-type code + title for a Progress Note. The rule requires a
+ * `code` (CONF:1198-17189) selected from ValueSet `ProgressNoteDocumentTypeCode`
+ * (`2.16.840.1.113883.11.20.8.1`, CONF:1198-17190); `11506-3` is that set's
+ * general member, spelled as the pinned vocabulary artifact spells it. The other
+ * members specialise by discipline, which this builder has no input to choose
+ * between and will not guess. @internal
+ */
+const PROGRESS_NOTE_DOC_CODE = { code: "11506-3", displayName: "Progress note" } as const;
+/**
+ * The History and Physical document template OID (root), rule
+ * `r-urn-hl7ii-2.16.840.1.113883.10.20.22.1.3-2015-08-01-errors`
+ * (CONF:1198-8283 / -10046 / -32518). @internal
+ */
+const HISTORY_AND_PHYSICAL_TEMPLATE = "2.16.840.1.113883.10.20.22.1.3";
+/**
+ * The LOINC document-type code + title for a History and Physical: `34117-2`,
+ * the general member of ValueSet `HPDocumentType` (`2.16.840.1.113883.1.11.20.22`,
+ * CONF:1198-17186), spelled as the pinned vocabulary artifact spells it. @internal
+ */
+const HISTORY_AND_PHYSICAL_DOC_CODE = {
+  code: "34117-2",
+  displayName: "History and physical note",
+} as const;
+/**
+ * The Consultation Note document template OID (root), rule
+ * `r-urn-hl7ii-2.16.840.1.113883.10.20.22.1.4-2015-08-01-errors`
+ * (CONF:1198-8375 / -10040 / -32502). @internal
+ */
+const CONSULTATION_NOTE_TEMPLATE = "2.16.840.1.113883.10.20.22.1.4";
+/**
+ * The LOINC document-type code + title for a Consultation Note: `11488-4`, the
+ * general member of ValueSet `ConsultDocumentType` (`2.16.840.1.113883.11.20.9.31`,
+ * CONF:1198-32969), spelled as the pinned vocabulary artifact spells it. @internal
+ */
+const CONSULTATION_NOTE_DOC_CODE = { code: "11488-4", displayName: "Consult note" } as const;
+/**
+ * The five narrative-only sections the three office-visit document types
+ * (Progress Note, History and Physical, Consultation Note) add, each read off
+ * the pinned normative R2.1 Schematron: its `templateId` root, the `@extension`
+ * its rule context matches (`null` for the four whose context is
+ * `not(@extension)`), and the LOINC `code` its rule fixes. @internal
+ */
+const OFFICE_NARRATIVE_SECTIONS = {
+  /** History of Present Illness Section, IHE PCC, CONF:81-7848 / -10458 / -15478. */
+  historyOfPresentIllness: {
+    root: "1.3.6.1.4.1.19376.1.5.3.1.3.4",
+    extension: null,
+    code: "10164-2",
+    displayName: "History of Present Illness",
+  },
+  /** Chief Complaint and Reason for Visit Section, CONF:81-7840 / -10383 / -15450. */
+  chiefComplaintAndReasonForVisit: {
+    root: "2.16.840.1.113883.10.20.22.2.13",
+    extension: null,
+    code: "46239-0",
+    displayName: "Chief Complaint and Reason for Visit",
+  },
+  /** General Status Section, CONF:81-7985 / -10457 / -15473. */
+  generalStatus: {
+    root: "2.16.840.1.113883.10.20.2.5",
+    extension: null,
+    code: "10210-3",
+    displayName: "General Status",
+  },
+  /** Physical Exam Section (V3), stamped {@link R21}, CONF:1198-7806 / -10465 / -32587 / -15398. */
+  physicalExam: {
+    root: "2.16.840.1.113883.10.20.2.10",
+    extension: R21,
+    code: "29545-1",
+    displayName: "Physical Findings",
+  },
+  /** Review of Systems Section, IHE PCC, CONF:81-7812 / -10469 / -15436. */
+  reviewOfSystems: {
+    root: "1.3.6.1.4.1.19376.1.5.3.1.3.18",
+    extension: null,
+    code: "10187-3",
+    displayName: "Review of Systems",
+  },
+} as const;
+/** The key of one {@link OFFICE_NARRATIVE_SECTIONS} entry. @internal */
+type OfficeNarrativeKey = keyof typeof OFFICE_NARRATIVE_SECTIONS;
+/** Every {@link OfficeNarrativeKey}, in the order an optional one is emitted. @internal */
+const OFFICE_NARRATIVE_KEYS: readonly OfficeNarrativeKey[] = [
+  "chiefComplaintAndReasonForVisit",
+  "historyOfPresentIllness",
+  "reviewOfSystems",
+  "physicalExam",
+  "generalStatus",
+];
 /** The R2.1 `@extension` stamp the Medication Activity/Information templates carry. @internal */
 const MED_EXT = "2014-06-09";
 /**
@@ -1121,15 +1233,19 @@ export interface BuildCcdaEncounter {
 
 /**
  * The `componentOf/encompassingEncounter` frame a Discharge Summary SHALL carry
- * (CONF:1198-8471, -8472): the inpatient stay the document summarises. Ignored
- * for a document type whose rule does not require the frame, because emitting an
- * encounter a CCD never claimed would be asserting one.
+ * (CONF:1198-8471, -8472): the inpatient stay the document summarises. A
+ * Progress Note, a History and Physical and a Consultation Note carry the frame
+ * too, for the visit they document. Refused for a CCD and a Referral Note, whose
+ * rules do not carry the frame, because emitting an encounter a document never
+ * claimed would be asserting one.
  *
- * **NOTHING HERE IS EVER FABRICATED, AND EVERY SLOT IS REQUIRED BY THE
- * TEMPLATE.** The encounter's `effectiveTime` SHALL carry a `low` and a `high`
- * (CONF:1198-8473, -8475) and the encounter SHALL carry a
+ * **NOTHING HERE IS EVER FABRICATED.** For a Discharge Summary every slot is
+ * required by the template: the encounter's `effectiveTime` SHALL carry a `low`
+ * and a `high` (CONF:1198-8473, -8475) and the encounter SHALL carry a
  * `dischargeDispositionCode` (CONF:1198-8476), so all three elements are always
- * emitted. A bound or a disposition the caller did not supply is emitted as an
+ * emitted. For the three office-visit types only the `low` is always emitted
+ * (the Progress Note's CONF:1198-7599 names it); the `high` and the disposition
+ * are emitted only when supplied. A bound or a disposition the caller did not supply is emitted as an
  * **explicit** `nullFlavor="UNK"`, which satisfies the cardinality without
  * stating a clinical fact and which {@link parseCcda} reads back as absent
  * rather than as a date or a code. An admission date, a discharge date and a
@@ -1151,18 +1267,21 @@ export interface BuildCcdaEncounter {
 export interface BuildCcdaEncompassingEncounter {
   /**
    * The encounter period as HL7 date strings (an `IVL_TS` low/high), the
-   * admission and discharge times. Either bound may be omitted and an omitted
-   * one is emitted `nullFlavor="UNK"`; the element itself is always emitted,
-   * because the template requires both bounds to be present.
+   * admission and discharge times for a Discharge Summary, the visit for the
+   * other framed types. Either bound may be omitted. An omitted `low` is
+   * emitted `nullFlavor="UNK"`; so is an omitted `high` on a Discharge Summary,
+   * whose template requires both bounds, while on the other types an omitted
+   * `high` is not emitted.
    */
   readonly period?: { readonly low?: string; readonly high?: string };
   /**
    * The discharge disposition. `codeSystem` defaults to the NUBC UB-04 Patient
    * Discharge Status code set, the system every member of the value set the
    * template names carries; supply your own to code it elsewhere, since that
-   * binding is a SHOULD. Omitted entirely, the element is emitted
+   * binding is a SHOULD. Omitted on a Discharge Summary, the element is emitted
    * `nullFlavor="UNK"`: the builder has no defensible default for where a
-   * patient went.
+   * patient went. Omitted on the other framed types, whose rules do not require
+   * it, the element is not emitted.
    */
   readonly dischargeDisposition?: BuildCode;
 }
@@ -1863,8 +1982,8 @@ export type BuildCcdaPlannedItem =
  * `vitalSigns`, `smokingStatus`) defaults to empty, in which case its section is
  * emitted as a spec-clean empty `nullFlavor="NI"` section. `immunizations` is optional, its section is emitted
  * only when populated (Immunizations is not a CCD SHALL section). `documentType`
- * is `"ccd"` (the default), `"referralNote"` or `"dischargeSummary"`; the other
- * nine C-CDA R2.1 document types are not implemented.
+ * is `"ccd"` (the default) or one of the five other {@link BuildableDocumentType}s;
+ * the other six US Realm document types are not implemented.
  *
  * @example
  * ```ts
@@ -1878,10 +1997,11 @@ export type BuildCcdaPlannedItem =
  */
 export interface BuildCcdaInit {
   /**
-   * The document type, `"ccd"` (default), `"referralNote"` or
-   * `"dischargeSummary"`. Each specializes the US Realm Header (its own document
-   * `templateId` + LOINC `code`) and its SHALL section set; the other nine C-CDA
-   * R2.1 document types are not emitted, and asking for one throws rather than
+   * The document type: `"ccd"` (default), `"referralNote"`,
+   * `"dischargeSummary"`, `"progressNote"`, `"historyAndPhysical"` or
+   * `"consultationNote"`. Each specializes the US Realm Header (its own document
+   * `templateId` + LOINC `code`) and its SHALL section set; the other six US
+   * Realm document types are not emitted, and asking for one throws rather than
    * emitting a document that merely resembles it.
    */
   readonly documentType?: BuildableDocumentType;
@@ -1901,31 +2021,30 @@ export interface BuildCcdaInit {
   readonly patient: BuildCcdaPatient;
   /**
    * Problem Concerns for the Problems section; an empty section when omitted
-   * for a CCD or a Referral Note, whose SHALL sets include it. A Discharge
-   * Summary's does not, so for that type the section is emitted only when this
-   * is non-empty.
+   * for a CCD, a Referral Note or a Consultation Note, whose SHALL sets include
+   * it. For the other types the section is emitted only when this is non-empty.
    */
   readonly problems?: readonly BuildCcdaProblem[];
   /** Allergy Concerns for the Allergies section; empty section when omitted. */
   readonly allergies?: readonly BuildCcdaAllergy[];
   /**
    * Medication Activities for the Medications section; an empty section when
-   * omitted for a CCD or a Referral Note, whose SHALL sets include it. A
-   * Discharge Summary's does not, so for that type the section is emitted only
-   * when this is non-empty, and always as the Medications Section, never as the
-   * Discharge Medications Section.
+   * omitted for a CCD, a Referral Note or a History and Physical, whose SHALL
+   * sets include it. For the other types the section is emitted only when this
+   * is non-empty, and for a Discharge Summary always as the Medications Section,
+   * never as the Discharge Medications Section.
    */
   readonly medications?: readonly BuildCcdaMedication[];
   /**
    * Result panels for the Results section; an empty section when omitted for a
-   * CCD, whose SHALL set includes it. For a Referral Note or a Discharge Summary
-   * the section is emitted only when this is non-empty.
+   * CCD or a History and Physical, whose SHALL sets include it. For the other
+   * types the section is emitted only when this is non-empty.
    */
   readonly results?: readonly BuildCcdaResultPanel[];
   /**
    * Vital Signs panels for the Vital Signs section; an empty section when omitted
-   * for a CCD, whose SHALL set includes it. For a Referral Note or a Discharge
-   * Summary the section is emitted only when this is non-empty.
+   * for a CCD or a History and Physical, whose SHALL sets include it. For the
+   * other types the section is emitted only when this is non-empty.
    */
   readonly vitalSigns?: readonly BuildCcdaVitalsPanel[];
   /** Immunization Activities; the Immunizations section is emitted only when non-empty. */
@@ -1936,8 +2055,9 @@ export interface BuildCcdaInit {
   readonly encounters?: readonly BuildCcdaEncounter[];
   /**
    * Smoking Status observations for the Social History section. Social History is
-   * a **CCD SHALL** section (CONF:1198-30688), so for a CCD the section is always
-   * emitted, as a `nullFlavor="NI"` shell when this is empty. For document types
+   * a **CCD SHALL** section (CONF:1198-30688), and a History and Physical SHALL
+   * section (-30610), so for those two the section is always emitted, as a
+   * `nullFlavor="NI"` shell when this is empty. For document types
    * whose SHALL set excludes it, the section is emitted only when non-empty.
    */
   readonly smokingStatus?: readonly BuildCcdaSmokingStatus[];
@@ -1979,7 +2099,9 @@ export interface BuildCcdaInit {
   readonly mentalStatusScales?: readonly BuildCcdaAssessmentScale[];
   /**
    * Historical problems for the Past Medical History section; the section is
-   * emitted only when non-empty (a CCD MAY section). Each is a bare Problem
+   * emitted only when non-empty (a CCD MAY section), except for a History and
+   * Physical, whose SHALL set includes it (CONF:1198-30588) and which emits an
+   * empty `nullFlavor="NI"` section when this is omitted. Each is a bare Problem
    * Observation (not a concern act), read back via `getPastMedicalHistory`, never
    * conflated with the active Problems returned by `getProblems`.
    */
@@ -1993,27 +2115,32 @@ export interface BuildCcdaInit {
   readonly planOfTreatment?: readonly BuildCcdaPlannedItem[];
   /**
    * Family history for the Family History section; the section is emitted only
-   * when non-empty (a CCD SHOULD section). Each entry is one relative (a Family
+   * when non-empty (a CCD SHOULD section), except for a History and Physical,
+   * whose SHALL set includes it (CONF:1198-30584) and which emits an empty
+   * `nullFlavor="NI"` section when this is omitted. Each entry is one relative (a Family
    * History Organizer) carrying that relative's conditions, read back via
    * `getFamilyHistory`, grouped by relative.
    */
   readonly familyHistory?: readonly BuildCcdaFamilyHistory[];
   /**
-   * The Assessment Section narrative (`documentType: "referralNote"` only; with
-   * Plan of Treatment it satisfies the Referral Note's Assessment/Plan choice,
-   * CONF:1198-29102). Narrative-only, so this is a free-text
-   * clinician summary; when omitted the section is emitted as a spec-clean
-   * empty `nullFlavor="NI"` section (never a fabricated assessment). Ignored for
-   * a CCD; refused with a `TypeError` for a Discharge Summary, which carries no
-   * Assessment Section.
+   * The Assessment Section narrative. A SHALL section, through the
+   * Assessment/Plan choice, for a Referral Note (CONF:1198-29102), a Progress
+   * Note (-30657), a History and Physical (-30614) and a Consultation Note
+   * (-9501): with Plan of Treatment it satisfies that choice. Narrative-only, so
+   * this is a free-text clinician summary; when omitted the section is emitted as
+   * a spec-clean empty `nullFlavor="NI"` section (never a fabricated assessment).
+   * Ignored for a CCD; refused with a `TypeError` for a Discharge Summary, which
+   * carries no Assessment Section.
    */
   readonly assessment?: string;
   /**
-   * The Reason for Referral Section narrative (`documentType: "referralNote"`
-   * only, a Referral Note SHALL section). Narrative-only free text; when omitted
-   * the SHALL section is emitted as an empty `nullFlavor="NI"` section (never a
-   * fabricated reason). Ignored for a CCD; refused with a `TypeError` for a
-   * Discharge Summary, which carries no Reason for Referral Section.
+   * The Reason for Referral Section narrative, a SHALL section for a Referral
+   * Note (CONF:1198-30925) and, through its reason choice (-9504), for a
+   * Consultation Note. Narrative-only free text; when omitted the SHALL section
+   * is emitted as an empty `nullFlavor="NI"` section (never a fabricated reason).
+   * Ignored for a CCD; refused with a `TypeError` for a Discharge Summary, a
+   * Progress Note and a History and Physical, which carry no Reason for Referral
+   * Section here.
    */
   readonly reasonForReferral?: string;
   /**
@@ -2038,16 +2165,58 @@ export interface BuildCcdaInit {
    */
   readonly dischargeDiagnoses?: readonly BuildCcdaProblem[];
   /**
-   * The `componentOf/encompassingEncounter` frame
-   * (`documentType: "dischargeSummary"` only, CONF:1198-8471). Supplies the
-   * encounter period's two bounds and the discharge disposition; each slot the
-   * caller omits is emitted as an explicit `nullFlavor="UNK"` rather than
-   * guessed. When the whole field is omitted the frame is still emitted, with
-   * every slot unknown, because the document type's rule requires it. Refused
-   * with a `TypeError` for the other document types, whose rules do not carry
-   * the frame, rather than dropped.
+   * The `componentOf/encompassingEncounter` frame. Required by the Discharge
+   * Summary (CONF:1198-8471), the Progress Note (-7595), the History and
+   * Physical (-8338) and the Consultation Note (-8386), so for those four the
+   * frame is always emitted, with every slot the caller omits written as an
+   * explicit `nullFlavor="UNK"` rather than guessed; see
+   * {@link BuildCcdaEncompassingEncounter} for which slots each type requires.
+   * Refused with a `TypeError` for a CCD and a Referral Note, whose rules do not
+   * carry the frame, rather than dropped.
    */
   readonly encompassingEncounter?: BuildCcdaEncompassingEncounter;
+  /**
+   * The History of Present Illness Section narrative
+   * (`1.3.6.1.4.1.19376.1.5.3.1.3.4`, LOINC `10164-2`). A SHALL section for a
+   * Consultation Note (CONF:1198-28907), emitted as an empty `nullFlavor="NI"`
+   * section when omitted. Carried, and emitted only when supplied, by a Progress
+   * Note and a History and Physical. Refused with a `TypeError` for the other
+   * three types rather than dropped.
+   */
+  readonly historyOfPresentIllness?: string;
+  /**
+   * The Chief Complaint and Reason for Visit Section narrative
+   * (`2.16.840.1.113883.10.20.22.2.13`, LOINC `46239-0`). It satisfies the
+   * History and Physical's chief-complaint choice (CONF:1198-30613), so for that
+   * type it is always emitted, as an empty `nullFlavor="NI"` section when
+   * omitted. Carried, and emitted only when supplied, by a Progress Note and a
+   * Consultation Note. Refused with a `TypeError` for the other three types.
+   */
+  readonly chiefComplaintAndReasonForVisit?: string;
+  /**
+   * The Review of Systems Section narrative (`1.3.6.1.4.1.19376.1.5.3.1.3.18`,
+   * LOINC `10187-3`). A SHALL section for a History and Physical
+   * (CONF:1198-30608), emitted as an empty `nullFlavor="NI"` section when
+   * omitted. Carried, and emitted only when supplied, by a Progress Note and a
+   * Consultation Note. Refused with a `TypeError` for the other three types.
+   */
+  readonly reviewOfSystems?: string;
+  /**
+   * The Physical Exam Section (V3) narrative (`2.16.840.1.113883.10.20.2.10`,
+   * LOINC `29545-1`). A SHALL section for a History and Physical
+   * (CONF:1198-30598), emitted as an empty `nullFlavor="NI"` section when
+   * omitted. Carried, and emitted only when supplied, by a Progress Note and a
+   * Consultation Note. Refused with a `TypeError` for the other three types.
+   */
+  readonly physicalExam?: string;
+  /**
+   * The General Status Section narrative (`2.16.840.1.113883.10.20.2.5`, LOINC
+   * `10210-3`). A SHALL section for a History and Physical (CONF:1198-30586),
+   * emitted as an empty `nullFlavor="NI"` section when omitted. Carried, and
+   * emitted only when supplied, by a Progress Note and a Consultation Note.
+   * Refused with a `TypeError` for the other three types.
+   */
+  readonly generalStatus?: string;
 }
 
 /**
@@ -2057,7 +2226,9 @@ export interface BuildCcdaInit {
  * six-section SHALL set; `"assessment"`, `"reasonForReferral"`, and
  * `"planOfTreatment"` are the Referral Note's narrative SHALL sections;
  * `"hospitalCourse"` and `"dischargeDiagnosis"` are the two the Discharge
- * Summary adds to a set it otherwise shares.
+ * Summary adds to a set it otherwise shares; `"pastMedicalHistory"`,
+ * `"familyHistory"` and the five {@link OfficeNarrativeKey}s are what the History
+ * and Physical and the Consultation Note add.
  * @internal
  */
 type ShallSectionKey =
@@ -2071,24 +2242,32 @@ type ShallSectionKey =
   | "assessment"
   | "planOfTreatment"
   | "hospitalCourse"
-  | "dischargeDiagnosis";
+  | "dischargeDiagnosis"
+  | "pastMedicalHistory"
+  | "familyHistory"
+  | OfficeNarrativeKey;
 
 /**
- * The document types {@link buildCcda} can emit, three of the twelve
+ * The document types {@link buildCcda} can emit, six of the twelve US Realm
  * {@link DocumentType}s `parseCcda` recognizes.
  *
  * **Declared as a subset of the recognized enumeration rather than as its own
  * union of strings.** `Extract` fails to compile if any member stops being a
  * recognized document type, so the builder's surface cannot drift from the
  * parser's: renaming a key in `DOCUMENT_TYPES` is already a breaking change and
- * this makes it a compile error here too. The other nine are refused at run
- * time by {@link buildCcda}, and the refusal is derived from
+ * this makes it a compile error here too. The other seven recognized types are
+ * refused at run time by {@link buildCcda}, and the refusal is derived from
  * {@link DOC_TYPE_SPECS} rather than from a second list, so a thirteenth
  * recognized type is refused the moment it is recognized.
  */
 export type BuildableDocumentType = Extract<
   DocumentType,
-  "ccd" | "referralNote" | "dischargeSummary"
+  | "ccd"
+  | "referralNote"
+  | "dischargeSummary"
+  | "progressNote"
+  | "historyAndPhysical"
+  | "consultationNote"
 >;
 
 /**
@@ -2120,11 +2299,31 @@ interface DocTypeSpec {
   /**
    * Whether this type's header rule requires `componentOf/encompassingEncounter`.
    * The Discharge Summary's does (CONF:1198-8471, -8472), because the document
-   * summarises one inpatient stay; neither of the other two carries the frame,
-   * and emitting it for them would assert an encounter the document never
-   * claimed.
+   * summarises one inpatient stay, and so do the three office-visit types
+   * (Progress Note CONF:1198-7595, History and Physical -8338, Consultation Note
+   * -8386). Neither a CCD nor a Referral Note carries the frame, and emitting it
+   * for them would assert an encounter the document never claimed.
    */
   readonly requiresComponentOf: boolean;
+  /**
+   * Whether the encounter frame SHALL carry a discharge stay's slots: a `high`
+   * bound (CONF:1198-8475) and a `dischargeDispositionCode` (-8476). Only the
+   * Discharge Summary's rule names them; for the other framed types each is
+   * emitted only when the caller supplies it, and never as a `nullFlavor` slot
+   * the type does not require.
+   */
+  readonly requiresDischargeSlots: boolean;
+  /**
+   * Whether the encounter frame SHALL carry `location/healthCareFacility` with
+   * an `id` (Progress Note CONF:1198-30879, -30880, -30881).
+   */
+  readonly requiresFacility: boolean;
+  /**
+   * Whether this type's rule requires `inFulfillmentOf/order` with an `id`
+   * (Consultation Note CONF:1198-8382, -29923, -29924): the consult request the
+   * note answers.
+   */
+  readonly requiresOrder: boolean;
 }
 
 /**
@@ -2178,6 +2377,31 @@ interface DocTypeSpec {
  * requires neither `documentationOf` nor `informationRecipient`: both of those
  * SHALLs live in the CCD's and the Referral Note's own rules (CONF:1198-8452,
  * -31589) rather than in the shared US Realm Header rule all three extend.
+ *
+ * **Progress Note** names **no** unconditional SHALL section; its one section
+ * obligation is the Assessment/Plan choice (CONF:1198-30657), which this
+ * builder meets with an Assessment Section and a Plan of Treatment Section, the
+ * pair the Referral Note already emits. Its header rule requires the encounter
+ * frame with a `low` bound (-7599) and a `location/healthCareFacility/id`
+ * (-30879, -30880, -30881); `documentationOf` is optional there and not emitted.
+ *
+ * **History and Physical** SHALL contain **ten** sections, read off its errors
+ * rule in that rule's own order: Allergies (entries optional) (V3)
+ * **CONF:1198-30572**, Family History (V3) **-30584**, General Status
+ * **-30586**, Past Medical History (V3) **-30588**, Medications (entries
+ * optional) (V2) **-30596**, Physical Exam (V3) **-30598**, Results (entries
+ * optional) (V3) **-30606**, Review of Systems **-30608**, Social History (V3)
+ * **-30610**, and Vital Signs (entries optional) (V3) **-30612**. Two choices
+ * follow: a chief complaint or reason for visit (**-30613**), met with the
+ * Chief Complaint and Reason for Visit Section, and Assessment/Plan
+ * (**-30614**), met as above.
+ *
+ * **Consultation Note** SHALL contain History of Present Illness
+ * **CONF:1198-28907**, Allergies (entries required) (V3) **-28911** and Problem
+ * (entries required) (V3) **-28929**, and two choices: a reason (**-9504**), met
+ * with the Reason for Referral Section, and Assessment/Plan (**-9501**). Its
+ * header rule requires `inFulfillmentOf/order` (-8382, -29923, -29924) and the
+ * encounter frame (-8386).
  * @internal
  */
 const DOC_TYPE_SPECS: Readonly<Record<BuildableDocumentType, DocTypeSpec>> = {
@@ -2195,6 +2419,9 @@ const DOC_TYPE_SPECS: Readonly<Record<BuildableDocumentType, DocTypeSpec>> = {
     requiresDocumentationOf: true,
     requiresInformationRecipient: false,
     requiresComponentOf: false,
+    requiresDischargeSlots: false,
+    requiresFacility: false,
+    requiresOrder: false,
   },
   referralNote: {
     documentTemplateRoot: REFERRAL_NOTE_TEMPLATE,
@@ -2210,6 +2437,9 @@ const DOC_TYPE_SPECS: Readonly<Record<BuildableDocumentType, DocTypeSpec>> = {
     requiresDocumentationOf: false,
     requiresInformationRecipient: true,
     requiresComponentOf: false,
+    requiresDischargeSlots: false,
+    requiresFacility: false,
+    requiresOrder: false,
   },
   dischargeSummary: {
     documentTemplateRoot: DISCHARGE_SUMMARY_TEMPLATE,
@@ -2218,6 +2448,63 @@ const DOC_TYPE_SPECS: Readonly<Record<BuildableDocumentType, DocTypeSpec>> = {
     requiresDocumentationOf: false,
     requiresInformationRecipient: false,
     requiresComponentOf: true,
+    requiresDischargeSlots: true,
+    requiresFacility: false,
+    requiresOrder: false,
+  },
+  progressNote: {
+    documentTemplateRoot: PROGRESS_NOTE_TEMPLATE,
+    documentCode: PROGRESS_NOTE_DOC_CODE,
+    shallSections: ["assessment", "planOfTreatment"],
+    requiresDocumentationOf: false,
+    requiresInformationRecipient: false,
+    requiresComponentOf: true,
+    requiresDischargeSlots: false,
+    requiresFacility: true,
+    requiresOrder: false,
+  },
+  historyAndPhysical: {
+    documentTemplateRoot: HISTORY_AND_PHYSICAL_TEMPLATE,
+    documentCode: HISTORY_AND_PHYSICAL_DOC_CODE,
+    shallSections: [
+      "allergies",
+      "familyHistory",
+      "generalStatus",
+      "pastMedicalHistory",
+      "medications",
+      "physicalExam",
+      "results",
+      "reviewOfSystems",
+      "socialHistory",
+      "vitalSigns",
+      "chiefComplaintAndReasonForVisit",
+      "assessment",
+      "planOfTreatment",
+    ],
+    requiresDocumentationOf: false,
+    requiresInformationRecipient: false,
+    requiresComponentOf: true,
+    requiresDischargeSlots: false,
+    requiresFacility: false,
+    requiresOrder: false,
+  },
+  consultationNote: {
+    documentTemplateRoot: CONSULTATION_NOTE_TEMPLATE,
+    documentCode: CONSULTATION_NOTE_DOC_CODE,
+    shallSections: [
+      "historyOfPresentIllness",
+      "allergies",
+      "problems",
+      "reasonForReferral",
+      "assessment",
+      "planOfTreatment",
+    ],
+    requiresDocumentationOf: false,
+    requiresInformationRecipient: false,
+    requiresComponentOf: true,
+    requiresDischargeSlots: false,
+    requiresFacility: false,
+    requiresOrder: true,
   },
 };
 
@@ -2225,8 +2512,8 @@ const DOC_TYPE_SPECS: Readonly<Record<BuildableDocumentType, DocTypeSpec>> = {
  * Whether a caller-supplied `documentType` is one this builder specializes.
  *
  * The membership question is asked of {@link DOC_TYPE_SPECS} itself, so the set
- * of refused types is whatever the spec table does not cover: the nine
- * recognized C-CDA R2.1 types this builder does not emit today, a thirteenth
+ * of refused types is whatever the spec table does not cover: the seven
+ * recognized types this builder does not emit today, a thirteenth
  * type the parser starts recognizing tomorrow, and any string that is not a
  * document type at all. A hand-written list of refused types would go stale on
  * the day a thirteenth is added, and the fall-through would be a document
@@ -2264,28 +2551,46 @@ function unsupportedDocumentType(value: unknown): TypeError {
 }
 
 /**
- * The {@link BuildCcdaInit} fields that belong to ONE document type: the type
- * that carries each, and the types that refuse it. See
+ * The {@link BuildCcdaInit} fields that belong to SOME document types: the
+ * types that carry each, and the types that ignore it for a reason older than
+ * this check. Every other type refuses it. See
  * {@link refuseContentTheTypeDoesNotCarry}. @internal
  */
 const TYPE_SPECIFIC_INPUTS: readonly {
   readonly field: keyof BuildCcdaInit;
-  readonly carriedBy: BuildableDocumentType;
-  readonly refusedFor: readonly BuildableDocumentType[];
+  readonly carriedBy: readonly BuildableDocumentType[];
+  readonly ignoredBy?: readonly BuildableDocumentType[];
 }[] = [
-  { field: "hospitalCourse", carriedBy: "dischargeSummary", refusedFor: ["ccd", "referralNote"] },
-  {
-    field: "dischargeDiagnoses",
-    carriedBy: "dischargeSummary",
-    refusedFor: ["ccd", "referralNote"],
-  },
+  { field: "hospitalCourse", carriedBy: ["dischargeSummary"] },
+  { field: "dischargeDiagnoses", carriedBy: ["dischargeSummary"] },
   {
     field: "encompassingEncounter",
-    carriedBy: "dischargeSummary",
-    refusedFor: ["ccd", "referralNote"],
+    carriedBy: ["dischargeSummary", "progressNote", "historyAndPhysical", "consultationNote"],
   },
-  { field: "assessment", carriedBy: "referralNote", refusedFor: ["dischargeSummary"] },
-  { field: "reasonForReferral", carriedBy: "referralNote", refusedFor: ["dischargeSummary"] },
+  {
+    field: "assessment",
+    carriedBy: ["referralNote", "progressNote", "historyAndPhysical", "consultationNote"],
+    ignoredBy: ["ccd"],
+  },
+  {
+    field: "reasonForReferral",
+    carriedBy: ["referralNote", "consultationNote"],
+    ignoredBy: ["ccd"],
+  },
+  {
+    field: "historyOfPresentIllness",
+    carriedBy: ["progressNote", "historyAndPhysical", "consultationNote"],
+  },
+  {
+    field: "chiefComplaintAndReasonForVisit",
+    carriedBy: ["progressNote", "historyAndPhysical", "consultationNote"],
+  },
+  {
+    field: "reviewOfSystems",
+    carriedBy: ["progressNote", "historyAndPhysical", "consultationNote"],
+  },
+  { field: "physicalExam", carriedBy: ["progressNote", "historyAndPhysical", "consultationNote"] },
+  { field: "generalStatus", carriedBy: ["progressNote", "historyAndPhysical", "consultationNote"] },
 ];
 
 /**
@@ -2297,32 +2602,33 @@ const TYPE_SPECIFIC_INPUTS: readonly {
  * collections (`problems`, `medications`, `results`, ...) are emitted on every
  * type that is handed them, each in its own section. The inputs listed in
  * {@link TYPE_SPECIFIC_INPUTS} are not general: each names a section or a frame
- * one document type carries, so a Discharge Summary's hospital course, discharge
- * diagnoses or encounter frame is refused on a CCD or a Referral Note, and a
- * Referral Note's assessment or reason for referral is refused on a Discharge
- * Summary. Presence is the trigger, not content: a field the type does not carry
- * is refused whenever it is supplied at all.
+ * some document types carry, so a Discharge Summary's hospital course is
+ * refused on every other type, an encounter frame is refused on a CCD and a
+ * Referral Note, and a Physical Exam narrative is refused on the three types
+ * that carry no Physical Exam Section. Presence is the trigger, not content: a
+ * field the type does not carry is refused whenever it is supplied at all.
  *
  * **One silent drop remains, and it is older than this check.** A CCD handed
  * `assessment` or `reasonForReferral` still ignores them, exactly as it always
- * has: the CCD's emitted bytes for an init naming no Discharge Summary input are
- * held identical to the pre-Discharge-Summary builder, and refusing there would
- * move a published behaviour. That is why `refusedFor` is a list rather than
- * "every type but the owner".
+ * has: the CCD's emitted bytes are held identical to the builder before this
+ * check, and refusing there would move a published behaviour. That is what
+ * `ignoredBy` records, and it names no other type.
  *
- * The message names the field and the two document types, all constants of this
+ * The message names the field and the document types, all constants of this
  * module, and never any of the content supplied. @internal
  */
 function refuseContentTheTypeDoesNotCarry(
   documentType: BuildableDocumentType,
   init: BuildCcdaInit,
 ): void {
-  for (const { field, carriedBy, refusedFor } of TYPE_SPECIFIC_INPUTS) {
-    if (init[field] === undefined || !refusedFor.includes(documentType)) continue;
+  for (const { field, carriedBy, ignoredBy = [] } of TYPE_SPECIFIC_INPUTS) {
+    if (init[field] === undefined) continue;
+    if (carriedBy.includes(documentType) || ignoredBy.includes(documentType)) continue;
+    const carriers = carriedBy.map((type) => `"${type}"`).join(", ");
     throw new TypeError(
-      `buildCcda: \`${field}\` is ${carriedBy} content and documentType "${documentType}" ` +
-        `does not carry it. The builder refuses rather than drop supplied content in silence: ` +
-        `pass documentType "${carriedBy}", or omit \`${field}\`.`,
+      `buildCcda: \`${field}\` is not carried by documentType "${documentType}". The builder ` +
+        `refuses rather than drop supplied content in silence: pass a documentType that ` +
+        `carries it (${carriers}), or omit \`${field}\`.`,
     );
   }
 }
@@ -2572,8 +2878,10 @@ export interface BuildCcdaOptions {
 /**
  * Build a spec-clean C-CDA R2.1 document from structured input and return the
  * parsed {@link CcdaDocument}. Emits a **CCD** by default, a **Referral Note**
- * when `documentType: "referralNote"`, or a **Discharge Summary** when
- * `documentType: "dischargeSummary"`, each with its own US Realm Header
+ * when `documentType: "referralNote"`, a **Discharge Summary** when
+ * `documentType: "dischargeSummary"`, or a **Progress Note**, **History and
+ * Physical** or **Consultation Note** for `"progressNote"`,
+ * `"historyAndPhysical"` or `"consultationNote"`, each with its own US Realm Header
  * specialization (document `templateId` + LOINC `code`) and SHALL section set.
  * The emitted document round-trips through {@link parseCcda} by construction (see
  * the module doc); a clean build carries zero warnings.
@@ -2590,12 +2898,14 @@ export interface BuildCcdaOptions {
  *   input (today: `MISSING_PLANNED_MEDICATION_EFFECTIVE_TIME` and
  *   `MISSING_SELF_CARE_ACTIVITY`, appended last).
  * @throws {TypeError} When `documentType` is anything other than a
- *   {@link BuildableDocumentType} (the three types this builder supports; only an
+ *   {@link BuildableDocumentType} (the six types this builder supports; only an
  *   omitted, `undefined` one defaults to a CCD, and `null` or a non-string is
  *   refused), when a type-specific input is supplied to a type that does not
- *   carry it (`hospitalCourse`, `dischargeDiagnoses` or `encompassingEncounter`
- *   on anything but a Discharge Summary; `assessment` or `reasonForReferral` on a
- *   Discharge Summary), when an allergy
+ *   carry it (`hospitalCourse` or `dischargeDiagnoses` on anything but a
+ *   Discharge Summary; `encompassingEncounter` on a CCD or a Referral Note;
+ *   `assessment` on a Discharge Summary; `reasonForReferral` on a Discharge
+ *   Summary, a Progress Note or a History and Physical; an office-visit
+ *   narrative on a CCD, a Referral Note or a Discharge Summary), when an allergy
  *   is neither an `allergen` nor `noKnownAllergy`, when a result does not carry
  *   exactly one value form (`quantity` / `codedValue` / `stringValue`), when a
  *   `"observation"`-variant procedure omits its SHALL `value`, when a
@@ -2756,8 +3066,12 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
       ),
     );
   }
+  // Past Medical History and Family History are History and Physical SHALL
+  // sections, emitted by the loop above for that type; elsewhere each is emitted
+  // only when populated, and the `shall.has` guard keeps a History and Physical
+  // from carrying either twice.
   const pastMedicalHistory = init.pastMedicalHistory ?? [];
-  if (pastMedicalHistory.length > 0) {
+  if (!shall.has("pastMedicalHistory") && pastMedicalHistory.length > 0) {
     structuredBody.appendChild(pastMedicalHistorySection(doc, pastMedicalHistory, id, translate));
   }
   // Plan of Treatment is a Referral Note SHALL section (emitted above); for a CCD
@@ -2767,8 +3081,18 @@ export function buildCcda(init: BuildCcdaInit, options: BuildCcdaOptions = {}): 
     structuredBody.appendChild(planOfTreatmentSection(doc, planOfTreatment, id));
   }
   const familyHistory = init.familyHistory ?? [];
-  if (familyHistory.length > 0) {
+  if (!shall.has("familyHistory") && familyHistory.length > 0) {
     structuredBody.appendChild(familyHistorySection(doc, familyHistory, id));
+  }
+  // The office-visit narratives a type carries without requiring: emitted when
+  // supplied, never fabricated when not. A type that carries none of them has
+  // already refused any that was supplied, so this adds nothing to a CCD, a
+  // Referral Note or a Discharge Summary.
+  for (const key of OFFICE_NARRATIVE_KEYS) {
+    const narrative = init[key];
+    if (!shall.has(key) && narrative !== undefined) {
+      structuredBody.appendChild(officeNarrativeSection(doc, key, narrative));
+    }
   }
   root.appendChild(el(doc, "component", undefined, structuredBody));
 
@@ -2957,6 +3281,16 @@ function shallSection(
       return hospitalCourseSection(doc, init.hospitalCourse);
     case "dischargeDiagnosis":
       return dischargeDiagnosisSection(doc, init.dischargeDiagnoses ?? [], id, translate);
+    case "pastMedicalHistory":
+      return pastMedicalHistorySection(doc, init.pastMedicalHistory ?? [], id, translate);
+    case "familyHistory":
+      return familyHistorySection(doc, init.familyHistory ?? [], id);
+    case "historyOfPresentIllness":
+    case "chiefComplaintAndReasonForVisit":
+    case "reviewOfSystems":
+    case "physicalExam":
+    case "generalStatus":
+      return officeNarrativeSection(doc, key, init[key]);
   }
 }
 
@@ -2993,6 +3327,9 @@ function appendHeader(
   // documentationOf after inFulfillmentOf, both before component. Emitting either in
   // the wrong place is XSD-invalid rather than cosmetic.
   if (spec.requiresInformationRecipient) root.appendChild(informationRecipient(doc));
+  // inFulfillmentOf precedes documentationOf in the same sequence
+  // (… participant*, inFulfillmentOf*, documentationOf*, …).
+  if (spec.requiresOrder) root.appendChild(inFulfillmentOf(doc));
   if (spec.requiresDocumentationOf) root.appendChild(documentationOf(doc));
   // ...and componentOf is the LAST element of that sequence before `component`
   // (POCD_MT000040.ClinicalDocument: … documentationOf*, relatedDocument*,
@@ -3001,8 +3338,27 @@ function appendHeader(
   // earlier, next to documentationOf where it reads as if it belonged, fails the
   // core CDA R2 XSD before the Schematron is even reached.
   if (spec.requiresComponentOf) {
-    root.appendChild(componentOfElement(doc, init.encompassingEncounter, id));
+    root.appendChild(componentOfElement(doc, init.encompassingEncounter, id, spec));
   }
+}
+
+/**
+ * The `<inFulfillmentOf><order>` a Consultation Note SHALL carry
+ * (CONF:1198-8382, -29923): the consult request the note answers, which SHALL
+ * carry at least one `id` (-29924).
+ *
+ * The id is `nullFlavor="UNK"`. The builder is told of no order, and an order
+ * identifier names a request that exists in some ordering system: a synthetic
+ * one would point at a request nobody made. The cardinality is satisfied and the
+ * identity is declared unknown. @internal
+ */
+function inFulfillmentOf(doc: Document): Element {
+  return el(
+    doc,
+    "inFulfillmentOf",
+    undefined,
+    el(doc, "order", undefined, el(doc, "id", { nullFlavor: "UNK" })),
+  );
 }
 
 /**
@@ -3041,41 +3397,73 @@ function componentOfElement(
   doc: Document,
   encounter: BuildCcdaEncompassingEncounter | undefined,
   id: (prefix: string) => string,
+  spec: DocTypeSpec,
 ): Element {
   const encompassing = el(
     doc,
     "encompassingEncounter",
     undefined,
     el(doc, "id", { root: SYNTH_ROOT, extension: id("enc") }),
-    encompassingEncounterPeriod(doc, encounter?.period),
-    dischargeDispositionCode(doc, encounter?.dischargeDisposition),
+    encompassingEncounterPeriod(doc, encounter?.period, spec.requiresDischargeSlots),
   );
+  // The disposition is a SHALL slot only for a Discharge Summary (CONF:1198-8476),
+  // so only there is an omitted one written as an explicit unknown. On the other
+  // framed types a supplied disposition is emitted verbatim and an omitted one is
+  // not emitted at all.
+  if (spec.requiresDischargeSlots || encounter?.dischargeDisposition !== undefined) {
+    encompassing.appendChild(dischargeDispositionCode(doc, encounter?.dischargeDisposition));
+  }
+  // location is last in POCD_MT000040.EncompassingEncounter
+  // (… dischargeDispositionCode?, responsibleParty?, encounterParticipant*, location?).
+  if (spec.requiresFacility) encompassing.appendChild(encounterLocation(doc));
   return el(doc, "componentOf", undefined, encompassing);
 }
 
 /**
- * The encompassing encounter's SHALL `<effectiveTime>`, with BOTH bounds always
- * present. Unlike {@link encounterPeriod}, which omits a `high` the caller did
- * not supply, this template requires the `high` element itself
- * (CONF:1198-8475), so an unsupplied end is an explicit `nullFlavor="UNK"`
- * rather than an absent element, and never the `low` copied across.
+ * The `<location><healthCareFacility>` a Progress Note's encounter SHALL carry
+ * (CONF:1198-30879, -30880), whose facility SHALL carry at least one `id`
+ * (-30881).
+ *
+ * The id is `nullFlavor="UNK"`: the builder is told of no facility, and a
+ * facility identifier names a real place, so it is declared unknown rather than
+ * invented. @internal
+ */
+function encounterLocation(doc: Document): Element {
+  return el(
+    doc,
+    "location",
+    undefined,
+    el(doc, "healthCareFacility", undefined, el(doc, "id", { nullFlavor: "UNK" })),
+  );
+}
+
+/**
+ * The encompassing encounter's SHALL `<effectiveTime>`. For a Discharge
+ * Summary (`requireHigh`) BOTH bounds are always present: unlike
+ * {@link encounterPeriod}, which omits a `high` the caller did not supply, that
+ * template requires the `high` element itself (CONF:1198-8475), so an
+ * unsupplied end is an explicit `nullFlavor="UNK"` rather than an absent
+ * element, and never the `low` copied across. For the other framed types only
+ * the `low` is always present, and the `high` is written only when supplied.
  * @internal
  */
 function encompassingEncounterPeriod(
   doc: Document,
   period: { readonly low?: string; readonly high?: string } | undefined,
+  requireHigh: boolean,
 ): Element {
   const bound = (name: "low" | "high", value: string | undefined): Element =>
     value === undefined
       ? el(doc, name, { nullFlavor: "UNK" })
       : el(doc, name, { value: assertHl7Ts(value, `encompassingEncounter.period.${name}`) });
-  return el(
-    doc,
-    "effectiveTime",
-    undefined,
-    bound("low", period?.low),
-    bound("high", period?.high),
-  );
+  const effectiveTime = el(doc, "effectiveTime", undefined, bound("low", period?.low));
+  // The `low` is always written: the Progress Note names it (CONF:1198-7599) and an
+  // IVL_TS with neither bound states nothing. The `high` is a SHALL only for a
+  // Discharge Summary (-8475); elsewhere it is written only when supplied.
+  if (requireHigh || period?.high !== undefined) {
+    effectiveTime.appendChild(bound("high", period?.high));
+  }
+  return effectiveTime;
 }
 
 /**
@@ -5293,9 +5681,11 @@ function supportingObservation(
 
 /**
  * Build the Past Medical History section from one or more historical
- * {@link BuildCcdaProblem}s. Only called with a non-empty list (see
- * {@link buildCcda}), Past Medical History is a CCD MAY (not SHALL) section, so
- * an unpopulated one is not fabricated. The Past Medical History Section (V3,
+ * {@link BuildCcdaProblem}s. Called with a non-empty list for every type but a
+ * History and Physical (see {@link buildCcda}): Past Medical History is a CCD
+ * MAY (not SHALL) section, so an unpopulated one is not fabricated there, and a
+ * History and Physical SHALL section, so for that type an empty list yields an
+ * empty `nullFlavor="NI"` section. The Past Medical History Section (V3,
  * `…22.2.20`, LOINC `11348-0`, the R2.1 `2015-08-01` stamp) carries **bare**
  * Problem Observations (`…22.4.4`) directly under each `<entry>`, unlike the
  * Problems section, which nests each Problem Observation inside a Problem Concern
@@ -5311,6 +5701,12 @@ function pastMedicalHistorySection(
   id: (prefix: string) => string,
   translate?: Translate,
 ): Element {
+  // A History and Physical SHALL carry the section (CONF:1198-30588); with no
+  // history supplied it is a spec-clean empty nullFlavor="NI" section, never an
+  // invented history. Its entries are optional, so this stays conformant.
+  if (history.length === 0) {
+    return emptySection(doc, PAST_MEDICAL_HISTORY_SECTION_BASE, "11348-0", "Past Medical History");
+  }
   const text = el(doc, "text");
   const entries: Element[] = [];
   for (const p of history) {
@@ -5520,6 +5916,42 @@ function hospitalCourseSection(doc: Document, narrative: string | undefined): El
     false,
     undefined,
     null,
+  );
+  return el(doc, "component", undefined, section);
+}
+
+/**
+ * Build one of the five narrative-only office-visit sections
+ * ({@link OFFICE_NARRATIVE_SECTIONS}): History of Present Illness, Chief
+ * Complaint and Reason for Visit, Review of Systems, Physical Exam (V3) or
+ * General Status. Each carries the `templateId` its rule context matches (a
+ * root-only one for the four unversioned templates, the R2.1 stamp for Physical
+ * Exam) and the LOINC `code` its rule fixes. None has an entries-required
+ * variant.
+ *
+ * When the caller supplies no narrative the section is emitted as a spec-clean
+ * empty `nullFlavor="NI"` section, never an invented finding. That path is
+ * reached only for a type whose SHALL set names the section: an optional one is
+ * emitted only when supplied. @internal
+ */
+function officeNarrativeSection(
+  doc: Document,
+  key: OfficeNarrativeKey,
+  narrative: string | undefined,
+): Element {
+  const { root, extension, code, displayName } = OFFICE_NARRATIVE_SECTIONS[key];
+  if (narrative === undefined) {
+    return emptySection(doc, root, code, displayName, false, extension);
+  }
+  const section = sectionElement(
+    doc,
+    root,
+    code,
+    displayName,
+    textEl(doc, "text", narrative),
+    false,
+    undefined,
+    extension,
   );
   return el(doc, "component", undefined, section);
 }
@@ -5747,9 +6179,11 @@ function familyHistoryLabel(
 
 /**
  * Build the Family History section from one or more {@link BuildCcdaFamilyHistory}
- * organizers. Only called with a non-empty list (see {@link buildCcda}), Family
- * History is a CCD SHOULD (not SHALL) section, so an unpopulated one is not
- * fabricated. The Family History Section (V3, `…22.2.15`, LOINC `10157-6`, the
+ * organizers. Called with a non-empty list for every type but a History and
+ * Physical (see {@link buildCcda}): Family History is a CCD SHOULD (not SHALL)
+ * section, so an unpopulated one is not fabricated there, and a History and
+ * Physical SHALL section, so for that type an empty list yields an empty
+ * `nullFlavor="NI"` section. The Family History Section (V3, `…22.2.15`, LOINC `10157-6`, the
  * R2.1 `2015-08-01` stamp) has **no** entries-required variant (`…2.15.1`), so
  * only the base `templateId` is emitted even though the section carries entries.
  * Each `<entry>` is one Family History Organizer (`…22.4.45`) naming a single
@@ -5760,6 +6194,12 @@ function familyHistorySection(
   histories: readonly BuildCcdaFamilyHistory[],
   id: (prefix: string) => string,
 ): Element {
+  // A History and Physical SHALL carry the section (CONF:1198-30584); with no
+  // relative supplied it is a spec-clean empty nullFlavor="NI" section, never an
+  // invented family history. Its entries are optional, so this stays conformant.
+  if (histories.length === 0) {
+    return emptySection(doc, FAMILY_HISTORY_SECTION_BASE, "10157-6", "Family History");
+  }
   const text = el(doc, "text");
   const entries: Element[] = [];
   for (const h of histories) {
