@@ -36,6 +36,11 @@ import type { Document, Element } from "@xmldom/xmldom";
 import { positionOf } from "../model/dom.js";
 import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES } from "./errors.js";
 import { isRecognizedNamespace } from "./namespaces.js";
+import {
+  refuseOutsideRootNodes,
+  refuseOutsideRootText,
+  type TopLevelNode,
+} from "./outside-root.js";
 import { isXmlChar } from "./xml-chars.js";
 import type { CcdaParseLimits } from "./types.js";
 import { encodingBomStripped, unknownNamespacePrefix, type CcdaWarning } from "./warnings.js";
@@ -203,12 +208,14 @@ export function parseSecureXml(
 }
 
 /**
- * {@link parseSecureXml}, with one more refusal when `refuseOutsideRoot` is set: character data
- * outside the root element that is not white space (text, or a reference of any kind, before or
- * after the root) throws `NOT_WELL_FORMED_XML`, as XML 1.0 production [1] makes such a text not
- * well-formed. `@xmldom/xmldom` reports that content as an `error` and drops it, which
- * `parseSecureXml` (and so `parseCcda`) tolerates; the exported `parseXml` sets the flag, so a
- * sender's content is never lost without a word.
+ * {@link parseSecureXml}, with one more refusal when `refuseOutsideRoot` is set: anything outside
+ * the root element but white space, comments and processing instructions throws
+ * `NOT_WELL_FORMED_XML`, as XML 1.0 productions [1], [22] and [27] make such a text not
+ * well-formed. `@xmldom/xmldom` drops some of that content, keeps some as a node under the
+ * document, and reports only some of it, which `parseSecureXml` (and so `parseCcda`) tolerates.
+ * The exported `parseXml` sets the flag, so a sender's content is never lost without a word. The
+ * refusal reads the text itself before the tree is built ({@link refuseOutsideRootText}) and the
+ * document's own nodes after ({@link refuseOutsideRootNodes}); it never reads what xmldom reports.
  *
  * @internal
  */
@@ -220,7 +227,13 @@ export function readSecureXml(
   refuseOutsideRoot: boolean,
 ): Document {
   const accepted = acceptSource(raw, limits, emit);
-  const doc = buildDom(accepted.source, accepted.lineBreaksToNormalize, true, refuseOutsideRoot);
+  if (refuseOutsideRoot) refuseOutsideRootText(accepted.source);
+  const doc = buildDom(accepted.source, accepted.lineBreaksToNormalize);
+  // A second guard that does not trust the scan above: every text the scan passes yields a
+  // document this check passes too, so no test can tell a mutant that skips it from the code.
+  // Stryker disable next-line ConditionalExpression: equivalent while the text scan holds
+  if (refuseOutsideRoot)
+    refuseOutsideRootNodes(doc as unknown as { childNodes: ArrayLike<TopLevelNode> });
   enforceStructureLimits(doc.documentElement, limits, reportForeignNamespace);
   return doc;
 }
@@ -568,12 +581,7 @@ function keepLineEndings(source: string): string {
  *
  * @internal
  */
-function buildDom(
-  source: string,
-  lineBreaksToNormalize: boolean,
-  locate = true,
-  refuseOutsideRoot = false,
-): Document {
+function buildDom(source: string, lineBreaksToNormalize: boolean, locate = true): Document {
   const { DOMParser, normalizeLineEndings: xmldomLineEndings } = xmldom();
   const parser = new DOMParser({
     locator: locate,
@@ -581,15 +589,8 @@ function buildDom(
     // text with none of the characters it rewrites, both of its replacements are the identity, so
     // the text is passed through as it is instead of being scanned twice more.
     normalizeLineEndings: lineBreaksToNormalize ? xmldomLineEndings : keepLineEndings,
-    onError: (level: "warning" | "error" | "fatalError", message: string): void => {
+    onError: (level: "warning" | "error" | "fatalError"): void => {
       if (level === "fatalError") {
-        throw new CcdaParseError(
-          FATAL_CODES.NOT_WELL_FORMED_XML,
-          FATAL_MESSAGES.NOT_WELL_FORMED_XML,
-          {},
-        );
-      }
-      if (refuseOutsideRoot && isOutsideRootReport(message)) {
         throw new CcdaParseError(
           FATAL_CODES.NOT_WELL_FORMED_XML,
           FATAL_MESSAGES.NOT_WELL_FORMED_XML,
@@ -610,25 +611,6 @@ function buildDom(
       {},
     );
   }
-}
-
-/**
- * Whether an `error` `@xmldom/xmldom` reported is character data outside the root element: its
- * sax reader reports text before the root, or between the root and later markup, as "Unexpected
- * content outside root element", and text after the root with no markup after it as "Extra
- * content at the end of the document" (lib/sax.js). The first quotes the text after its fixed
- * start, so only that start is compared, and the text is never read further or passed on; the
- * second quotes nothing and is compared whole. White space alone is
- * reported as neither. test/xml.test.ts pins both reports, so a version of xmldom that words them
- * otherwise fails there rather than reading such a text.
- *
- * @internal
- */
-function isOutsideRootReport(message: string): boolean {
-  return (
-    message.startsWith("Unexpected content outside root element") ||
-    message === "Extra content at the end of the document"
-  );
 }
 
 /**

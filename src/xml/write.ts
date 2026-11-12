@@ -463,9 +463,9 @@ function prolog(node: XmlNode, first: boolean): string {
       throw new Refusal("holds a DOCTYPE, which parseXml refuses");
     case TEXT:
       if (/^[ \t\n\r]*$/u.test(node.data)) return node.data;
-      throw new Refusal("holds text outside the root element, which a parse drops");
+      throw new Refusal("holds text outside the root element, which parseXml refuses");
     case CDATA:
-      throw new Refusal("holds a CDATA section outside the root element, which a parse refuses");
+      throw new Refusal("holds a CDATA section outside the root element, which parseXml refuses");
     default:
       return first && isDeclaration(node) ? declaration(node.data) : content(node);
   }

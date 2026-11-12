@@ -23,6 +23,7 @@ import {
   type CcdaWarning,
 } from "../src/index.js";
 import { xmldom } from "../src/parser/xmldom.js";
+import { refuseOutsideRootNodes, refuseOutsideRootText } from "../src/parser/outside-root.js";
 import { firstDifference, readBackDifference } from "../src/xml/same-tree.js";
 import { declaredPrefix } from "../src/xml/write.js";
 
@@ -265,8 +266,29 @@ describe("parseXml reads any XML, not only C-CDA", () => {
   });
 });
 
-/** Texts with character data outside the root element, which XML 1.0 production [1] forbids. */
-const OUTSIDE_ROOT: readonly { readonly name: string; readonly text: string }[] = [
+/**
+ * Characters that are not XML white space (XML 1.0 production [3] is space, tab, carriage return
+ * and line feed only), though JavaScript's `trim` and `\s` take each as white space.
+ */
+const NOT_XML_SPACE: readonly (readonly [string, string])[] = [
+  ["NO-BREAK SPACE", String.fromCodePoint(0xa0)],
+  ["IDEOGRAPHIC SPACE", String.fromCodePoint(0x3000)],
+  ["a byte order mark", String.fromCodePoint(0xfeff)],
+  ["LINE SEPARATOR", String.fromCodePoint(0x2028)],
+  ["NEL", String.fromCodePoint(0x85)],
+];
+
+/**
+ * Texts with content outside the root element that XML 1.0 productions [1], [22] and [27] forbid:
+ * anything there but white space, comments and processing instructions. `parseSecureXml` is what
+ * `parseCcda` reads with, and each row names what it does with the text, as it did before
+ * `parseXml` existed: `"none"` when it reads it, else the fatal code.
+ */
+const OUTSIDE_ROOT: readonly {
+  readonly name: string;
+  readonly text: string;
+  readonly secure?: string;
+}[] = [
   { name: "text before the root", text: `Synthetic ${MARKER}<a/>` },
   { name: "text after the root", text: `<a/>Synthetic ${MARKER}` },
   { name: "text after the declaration", text: `<?xml version="1.0"?>${MARKER}<a/>` },
@@ -277,6 +299,32 @@ const OUTSIDE_ROOT: readonly { readonly name: string; readonly text: string }[] 
   { name: "a character reference after the root", text: "<a/>&#65;" },
   { name: "a custom entity reference after the root", text: `<a/>&${MARKER};` },
   { name: "text after a byte order mark, before the root", text: `\ufeff${MARKER}<a/>` },
+  { name: "a reference before the root", text: "&amp;<a/>" },
+  { name: "a stray less-than before the root", text: "<<a/>" },
+  { name: "a stray less-than after the root", text: "<a/><" },
+  { name: "a stray less-than and a space after the root", text: "<a/>< " },
+  { name: "a stray less-than after a trailing comment", text: "<a/><!--c--><" },
+  { name: "a CDATA section after the root", text: `<a/><![CDATA[${MARKER}]]>` },
+  {
+    name: "a CDATA section before the root",
+    text: `<![CDATA[${MARKER}]]><a/>`,
+    secure: FATAL_CODES.NOT_WELL_FORMED_XML,
+  },
+  {
+    name: "a second element after the root",
+    text: "<a/><b/>",
+    secure: FATAL_CODES.NOT_WELL_FORMED_XML,
+  },
+  {
+    name: "a second element after a trailing comment",
+    text: "<a/><!--c--><b>x</b>",
+    secure: FATAL_CODES.NOT_WELL_FORMED_XML,
+  },
+  ...NOT_XML_SPACE.flatMap(([label, char]) => [
+    { name: `${label} after the root`, text: `<a/>${char}` },
+    { name: `${label} before the root`, text: `\n${char}<a/>` },
+    { name: `${label} after a trailing comment`, text: `<a/><!--c-->${char}` },
+  ]),
 ];
 
 describe("parseXml refuses character data outside the root element", () => {
@@ -306,11 +354,130 @@ describe("parseXml refuses character data outside the root element", () => {
     expect(parseXml("<a>Synthetic &undeclared;</a>").documentElement?.localName).toBe("a");
   });
 
-  it("leaves the C-CDA reader as it was: parseSecureXml still reads such a text", () => {
-    // The internal reader's leniency is unchanged; only the exported parseXml refuses.
-    for (const { text } of OUTSIDE_ROOT) {
-      expect(fatalOf(() => parseSecureXml(text, resolveLimits(), () => {}))).toBe("none");
+  it.each(OUTSIDE_ROOT)(
+    "leaves the C-CDA reader as it was: parseSecureXml on $name",
+    ({ text, secure }) => {
+      // The internal reader's leniency is unchanged; only the exported parseXml refuses.
+      expect(fatalOf(() => parseSecureXml(text, resolveLimits(), () => {}))).toBe(secure ?? "none");
+    },
+  );
+
+  it("refuses an unclosed comment or instruction outside the root, and an unclosed root", () => {
+    for (const text of ["<!--c<a/>", "<?p x<a/>", "<a/><!--c", "<a/><?p x", "<a>", "<a><b></a>"]) {
+      expect(
+        fatalOf(() => parseXml(text)),
+        JSON.stringify(text),
+      ).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
     }
+  });
+
+  it("finds the end of the root past markup characters inside it", () => {
+    const text =
+      '<?xml version="1.0"?>\n<a:r xmlns:a="urn:example:a" x=\'1/>\' y="b>/c">' +
+      "<s/><t >x &amp; y<!-- </a:r> --><![CDATA[</a:r>]]><?p </a:r>?></t ></a:r\t>\r\n<!--z-->";
+    const doc = parseXml(text);
+    expect(doc.documentElement?.localName).toBe("r");
+    expect(doc.documentElement?.childNodes.length).toBe(2);
+  });
+});
+
+describe("the scan of the text outside the root element", () => {
+  /** What the scan does with `text`: `"none"` when it passes it, else the fatal code. */
+  function scanned(text: string): string {
+    return fatalOf(() => refuseOutsideRootText(text));
+  }
+
+  it("passes one element with only white space, comments and instructions around it", () => {
+    for (const text of [
+      "<a/>",
+      "<a></a>",
+      " \t\r\n<a/> \t\r\n",
+      "<!--c--><?p x?><a/><!--d--><?q y?>",
+      "<a:b:c/>",
+      `<${String.fromCodePoint(0x10000)}/>`,
+      "<a x='1' y=\"2\"/>",
+      "<a\n/>",
+      "<a\t>t</a>",
+    ]) {
+      expect(scanned(text), JSON.stringify(text)).toBe("none");
+    }
+  });
+
+  it("refuses a text with no element, or nothing but a comment or instruction", () => {
+    for (const text of ["", " ", "x", "<!--c-->", "<?p x?>", "</a>", "<![CDATA[x]]>"]) {
+      expect(scanned(text), JSON.stringify(text)).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+    }
+  });
+
+  it("refuses a tag that does not start with a name, or a name not followed by a separator", () => {
+    for (const text of ["< a/>", "<1a/>", "<-a/>", "<a<b/>", '<a"x"/>', "<a/ >"]) {
+      expect(scanned(text), JSON.stringify(text)).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+    }
+  });
+
+  it("matches each end tag to its start tag by name", () => {
+    expect(scanned("<a><b></b></a>")).toBe("none");
+    expect(scanned("<a></b>")).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+    expect(scanned("<a><b></a></b>")).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+  });
+
+  it("ends each comment, CDATA section and instruction inside the root at its first close", () => {
+    // Read to the last close instead, each would swallow the <b> between two of them.
+    for (const [open, close] of [
+      ["<!--", "-->"],
+      ["<![CDATA[", "]]>"],
+      ["<?p ", "?>"],
+    ]) {
+      const text = `<a>${open}x${close}<b>${open}y${close}</b></a>`;
+      expect(scanned(text), text).toBe("none");
+    }
+  });
+
+  it("ends each comment and instruction outside the root at its first close", () => {
+    expect(scanned("<!--c--><a/><!--d-->")).toBe("none");
+    expect(scanned("<?p x?><a/><?q y?>")).toBe("none");
+    expect(scanned("<!--c--><a><!--d--></a>")).toBe("none");
+  });
+
+  it("reads past a greater-than in either kind of quoted attribute value", () => {
+    expect(scanned("<a x='>/'><b y=\">\"/></a>")).toBe("none");
+    expect(scanned("<a x='>'/>z")).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+  });
+});
+
+describe("the check of the nodes directly under the document", () => {
+  /** What the check does with these nodes: `"none"` when it passes them, else the fatal code. */
+  function checked(...nodes: { nodeType: number; data: string }[]): string {
+    return fatalOf(() => refuseOutsideRootNodes({ childNodes: nodes }));
+  }
+  const element = { nodeType: 1, data: "" };
+
+  it("passes one element with comments, instructions and white space text beside it", () => {
+    expect(checked(element)).toBe("none");
+    expect(
+      checked(
+        { nodeType: 8, data: "c" },
+        { nodeType: 7, data: "x" },
+        { nodeType: 3, data: " \t\r\n" },
+        element,
+        { nodeType: 3, data: "" },
+      ),
+    ).toBe("none");
+  });
+
+  it("refuses text that is not XML white space, wherever it sits in the text", () => {
+    for (const data of ["x", "\n x\n", " x", "x ", String.fromCodePoint(0xa0)]) {
+      expect(checked(element, { nodeType: 3, data }), JSON.stringify(data)).toBe(
+        FATAL_CODES.NOT_WELL_FORMED_XML,
+      );
+    }
+  });
+
+  it("refuses a CDATA section, even of white space, a second element, and none", () => {
+    expect(checked(element, { nodeType: 4, data: " " })).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+    expect(checked(element, element)).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+    expect(checked({ nodeType: 8, data: "c" })).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+    expect(checked()).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
   });
 });
 
@@ -903,7 +1070,7 @@ describe("serializeXml refuses a node outside the root that a parse drops or rew
       if (before) doc.insertBefore(text, doc.documentElement);
       else doc.appendChild(text);
       const message = refusalOf(doc);
-      expect(message).toBe(refused("holds text outside the root element, which a parse drops"));
+      expect(message).toBe(refused("holds text outside the root element, which parseXml refuses"));
       expect(message).not.toContain(MARKER);
     }
   });
@@ -915,7 +1082,7 @@ describe("serializeXml refuses a node outside the root that a parse drops or rew
       if (before) doc.insertBefore(cdata, doc.documentElement);
       else doc.appendChild(cdata);
       expect(refusalOf(doc)).toBe(
-        refused("holds a CDATA section outside the root element, which a parse refuses"),
+        refused("holds a CDATA section outside the root element, which parseXml refuses"),
       );
     }
   });

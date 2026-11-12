@@ -8,9 +8,10 @@
  * `parseXml` is `parseSecureXml` without the C-CDA part: it does not report an element outside the
  * HL7 v3 namespaces (`UNKNOWN_NAMESPACE_PREFIX`), since in another XML format that is no deviation,
  * and it takes its limits as options rather than a resolved record. Every refusal is the same one,
- * the same `CcdaParseError` with the same `FatalCode`, from the same code, with one more: text
- * other than white space before or after the root element, which `@xmldom/xmldom` drops and
- * `parseSecureXml` tolerates, is refused as `NOT_WELL_FORMED_XML` (`readSecureXml`).
+ * the same `CcdaParseError` with the same `FatalCode`, from the same code, with one more: anything
+ * before or after the root element but white space, comments and processing instructions, which
+ * `@xmldom/xmldom` drops or keeps and `parseSecureXml` tolerates, is refused as
+ * `NOT_WELL_FORMED_XML` (`readSecureXml`, `../parser/outside-root.ts`).
  *
  * @packageDocumentation
  */
@@ -61,9 +62,10 @@ export interface ParseXmlOptions {
  * - is larger than `limits.maxInputBytes` in UTF-8: `INPUT_SIZE_LIMIT_EXCEEDED`;
  * - nests elements deeper than `limits.maxDepth`: `ELEMENT_DEPTH_LIMIT_EXCEEDED`;
  * - holds more elements than `limits.maxNodeCount`: `NODE_COUNT_LIMIT_EXCEEDED`;
- * - is not well-formed, holds no root element, holds text or a reference other than white space
- *   before or after the root element, or holds a character XML 1.0 forbids, written raw or as a
- *   character reference: `NOT_WELL_FORMED_XML`.
+ * - is not well-formed, holds no root element, holds anything before or after the root element
+ *   but white space (space, tab, carriage return, line feed), comments and processing
+ *   instructions (text, a reference, a stray `<`, a CDATA section, a second element), or holds a
+ *   character XML 1.0 forbids, written raw or as a character reference: `NOT_WELL_FORMED_XML`.
  *
  * No message or position names anything the text said. A leading byte order mark is removed and
  * reported as `ENCODING_BOM_STRIPPED` through `options.onWarning`. Unlike `parseCcda`, it does not
@@ -154,8 +156,8 @@ function ignoreWarning(): void {
  *   reference there;
  * - a processing instruction whose data starts with a space, tab or line feed, which a parse
  *   drops;
- * - text other than white space, or a CDATA section, directly under the document, which a parse
- *   drops or refuses;
+ * - text other than white space, or a CDATA section, directly under the document, which
+ *   `parseXml` refuses;
  * - an XML declaration (an instruction with the target `xml` first in the document) whose data is
  *   not a version, then an optional encoding and an optional standalone, in that order;
  * - a prefixed element or attribute name with no namespace, which no declaration binds (an

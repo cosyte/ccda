@@ -2,7 +2,7 @@
 id: parse-and-write-xml
 title: Parse and write any XML safely
 sidebar_label: Parse and write any XML
-description: "Read any XML format with the hardened reader parseCcda uses, which refuses DTDs, external entities and entity expansion under limits you set, and write it back with serializeXml."
+description: "Read any XML with the hardened reader parseCcda uses, which refuses DTDs, external entities and entity expansion, and write it back with serializeXml."
 ---
 
 # Parse and write any XML safely
@@ -47,12 +47,16 @@ five predefined entities (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`) and chara
 (`&#65;`) are read as XML reads them and never count toward `maxEntityExpansions`. No message or
 position names anything the text said, so a refusal is safe to log.
 
-Not well-formed includes text before or after the root element: outside it, XML allows only white
-space, comments and processing instructions, so `parseXml("<a/>Synthetic note")` and
-`parseXml("note<a/>")` throw `NOT_WELL_FORMED_XML` (a reference such as `&amp;` there too) rather
-than return a document with the text dropped. `parseCcda` reads such a text as it always has. An
-entity reference with no declaration (`&name;`) inside the root is read as `parseCcda` reads it:
-never expanded, and counted toward `maxEntityExpansions`.
+Not well-formed includes anything before or after the root element but white space, comments and
+processing instructions, which is all XML allows there. White space means space, tab, carriage
+return and line feed only, so NO-BREAK SPACE, NEL, LINE SEPARATOR and a byte order mark past the
+first character count as text. So `parseXml("<a/>Synthetic note")`, `parseXml("note<a/>")`, a
+reference such as `&amp;`, a stray `<`, a CDATA section or a second element there all throw
+`NOT_WELL_FORMED_XML` rather than return a document with the content dropped or kept beside the
+root. `parseXml` finds this by reading the text itself, before the tree is built, and checks the
+document's own nodes after. `parseCcda` reads such a text as it always has. An entity reference
+with no declaration (`&name;`) inside the root is read as `parseCcda` reads it: never expanded, and
+counted toward `maxEntityExpansions`.
 
 ```ts runnable
 import { CcdaParseError, FATAL_CODES, parseXml } from "@cosyte/ccda";
@@ -124,8 +128,8 @@ these are the trees it refuses before it writes anything:
 - a carriage return, NEL, LINE SEPARATOR or PARAGRAPH SEPARATOR in a comment, a CDATA section or a
   processing instruction, where no reference can be written and a parse would read a line feed;
 - a processing instruction whose data starts with a space, tab or line feed, which a parse drops;
-- text other than white space, or a CDATA section, directly under the document, which a parse
-  drops or refuses;
+- text other than white space, or a CDATA section, directly under the document, which
+  `parseXml` refuses;
 - an XML declaration (an instruction with the target `xml` first in the document) that is not a
   version, then an optional encoding and an optional standalone;
 - a prefixed element or attribute name with no namespace, which no declaration would bind;
@@ -153,7 +157,8 @@ the writer and the reader from commit 2e7ed13 to 84f5bb8, on a 4-CPU GitHub-host
 | CCD, 100 entries, 0.2 MiB | 14.222 to 18.912 ms | 44.062 to 53.266 ms | 4.434 to 5.908 ms                 |
 
 So a checked write took 8.4 to 12.6 times as long as xmldom's unchecked one, and 2.7 to 3.1 times
-as long as reading the same text.
+as long as reading the same text. Per-call times vary with the runner's CPU, so the ranges above
+hold for the four runs named, not for every machine.
 
 The writer does not apply the reader's limits. A tree deeper or larger than the limits you read
 with, or a comment holding more `&name;` strings than `maxEntityExpansions` (the reader counts them
