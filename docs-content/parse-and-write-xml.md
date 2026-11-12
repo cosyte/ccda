@@ -58,6 +58,14 @@ document's own nodes after. `parseCcda` reads such a text as it always has. An e
 with no declaration (`&name;`) inside the root is read as `parseCcda` reads it: never expanded, and
 counted toward `maxEntityExpansions`.
 
+Not well-formed also includes a start tag XML 1.0 forbids: an unquoted value (`<a x=b/>`), an
+attribute with no value (`<a x/>`), a quote that does not open or close a value, two attributes
+with no white space between them, one attribute named twice, or a `<` in a value. `parseCcda` reads
+some of these, as it always has; `parseXml` refuses each, since a quote read one way by the scan
+and another by the tree's builder would put the end of the root in two places. Anything else
+`@xmldom/xmldom` reports while it builds the tree, even as a warning, is refused too, except the
+undeclared entity reference above and U+FFFD REPLACEMENT CHARACTER, which XML allows.
+
 ```ts runnable
 import { CcdaParseError, FATAL_CODES, parseXml } from "@cosyte/ccda";
 
