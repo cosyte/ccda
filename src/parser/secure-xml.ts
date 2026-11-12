@@ -490,33 +490,45 @@ function namesForbiddenCharacter(token: string): boolean {
 }
 
 /**
- * A comment, a CDATA section or a processing instruction: the three places XML does not expand a
- * character reference. Matched left to right, the earliest construct wins, so a `<!--` inside a
- * CDATA section or a `]]>` inside a comment is read as the text it is. An attribute value cannot
- * hold a `<`, so none of the three can start inside one. A construct that never closes does not
- * match, and a reference after its start is then treated as expanded: such a text is not
- * well-formed either way.
- *
- * @internal
+ * A comment, a CDATA section and a processing instruction, each by how it opens and closes: the
+ * three places XML does not expand a character reference. @internal
  */
-const UNEXPANDED_RE = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>/gu;
+const UNEXPANDED: readonly { readonly open: string; readonly close: string }[] = [
+  { open: "<!--", close: "-->" },
+  { open: "<![CDATA[", close: "]]>" },
+  { open: "<?", close: "?>" },
+];
 
 /**
  * Whether any of these offsets (each the start of a character reference, in ascending order) lies
  * outside every comment, CDATA section and processing instruction, where XML expands it. Run only
  * when the gate found a reference to a forbidden code point, so a text without one pays nothing.
  *
+ * One walk from the start of the text, `<` by `<`, never revisiting a character: a construct opened
+ * at a `<` is skipped whole to its close, so a `<!--` inside a CDATA section or a `]]>` inside a
+ * comment is read as the text it is. An attribute value cannot hold a `<`, so no construct starts
+ * inside one. A construct that never closes ends the walk with a refusal: such a text is not
+ * well-formed either way, and stopping there keeps a text of many unclosed openers linear (a lazy
+ * regular expression over the same three spans retries from each opener, quadratic in them).
+ *
  * @internal
  */
 function anyExpanded(source: string, offsets: readonly number[]): boolean {
-  UNEXPANDED_RE.lastIndex = 0;
-  let span = UNEXPANDED_RE.exec(source);
+  let at = 0;
   for (const offset of offsets) {
-    // The spans come in text order and do not overlap: pass the ones that end before this offset.
-    while (span !== null && span.index + span[0].length <= offset) {
-      span = UNEXPANDED_RE.exec(source);
+    // Past `at`, nothing is read yet; an offset before it sits inside the construct last skipped.
+    while (at <= offset) {
+      const lt = source.indexOf("<", at);
+      if (lt === -1 || lt > offset) return true;
+      const construct = UNEXPANDED.find(({ open }) => source.startsWith(open, lt));
+      if (construct === undefined) {
+        at = lt + 1;
+        continue;
+      }
+      const close = source.indexOf(construct.close, lt + construct.open.length);
+      if (close === -1) return true;
+      at = close + construct.close.length;
     }
-    if (span === null || offset < span.index) return true;
   }
   return false;
 }

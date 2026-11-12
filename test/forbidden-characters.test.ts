@@ -452,9 +452,24 @@ describe("parseCcda refuses a text that holds a character XML 1.0 forbids", () =
       "after a CDATA section that held what looks like a comment's start",
       `${ROOT}<title><![CDATA[<!--]]>&#1;<!-- --></title></ClinicalDocument>`,
     ],
+    [
+      "in a second reference after one inside a comment",
+      `${ROOT}<!-- &#1; --><title>&#1;</title></ClinicalDocument>`,
+    ],
+    ["in a comment that never closes", `${ROOT}<!-- &#1; <title/></ClinicalDocument>`],
+    ["after the root element closes", `${ROOT}<title/></ClinicalDocument>&#1;`],
   ];
 
-  it.each(EXPANDED_AFTER)("still refuses a reference in text %s", async (_name, text) => {
+  it("decides a reference after many openers that never close in time linear in the text", () => {
+    // A lazy regular expression over the three spans retries from each opener and would run for
+    // minutes here; the walk reads the text once.
+    for (const opener of ["<!--", "<![CDATA[", "<?"]) {
+      const text = `${ROOT}<title>${opener.repeat(100_000)}&#1;</title></ClinicalDocument>`;
+      expect(fatalOf(text), opener).toBe("NOT_WELL_FORMED_XML");
+    }
+  });
+
+  it.each(EXPANDED_AFTER)("still refuses a reference %s", async (_name, text) => {
     expect(await wellFormed(text)).toBe(false);
     expect(fatalOf(text)).toBe("NOT_WELL_FORMED_XML");
   });
