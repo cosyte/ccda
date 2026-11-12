@@ -120,7 +120,8 @@ function written(text: string): string {
 
 /** Ways to make the root's last attribute not well-formed, each from its name and quoted value. */
 const breaks = fc.constantFrom(
-  (n: string, v: string) => `${n}=${v.slice(1, -1)}`, // unquoted
+  // unquoted, starting with a letter: a value of two quotes alone, `""`, would be quoted again
+  (n: string, v: string) => `${n}=v${v.slice(1, -1)}`,
   (n: string, v: string) => `${n}=${v.slice(1, -1)}${v.slice(-1)}`, // no opening quote
   (n: string) => n, // no value
   (n: string) => `${n}=`, // no value after =
