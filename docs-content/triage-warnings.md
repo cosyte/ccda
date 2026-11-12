@@ -67,6 +67,8 @@ into a thrown `CcdaParseError` carrying the same code: a spec-conformance gate f
   (`onWarning`, `strict`).
 - [`CcdaWarning`](./api/README.md#ccdawarning) and [`CcdaPosition`](./api/README.md#ccdaposition):
   what each warning carries.
+- [Warning and error codes](./warning-codes.md): what every code means, and which a profile may
+  never quiet.
 - [`WARNING_CODES`](./api/README.md#warning_codes) and [`FATAL_CODES`](./api/README.md#fatal_codes).
 
 ## Related
