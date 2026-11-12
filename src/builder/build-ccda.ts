@@ -327,7 +327,7 @@ import type { TerminologyAdapter, TerminologyCoding } from "../model/terminology
 import type { PlannedItemKind } from "../model/entries/plan-of-treatment.js";
 import type { ProcedureKind } from "../model/entries/procedure.js";
 import { parseCcdaText } from "../parser/index.js";
-import type { DocumentType } from "../parser/templates.js";
+import { DOCUMENT_TYPES, type DocumentType } from "../parser/templates.js";
 import {
   missingPlannedMedicationEffectiveTime,
   missingSelfCareActivity,
@@ -2575,17 +2575,23 @@ function refuseForbiddenCharacters(value: unknown, path: string, seen: Set<objec
 /**
  * The refusal {@link buildCcda} throws for a `documentType` it does not emit.
  *
- * A string is named in the message, because it is the caller's own argument
- * and naming it tells them which request was refused. A value that is not a
- * string is described by its kind and never converted: stringifying it would run
- * a caller-supplied `toString`, and the whole point of refusing it before the
- * lookup is that no such conversion decides anything here. @internal
+ * A document type the package recognizes ({@link DOCUMENT_TYPES}) but this
+ * builder does not emit is named, so the caller is told which request was
+ * refused; the name written is the package's own constant, matched by strict
+ * equality. Any other value is described by its kind and never quoted or
+ * converted: a string is the caller's own text, and like every other refusal
+ * here the message never carries input text (it may hold a character XML
+ * forbids, or anything else that does not belong in a log). Stringifying a value
+ * that is not a string would run a caller-supplied `toString`, and the whole
+ * point of refusing it before the lookup is that no such conversion decides
+ * anything here. @internal
  */
 function unsupportedDocumentType(value: unknown): TypeError {
+  const known = DOCUMENT_TYPES.find((type) => type === value);
   const named =
-    typeof value === "string"
-      ? `"${value}"`
-      : `of type ${value === null ? "null" : Array.isArray(value) ? "array" : typeof value}`;
+    known === undefined
+      ? `of type ${value === null ? "null" : Array.isArray(value) ? "array" : typeof value}`
+      : `"${known}"`;
   return new TypeError(
     `buildCcda: documentType ${named} is not supported yet, this builder emits ` +
       `${Object.keys(DOC_TYPE_SPECS)

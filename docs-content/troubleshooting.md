@@ -40,10 +40,12 @@ that (an unknown section code, a missing dose, a code/narrative mismatch, an une
 non-UCUM unit) is a warning you triage, not an exception you catch.
 
 A text that holds a character XML 1.0 forbids (a control character such as U+0001 other than tab,
-line feed and carriage return, an unpaired surrogate, U+FFFE or U+FFFF), written as it is or as a
-character reference such as `&#1;`, is not XML, so `parseCcda` and `editCcda` throw
-`NOT_WELL_FORMED_XML` for it rather than reading it. The error names neither the character nor where
-it sits.
+line feed and carriage return, an unpaired surrogate, U+FFFE or U+FFFF), written as it is anywhere or
+as a character reference such as `&#1;` in text content or an attribute value, is not XML, so
+`parseCcda` and `editCcda` throw `NOT_WELL_FORMED_XML` for it rather than reading it. The error names
+neither the character nor where it sits. In a comment, a CDATA section or a processing instruction
+XML does not expand a reference, so `<!-- &#1; -->` is plain text there and the document reads as
+before.
 
 ## Common symptoms
 

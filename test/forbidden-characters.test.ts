@@ -181,6 +181,17 @@ describe("buildCcda refuses a character XML 1.0 forbids", () => {
     expect(err?.message).not.toContain(MARKER);
   });
 
+  it("never quotes a documentType it refuses, so no caller text reaches the message", () => {
+    for (const documentType of [MARKER, `${MARKER}${charOf(0x1)}`]) {
+      const err = thrownBy(() =>
+        buildCcda({ documentType, patient: PATIENT } as unknown as BuildCcdaInit),
+      );
+      expect(err).toBeInstanceOf(TypeError);
+      expect(err?.message).toMatch(/^buildCcda: documentType of type string is not supported yet/u);
+      expect(err?.message).not.toContain(MARKER);
+    }
+  });
+
   it("accepts what XML allows: tab, line feed, carriage return and a surrogate pair", () => {
     const doc = buildCcda({
       patient: PATIENT,
@@ -401,6 +412,62 @@ describe("parseCcda refuses a text that holds a character XML 1.0 forbids", () =
     // Neither is a character reference in XML; the gate does not decide them.
     const before = thrownBy(() => parseCcda(wrap(inner)));
     expect(before === undefined || before instanceof CcdaParseError).toBe(true);
+  });
+
+  // In a comment ([15]), a CDATA section ([20]) and a processing instruction ([16]) the characters
+  // `&#1;` are Char text, not a reference (section 4.4, "Not recognized" in a comment), so the
+  // document is well-formed: libxml2 reads it, and so must parseCcda.
+  const NOT_EXPANDED: readonly (readonly [string, string])[] = [
+    ["a comment", `${ROOT}<!-- &#1; --><title/></ClinicalDocument>`],
+    ["a CDATA section", `${ROOT}<title><![CDATA[&#xFFFE;]]></title></ClinicalDocument>`],
+    ["a processing instruction", `${ROOT}<?pi &#0;?><title/></ClinicalDocument>`],
+    ["a comment before the root", `<!-- &#x110000; -->${ROOT}<title/></ClinicalDocument>`],
+    ["a processing instruction before the root", `<?pi &#1;?>${ROOT}<title/></ClinicalDocument>`],
+    [
+      "a comment that holds what looks like a CDATA section's end",
+      `${ROOT}<!-- ]]> &#1; --><title/></ClinicalDocument>`,
+    ],
+    [
+      "a CDATA section that holds what looks like a comment's start",
+      `${ROOT}<title><![CDATA[<!-- &#1;]]></title></ClinicalDocument>`,
+    ],
+  ];
+
+  it.each(NOT_EXPANDED)(
+    "reads a reference to a forbidden code point in %s, where XML does not expand it",
+    async (_name, text) => {
+      expect(await wellFormed(text)).toBe(true);
+      expect(fatalOf(text)).toBe("none");
+    },
+  );
+
+  const EXPANDED_AFTER: readonly (readonly [string, string])[] = [
+    ["after a comment closes", `${ROOT}<!-- x --><title>&#1;</title></ClinicalDocument>`],
+    ["after a CDATA section closes", `${ROOT}<title><![CDATA[x]]>&#1;</title></ClinicalDocument>`],
+    [
+      "after a processing instruction closes",
+      `${ROOT}<?pi x?><title a="&#1;"/></ClinicalDocument>`,
+    ],
+    [
+      "after a CDATA section that held what looks like a comment's start",
+      `${ROOT}<title><![CDATA[<!--]]>&#1;<!-- --></title></ClinicalDocument>`,
+    ],
+  ];
+
+  it.each(EXPANDED_AFTER)("still refuses a reference in text %s", async (_name, text) => {
+    expect(await wellFormed(text)).toBe(false);
+    expect(fatalOf(text)).toBe("NOT_WELL_FORMED_XML");
+  });
+
+  it("still refuses a forbidden code point written raw in a CDATA section and an instruction", async () => {
+    for (const text of [
+      `${ROOT}<title>${charOf(0x1)}<!-- &#1; --></title></ClinicalDocument>`,
+      `${ROOT}<title><![CDATA[${charOf(0x1)}]]></title></ClinicalDocument>`,
+      `${ROOT}<?pi ${charOf(0xfffe)}?><title/></ClinicalDocument>`,
+    ]) {
+      expect(await wellFormed(text)).toBe(false);
+      expect(fatalOf(text)).toBe("NOT_WELL_FORMED_XML");
+    }
   });
 
   it("puts nothing of the text in the fatal", () => {

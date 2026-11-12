@@ -391,9 +391,12 @@ export function rebuildDom(
  * error (section 2.2, and the Legal Character constraint of section 4.1), so the text is not XML,
  * every conforming parser rejects it, and a document read from it would carry the character into
  * any XML written back out. The fatal names no character and no place, like every other
- * `NOT_WELL_FORMED_XML`. A character reference inside a comment or a CDATA section is text, not a
- * reference, but the gate does not tell those apart and refuses one that names a forbidden code
- * point there too.
+ * `NOT_WELL_FORMED_XML`. A forbidden character written raw is refused wherever it sits, comments,
+ * CDATA sections and processing instructions included, since none of them may hold one. A
+ * character reference is refused only where XML expands it, in text content and attribute values:
+ * inside a comment, a CDATA section or a processing instruction `&#1;` is plain text, not a
+ * reference (XML 1.0 productions [15], [16] and [20], and section 4.4), and the document is
+ * well-formed ({@link anyExpanded}).
  *
  * A declared DTD outranks the entity cap wherever it sits, as it did when the two were separate
  * passes with the DTD check first: a count over the cap does not throw until the scan has
@@ -408,6 +411,10 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
   let over = false;
   let lineBreaks = false;
   let forbidden = false;
+  // Where each character reference naming a forbidden code point starts, in text order: one in a
+  // comment, a CDATA section or a processing instruction is not a reference, so whether it makes the
+  // text ill-formed is decided after the scan, and only when there is one.
+  let forbiddenReferences: number[] | undefined;
   GATE_RE.lastIndex = 0;
   for (let match = GATE_RE.exec(source); match !== null; match = GATE_RE.exec(source)) {
     const token = match[0];
@@ -432,7 +439,9 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
         forbidden = true;
       }
     } else if (token.charCodeAt(1) === HASH) {
-      forbidden ||= namesForbiddenCharacter(token);
+      if (!forbidden && namesForbiddenCharacter(token)) {
+        (forbiddenReferences ??= []).push(match.index);
+      }
     } else if (!over && !PREDEFINED_ENTITIES.has(token.slice(1, -1).toLowerCase())) {
       // Compared at each custom reference, as the separate pass did, so a cap a caller set below
       // zero is exceeded by the first custom reference and never by a text with none.
@@ -447,7 +456,10 @@ function gateScan(source: string, limits: ResolvedLimits): boolean {
       {},
     );
   }
-  if (forbidden) {
+  if (
+    forbidden ||
+    (forbiddenReferences !== undefined && anyExpanded(source, forbiddenReferences))
+  ) {
     throw new CcdaParseError(
       FATAL_CODES.NOT_WELL_FORMED_XML,
       FATAL_MESSAGES.NOT_WELL_FORMED_XML,
@@ -475,6 +487,38 @@ function namesForbiddenCharacter(token: string): boolean {
   const significant = digits.replace(/^0+/u, "");
   if (significant.length > 8) return true;
   return !isXmlChar(significant === "" ? 0 : Number.parseInt(significant, hex ? 16 : 10));
+}
+
+/**
+ * A comment, a CDATA section or a processing instruction: the three places XML does not expand a
+ * character reference. Matched left to right, the earliest construct wins, so a `<!--` inside a
+ * CDATA section or a `]]>` inside a comment is read as the text it is. An attribute value cannot
+ * hold a `<`, so none of the three can start inside one. A construct that never closes does not
+ * match, and a reference after its start is then treated as expanded: such a text is not
+ * well-formed either way.
+ *
+ * @internal
+ */
+const UNEXPANDED_RE = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>/gu;
+
+/**
+ * Whether any of these offsets (each the start of a character reference, in ascending order) lies
+ * outside every comment, CDATA section and processing instruction, where XML expands it. Run only
+ * when the gate found a reference to a forbidden code point, so a text without one pays nothing.
+ *
+ * @internal
+ */
+function anyExpanded(source: string, offsets: readonly number[]): boolean {
+  UNEXPANDED_RE.lastIndex = 0;
+  let span = UNEXPANDED_RE.exec(source);
+  for (const offset of offsets) {
+    // The spans come in text order and do not overlap: pass the ones that end before this offset.
+    while (span !== null && span.index + span[0].length <= offset) {
+      span = UNEXPANDED_RE.exec(source);
+    }
+    if (span === null || offset < span.index) return true;
+  }
+  return false;
 }
 
 /** The end-of-line handling for a text with no line break to rewrite: the text itself. @internal */
