@@ -9,8 +9,11 @@
  * SEPARATOR to a line feed before it reads. {@link refuseOutsideRootText} scans the text before
  * the tree is built, and {@link refuseOutsideRootNodes} checks the document's own nodes after.
  * The scan reads each start tag strictly, as XML 1.0 writes one: where it read a quote another way
- * than xmldom, the two would find the root's end in different places. Neither names anything the
- * text said. `parseSecureXml`, and so `parseCcda`, runs neither.
+ * than xmldom, the two would find the root's end in different places. The scan also refuses an
+ * `&` that starts no reference, in text or a value, and `]]>` in text, which xmldom reads as text
+ * with no report, and counts each element's attributes and child nodes ({@link ScannedTree}) for
+ * the check of the built tree (`./built-tree.ts`). Neither names anything the text said.
+ * `parseSecureXml`, and so `parseCcda`, runs neither.
  *
  * The patterns are written inside the functions that use them, not at the top of the module:
  * StrykerJS cannot judge a mutant in a value computed once when the module loads.
@@ -95,17 +98,72 @@ function markupPattern(): RegExp {
 
 /**
  * Throw `NOT_WELL_FORMED_XML` when one name is given to two attributes of a start tag (XML 1.0
- * well-formedness constraint Unique Att Spec). `attributes` is group 3 of {@link markupPattern}, so
- * each attribute in it is one match of `attribute`, the global {@link attributePattern}, its name
- * in group 1. Names are compared whole, prefix included; two prefixes bound to one namespace are
- * left to the tree's builder.
+ * well-formedness constraint Unique Att Spec), and return the attributes' names. `attributes` is
+ * group 3 of {@link markupPattern}, so each attribute in it is one match of `attribute`, the global
+ * {@link attributePattern}, its name in group 1. Names are compared whole, prefix included here;
+ * two prefixes bound to one namespace are told apart after the tree is built, from the names this
+ * returns ({@link ScannedTree.sharedLocalNames}).
  */
-function refuseDuplicateAttribute(attributes: string, attribute: RegExp): void {
+function refuseDuplicateAttribute(attributes: string, attribute: RegExp): string[] {
   const seen = new Set<string>();
   for (const [, name] of attributes.matchAll(attribute)) {
     if (seen.has(name as string)) throw notWellFormed();
     seen.add(name as string);
   }
+  return [...seen];
+}
+
+/**
+ * Whether two of `names` share a local name under two prefixes, neither of them `xmlns`: only
+ * such a pair can name one attribute twice once the prefixes are resolved (Namespaces in XML 1.0,
+ * constraint Attributes Unique).
+ */
+function sharesLocalName(names: readonly string[]): boolean {
+  const locals = new Set<string>();
+  for (const name of names) {
+    const colon = name.indexOf(":");
+    if (colon === -1 || name.startsWith("xmlns:")) continue;
+    const local = name.slice(colon + 1);
+    if (locals.has(local)) return true;
+    locals.add(local);
+  }
+  return false;
+}
+
+/**
+ * Throw `NOT_WELL_FORMED_XML` when `content` (character data, or the attributes of a start tag)
+ * holds an `&` that starts no reference (XML 1.0 productions [10], [14], [66] and [68]), or, when
+ * `text`, the sequence `]]>` (production [14]). `@xmldom/xmldom` reads each of these as plain
+ * text and reports nothing. `reference` is the pattern {@link bareAmpersandPattern} returns.
+ */
+function refuseBareMarkup(content: string, reference: RegExp, text: boolean): void {
+  if (reference.test(content) || (text && content.includes("]]>"))) throw notWellFormed();
+}
+
+/**
+ * A pattern for an `&` that does not start a reference: an entity reference (`&` a name `;`), a
+ * decimal character reference (`&#` digits `;`) or a hexadecimal one (`&#x` hex digits `;`).
+ */
+function bareAmpersandPattern(): RegExp {
+  return new RegExp(`&(?!(?:${namePattern()}|#[0-9]+|#x[0-9a-fA-F]+);)`, "u");
+}
+
+/**
+ * What the scan read inside the root element, element by element in document order (the order of
+ * their start tags), for the check after the tree is built (`./built-tree.ts`): the number of
+ * attributes each start tag holds, the number of child nodes a DOM builds under each element, and
+ * the attribute names of each element where two prefixes give one local name.
+ *
+ * A child node is an element, a comment, a processing instruction, a CDATA section that is not
+ * empty, or a run of text: text broken only by empty CDATA sections is one node, as a DOM
+ * normalizes it, and an empty CDATA section is none.
+ *
+ * @internal
+ */
+export interface ScannedTree {
+  readonly attributes: readonly number[];
+  readonly children: readonly number[];
+  readonly sharedLocalNames: ReadonlyMap<number, readonly string[]>;
 }
 
 /**
@@ -115,13 +173,16 @@ function refuseDuplicateAttribute(attributes: string, attribute: RegExp): void {
  * text, comments, CDATA sections and instructions inside it are passed over whole, so markup
  * characters in them, or in an attribute value, do not end it early. Each start tag must be well
  * formed as XML 1.0 writes one (see `markupPattern`), with no attribute named twice, so the
- * scan reads every quote where `@xmldom/xmldom` does. It checks no more of the element than that;
- * the tree is built after, and refuses the rest of what is not well-formed.
+ * scan reads every quote where `@xmldom/xmldom` does, and no `&` may start no reference nor `]]>`
+ * sit in text. It checks no more of the element than that; the tree is built after, and refuses the
+ * rest of what is not well-formed. Returns what the scan counted inside the root.
  *
  * @internal
  */
-export function refuseOutsideRootText(source: string): void {
-  if (skipMisc(source, rootSpan(source).end) !== source.length) throw notWellFormed();
+export function refuseOutsideRootText(source: string): ScannedTree {
+  const scan = scanRoot(source);
+  if (skipMisc(source, scan.end) !== source.length) throw notWellFormed();
+  return scan.tree;
 }
 
 /**
@@ -133,23 +194,73 @@ export function refuseOutsideRootText(source: string): void {
  * @internal
  */
 export function rootSpan(source: string): { readonly start: number; readonly end: number } {
+  const { start, end } = scanRoot(source);
+  return { start, end };
+}
+
+/** Count one more child node under the element at `index`, which the scan has counted already. */
+function addChild(children: number[], index: number): void {
+  children[index] = (children[index] as number) + 1;
+}
+
+/**
+ * {@link rootSpan}, with what the scan read inside the root ({@link ScannedTree}). Each run of
+ * text and each start tag's attributes are checked for an `&` that starts no reference, and each
+ * run of text for `]]>`.
+ */
+function scanRoot(source: string): {
+  readonly start: number;
+  readonly end: number;
+  readonly tree: ScannedTree;
+} {
   const markup = markupPattern();
   const attribute = new RegExp(attributePattern(), "gu");
+  const reference = bareAmpersandPattern();
   const start = skipMisc(source, 0);
   markup.lastIndex = start;
   let match = markup.exec(source);
   // The first markup must be the root's start tag, with nothing before it.
   if (match?.[2] === undefined || !match[0].startsWith("<")) throw notWellFormed();
-  const open: string[] = [];
+  const attributeCounts: number[] = [];
+  const children: number[] = [];
+  const sharedLocalNames = new Map<number, string[]>();
+  // The index of each open element in the two arrays, innermost last.
+  const open: { readonly name: string; readonly index: number }[] = [];
+  // Whether the last child counted under the innermost open element is a run of text.
+  let afterText = false;
   do {
     const [whole, endName, startName, attributes] = match;
-    if (startName !== undefined) {
-      refuseDuplicateAttribute(attributes as string, attribute);
-      if (!whole.endsWith("/>")) open.push(startName);
-    } else if (endName !== undefined && open.pop() !== endName) {
-      throw notWellFormed();
+    const at = whole.indexOf("<");
+    const parent = open.at(-1)?.index;
+    if (at > 0) {
+      refuseBareMarkup(whole.slice(0, at), reference, true);
+      if (!afterText) addChild(children, parent as number);
+      afterText = true;
     }
-    if (open.length === 0) return { start, end: markup.lastIndex };
+    if (startName !== undefined) {
+      const names = refuseDuplicateAttribute(attributes as string, attribute);
+      refuseBareMarkup(attributes as string, reference, false);
+      if (parent !== undefined) addChild(children, parent);
+      const index = attributeCounts.push(names.length) - 1;
+      children.push(0);
+      if (sharesLocalName(names)) sharedLocalNames.set(index, names);
+      if (!whole.endsWith("/>")) open.push({ name: startName, index });
+      afterText = false;
+    } else if (endName !== undefined) {
+      if (open.pop()?.name !== endName) throw notWellFormed();
+      afterText = false;
+    } else if (whole.slice(at) !== "<![CDATA[]]>") {
+      // A comment, an instruction, or a CDATA section that is not empty; an empty one is no node.
+      addChild(children, parent as number);
+      afterText = false;
+    }
+    if (open.length === 0) {
+      return {
+        start,
+        end: markup.lastIndex,
+        tree: { attributes: attributeCounts, children, sharedLocalNames },
+      };
+    }
     match = markup.exec(source);
   } while (match !== null);
   throw notWellFormed();

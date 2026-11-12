@@ -36,6 +36,7 @@ import type { Document, Element } from "@xmldom/xmldom";
 import { positionOf } from "../model/dom.js";
 import { CcdaParseError, FATAL_CODES, FATAL_MESSAGES } from "./errors.js";
 import { isRecognizedNamespace } from "./namespaces.js";
+import { refuseTreeDifference } from "./built-tree.js";
 import { refuseOutsideRootNodes, refuseOutsideRootText } from "./outside-root.js";
 import { isXmlChar } from "./xml-chars.js";
 import type { CcdaParseLimits } from "./types.js";
@@ -210,11 +211,13 @@ export function parseSecureXml(
  * well-formed, and so does a start tag XML 1.0 makes not well-formed. `@xmldom/xmldom` drops some
  * of that content, keeps some as a node under the document, and reports some of it only as a
  * warning or an error, which `parseSecureXml` (and so `parseCcda`) tolerates. The exported
- * `parseXml` sets the flag, so a sender's content is never lost without a word. Three guards hold
+ * `parseXml` sets the flag, so a sender's content is never lost without a word. Four guards hold
  * it, none trusting the others: a scan of the text before the tree is built
- * ({@link refuseOutsideRootText}), which reads start tags as XML does; xmldom's reports while it
- * builds, every one fatal but the two a well-formed text can draw ({@link isToleratedReport}); and
- * a check of the document's own nodes after ({@link refuseOutsideRootNodes}).
+ * ({@link refuseOutsideRootText}), which reads start tags as XML does, and refuses an `&` that
+ * starts no reference and `]]>` in text; xmldom's reports while it builds, every one fatal but the
+ * two a well-formed text can draw ({@link isToleratedReport}); a check of the document's own nodes
+ * after ({@link refuseOutsideRootNodes}); and a check of the whole tree against what the scan
+ * counted, with the namespace rules xmldom does not keep ({@link refuseTreeDifference}).
  *
  * @internal
  */
@@ -226,12 +229,15 @@ export function readSecureXml(
   refuseOutsideRoot: boolean,
 ): Document {
   const accepted = acceptSource(raw, limits, emit);
-  if (refuseOutsideRoot) refuseOutsideRootText(accepted.source);
+  const scanned = refuseOutsideRoot ? refuseOutsideRootText(accepted.source) : undefined;
   const doc = buildDom(accepted.source, accepted.lineBreaksToNormalize, true, refuseOutsideRoot);
   // A guard that trusts neither the scan nor xmldom's reports: a CDATA section after the root is
   // one text xmldom reports nothing for and keeps under the document (test/xml-guards.test.ts).
   if (refuseOutsideRoot) refuseOutsideRootNodes(doc);
   enforceStructureLimits(doc.documentElement, limits, reportForeignNamespace);
+  // The tree must hold what the scan read: xmldom drops an attribute named twice through two
+  // prefixes with no report, so its tree is checked against the scan's counts.
+  if (scanned !== undefined) refuseTreeDifference(doc, scanned);
   return doc;
 }
 
@@ -567,15 +573,18 @@ function anyExpanded(source: string, offsets: readonly number[]): boolean {
  * Whether a report from `@xmldom/xmldom` is one a strict build (`parseXml`) reads past, as either
  * can come from a text `parseXml` reads: the warning on U+FFFD REPLACEMENT CHARACTER, which XML
  * 1.0 allows, and the error on an entity reference with no declaration (`&name;`), which is never
- * expanded and counts toward `maxEntityExpansions`. Each is matched by xmldom's own words, so a
- * report reworded in another xmldom release is fatal, not read past.
+ * expanded and counts toward `maxEntityExpansions`. Each is matched whole, by xmldom's own words
+ * and, for the entity, the reference xmldom names in them (`&`, a name of ASCII letters, digits and
+ * `_` not starting with a digit, `;`, the only names its entity pattern reads whole), so a report
+ * reworded in another xmldom release, or with anything after the reference, is fatal, not read
+ * past.
  *
  * @internal
  */
-function isToleratedReport(level: "warning" | "error", message: string): boolean {
+export function isToleratedReport(level: "warning" | "error", message: string): boolean {
   return level === "warning"
     ? message === "Unicode replacement character detected, source encoding issues?"
-    : message.startsWith("entity not found:");
+    : /^entity not found:&[A-Z_a-z]\w*;$/u.test(message);
 }
 
 /** The end-of-line handling for a text with no line break to rewrite: the text itself. @internal */

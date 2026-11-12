@@ -52,6 +52,9 @@ function fatalOf(run: () => unknown): string {
 /** A marker that must never reach a message: it stands for whatever a hostile text carries. */
 const MARKER = "zzmarkerzz";
 
+/** The namespace the prefix `xml` is bound to. */
+const XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace";
+
 interface Attack {
   readonly name: string;
   readonly text: string;
@@ -611,6 +614,252 @@ describe("parseXml refuses a start tag XML 1.0 makes not well-formed", () => {
       expect(fatalOf(() => parseSecureXml(text, resolveLimits(), () => {}))).toBe(secure ?? "none");
     },
   );
+});
+
+const SAME_NAMESPACE = "urn:example:x";
+
+/**
+ * Texts XML 1.0 or Namespaces in XML 1.0 makes not well-formed that `@xmldom/xmldom` reads with no
+ * report, so `parseXml` read them before it checked for each: an attribute named twice through two
+ * prefixes bound to one namespace (xmldom keeps one and drops the other), an `&` that starts no
+ * reference, `]]>` in text, a namespace declaration the namespace constraints forbid, and a colon
+ * in a processing instruction's target. `secure` names what `parseSecureXml` does with each, as it
+ * did before `parseXml` existed: `"none"` when it reads it.
+ */
+const READ_PAST: readonly {
+  readonly name: string;
+  readonly text: string;
+  readonly secure?: string;
+}[] = [
+  {
+    name: "one attribute through two prefixes bound to one namespace",
+    text: `<a xmlns:p="${SAME_NAMESPACE}" xmlns:q="${SAME_NAMESPACE}" p:x="first" q:x="second"/>`,
+  },
+  {
+    name: "one attribute through two prefixes, in the other order",
+    text: `<a xmlns:p="${SAME_NAMESPACE}" xmlns:q="${SAME_NAMESPACE}" q:x="second" p:x="first"/>`,
+  },
+  {
+    name: "one attribute through two prefixes, on a child",
+    text: `<a xmlns:p="${SAME_NAMESPACE}" xmlns:q="${SAME_NAMESPACE}"><b p:x="first" q:x="second"/></a>`,
+  },
+  {
+    name: "one attribute through two prefixes, the second declared on the child",
+    text: `<a xmlns:p="${SAME_NAMESPACE}"><b xmlns:q="${SAME_NAMESPACE}" p:x="first" q:x="second"/></a>`,
+  },
+  {
+    name: "one attribute through two prefixes, one namespace written with a reference",
+    text: `<a xmlns:p="&#x75;rn:example:x" xmlns:q="${SAME_NAMESPACE}" p:x="first" q:x="second"/>`,
+  },
+  {
+    name: "one attribute through a prefix bound again to the parent's namespace on a sibling",
+    text: `<a xmlns:p="${SAME_NAMESPACE}"><b xmlns:p="urn:example:y"/><c xmlns:q="${SAME_NAMESPACE}" p:x="1" q:x="2"/></a>`,
+  },
+  {
+    name: "one attribute through xml and a prefix bound to the xml namespace",
+    text: `<a xmlns:p="http://www.w3.org/XML/1998/namespace" xml:lang="en" p:lang="fr"/>`,
+  },
+  { name: "a bare ampersand in text", text: "<a>&</a>" },
+  { name: "a bare ampersand between words", text: "<a>x & y</a>" },
+  { name: "a bare ampersand in a value", text: '<a x="&"/>' },
+  { name: "a bare ampersand in a single-quoted value", text: "<a x='a & b'/>" },
+  { name: "an ampersand and a semicolon in text", text: "<a>&;</a>" },
+  { name: "an ampersand and a semicolon in a value", text: '<a x="&;"/>' },
+  { name: "an ampersand, a space and a name in text", text: "<a>& foo;</a>" },
+  { name: "a character reference with no digits in text", text: "<a>&#;</a>" },
+  { name: "a character reference with no digits in a value", text: '<a x="&#;"/>' },
+  { name: "a bare ampersand in a child's text", text: "<a><b>Synthetic & co</b></a>" },
+  { name: "]]> in text", text: "<a>]]></a>" },
+  { name: "]]> between words in text", text: "<a>x]]>y</a>" },
+  { name: "]]> in a child's text after a CDATA section", text: "<a><b><![CDATA[x]]>]]></b></a>" },
+  { name: "a prefix bound to no namespace", text: '<a xmlns:p=""/>' },
+  { name: "a prefix bound to no namespace on a child", text: '<a><b xmlns:p=""/></a>' },
+  { name: "the xml prefix bound to another namespace", text: '<a xmlns:xml="urn:x"/>' },
+  { name: "the xmlns prefix declared", text: '<a xmlns:xmlns="urn:x"/>' },
+  {
+    name: "another prefix bound to the xml namespace",
+    text: '<a xmlns:p="http://www.w3.org/XML/1998/namespace"/>',
+  },
+  {
+    name: "another prefix bound to the xmlns namespace",
+    text: '<a xmlns:p="http://www.w3.org/2000/xmlns/"/>',
+  },
+  {
+    name: "the default namespace bound to the xml namespace",
+    text: '<a xmlns="http://www.w3.org/XML/1998/namespace"/>',
+  },
+  { name: "a colon in an instruction's target inside the root", text: "<a><?p:q x?></a>" },
+  { name: "a colon in an instruction's target before the root", text: "<?p:q x?><a/>" },
+  { name: "a colon in an instruction's target after the root", text: "<a/><?p:q?>" },
+];
+
+describe("parseXml refuses what XML or its namespaces forbid and xmldom reads past", () => {
+  it.each(READ_PAST)("refuses $name with NOT_WELL_FORMED_XML", ({ text }) => {
+    expect(fatalOf(() => parseXml(text))).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+  });
+
+  it.each(READ_PAST)(
+    "leaves the C-CDA reader as it was: parseSecureXml on $name",
+    ({ text, secure }) => {
+      expect(fatalOf(() => parseSecureXml(text, resolveLimits(), () => {}))).toBe(secure ?? "none");
+    },
+  );
+
+  it("reads the forms beside them that XML and its namespaces allow", () => {
+    const cases: readonly (readonly [
+      string,
+      (doc: ReturnType<typeof parseXml>) => unknown,
+      unknown,
+    ])[] = [
+      // Two prefixes for two namespaces, a prefix bound again on a child, and an unprefixed name.
+      [
+        '<a xmlns:p="urn:example:x" xmlns:q="urn:example:y" p:x="1" q:x="2" x="3"/>',
+        (doc) => doc.documentElement?.attributes.length,
+        5,
+      ],
+      [
+        '<a xmlns:p="urn:example:x"><b xmlns:p="urn:example:y" xmlns:q="urn:example:x" p:x="1" q:x="2"/></a>',
+        (doc) => doc.getElementsByTagName("b")[0]?.getAttributeNS("urn:example:x", "x"),
+        "2",
+      ],
+      ['<a xmlns=""/>', (doc) => doc.documentElement?.getAttribute("xmlns"), ""],
+      [
+        `<a xmlns:xml="${XML_NAMESPACE}" xml:lang="en"/>`,
+        (doc) => doc.documentElement?.getAttributeNS(XML_NAMESPACE, "lang"),
+        "en",
+      ],
+      ['<a xmlns="urn:example:x"><b xmlns=""/></a>', (doc) => doc.documentElement?.localName, "a"],
+      ["<a>]]</a>", (doc) => doc.documentElement?.textContent, "]]"],
+      ["<a>]] ></a>", (doc) => doc.documentElement?.textContent, "]] >"],
+      ['<a x="]]>"/>', (doc) => doc.documentElement?.getAttribute("x"), "]]>"],
+      [
+        "<a>&amp;&lt;&#65;&#x42;&#x4a;&#x4A;</a>",
+        (doc) => doc.documentElement?.textContent,
+        "&<ABJJ",
+      ],
+      ["<a>&undeclared;</a>", (doc) => doc.documentElement?.textContent, "&undeclared;"],
+      ["<a><?p-q x?></a>", (doc) => doc.documentElement?.firstChild?.nodeName, "p-q"],
+      ["<a><![CDATA[&]]></a>", (doc) => doc.documentElement?.textContent, "&"],
+      ["<a><!-- & ]]> --></a>", (doc) => doc.documentElement?.childNodes.length, 1],
+      ["<a><?p & ]]>?></a>", (doc) => doc.documentElement?.childNodes.length, 1],
+    ];
+    for (const [text, read, expected] of cases) {
+      expect(read(parseXml(text)), text).toBe(expected);
+    }
+  });
+
+  it("reads text broken only by empty CDATA sections as one text, as xmldom builds it", () => {
+    const doc = parseXml("<a>x<![CDATA[]]>y<![CDATA[]]><![CDATA[z]]><![CDATA[]]>w<b/></a>");
+    const kinds = Array.from(doc.documentElement?.childNodes ?? []).map((n) => n.nodeType);
+    expect(kinds).toEqual([3, 4, 3, 1]);
+    expect(parseXml("<a><![CDATA[]]></a>").documentElement?.childNodes.length).toBe(0);
+    expect(parseXml("<a><![CDATA[]]><b/></a>").documentElement?.childNodes.length).toBe(1);
+  });
+
+  it("reads past only the undeclared entity report xmldom gives for a whole reference", () => {
+    // xmldom reads an entity name as ASCII letters, digits and `_`; a name with any other
+    // character draws another report, which parseXml refuses, as it refuses &1a; and &b c.
+    expect(fatalOf(() => parseXml("<a>&_a1;</a>"))).toBe("none");
+    for (const text of ["<a>&café;</a>", "<a>&a-b;</a>", "<a>&a.b;</a>", "<a>&1a;</a>"]) {
+      expect(
+        fatalOf(() => parseXml(text)),
+        text,
+      ).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+    }
+  });
+});
+
+/**
+ * Texts the review checked that `parseXml` refuses, each a row so a later change cannot let one
+ * through unseen. Every value is synthetic.
+ */
+const REVIEWED_REFUSALS: readonly string[] = [
+  '<a></a x="1">',
+  "<a></a junk>",
+  "<a></a/>",
+  "<a></b>",
+  "<a></A>",
+  "<a><b></a></b>",
+  '<?xml version="1.0" x="1"?><a/>',
+  '<?xml version="1.0" standalone="maybe"?><a/>',
+  '<!--c--><?xml version="1.0"?><a/>',
+  ' <?xml version="1.0"?><a/>',
+  '<?XML version="1.0"?><a/>',
+  "<a\u0000/>",
+  "<a>\u0000</a>",
+  "<a\u0001/>",
+  "<a>\u0001</a>",
+  "<a￿/>",
+  "<a>￿</a>",
+  '<a xmlns="urn:example:x" xmlns="urn:example:y"/>',
+  '<a xmlns:p="urn:example:x" xmlns:p="urn:example:y"/>',
+  "<p:a/>",
+  '<a p:x="1"/>',
+  "<a:b:c/>",
+  "<a>&#x;</a>",
+  "<a>&#xZZ;</a>",
+  "<a>&#65</a>",
+  "<a>a<b</a>",
+  // Forms beside them, checked in the same round.
+  "<a><!-- a -- b --></a>",
+  "<a><!-- a ---></a>",
+  "<!-- -- --><a/>",
+  "<a><?XML x?></a>",
+  "<?Xml x?><a/>",
+  "<a><?xml x?></a>",
+  "<a><? x?></a>",
+  "<a>&#x110000;</a>",
+  "<a>&#xD800;</a>",
+  `<a>${String.fromCharCode(0xd800)}</a>`,
+  '<?xml version="2.0"?><a/>',
+  '<?xml encoding="UTF-8"?><a/>',
+  '<?xml version="1.0" encoding="bad enc"?><a/>',
+  "<?xml version='1.0' standalone='yes' encoding='UTF-8'?><a/>",
+  '<a xmlns:p="urn:example:x" p:="1"/>',
+  '<a :x="1"/>',
+  "<:a/>",
+  "<a:/>",
+  '<a xmlns:p:q="urn:example:x"/>',
+  '<a xmlns:="urn:example:x"/>',
+];
+
+/** Texts the review checked that `parseXml` reads, each with what a read of it must hold. */
+const REVIEWED_READS: readonly (readonly [
+  string,
+  (doc: ReturnType<typeof parseXml>) => unknown,
+  unknown,
+])[] = [
+  [`<a x=">" y="'" z='"'/>`, (doc) => doc.documentElement?.getAttribute("z"), '"'],
+  [
+    '<a x="&amp;&#65;&#x42;&undeclared;"/>',
+    (doc) => doc.documentElement?.getAttribute("x"),
+    "&AB&undeclared;",
+  ],
+  ['<a x = "1"/>', (doc) => doc.documentElement?.getAttribute("x"), "1"],
+  ['<a x\n=\t"1"/>', (doc) => doc.documentElement?.getAttribute("x"), "1"],
+  ["<a/>", (doc) => doc.documentElement?.localName, "a"],
+  ["<a />", (doc) => doc.documentElement?.localName, "a"],
+  ["<a></a >", (doc) => doc.documentElement?.localName, "a"],
+  ["<a.></a.>", (doc) => doc.documentElement?.localName, "a."],
+  ["<a><![CDATA[x]y]]]></a>", (doc) => doc.documentElement?.textContent, "x]y]"],
+  ['<a x="1\n2\t3"/>', (doc) => doc.documentElement?.getAttribute("x"), "1 2 3"],
+  ['<a x="1&#10;2&#9;3"/>', (doc) => doc.documentElement?.getAttribute("x"), "1\n2\t3"],
+];
+
+describe("the inputs the review checked", () => {
+  it.each(REVIEWED_REFUSALS)("parseXml refuses %j with NOT_WELL_FORMED_XML", (text) => {
+    expect(fatalOf(() => parseXml(text))).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+  });
+
+  it("parseXml reads each the review read, and serializeXml writes it back to the same tree", () => {
+    for (const [text, read, expected] of REVIEWED_READS) {
+      const doc = parseXml(text);
+      expect(read(doc), text).toBe(expected);
+      const back = parseXml(serializeXml(doc));
+      expect(read(back), text).toBe(expected);
+      expect(firstDifference(doc as never, back as never), text).toBe(undefined);
+    }
+  });
 });
 
 describe("the check of the nodes directly under the document", () => {
@@ -1524,11 +1773,13 @@ describe("serializeXml and its check, at the edges each choice turns on", () => 
         parseXml('<root xmlns:p="urn:example:b" p:x="1"/>') as never,
       ),
     ).toBe("an attribute");
+    // A text cannot bind another prefix to the xml namespace (parseXml refuses it), so the tree
+    // to compare with is built.
     const unbound = newDocument();
     unbound.documentElement?.setAttribute("x:y", "1");
-    expect(
-      firstDifference(unbound as never, parseXml(`<root xmlns:x="${XML}" x:y="1"/>`) as never),
-    ).toBe("an attribute");
+    const bound = newDocument();
+    bound.documentElement?.setAttributeNS(XML, "x:y", "1");
+    expect(firstDifference(unbound as never, bound as never)).toBe("an attribute");
     const lang = newDocument();
     lang.documentElement?.setAttribute("xml:lang", "en");
     expect(firstDifference(lang as never, parseXml('<root xml:lang="en"/>') as never)).toBe(
