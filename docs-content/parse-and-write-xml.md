@@ -142,16 +142,17 @@ these are the trees it refuses before it writes anything:
 The read-back is a parse of the output and a walk of both trees on every call, so a write costs
 more than writing alone. `bench/ccda.bench.mjs` measures `serializeXml` beside `parseXml` and
 beside xmldom's own `XMLSerializer`, which checks nothing and reads nothing back. Every reading of
-the writer as it stands, from commit 2e7ed13 on, on a 4-CPU GitHub-hosted runner with Node 22,
-each the median of 3 processes, per call (Bench reading runs 43181575140 on 2e7ed13, 43186834350 on
-f7450cc and 43191626744 on 6778d43, each measuring the source of 2e7ed13):
+the writer and the reader from commit 2e7ed13 to 84f5bb8, on a 4-CPU GitHub-hosted runner with Node
+22, each the median of 3 processes, per call: Bench reading runs 43181575140 (on 2e7ed13),
+43186834350 (on f7450cc) and 43191626744 (on 6778d43), which measure the same source, and
+43201776361 (on 84f5bb8), which measures it with the refusal of text outside the root element:
 
 | Input                     | `parseXml`          | `serializeXml`      | xmldom `XMLSerializer`, unchecked |
 | ------------------------- | ------------------- | ------------------- | --------------------------------- |
-| Referral Note, 23 KiB     | 1.469 to 1.856 ms   | 4.258 to 5.059 ms   | 0.385 to 0.437 ms                 |
+| Referral Note, 23 KiB     | 1.447 to 1.856 ms   | 4.165 to 5.059 ms   | 0.385 to 0.437 ms                 |
 | CCD, 100 entries, 0.2 MiB | 14.222 to 18.912 ms | 44.062 to 53.266 ms | 4.434 to 5.908 ms                 |
 
-So a checked write took 9.0 to 12.6 times as long as xmldom's unchecked one, and 2.7 to 3.1 times
+So a checked write took 8.4 to 12.6 times as long as xmldom's unchecked one, and 2.7 to 3.1 times
 as long as reading the same text.
 
 The writer does not apply the reader's limits. A tree deeper or larger than the limits you read
