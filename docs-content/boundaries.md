@@ -348,9 +348,9 @@ this page says so instead of resolving it in your favor.
   [3]: space, tab, line feed, carriage return) nor in a name (production [4a]): U+0080 to U+00BF
   but the middle dot U+00B7, U+00D7, U+00F7, U+037E, U+2000 to U+200B, U+200E to U+203E, U+2041
   to U+206F, U+2190 to U+2BFF, U+2FF0 to U+3000, U+E000 to U+F8FF, U+FDD0 to U+FDEF and U+F0000
-  to U+10FFFF. The list is read from those productions, not kept by hand. Among them are the
-  no-break space (U+00A0), the other Unicode spaces and the private use characters. Text,
-  attribute values, comments, CDATA sections and processing instruction data keep them as they
+  to U+10FFFF. The list is derived from those productions and checked against them at every code
+  point. Among them are the no-break space (U+00A0), the other Unicode spaces and the private use
+  characters. Text, attribute values, comments, CDATA sections and processing instruction data keep them as they
   were written. Up to this release the DOM library under the parser read U+0080 inside a tag as
   white space, and read a tag holding most of the others as plain text, `<` and all, so an element
   could gain a wrong attribute split or turn into narrative text without a warning.
