@@ -134,7 +134,16 @@ these are the trees it refuses before it writes anything:
 
 The read-back is a parse of the output and a walk of both trees on every call, so a write costs
 more than writing alone. `bench/ccda.bench.mjs` measures `serializeXml` beside `parseXml` and
-beside xmldom's own `XMLSerializer`, which checks nothing and reads nothing back.
+beside xmldom's own `XMLSerializer`, which checks nothing and reads nothing back. One reading on a
+4-CPU GitHub-hosted runner with Node 22 (Bench reading run 43181575140), the median of 3 processes:
+
+| Input                         | `parseXml` | `serializeXml` | xmldom `XMLSerializer`, unchecked |
+| ----------------------------- | ---------- | -------------- | --------------------------------- |
+| Referral Note, 23 KiB         | 1.856 ms   | 5.059 ms       | 0.437 ms                          |
+| CCD, 100 entries, 0.2 MiB     | 18.912 ms  | 53.266 ms      | 5.908 ms                          |
+
+So a checked write took about 9 to 12 times as long as xmldom's unchecked one, and about 2.7 to 2.8
+times as long as reading the same text.
 
 The writer does not apply the reader's limits. A tree deeper or larger than the limits you read
 with, or a comment holding more `&name;` strings than `maxEntityExpansions` (the reader counts them
