@@ -189,8 +189,8 @@ loud safety-critical code, under-firing costs one of two strengths handed back i
 
 - **Results**: Result Organizers via `getResults()`: the LOINC-coded analyte, the polymorphic
   observation `value` as a discriminated `ObservationValue` (`physicalQuantity` / `coded` / `string` /
-  `integer` / `range` / `unsupported`, selected by `xsi:type`; those are **all six** arms, so an
-  exhaustive `switch` on `kind` is complete), the `referenceRange` (structured `IVL_PQ` bounds,
+  `integer` / `real` / `range` / `unsupported`, selected by `xsi:type`; those are **all seven** arms,
+  so an exhaustive `switch` on `kind` is complete), the `referenceRange` (structured `IVL_PQ` bounds,
   else free-text), and the `interpretation`.
 - **Vital Signs**: Vital Signs Organizers via `getVitals()`: the same UCUM-checked `ObservationValue`
   machinery, no reference range.
@@ -201,10 +201,11 @@ loud safety-critical code, under-firing costs one of two strengths handed back i
 Every physical quantity is checked against a **computable, zero-dependency UCUM grammar**
 (`isValidUcumUnit`, `isUcumCaseSuspect`): a non-UCUM unit is flagged (`NON_UCUM_UNIT`) and a
 letter-case slip caught (`UCUM_CASE_SUSPECT`), but the **raw unit is always preserved, never
-normalized away**. An unrecognized `value xsi:type` is typed `unsupported` and reported with
-`RESULT_VALUE_TYPE_UNHANDLED`. The element's text, if it has any, is kept in `raw`; an attribute-only
-value such as `<value xsi:type="REAL" value="7.25"/>` is not kept in the typed model, though
-`doc.toString()` still carries it. See the
+normalized away**. A `REAL` value (`<value xsi:type="REAL" value="7.25"/>`) is the `real` arm: the
+number in `value` and the verbatim token in `raw`, like `integer`. An unrecognized `value xsi:type`
+is typed `unsupported` and reported with `RESULT_VALUE_TYPE_UNHANDLED`. The element's text, if it has
+any, is kept in `raw`; content held in its attributes or child elements (an `MO` amount, an `RTO`
+ratio) is not kept in the typed model, though `doc.toString()` still carries it. See the
 [cases reported against other parsers](./limitations.md#cases-reported-against-other-parsers).
 
 ## Procedures, encounters, and social history
@@ -215,7 +216,11 @@ value such as `<value xsi:type="REAL" value="7.25"/>` is not kept in the typed m
   safety-critical:** a performed procedure (`EVN`) and a planned/ordered one
   (`INT`/`RQO`/`PRMS`/`PRP`/`APT`/`ARQ`) become a `disposition` of `"performed"` vs `"planned"` and are
   **never conflated**: a missing mood is `PLANNED_VS_PERFORMED_AMBIGUOUS`, an unrecognized mood is
-  `PROCEDURE_MOOD_UNEXPECTED`, both leaving `disposition` undefined rather than guessing.
+  `PROCEDURE_MOOD_UNEXPECTED`, both leaving `disposition` undefined rather than guessing. A device
+  the procedure used or placed (`participant typeCode="DEV"`, a Product Instance on an implant) is
+  kept on `devices`: its `ids` (the UDI) and its device `code`. A Procedure Activity Procedure in a
+  Medical Equipment section, which is how C-CDA R2.1 records an implant (CONF:1098-31885), is read
+  there and is not flagged `SECTION_PLACEMENT_SUSPECT`.
 - **Encounters** via `getEncounters()`: the Encounter Activity (`…22.4.49`): the visit type `code`,
   `statusCode`, and visit-period `effectiveTime`.
 - **Social History: Smoking Status** via `getSmokingStatus()`: the Smoking Status (Meaningful Use)
@@ -252,9 +257,8 @@ value such as `<value xsi:type="REAL" value="7.25"/>` is not kept in the typed m
   occurrence outside it is still dropped in silence**: a Handoff nested in an **Intervention Act**
   (`…22.4.131`) is silent, because that act is not a container this library descends into, and a
   direct entry of a section this catalog recognizes as nothing is silent because there is no key to
-  match. **A Goal Observation is
-  deliberately not reported**, because the decision taken on it was to model it rather than warn about
-  it. A planned entry is read as an `<entry>`'s own
+  match. **A Goal Observation is reported too**, with the same code and its own wording, wherever it
+  is a section's direct entry, and it is still not modeled. A planned entry is read as an `<entry>`'s own
   act **or** nested inside a **Planned Intervention Act** (`…22.4.146`), the act that groups the
   interventions planned toward a goal and the one container C-CDA lets hold all seven inline; until
   `0.0.3` only the first was read, so all seven vanished from the nested shape with nothing raised

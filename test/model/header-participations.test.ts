@@ -527,12 +527,28 @@ describe("AC-10: adding a code leaves every published code and message untouched
     }
   });
 
+  /**
+   * Published messages reworded on purpose since, each pinned to its new text
+   * character for character, so the table above stays the record of what was
+   * published. `RESULT_VALUE_TYPE_UNHANDLED` said "raw value preserved", which
+   * was false for a value held in attributes (a `REAL` lost its number with
+   * that message beside it); the code and its meaning are unchanged.
+   */
+  const REWORDED_SINCE_PUBLISHED: Readonly<Record<string, string>> = Object.freeze({
+    RESULT_VALUE_TYPE_UNHANDLED:
+      "The observation value's xsi:type is not specialized; it is read as unsupported, keeping the type name and any text content. Content held in the value's attributes or child elements is not in the model and survives only in the re-serialized document.",
+  });
+
   it("AC-10: every previously published message is unchanged character for character", () => {
     for (const [code, message] of Object.entries(PUBLISHED_WARNING_MESSAGES)) {
       expect(
         WARNING_MESSAGES[code as keyof typeof WARNING_MESSAGES],
         `${code}'s message text moved`,
-      ).toBe(message);
+      ).toBe(REWORDED_SINCE_PUBLISHED[code] ?? message);
+    }
+    for (const code of Object.keys(REWORDED_SINCE_PUBLISHED)) {
+      expect(PUBLISHED_WARNING_MESSAGES[code], `${code} was never published`).toBeDefined();
+      expect(REWORDED_SINCE_PUBLISHED[code]).not.toBe(PUBLISHED_WARNING_MESSAGES[code]);
     }
   });
 

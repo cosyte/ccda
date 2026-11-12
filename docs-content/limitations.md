@@ -14,7 +14,7 @@ built never to silently drop or garble data, and where a limitation applies, the
 preserved (often with a warning) and is simply not decoded further. Where a value does still go
 missing from the model with no warning, this page names the case;
 [the cases reported against other parsers](#cases-reported-against-other-parsers) lists the ones we
-test for, with the three that still fail.
+test for and what we do with each.
 
 Depth tracks the code, and never leads it. Where a boundary is genuinely open, this page says so
 instead of resolving it in your favor.
@@ -386,9 +386,10 @@ instead of resolving it in your favor.
   appear in more places than it covers, and an occurrence outside it is still dropped in silence.**
   Two such places are measured and pinned: a Handoff nested in an **Intervention Act** (`…22.4.131`)
   is silent because that act is not a container this library descends into, and a direct entry of a
-  section this catalog recognizes as nothing is silent because there is no key to match. **Goal
-  Observation is deliberately not reported**, because the decision taken on it was to model it rather
-  than warn about it.
+  section this catalog recognizes as nothing is silent because there is no key to match. **A Goal
+  Observation is reported too**, with the same code and its own wording, wherever it is a section's
+  direct entry (a Goals section, a Plan of Treatment section, or any other). It is still not modeled:
+  no accessor returns it.
 - **A planned entry nested in a Planned Intervention Act was dropped in silence, for all seven kinds
   (fixed in `0.0.3`).** `getPlannedItems()` used to read an `<entry>`'s own act and go no deeper, so a
   planned flu shot or drug order hanging off a **Planned Intervention Act** (`…22.4.146`, the act that
@@ -499,29 +500,33 @@ instead of resolving it in your favor.
 The open issues on other C-CDA parsers are mostly one complaint: a value the document carried came
 back as nothing, with nothing said. We took each class of that complaint, wrote a synthetic document
 for it, and hold every class to one rule: the value is in the typed model, or a warning with a named
-code is raised on the element that holds it. `test/silent-loss.test.ts` runs them. Three classes do
-not meet the rule today. Each is a defect we mean to fix, and its test is written to go red the day
-the fix lands.
+code is raised on the element that holds it. `test/silent-loss.test.ts` runs them. Every class meets
+the rule. Three of them used to drop the value with no warning (an entry with no `templateId`, a Goal
+Observation, an implant's device) and a `REAL` value was reported but its number was not in the
+model; all four were fixed in the same release.
 
-| Class                                                                    | What we do today                                                                                                                            | Result                  |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| Allergy whose category is not food                                       | `type` keeps the propensity code and `allergen` the substance, whatever the category                                                        | Kept                    |
-| Interval `effectiveTime` on a medication                                 | `duration.low` and `duration.high`                                                                                                          | Kept                    |
-| Interval `effectiveTime` on a result                                     | `effectiveTime.low` and `effectiveTime.high`                                                                                                | Kept                    |
-| `REAL` observation value                                                 | `{ kind: "unsupported", xsiType: "REAL" }` and `RESULT_VALUE_TYPE_UNHANDLED`; the number itself is not in the model                         | Reported                |
-| `ED` observation value                                                   | `{ kind: "unsupported", xsiType: "ED", raw }` with the text, and `RESULT_VALUE_TYPE_UNHANDLED`                                              | Kept and reported       |
-| Family History section                                                   | `getFamilyHistory()`: the relative and each condition                                                                                       | Kept                    |
-| `negationInd` on a problem                                               | `negated: true` beside the coded `value`                                                                                                    | Kept                    |
-| `negationInd` on a medication                                            | `negated: true` beside the `drug`                                                                                                           | Kept                    |
-| Medication whose first `templateId` is not the Medication Activity root  | Read: every `templateId` is checked, not only the first                                                                                     | Kept                    |
-| Timestamp with no zone offset                                            | `raw` keeps every digit; `toObject` gives no `offsetMinutes` and `toDate` gives `undefined` unless you pass `assumeOffsetMinutes`           | Kept                    |
-| A single `participant`                                                   | The allergen is read from it like any other                                                                                                 | Kept                    |
-| Medication entry with no `templateId`                                    | Not read and not reported; the stamped entries beside it are read                                                                           | **Dropped, no warning** |
-| Goals section with a Goal Observation                                    | The section is recognized and keeps its narrative; the Goal Observation is not modeled and draws no warning                                 | **Dropped, no warning** |
-| Implant: a procedure in Medical Equipment with a Product Instance device | The procedure and its code are read (it draws `SECTION_PLACEMENT_SUSPECT`); the device code and its UDI are not modeled and draw no warning | **Dropped, no warning** |
+| Class                                                                    | What we do today                                                                                                                                                                            | Result            |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| Allergy whose category is not food                                       | `type` keeps the propensity code and `allergen` the substance, whatever the category                                                                                                        | Kept              |
+| Interval `effectiveTime` on a medication                                 | `duration.low` and `duration.high`                                                                                                                                                          | Kept              |
+| Interval `effectiveTime` on a result                                     | `effectiveTime.low` and `effectiveTime.high`                                                                                                                                                | Kept              |
+| `REAL` observation value                                                 | `{ kind: "real", value, raw }`: the number and the verbatim `@value`, no warning                                                                                                            | Kept              |
+| `ED` observation value                                                   | `{ kind: "unsupported", xsiType: "ED", raw }` with the text, and `RESULT_VALUE_TYPE_UNHANDLED`                                                                                              | Kept and reported |
+| Family History section                                                   | `getFamilyHistory()`: the relative and each condition                                                                                                                                       | Kept              |
+| `negationInd` on a problem                                               | `negated: true` beside the coded `value`                                                                                                                                                    | Kept              |
+| `negationInd` on a medication                                            | `negated: true` beside the `drug`                                                                                                                                                           | Kept              |
+| Medication whose first `templateId` is not the Medication Activity root  | Read: every `templateId` is checked, not only the first                                                                                                                                     | Kept              |
+| Timestamp with no zone offset                                            | `raw` keeps every digit; `toObject` gives no `offsetMinutes` and `toDate` gives `undefined` unless you pass `assumeOffsetMinutes`                                                           | Kept              |
+| A single `participant`                                                   | The allergen is read from it like any other                                                                                                                                                 | Kept              |
+| Medication entry with no `templateId`                                    | Not read, since every entry family is recognized by `templateId`; `MISSING_TEMPLATE_ID` is raised on the entry's statement. The same holds for an entry with no `templateId` in any section | Reported          |
+| Goals section with a Goal Observation                                    | The section is recognized and keeps its narrative; the Goal Observation is not modeled, and `PLAN_ENTRY_NOT_MODELED` is raised on it                                                        | Reported          |
+| Implant: a procedure in Medical Equipment with a Product Instance device | The procedure is read, and `devices` on it keeps the device code and its `ids` (the UDI). The guide names this entry in this section, so it draws no `SECTION_PLACEMENT_SUSPECT`            | Kept              |
 
-Every dropped value is still in the document: `doc.toString()` re-serializes it faithfully, so a
-caller who needs one of the three today can read it from there.
+A reported value is still in the document: `doc.toString()` re-serializes it faithfully, so a caller
+who needs it can read it from there. Two boundaries remain beside these classes. An entry whose
+statement carries a `templateId` this library does not read (a Health Concern Act, a Non-Medicinal
+Supply Activity, an Advance Directive Observation) is not in the model and draws no warning. A
+Product Instance's `scopingEntity`, the organization that issued the device id, is not read.
 
 ## Building a document
 

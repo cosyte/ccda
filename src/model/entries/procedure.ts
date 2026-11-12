@@ -12,9 +12,18 @@
  * `PLANNED_VS_PERFORMED_AMBIGUOUS` (disposition left undefined); an unrecognized
  * mood is `PROCEDURE_MOOD_UNEXPECTED`, both extract the procedure, neither
  * guesses its disposition.
+ *
+ * **A device the procedure used or placed is kept.** Each
+ * `participant typeCode="DEV"` with a `participantRole` becomes one entry of
+ * `devices`: the role's `id`s (a Product Instance, `…22.4.37`, carries the UDI
+ * there) and its `playingDevice/code`. That is how an implant is recorded, a
+ * Procedure Activity Procedure in a Medical Equipment or Procedures section with
+ * a Product Instance device; before this the procedure was read and the device
+ * code and UDI reached no model field with nothing said. The Product Instance's
+ * `scopingEntity` (the organization that assigned the device id) is not read.
  */
 
-import { attr, child, positionOf } from "../dom.js";
+import { attr, child, children, positionOf } from "../dom.js";
 import { parseCd, type CD } from "../types/cd.js";
 import type { II } from "../types/ii.js";
 import { parseIvlTs, type IVL_TS } from "../types/ivl-ts.js";
@@ -70,7 +79,10 @@ export type ProcedureDisposition = EventDisposition;
  * code (SNOMED CT / CPT / ICD-10-PCS / LOINC); `disposition` is the
  * performed-vs-planned reading of `moodCode`; `value` carries the result for the
  * observation variant. `negated` (a `negationInd` "did not happen") and
- * `nullFlavor` ("unknown") are kept distinct, never collapsed.
+ * `nullFlavor` ("unknown") are kept distinct, never collapsed. `devices` holds
+ * each device participant (`participant typeCode="DEV"`): its `ids` (a UDI on a
+ * Product Instance) and its device `code`, in document order; absent when the
+ * procedure names none.
  *
  * @example
  * ```ts
@@ -92,6 +104,7 @@ export interface Procedure {
   readonly value?: ObservationValue;
   readonly effectiveTime?: IVL_TS;
   readonly narrative?: string;
+  readonly devices?: readonly { readonly ids: readonly II[]; readonly code?: CD }[];
 }
 
 /** The element name + template root for each Procedure Activity variant. @internal */
@@ -152,6 +165,7 @@ function buildProcedure(
   const effectiveTime = parseIvlTs(child(el, "effectiveTime"), ctx);
   const narrative = resolveNarrative(el, narrativeById, ctx);
   reconcileCode(code, narrative, "procedure", positionOf(codeEl ?? el), ctx);
+  const devices = readDevices(el, ctx);
 
   const out: {
     ids: readonly II[];
@@ -165,6 +179,7 @@ function buildProcedure(
     value?: ObservationValue;
     effectiveTime?: IVL_TS;
     narrative?: string;
+    devices?: readonly { readonly ids: readonly II[]; readonly code?: CD }[];
   } = { ids, kind };
   if (moodCode !== undefined) out.moodCode = moodCode;
   if (disposition !== undefined) out.disposition = disposition;
@@ -175,6 +190,31 @@ function buildProcedure(
   if (value !== undefined) out.value = value;
   if (effectiveTime !== undefined) out.effectiveTime = effectiveTime;
   if (narrative !== undefined) out.narrative = narrative;
+  if (devices.length > 0) out.devices = devices;
+  return out;
+}
+
+/**
+ * Every device participant of a procedure act, in document order: each
+ * `participant typeCode="DEV"` with a `participantRole`, read into its `ids` and
+ * its `playingDevice/code`. Not gated on the Product Instance `templateId`, so a
+ * device participant that omits it is kept too. @internal
+ */
+function readDevices(
+  el: Element,
+  ctx: ParseCtx,
+): readonly { readonly ids: readonly II[]; readonly code?: CD }[] {
+  const out: { ids: readonly II[]; code?: CD }[] = [];
+  for (const participant of children(el, "participant")) {
+    if (attr(participant, "typeCode") !== "DEV") continue;
+    const role = child(participant, "participantRole");
+    if (role === undefined) continue;
+    const device: { ids: readonly II[]; code?: CD } = { ids: idsOf(role, ctx) };
+    const playing = child(role, "playingDevice");
+    const code = playing === undefined ? undefined : parseCd(child(playing, "code"), ctx);
+    if (code !== undefined) device.code = code;
+    out.push(device);
+  }
   return out;
 }
 

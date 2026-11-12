@@ -5,16 +5,25 @@
  * Results / Vital Signs / Immunizations extractors. Section recognition here is
  * **silent**, `buildSection` already emitted the section-level
  * warnings (LOINC fallback, unknown code), so re-emitting them would
- * double-count. The only new section-level signal is `SECTION_PLACEMENT_SUSPECT`:
- * an entry whose home section differs from the section it was found in.
+ * double-count. The section-level signals raised here are about a section's
+ * direct entries: `SECTION_PLACEMENT_SUSPECT` (an entry whose home section
+ * differs from the section it was found in), `MISSING_TEMPLATE_ID` (an entry
+ * statement with no `templateId`, which no extractor can route) and
+ * `PLAN_ENTRY_NOT_MODELED` for a Goal Observation (recognized, not modelled).
  */
 
 import { child, children, positionOf } from "../dom.js";
 import { buildNarrativeIndex } from "../section.js";
-import { sectionPlacementSuspect } from "../../parser/warnings.js";
+import {
+  goalObservationNotModeled,
+  missingEntryTemplateId,
+  sectionPlacementSuspect,
+} from "../../parser/warnings.js";
 import type { ParseCtx } from "../types/_shared.js";
 import {
+  ENTRY_ROOT_OTHER_SECTIONS,
   ENTRY_ROOT_TO_SECTION,
+  GOAL_OBSERVATION,
   anyEntryAct,
   childEntries,
   sectionKeyOf,
@@ -130,6 +139,7 @@ function extractAll(structuredBody: Element, ctx: ParseCtx): ClinicalEntries {
     pastMedicalHistory.push(...extractPastMedicalHistory(sectionEl, narrativeById, ctx));
 
     flagMisplacedEntries(sectionEl, key, ctx);
+    reportUnreadEntries(sectionEl, ctx);
   }
 
   return {
@@ -186,9 +196,39 @@ function flagMisplacedEntries(
     for (const root of templateRoots(act)) {
       const home = ENTRY_ROOT_TO_SECTION.get(root);
       if (home !== undefined && home !== sectionKey) {
+        if (ENTRY_ROOT_OTHER_SECTIONS.get(root)?.has(sectionKey) === true) continue;
         ctx.emit(sectionPlacementSuspect(positionOf(act), home));
         break;
       }
+    }
+  }
+}
+
+/**
+ * Report a section's direct entry that no extractor reads, at the statement that
+ * holds it, so its content is never dropped in silence:
+ *
+ * - a statement with **no `templateId`** draws `MISSING_TEMPLATE_ID`. Every
+ *   entry family is routed by `templateId` root alone, so such an entry reaches
+ *   no model field whatever section it sits in;
+ * - a **Goal Observation** draws `PLAN_ENTRY_NOT_MODELED`. Goals are recognized
+ *   and not modelled.
+ *
+ * Every direct entry is checked, in every section, recognized or not, the way
+ * {@link flagMisplacedEntries} walks them. An entry an overriding `<subject>`
+ * governs is checked too: it is withheld and reported as such
+ * (`SUBJECT_CONTEXT_OVERRIDE`), and these reports say a different true thing
+ * about it. A statement nested inside an entry is not checked here. @internal
+ */
+function reportUnreadEntries(sectionEl: Element, ctx: ParseCtx): void {
+  for (const entry of childEntries(sectionEl)) {
+    const act = anyEntryAct(entry);
+    if (act === undefined) continue;
+    const roots = templateRoots(act);
+    if (roots.length === 0) {
+      ctx.emit(missingEntryTemplateId(positionOf(act)));
+    } else if (roots.includes(GOAL_OBSERVATION)) {
+      ctx.emit(goalObservationNotModeled(positionOf(act)));
     }
   }
 }

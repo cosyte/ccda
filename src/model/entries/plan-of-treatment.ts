@@ -27,9 +27,11 @@
  * (`PLAN_ENTRY_NOT_MODELED`, one warning per matching root) where planned items
  * are read. That decision was taken 2026-08-06 and it settles only the
  * *reporting*: they are still not {@link PlannedItem}s, still reach no model
- * field, and still survive only in the re-serialized document. **Goal
- * Observation is deliberately NOT reported** with them; the decision taken on it
- * was to model it, and a warning would pre-empt that with a weaker answer.
+ * field, and still survive only in the re-serialized document. **A Goal
+ * Observation is reported too, but not here**: the section-entry walk
+ * (`./extract.ts`) reports it under the same code wherever it is a section's
+ * direct entry, a Goals section above all, so this module does not report it a
+ * second time. It is still not modelled.
  *
  * **A planned entry NESTED in a Planned Intervention Act (`…22.4.146`) is now
  * reached too, for all seven kinds.** R2.1 gives that act an `entryRelationship`
@@ -249,12 +251,11 @@ const PLANNED_VARIANTS: ReadonlyArray<{
  * answers "what is this patient scheduled to have done", which is the question
  * {@link extractPlannedItems} answers.
  *
- * **Goal Observation (`…22.4.121`) is deliberately absent.** It is the fourth
- * template the section admits and does not return, but it is `moodCode="GOL"`,
- * which {@link classifyDisposition} calls neither performed nor planned, and the
- * decision taken on it was to *model* it (with its own IG grounding and its own
- * conformance surface) rather than to report it. A warning here would pre-empt
- * that work with a weaker answer. @internal
+ * **Goal Observation (`…22.4.121`) is absent from this list.** It is the fourth
+ * template the section admits and does not return (it is `moodCode="GOL"`,
+ * which {@link classifyDisposition} calls neither performed nor planned), and it
+ * is reported by the section-entry walk in `./extract.ts` wherever it is a
+ * section's direct entry, so listing it here would report it twice. @internal
  */
 const UNMODELED_PLAN_ENTRY_ROOTS: ReadonlyMap<string, UnmodeledPlanEntry> = new Map([
   [INSTRUCTION, "instruction"],

@@ -39,7 +39,7 @@ exports[`code surface stability > AC-9: the code-to-message registry is unchange
   "PROFILE_QUIRK_APPLIED": "An active profile expected this deviation and downgraded it; the deviation's own code is on \`toleratedCode\`, the tolerating profile on \`profile\`, and \`expected\` is set.",
   "REQUIRED_SECTIONS_NOT_EVALUATED": "The document type's required-section (SHALL) obligations were not evaluated: the templateId that resolved the type names a C-CDA release this library does not model, and the R2.1-scoped tables here do not reach it. No REQUIRED_SECTION_MISSING is reported for this document, and the absence of one says nothing about which sections it carries.",
   "REQUIRED_SECTION_MISSING": "The document type requires a section (SHALL) that was not found; parsed without it. missingRequiredSections() names the full set.",
-  "RESULT_VALUE_TYPE_UNHANDLED": "The observation value's xsi:type is not specialized; raw value preserved as unsupported.",
+  "RESULT_VALUE_TYPE_UNHANDLED": "The observation value's xsi:type is not specialized; it is read as unsupported, keeping the type name and any text content. Content held in the value's attributes or child elements is not in the model and survives only in the re-serialized document.",
   "SECTION_MATCHED_BY_LOINC_FALLBACK": "Section identified by its LOINC code fallback (no recognized templateId present).",
   "SECTION_PLACEMENT_SUSPECT": "An entry template was found in a section it does not belong to; extracted but flagged.",
   "SEMANTIC_CODE_INVALID": "The supplied terminology adapter reports the code is not a valid member of its system; code preserved verbatim, never coerced.",

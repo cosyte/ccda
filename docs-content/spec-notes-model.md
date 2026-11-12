@@ -234,6 +234,10 @@ Every `<section>` is framed by `templateId` root (primary) with a LOINC `code` f
   only, so it never changes a key the first two found and its LOINC code alone recognizes nothing.
 - Neither recognizes it → `UNKNOWN_SECTION_CODE`, retained as **narrative-only** (nothing is dropped).
 
+Entries are recognized differently: by `templateId` root alone, with no fallback, in whatever section
+they sit. A section's direct entry whose statement carries no `templateId` is therefore read by no
+extractor, and it raises `MISSING_TEMPLATE_ID` on that statement so the loss is reported.
+
 `findSection(key)` walks top-level sections then their subsections (depth-first); `allSections()`
 returns every section flattened in document order. Each section carries its `title`, `code`,
 `narrativeText`, and a narrative `ID`→text index (`narrativeById`) so the clinical-entry layer can

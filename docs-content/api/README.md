@@ -411,10 +411,11 @@ the document carries no Plan of Treatment entries.
 returns **seven** entry templates and the Plan of Treatment Section admits
 **eleven**: Instruction (`…22.4.20`), Handoff Communication Participants
 (`…22.4.141`), Nutrition Recommendation (`…22.4.130`) and Goal Observation
-(`…22.4.121`) are not acts planned for the patient and are not returned, and
-nothing is raised about them. A Goal Observation is the clearest of the four:
-it is `moodCode="GOL"`, which this parser calls neither performed nor
-planned. And a planned entry is reached as a direct `<entry>` act or nested
+(`…22.4.121`) are not acts planned for the patient and are not returned;
+each is reported with `PLAN_ENTRY_NOT_MODELED` instead (the first three where
+planned items are read, a Goal Observation wherever it is a section's direct
+entry). A Goal Observation is the clearest of the four: it is
+`moodCode="GOL"`, which this parser calls neither performed nor planned. And a planned entry is reached as a direct `<entry>` act or nested
 inside a **Planned Intervention Act** (`…22.4.146`), the one container R2.1
 lets hold all seven inline. **Nesting is not solved in general**: R2.1 also
 puts planned acts inside a Nutrition Recommendation (`…22.4.130`, six of the
@@ -5204,7 +5205,10 @@ A single procedure. `kind` is the template variant; `code` is the procedure
 code (SNOMED CT / CPT / ICD-10-PCS / LOINC); `disposition` is the
 performed-vs-planned reading of `moodCode`; `value` carries the result for the
 observation variant. `negated` (a `negationInd` "did not happen") and
-`nullFlavor` ("unknown") are kept distinct, never collapsed.
+`nullFlavor` ("unknown") are kept distinct, never collapsed. `devices` holds
+each device participant (`participant typeCode="DEV"`): its `ids` (a UDI on a
+Product Instance) and its device `code`, in document order; absent when the
+procedure names none.
 
 #### Example
 
@@ -5220,6 +5224,10 @@ function wasPerformed(p: Procedure): boolean {
 ##### code?
 
 > `readonly` `optional` **code?**: [`CD`](#cd)
+
+##### devices?
+
+> `readonly` `optional` **devices?**: readonly `object`[]
 
 ##### disposition?
 
@@ -6831,23 +6839,25 @@ const nf: NullFlavor = "ASKU";
 
 ### ObservationValue
 
-> **ObservationValue** = \{ `kind`: `"physicalQuantity"`; `quantity`: [`PQ`](#pq); \} \| \{ `code`: [`CD`](#cd); `kind`: `"coded"`; \} \| \{ `kind`: `"string"`; `nullFlavor?`: `string`; `value`: `string`; \} \| \{ `kind`: `"integer"`; `nullFlavor?`: `string`; `raw?`: `string`; `value?`: `number`; \} \| \{ `kind`: `"range"`; `range`: [`IVL_PQ`](#ivl_pq); \} \| \{ `kind`: `"unsupported"`; `raw?`: `string`; `xsiType?`: `string`; \}
+> **ObservationValue** = \{ `kind`: `"physicalQuantity"`; `quantity`: [`PQ`](#pq); \} \| \{ `code`: [`CD`](#cd); `kind`: `"coded"`; \} \| \{ `kind`: `"string"`; `nullFlavor?`: `string`; `value`: `string`; \} \| \{ `kind`: `"integer"`; `nullFlavor?`: `string`; `raw?`: `string`; `value?`: `number`; \} \| \{ `kind`: `"real"`; `nullFlavor?`: `string`; `raw?`: `string`; `value?`: `number`; \} \| \{ `kind`: `"range"`; `range`: [`IVL_PQ`](#ivl_pq); \} \| \{ `kind`: `"unsupported"`; `raw?`: `string`; `xsiType?`: `string`; \}
 
 A parsed observation `value`, discriminated on `kind`. `physicalQuantity`
 carries a UCUM-checked [PQ](#pq); `coded` a [CD](#cd); `string` a free-text
 value; `integer` a count/score (`xsi:type="INT"`, the type C-CDA prefers for
-an assessment-scale score, units are not allowed on an `INT`); `range` an
-[IVL\_PQ](#ivl_pq). `unsupported` preserves an `xsi:type` the model does not
-specialize (with any raw text) so nothing is ever discarded. `integer` keeps
-`value` and `nullFlavor` distinct, a scored `INT` never collapses into an
-unknown one, and vice versa.
+an assessment-scale score, units are not allowed on an `INT`); `real` a
+unitless decimal number (`xsi:type="REAL"`); `range` an [IVL\_PQ](#ivl_pq).
+`unsupported` marks an `xsi:type` the model does not specialize: it keeps the
+type name and any text content, and is always reported with
+`RESULT_VALUE_TYPE_UNHANDLED`. `integer` and `real` keep `value` and
+`nullFlavor` distinct, a scored `INT` never collapses into an unknown one,
+and vice versa.
 
-`integer` and `string` carry a `nullFlavor` beside their content for the same
-reason every v3 datatype does, and `integer` mirrors `PQ` exactly: `raw` is
-the verbatim `@value` token and `value` the parsed number, so when a
-`nullFlavor` contradicts the score the parser withholds `value` and keeps
-`raw` (see [parsePq](#parsepq)). These two arms are parsed inline here rather
-than through `src/model/types/`, so they route through the shared
+`integer`, `real` and `string` carry a `nullFlavor` beside their content for
+the same reason every v3 datatype does, and `integer` and `real` mirror `PQ`
+exactly: `raw` is the verbatim `@value` token and `value` the parsed number,
+so when a `nullFlavor` contradicts the number the parser withholds `value`
+and keeps `raw` (see [parsePq](#parsepq)). These arms are parsed inline here
+rather than through `src/model/types/`, so they route through the shared
 contradiction check explicitly.
 
 #### Example
