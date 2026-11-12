@@ -21,10 +21,6 @@ on:
     - cron: "37 6 * * 0"
     - cron: "37 6 * * 3"
   workflow_dispatch:
-  # TEMPORARY: measures the first full run on this pull request before it merges. Removed in a
-  # later commit; never merge it.
-  pull_request:
-    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
