@@ -29,6 +29,7 @@ no warning.
 - `editCcda` adds or replaces whole sections of twelve kinds, removes none, and stamps `RPLC` revisions only.
 - A vendor profile quiets only codes outside `SAFETY_CRITICAL_CODES` and never changes an extracted value.
 - An Unstructured Document's `nonXMLBody` payload is exposed but never decoded.
+- An element holding one attribute name twice under two prefixes of one namespace is refused with `NOT_WELL_FORMED_XML`, never read with one of the two.
 - The scope is C-CDA R2.1, US Realm: no transport and no validator suite.
 
 ## Document types

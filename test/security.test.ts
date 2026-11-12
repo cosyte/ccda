@@ -2,9 +2,15 @@ import { DOMException, DOMParser, ParseError } from "@xmldom/xmldom";
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
 
-import { parseCcda, CcdaParseError, FATAL_CODES } from "../src/index.js";
+import {
+  parseCcda,
+  parseSecureXml,
+  resolveLimits,
+  CcdaParseError,
+  FATAL_CODES,
+} from "../src/index.js";
 import { FATAL_MESSAGES } from "../src/parser/errors.js";
-import { buildCcda } from "./__fixtures__/ccda.js";
+import { ALLERGY_ENTRY_SECTION, buildCcda } from "./__fixtures__/ccda.js";
 
 const fatalCodes = new Set<string>(Object.values(FATAL_CODES));
 
@@ -264,4 +270,106 @@ describe("secure XML substrate, what the XML parser reports", () => {
     expect(once).toContain(pi);
     expect(parseCcda(once).toString()).toBe(once);
   });
+});
+
+/**
+ * Namespaces in XML 1.0, section 6.3: no element may carry two attributes with the same local name
+ * whose prefixes are bound to the same namespace, so `p:a` beside `q:a`, with `p` and `q` bound to
+ * one URI, makes the element not well formed. `@xmldom/xmldom` builds such an element by keeping
+ * the later attribute and dropping the earlier one, with no error, so the parse has to notice.
+ */
+describe("secure XML substrate, one attribute under two prefixes of one namespace", () => {
+  const XSI = "http://www.w3.org/2001/XMLSchema-instance";
+
+  /** What `parseSecureXml` does with `xml`: `parsed`, or the code of the fatal it threw, checked whole. */
+  function secureOutcome(xml: string): string {
+    const thrown = thrownBy(() => parseSecureXml(xml, resolveLimits(), () => {}));
+    if (thrown === undefined) return "parsed";
+    expect(thrown).toBeInstanceOf(CcdaParseError);
+    const err = thrown as CcdaParseError;
+    expect(err.message).toBe(FATAL_MESSAGES[err.code]);
+    expect(err.position).toStrictEqual({});
+    return err.code;
+  }
+
+  it.each([
+    ["on the root", `<r xmlns:p="urn:x" xmlns:q="urn:x" p:a="1" q:a="2"/>`],
+    ["on a child", `<r xmlns:p="urn:x" xmlns:q="urn:x"><c p:a="1" q:a="2"/></r>`],
+    [
+      "with the second prefix declared on the child",
+      `<r xmlns:p="urn:x"><c xmlns:q="urn:x" p:a="1" q:a="2"/></r>`,
+    ],
+    [
+      "on a deeper element, among other attributes",
+      `<r xmlns:p="urn:x"><c><d><e b="0" xmlns:q="urn:x" p:a="1" c="3" q:a="2"/></d></c></r>`,
+    ],
+    ["in the other order", `<r xmlns:p="urn:x" xmlns:q="urn:x" q:a="2" p:a="1"/>`],
+  ])("parseSecureXml refuses it %s", (_label, xml) => {
+    expect(secureOutcome(xml)).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+  });
+
+  it.each([
+    ["one local name in two namespaces", `<r xmlns:p="urn:x" xmlns:q="urn:y" p:a="1" q:a="2"/>`],
+    [
+      "an unprefixed attribute beside a prefixed one bound to the default namespace",
+      `<r xmlns="urn:x" xmlns:p="urn:x" a="1" p:a="2"/>`,
+    ],
+  ])("parseSecureXml still reads %s, keeping both", (_label, xml) => {
+    expect(secureOutcome(xml)).toBe("parsed");
+    const root = parseSecureXml(xml, resolveLimits(), () => {}).documentElement;
+    const values = Array.from(root?.attributes ?? [])
+      .filter((attr) => attr.localName === "a")
+      .map((attr) => attr.value);
+    expect(values).toStrictEqual(["1", "2"]);
+  });
+
+  it("parseSecureXml still reads two prefixes of one namespace on different elements", () => {
+    const xml = `<r xmlns:p="urn:x" p:a="1"><c xmlns:q="urn:x" q:a="2"/></r>`;
+    expect(secureOutcome(xml)).toBe("parsed");
+  });
+
+  /** A synthetic document whose allergy type value carries `xsi:type` twice, under two prefixes. */
+  const twiceTyped = buildCcda({ sections: ALLERGY_ENTRY_SECTION }).replace(
+    '<value xsi:type="CD" code="416098002"',
+    `<value xmlns:t="${XSI}" xsi:type="CD" t:type="PQ" code="416098002"`,
+  );
+
+  it("parseCcda refuses a document with it, rather than read the value under one of the types", () => {
+    expect(twiceTyped).toContain('t:type="PQ"');
+    const thrown = thrownBy(() => parseCcda(twiceTyped));
+    expect(thrown).toBeInstanceOf(CcdaParseError);
+    const err = thrown as CcdaParseError;
+    expect(err.code).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+    expect(err.message).toBe(FATAL_MESSAGES.NOT_WELL_FORMED_XML);
+    expect(err.position).toStrictEqual({});
+  });
+
+  it("parseCcda refuses it in strict mode with the same code", () => {
+    expect(thrownBy(() => parseCcda(twiceTyped, { strict: true }))).toMatchObject({
+      code: FATAL_CODES.NOT_WELL_FORMED_XML,
+    });
+  });
+
+  it("parseCcda refuses it on the root element", () => {
+    const xml = buildCcda().replace(
+      "<ClinicalDocument ",
+      `<ClinicalDocument xmlns:t="${XSI}" xsi:nil="false" t:nil="true" `,
+    );
+    expect(xml).toContain('t:nil="true"');
+    expect(thrownBy(() => parseCcda(xml))).toMatchObject({
+      code: FATAL_CODES.NOT_WELL_FORMED_XML,
+    });
+  });
+
+  it(
+    "refuses it at the end of an element with many attributes in linear time",
+    () => {
+      const attrs = Array.from({ length: 80_000 }, (_, i) => ` a${String(i)}="1"`).join("");
+      const tag = `<id xmlns:p="urn:x" xmlns:q="urn:x"${attrs} p:a="1" q:a="2"/>`;
+      const { ms, outcome } = timedParse(`${V3_ROOT}${tag}</ClinicalDocument>`);
+      expect(outcome).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+      expect(ms).toBeLessThan(LINEAR_BUDGET_MS);
+    },
+    LINEAR_CASE_TIMEOUT,
+  );
 });
