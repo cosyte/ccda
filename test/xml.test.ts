@@ -415,6 +415,21 @@ describe("the scan of the text outside the root element", () => {
     }
   });
 
+  it("refuses an unclosed comment or instruction, and one whose close overlaps its open", () => {
+    // The leading white space puts each open where a scan that skipped past a missing close and
+    // went back would meet it again.
+    for (const text of [
+      "  <!--c<a/>",
+      " <?p x<a/>",
+      "<!--><a/>",
+      "<?><a/>",
+      "<a/>  <!--c",
+      "<a/> <?p x",
+    ]) {
+      expect(scanned(text), JSON.stringify(text)).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);
+    }
+  });
+
   it("matches each end tag to its start tag by name", () => {
     expect(scanned("<a><b></b></a>")).toBe("none");
     expect(scanned("<a></b>")).toBe(FATAL_CODES.NOT_WELL_FORMED_XML);

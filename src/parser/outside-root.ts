@@ -32,10 +32,19 @@ function notWellFormed(): CcdaParseError {
  * index past them. An unclosed comment or instruction is not skipped.
  */
 function skipMisc(source: string, from: number): number {
-  const misc = /(?:[ \t\r\n]|<!--[^]*?-->|<\?[^]*?\?>)*/y;
-  misc.lastIndex = from;
-  misc.exec(source);
-  return misc.lastIndex;
+  const space = /[ \t\r\n]*/y;
+  let at = from;
+  for (;;) {
+    space.lastIndex = at;
+    space.exec(source);
+    at = space.lastIndex;
+    const [open, close] = source.startsWith("<!--", at) ? ["<!--", "-->"] : ["<?", "?>"];
+    if (!source.startsWith(open, at)) return at;
+    // Each close is searched for once, from its open on, so the scan is linear in the text.
+    const end = source.indexOf(close, at + open.length);
+    if (end === -1) return at;
+    at = end + close.length;
+  }
 }
 
 /**
