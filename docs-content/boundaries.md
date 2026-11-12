@@ -325,6 +325,15 @@ this page says so instead of resolving it in your favor.
 - **`nonXMLBody` base64 is left inert.** An Unstructured Document's wrapped payload is exposed but never
   decoded: decoding an arbitrary embedded blob is a needless attack surface and a PHI decision the
   caller owns.
+- **One attribute under two prefixes of one namespace is refused, not halved.** Namespaces in XML
+  1.0 (section 6.3) makes an element not well formed when two of its attributes share a local name
+  and their prefixes are bound to the same namespace: `xsi:type="CD"` beside `t:type="PQ"` with `t`
+  also bound to the XML Schema instance namespace, declared on the element or above it. The DOM
+  library under the parser keeps the later of the two and drops the earlier with no error, so up to
+  this release such a document was read with one value missing and nothing said. `parseCcda` and
+  `parseSecureXml` now throw `NOT_WELL_FORMED_XML` for it, like any other text that is not XML. One
+  local name in two different namespaces, or an unprefixed attribute beside a prefixed one, is
+  allowed and read as before.
 - **Vendor profiles only quiet benign noise.** `parseCcda(xml, { profile })` (or a process default via
   `setDefaultCcdaProfile`) applies a `CcdaProfile` that downgrades the non-safety-critical deviations it
   expects to `PROFILE_QUIRK_APPLIED` (flagged `expected`, carrying the original `toleratedCode`). It

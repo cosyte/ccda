@@ -47,6 +47,13 @@ neither the character nor where it sits. In a comment, a CDATA section or a proc
 XML does not expand a reference, so `<!-- &#1; -->` is plain text there and the document reads as
 before.
 
+An element that holds one attribute name twice under two prefixes bound to the same namespace (for
+example `xsi:type="CD"` beside `t:type="PQ"`, with `t` bound to the XML Schema instance namespace on
+that element or above it) is not well formed under Namespaces in XML 1.0, so `parseCcda` and
+`parseSecureXml` throw `NOT_WELL_FORMED_XML` for it rather than keep one of the two values. Before
+this release the parser kept the later attribute and dropped the earlier one without a word. Remove
+one of the two, or give it a local name of its own, before you parse.
+
 ## Common symptoms
 
 | Symptom                                         | Likely cause                                                                        | What to do                                                                                                                                                                                             |

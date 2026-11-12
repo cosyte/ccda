@@ -37,15 +37,15 @@ Object.keys(FATAL_CODES).join(","); // => "XXE_OR_DTD_PRESENT,ENTITY_EXPANSION_L
 against hostile XML; their caps default to `DEFAULT_LIMITS` and are set with the `limits` parse
 option.
 
-| Code                           | Meaning                                                                                                               |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `XXE_OR_DTD_PRESENT`           | The input declares a DTD, a `DOCTYPE` or a custom entity, and is refused to prevent external-entity attacks.          |
-| `ENTITY_EXPANSION_LIMIT`       | The input has more custom entity references than the cap allows.                                                      |
-| `INPUT_SIZE_LIMIT_EXCEEDED`    | The input is larger than the byte cap.                                                                                |
-| `ELEMENT_DEPTH_LIMIT_EXCEEDED` | Elements are nested deeper than the depth cap.                                                                        |
-| `NODE_COUNT_LIMIT_EXCEEDED`    | The input has more elements than the node cap.                                                                        |
-| `NOT_WELL_FORMED_XML`          | The input is not well-formed XML, or holds a character XML 1.0 forbids, written as it is or as a character reference. |
-| `NOT_A_CLINICAL_DOCUMENT`      | The XML is well-formed, but the root element is not a `ClinicalDocument` in the HL7 v3 namespace.                     |
+| Code                           | Meaning                                                                                                                                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `XXE_OR_DTD_PRESENT`           | The input declares a DTD, a `DOCTYPE` or a custom entity, and is refused to prevent external-entity attacks.                                                                                     |
+| `ENTITY_EXPANSION_LIMIT`       | The input has more custom entity references than the cap allows.                                                                                                                                 |
+| `INPUT_SIZE_LIMIT_EXCEEDED`    | The input is larger than the byte cap.                                                                                                                                                           |
+| `ELEMENT_DEPTH_LIMIT_EXCEEDED` | Elements are nested deeper than the depth cap.                                                                                                                                                   |
+| `NODE_COUNT_LIMIT_EXCEEDED`    | The input has more elements than the node cap.                                                                                                                                                   |
+| `NOT_WELL_FORMED_XML`          | The input is not well-formed XML, or holds a character XML 1.0 forbids, written as it is or as a character reference, or an element with one attribute name under two prefixes of one namespace. |
+| `NOT_A_CLINICAL_DOCUMENT`      | The XML is well-formed, but the root element is not a `ClinicalDocument` in the HL7 v3 namespace.                                                                                                |
 
 ## Warning codes
 

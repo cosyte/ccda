@@ -20,7 +20,9 @@
  *   nonXMLBody) is never decoded here, it survives as inert text in the DOM.
  *
  * A UTF-8 BOM is stripped (emitting `ENCODING_BOM_STRIPPED`). Malformed XML
- * surfaces as `NOT_WELL_FORMED_XML`. Everything here is pure and synchronous.
+ * surfaces as `NOT_WELL_FORMED_XML`, and so does an element holding two attributes with one
+ * namespace and local name under two prefixes, which `@xmldom/xmldom` would build with one of them
+ * dropped. Everything here is pure and synchronous.
  *
  * It also owns the **foreign-namespace sweep** that raises
  * `UNKNOWN_NAMESPACE_PREFIX`, which is a placement decision rather than an
@@ -544,13 +546,16 @@ function keepLineEndings(source: string): string {
  * can) but converts any `fatalError` into a PHI-safe `NOT_WELL_FORMED_XML`
  * fatal. `@xmldom/xmldom` also throws directly for some malformed inputs; those
  * are caught and normalized to the same fatal. A null document element is left
- * for the caller's root gate to reject.
+ * for the caller's root gate to reject. An element `@xmldom/xmldom` built with fewer attributes than
+ * its start tag carried, two of them sharing a namespace and a local name, is refused after the
+ * build with the same fatal ({@link checkingDomBuilder}).
  *
  * @internal
  */
 function buildDom(source: string, lineBreaksToNormalize: boolean, locate = true): Document {
   const { DOMParser, normalizeLineEndings: xmldomLineEndings } = xmldom();
   const parser = new DOMParser({
+    domHandler: checkingDomBuilder(DOMParser),
     locator: locate,
     // XML's end-of-line handling, which xmldom applies to the whole text before it parses. On a
     // text with none of the characters it rewrites, both of its replacements are the identity, so
@@ -567,8 +572,9 @@ function buildDom(source: string, lineBreaksToNormalize: boolean, locate = true)
     },
   });
 
+  let doc: Document;
   try {
-    return parser.parseFromString(source, "application/xml");
+    doc = parser.parseFromString(source, "application/xml");
   } catch (err) {
     /* v8 ignore next -- @xmldom/xmldom wraps an error thrown from onError in its own ParseError, so no CcdaParseError reaches this catch; kept so one would pass through unchanged */
     if (err instanceof CcdaParseError) throw err;
@@ -578,6 +584,90 @@ function buildDom(source: string, lineBreaksToNormalize: boolean, locate = true)
       {},
     );
   }
+  if (MERGED_ATTRIBUTES.has(doc)) {
+    throw new CcdaParseError(
+      FATAL_CODES.NOT_WELL_FORMED_XML,
+      FATAL_MESSAGES.NOT_WELL_FORMED_XML,
+      {},
+    );
+  }
+  return doc;
+}
+
+/**
+ * The attributes of one start tag, as `@xmldom/xmldom`'s SAX reader hands them to its DOM builder:
+ * every attribute written, namespace declarations included. @internal
+ */
+interface SaxAttributes {
+  readonly length: number;
+}
+
+/** The part of `@xmldom/xmldom`'s DOM builder ({@link checkingDomBuilder}) this module touches. @internal */
+interface DomBuilder {
+  readonly doc: Document;
+  readonly currentElement: Element;
+  startElement(
+    namespaceURI: string | null,
+    localName: string,
+    qName: string,
+    attrs: SaxAttributes,
+  ): void;
+}
+
+/** A DOM builder class, as `DOMParser`'s `domHandler` option takes it. @internal */
+type DomBuilderClass = new (options: object) => DomBuilder;
+
+/**
+ * Every document {@link buildDom} built in which an element came out with fewer attributes than
+ * its start tag carried. Weak, so a document refused or dropped is not kept. @internal
+ */
+const MERGED_ATTRIBUTES = new WeakSet<Document>();
+
+/** {@link checkingDomBuilder}'s class, made the first time a DOM is built. @internal */
+let checkingBuilder: DomBuilderClass | undefined;
+
+/**
+ * `@xmldom/xmldom`'s own DOM builder, with one thing added: an element left holding fewer
+ * attributes than its start tag carried marks its document in {@link MERGED_ATTRIBUTES}, which
+ * {@link buildDom} refuses after the build.
+ *
+ * Namespaces in XML 1.0 (section 6.3) makes an element not well formed when two of its attributes
+ * have the same local name and prefixes bound to the same namespace (`p:a` and `q:a`, with `p` and
+ * `q` bound to one URI, whether declared on the element or above it). `@xmldom/xmldom` refuses two
+ * attributes with the same written name, but not these: it adds each attribute by namespace and
+ * local name, so the later one replaces the earlier and the element is built with one of them,
+ * without a word. A walk of the finished tree cannot see the one dropped, so the count is compared
+ * where the element is built, and that comparison is the whole check: with a written name repeated
+ * already fatal, a shorter element means exactly such a pair. It is one comparison per element,
+ * so the parse stays linear in the text and inside the limits it already enforces.
+ *
+ * The base class is the one `DOMParser` uses when no `domHandler` is given, read from a parser
+ * rather than imported, as `@xmldom/xmldom` does not export it from its entry point.
+ * `test/security.test.ts` runs every case this check exists for, so a version of `@xmldom/xmldom`
+ * that builds or names the class differently fails there.
+ *
+ * @internal
+ */
+function checkingDomBuilder(DOMParser: ReturnType<typeof xmldom>["DOMParser"]): DomBuilderClass {
+  checkingBuilder ??= extendDomBuilder(
+    (new DOMParser() as unknown as { readonly domHandler: DomBuilderClass }).domHandler,
+  );
+  return checkingBuilder;
+}
+
+/** The class {@link checkingDomBuilder} describes, made from `@xmldom/xmldom`'s own. @internal */
+function extendDomBuilder(Base: DomBuilderClass): DomBuilderClass {
+  return class extends Base {
+    override startElement(
+      namespaceURI: string | null,
+      localName: string,
+      qName: string,
+      attrs: SaxAttributes,
+    ): void {
+      super.startElement(namespaceURI, localName, qName, attrs);
+      if (this.currentElement.attributes.length !== attrs.length) MERGED_ATTRIBUTES.add(this.doc);
+    }
+  };
 }
 
 /**
