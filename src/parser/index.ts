@@ -114,6 +114,7 @@ export function parseCcdaText(
   );
 
   const root = accepted.root;
+  /* v8 ignore if -- buildDom has already thrown NOT_WELL_FORMED_XML for a source with no root element, and readTree returns none */
   if (root === null) {
     throw new CcdaParseError(
       FATAL_CODES.NOT_WELL_FORMED_XML,

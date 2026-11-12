@@ -24,9 +24,10 @@ jobs:
   # instead of it. ccda ships a PHI scanner, so the shared pipeline's optional PHI-scan step is
   # switched on.
   #
-  # Every caller of cosyte/.github in this directory names the same published reference, and they
-  # move together. A reference is an immutable release there, so it names one commit for good;
-  # nothing reaches this pipeline until one of these `uses:` lines is edited here.
+  # Every caller of cosyte/.github in this directory names a published reference, and they move
+  # together but for the one exception below. A reference is an immutable release there, so it
+  # names one commit for good; nothing reaches this pipeline until one of these `uses:` lines is
+  # edited here.
   #
   # The performance standard's two jobs run beside `verify`, never after it, so a pull request waits
   # for the slowest job rather than their sum:
@@ -34,11 +35,34 @@ jobs:
   #   self-check, never under coverage;
   # - `bench-compare` (pull requests only): bench/ccda.bench.mjs timed on the base build and the head
   #   build, interleaved on one runner. Advisory: it never fails, so never require it.
-  # A skipped job satisfies a required check, so require `scaling-gate` only while its input below
-  # stays on. The full reading, the budgets and the profile are in bench-reading.yml.
+  #
+  # The testing standard's jobs run beside them too:
+  # - `verify` on Linux, Windows and macOS (`os` below), each on Node 22, 24 and 26. The contexts
+  #   the ruleset names, `ci / verify (<22, 24>, ubuntu-latest)`, are still emitted verbatim; the
+  #   Windows and macOS ones are new.
+  # - `bun` and `deno`: `pnpm test` again under Bun and under Deno, each in its own job.
+  # - `coverage-ratchet`: the coverage run held to quality-floor.json by `cosyte-ratchet`, and on a
+  #   pull request every changed line that coverage counts held to having run, and no floor lowered
+  #   or removed.
+  # - `mutation` (pull requests only): StrykerJS over the source files the pull request changed
+  #   (`pnpm exec cosyte-mutate changed`, with stryker.config.mjs), and every mutant in the changed
+  #   lines must be killed. The full run, sharded, whose score the floor holds, is
+  #   weekly-mutation.yml; the properties at 10,000 cases are nightly-properties.yml.
+  # A skipped job satisfies a required check, so require any of these, or `scaling-gate`, only while
+  # its input below stays on. The full reading, the budgets and the profile are in bench-reading.yml.
+  #
+  # This caller, weekly-mutation.yml and nightly-properties.yml name the release of commit
+  # 398cd4ded647, one ahead of the other callers here. `release.yml` stays where it is: from this
+  # release on the shared release gates a publish on a recent weekly mutation result, and there is
+  # none until the first weekly run on `main`. The other callers move with the next change to them.
   ci:
-    uses: cosyte/.github/.github/workflows/ci.yml@0be6757a773885cbd5165dbfa0f93772d907b3e8 # workflows-2026-11-10-0be6757a7738
+    uses: cosyte/.github/.github/workflows/ci.yml@398cd4ded647dddd9f2e220ceb042840f59e1426 # the release of 398cd4ded647
     with:
+      os: '["ubuntu-latest", "windows-latest", "macos-latest"]'
+      run-coverage-ratchet: true
+      run-mutation: true
+      run-bun: true
+      run-deno: true
       run-phi-scan: true
       run-scaling-gate: true
       run-bench-compare: true

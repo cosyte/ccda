@@ -19,13 +19,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe as suite, expect, it } from "vitest";
 
 import { BUILT_DOCUMENT_CASES, writeTarGz } from "../__fixtures__/conformance.js";
 import { CONFORMANCE_CODES, ConformanceError } from "../../scripts/conformance/errors.js";
 import { cachePathFor, fetchArtifact, fetchCorpus } from "../../scripts/conformance/fetch.js";
 import { runConformance } from "../../scripts/conformance/run.js";
 import { buildCcda, serializeCcda } from "../../src/index.js";
+import { ON_DENO, ON_WINDOWS } from "../_helpers/runtime.js";
 import {
   SELF_TEST_URLS,
   fullyServingFetcher,
@@ -54,6 +55,14 @@ function plantCacheEntry(url: string, bytes: Uint8Array): void {
   mkdirSync(directory, { recursive: true });
   writeFileSync(cachePathFor(directory, url), bytes);
 }
+
+/**
+ * Not on Windows or under Deno: the conformance run is a job of its own on Linux and Node.js
+ * (`conformance` in ci.yml), and these tests of its cache run the whole conformance pipeline over a
+ * gzipped tar archive per case, which ran past Vitest's default 5 s budget on a Windows runner and
+ * under Deno. They run on Node.js on Linux and macOS, and under Bun.
+ */
+const describe = suite.skipIf(ON_WINDOWS || ON_DENO);
 
 describe("a warm cache needs no network", () => {
   it("asks the network for nothing on a second run over the same working directory", async () => {

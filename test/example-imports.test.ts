@@ -12,13 +12,14 @@
 
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe as suite, expect, it } from "vitest";
 
 import {
   SELF_SUBPATHS,
   checkExampleImports,
   sourceFiles,
 } from "../scripts/check-example-imports.js";
+import { ON_WINDOWS } from "./_helpers/runtime.js";
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 const FIXTURE = join(REPO_ROOT, "test", "__fixtures__", "example-imports");
@@ -30,6 +31,13 @@ const fixture = (file: string): ReturnType<typeof checkExampleImports> =>
     selfName: "@cosyte/ccda",
     selfEntry: join(FIXTURE, "index.ts"),
   });
+
+/**
+ * Not on Windows: each test type-checks a whole program with the TypeScript compiler, and on a
+ * Windows runner one ran past Vitest's default 5 s budget. The check reads source files, the same
+ * on every system, and runs on Linux and macOS.
+ */
+const describe = suite.skipIf(ON_WINDOWS);
 
 describe("the @example import check", () => {
   it("passes every example under src/", { timeout: 30_000 }, () => {

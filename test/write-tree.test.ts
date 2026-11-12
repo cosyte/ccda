@@ -18,7 +18,7 @@ import { serializeDocument } from "../src/serialize/serialize-dom.js";
 import { writeSource } from "../src/serialize/write-tree.js";
 import { generatedDocument } from "./_helpers/generated-xml.js";
 import { outputCorpus } from "./_output-corpus.js";
-import { assertProperty, propertyTimeout } from "./property/_runner.js";
+import { checkProperty, propertyTimeout } from "./property/_property.js";
 
 /** A character XML's end-of-line handling rewrites, as the gate scan looks for them. */
 const LINE_BREAK_RE = /[\r\u0085\u2028\u2029]/u;
@@ -148,7 +148,7 @@ describe("the compact tree's writer against serializeDocument", () => {
   it("agrees with serializeDocument on generated XML", { timeout: propertyTimeout() }, () => {
     let written = 0;
     let total = 0;
-    assertProperty(
+    checkProperty(
       "compact tree writer agrees with serializeDocument",
       fc.property(generatedDocument(), (source) => {
         total += 1;

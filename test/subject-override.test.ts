@@ -2,6 +2,8 @@ import { readFileSync, readdirSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
+import { UNDER_MUTATION } from "./_helpers/runtime.js";
+
 import {
   CcdaParseError,
   CcdaProfileDefinitionError,
@@ -807,44 +809,50 @@ describe("the record-target root list stays in step with the extractors", () => 
     root: ["INSTRUCTION", "HANDOFF_COMMUNICATION_PARTICIPANTS", "NUTRITION_RECOMMENDATION"],
   };
 
-  it("F1: every root an extractor reads a top-level entry by is in the list, and nothing else is", () => {
-    const found = new Set<string>();
-    let scanned = 0;
+  // Reads the source as text, which StrykerJS rewrites in a mutation run (see test/_helpers/runtime.ts).
+  it.skipIf(UNDER_MUTATION)(
+    "F1: every root an extractor reads a top-level entry by is in the list, and nothing else is",
+    () => {
+      const found = new Set<string>();
+      let scanned = 0;
 
-    for (const file of readdirSync(ENTRIES_DIR)) {
-      if (!file.endsWith(".ts")) continue;
-      const source = readFileSync(new URL(file, ENTRIES_DIR), "utf8");
-      // The extractors that read their entries through the choke point are the
-      // record-target ones, by definition: family history reads `childEntries`.
-      // The choke point's own module is not one of them (it only shows the call).
-      if (source.includes("export function readableEntries")) continue;
-      if (!source.includes("of readableEntries(sectionEl, ctx)")) continue;
-      scanned += 1;
-      const names = [
-        ...source.matchAll(/entryAct\(\s*entry\s*,\s*([\w$.]+)\s*\)/g),
-        ...source.matchAll(/hasTemplateRoot\(\s*act\s*,\s*([\w$.]+)\s*\)/g),
-      ].map((match) => match[1] ?? "");
-      expect(names.length, `${file} reads entries but names no entry template`).toBeGreaterThan(0);
+      for (const file of readdirSync(ENTRIES_DIR)) {
+        if (!file.endsWith(".ts")) continue;
+        const source = readFileSync(new URL(file, ENTRIES_DIR), "utf8");
+        // The extractors that read their entries through the choke point are the
+        // record-target ones, by definition: family history reads `childEntries`.
+        // The choke point's own module is not one of them (it only shows the call).
+        if (source.includes("export function readableEntries")) continue;
+        if (!source.includes("of readableEntries(sectionEl, ctx)")) continue;
+        scanned += 1;
+        const names = [
+          ...source.matchAll(/entryAct\(\s*entry\s*,\s*([\w$.]+)\s*\)/g),
+          ...source.matchAll(/hasTemplateRoot\(\s*act\s*,\s*([\w$.]+)\s*\)/g),
+        ].map((match) => match[1] ?? "");
+        expect(names.length, `${file} reads entries but names no entry template`).toBeGreaterThan(
+          0,
+        );
 
-      for (const name of names) {
-        const direct = rootNamed(name);
-        const roots =
-          direct === undefined
-            ? (INDIRECT[name] ?? []).map((constant) => rootNamed(constant) ?? constant)
-            : [direct];
-        expect(
-          roots.length,
-          `${file}: the template named ${name} resolves to nothing. Resolve it, add its root to RECORD_TARGET_ENTRY_ROOTS, or the family-history carve-out will exempt an entry this extractor returns.`,
-        ).toBeGreaterThan(0);
-        for (const root of roots) found.add(root);
+        for (const name of names) {
+          const direct = rootNamed(name);
+          const roots =
+            direct === undefined
+              ? (INDIRECT[name] ?? []).map((constant) => rootNamed(constant) ?? constant)
+              : [direct];
+          expect(
+            roots.length,
+            `${file}: the template named ${name} resolves to nothing. Resolve it, add its root to RECORD_TARGET_ENTRY_ROOTS, or the family-history carve-out will exempt an entry this extractor returns.`,
+          ).toBeGreaterThan(0);
+          for (const root of roots) found.add(root);
+        }
       }
-    }
 
-    expect(scanned).toBe(12);
-    expect([...found].sort()).toStrictEqual([...ENTRY_SHARED.RECORD_TARGET_ENTRY_ROOTS].sort());
-    // And the one root that must never be on it, whatever else is.
-    expect(ENTRY_SHARED.RECORD_TARGET_ENTRY_ROOTS.has(FAMILY_HISTORY_ORGANIZER_ROOT)).toBe(false);
-  });
+      expect(scanned).toBe(12);
+      expect([...found].sort()).toStrictEqual([...ENTRY_SHARED.RECORD_TARGET_ENTRY_ROOTS].sort());
+      // And the one root that must never be on it, whatever else is.
+      expect(ENTRY_SHARED.RECORD_TARGET_ENTRY_ROOTS.has(FAMILY_HISTORY_ORGANIZER_ROOT)).toBe(false);
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------

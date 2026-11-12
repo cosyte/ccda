@@ -5,6 +5,8 @@ import { DOMParser } from "@xmldom/xmldom";
 import type { Element } from "@xmldom/xmldom";
 import { describe, expect, it } from "vitest";
 
+import { UNDER_MUTATION } from "./_helpers/runtime.js";
+
 import {
   parseIvlTs,
   parseTs,
@@ -535,7 +537,8 @@ describe("toDate is honest about the timezone", () => {
     );
   });
 
-  it("reads no zone from the host, by construction", () => {
+  // Reads the source as text, which StrykerJS rewrites in a mutation run (see test/_helpers/runtime.ts).
+  it.skipIf(UNDER_MUTATION)("reads no zone from the host, by construction", () => {
     const source = readFileSync(MODULE_SOURCE, "utf8")
       .replace(/\/\*[\s\S]*?\*\//gu, "")
       .replace(/\/\/.*$/gmu, "");
@@ -557,7 +560,8 @@ describe("toDate is honest about the timezone", () => {
     }
   });
 
-  it("imports nothing beyond this package's own datatype modules", () => {
+  // Reads the source as text, which StrykerJS rewrites in a mutation run (see test/_helpers/runtime.ts).
+  it.skipIf(UNDER_MUTATION)("imports nothing beyond this package's own datatype modules", () => {
     // Comment-stripped, so the `@cosyte/ccda` specifiers inside the `@example` blocks (which a
     // reader copies, and which no bundler ever resolves from here) are not counted as imports.
     const source = readFileSync(MODULE_SOURCE, "utf8")

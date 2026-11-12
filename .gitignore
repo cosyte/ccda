@@ -10,6 +10,10 @@ dist/
 coverage/
 .vitest-cache/
 
+# Mutation testing (StrykerJS): the reports and the sandbox it runs in
+reports/
+.stryker-tmp/
+
 # Bench readings and profiles (`pnpm bench:reading --out bench-results/...`)
 bench-results/
 

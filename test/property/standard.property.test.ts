@@ -20,12 +20,21 @@
  *    codes, which are what lenient mode may still throw. Nothing else escapes, with or without a
  *    profile, and whatever a warning handler does.
  *
- * Each runs 100 cases by default from a fresh seed; `COSYTE_PROPERTY_RUNS` sets the depth, and a
- * failure prints the seed and path that replay it (see `./_runner.ts`).
+ * Each runs through the shared runners of `@cosyte/test-utils`: the round trip through
+ * `roundTripProperty`, the document normalizers through `idempotentNormalizeProperty`, the lenient
+ * parse through `lenientNeverThrowsProperty`, and the properties of another shape through its
+ * `assertProperty` (`checkProperty`). Each runs 100 cases by default from a fresh seed it prints
+ * first; `COSYTE_PROPERTY_RUNS` sets the depth (the nightly workflow sets 10,000), and a failure
+ * prints the seed and path that replay it (see `./_property.ts`).
  */
 
 import assert from "node:assert/strict";
 
+import {
+  idempotentNormalizeProperty,
+  lenientNeverThrowsProperty,
+  roundTripProperty,
+} from "@cosyte/test-utils";
 import fc from "fast-check";
 import { describe, it } from "vitest";
 
@@ -56,7 +65,7 @@ import {
   safeRepresentation,
 } from "../../src/parser/tokens.js";
 
-import { assertProperty, propertyTimeout } from "./_runner.js";
+import { checkProperty, propertyRun, propertyTimeout } from "./_property.js";
 
 /** Each test's budget, scaled to the depth `COSYTE_PROPERTY_RUNS` sets. */
 const TIMEOUT = propertyTimeout();
@@ -118,19 +127,25 @@ describe("property: round trip", () => {
   it(
     "parseCcda(serializeCcda(d)) equals d for any generated document, and serializing again changes nothing",
     () => {
-      assertProperty(
-        "round trip",
-        fc.property(document(), (d) => {
-          const once = serializeCcda(d);
-          const back = parseCcda(once);
-          assert.equal(back.toString(), once);
+      roundTripProperty<CcdaDocument>({
+        ...propertyRun("round trip"),
+        arbitrary: document(),
+        serialize: (d) => serializeCcda(d),
+        parse: (raw) => {
+          const back = parseCcda(raw);
+          assert.equal(back.toString(), raw);
+          return back;
+        },
+        // The runner calls this with the parsed document first and the generated one second. It
+        // asserts, so a failure reports the field that differs, and returns true when they agree.
+        equals: (back, d) => {
           assert.deepStrictEqual(model(back), {
             ...model(d),
             warnings: d.warnings.filter((w) => !BUILD_ONLY.has(w.code)),
           });
-          assert.equal(serializeCcda(back), once);
-        }),
-      );
+          return true;
+        },
+      });
     },
     TIMEOUT,
   );
@@ -140,7 +155,7 @@ describe("property: round trip", () => {
     () => {
       // This holds the generator to account: a repair warning on a built document would mean the
       // round trip above could be passing over a repair rather than proving fidelity.
-      assertProperty(
+      checkProperty(
         "generator is spec-clean",
         fc.property(document(), (d) => {
           const repairs = d.warnings.map((w) => w.code).filter((c) => !ADVISORY.has(c));
@@ -154,7 +169,7 @@ describe("property: round trip", () => {
   it(
     "a document parsed from messy text reads the same after a round trip",
     () => {
-      assertProperty(
+      checkProperty(
         "round trip (messy text)",
         fc.property(documentText(), (raw) => {
           const first = parseCcda(raw);
@@ -187,14 +202,15 @@ describe("property: idempotent normalize", () => {
   it(
     "serializeCcda(parseCcda(raw)) is a fixed point for messy document text",
     () => {
-      assertProperty(
-        "idempotent normalize (document text)",
-        fc.property(documentText(), (raw) => {
+      idempotentNormalizeProperty<string>({
+        ...propertyRun("idempotent normalize (document text)"),
+        arbitrary: documentText(),
+        normalize: (raw) => {
           const once = normalizeDocument(raw);
           assert.ok(once !== undefined, "messy document text was refused");
-          assert.equal(normalizeDocument(once), once);
-        }),
-      );
+          return once;
+        },
+      });
     },
     TIMEOUT,
   );
@@ -202,14 +218,15 @@ describe("property: idempotent normalize", () => {
   it(
     "serializeCcda(parseCcda(raw)) is a fixed point for any hostile input the parser accepts",
     () => {
-      assertProperty(
-        "idempotent normalize (hostile input)",
-        fc.property(hostileInput(), (raw) => {
-          const once = normalizeDocument(raw);
-          if (once === undefined) return;
-          assert.equal(normalizeDocument(once), once);
-        }),
-      );
+      // Input the parser refuses normalizes to the empty string, which the parser refuses too, so
+      // the property holds on it; an accepted input's normal form must parse again, to the same
+      // text, and one the parser refused would normalize to "" instead and fail.
+      assert.equal(normalizeDocument(""), undefined);
+      idempotentNormalizeProperty<string>({
+        ...propertyRun("idempotent normalize (hostile input)"),
+        arbitrary: hostileInput(),
+        normalize: (raw) => normalizeDocument(raw) ?? "",
+      });
     },
     TIMEOUT,
   );
@@ -217,7 +234,7 @@ describe("property: idempotent normalize", () => {
   it(
     "applyProfile is idempotent for every built-in profile, on every warning a parse raises",
     () => {
-      assertProperty(
+      checkProperty(
         "idempotent normalize (profile)",
         fc.property(documentText(), fc.constantFrom(...PROFILES), (raw, profile) => {
           for (const w of parseCcda(raw, { profile: null }).warnings) {
@@ -264,7 +281,7 @@ describe("property: idempotent normalize", () => {
         safeMediaType,
         safeRepresentation,
       ];
-      assertProperty(
+      checkProperty(
         "idempotent normalize (token bounds)",
         fc.property(tokenText, (raw) => {
           for (const bound of bounds) {
@@ -289,7 +306,7 @@ describe("property: idempotent normalize", () => {
         },
         { requiredKeys: [] },
       );
-      assertProperty(
+      checkProperty(
         "idempotent normalize (template id)",
         fc.property(id, (raw) => {
           const once = boundTemplateId(raw);
@@ -311,7 +328,7 @@ describe("property: idempotent normalize", () => {
         { raw: tokenText, value: fc.double(), unit: tokenText, nullFlavor: fc.constant("UNK") },
         { requiredKeys: [] },
       );
-      assertProperty(
+      checkProperty(
         "idempotent normalize (derived values)",
         fc.property(ts, pq, (t, q) => {
           const tOnce = tsWithoutDerivedValue(t);
@@ -329,13 +346,19 @@ describe("property: never throws in lenient mode", () => {
   it(
     "any hostile input parses with registered warnings or is refused with a documented fatal",
     () => {
-      assertProperty(
-        "never throws in lenient mode",
-        fc.property(hostileInput(), (raw) => {
-          const doc = parseOrFatal(raw);
-          if (doc !== undefined) assertWarningsRegistered(doc);
-        }),
-      );
+      lenientNeverThrowsProperty<string>({
+        ...propertyRun("never throws in lenient mode"),
+        arbitrary: hostileInput(),
+        parse: (raw) => parseCcda(raw),
+        isFatal: (err) => err instanceof CcdaParseError && FATAL.has(err.code),
+        // Every warning also carries a message; the runner checks the code and the position.
+        getWarnings: (doc) => {
+          assertWarningsRegistered(doc as CcdaDocument);
+          return (doc as CcdaDocument).warnings;
+        },
+        isKnownCode: (code) => KNOWN.has(code),
+        hasPositionalContext: (w) => typeof w.position === "object" && w.position !== null,
+      });
     },
     TIMEOUT,
   );
@@ -343,7 +366,7 @@ describe("property: never throws in lenient mode", () => {
   it(
     "messy document text always parses, with registered warnings",
     () => {
-      assertProperty(
+      checkProperty(
         "never throws in lenient mode (document text)",
         fc.property(documentText(), (raw) => {
           assertWarningsRegistered(parseCcda(raw));
@@ -357,7 +380,7 @@ describe("property: never throws in lenient mode", () => {
     "a built-in profile, or a warning handler that throws, makes no difference to what escapes",
     () => {
       const input = fc.oneof(hostileInput(), documentText());
-      assertProperty(
+      checkProperty(
         "never throws in lenient mode (profiles and handlers)",
         fc.property(input, fc.constantFrom(...PROFILES), (raw, profile) => {
           let doc: CcdaDocument | undefined;

@@ -21,13 +21,14 @@ import { lenientNeverThrowsProperty, roundTripProperty } from "@cosyte/test-util
 import { FATAL_CODES, WARNING_CODES, parseCcda, type CcdaDocument } from "../../src/index.js";
 
 import { specCleanCcdaXml } from "./_arbitraries.js";
+import { propertyRun, propertyTimeout } from "./_property.js";
 
 // Every test in this file is a property test, and their cost is not fixed: fast-check
 // draws a fresh seed on every run (none is pinned here, by design) and each draw parses
 // and re-serializes a whole generated C-CDA. See `vitest.config.ts` for why the budget is
-// here rather than global, and the CHANGELOG entry for
-// `PARSER-TESTTIMEOUT-ASSERTS-AN-IDLE-BOX` for what it was sized against.
-vi.setConfig({ testTimeout: 60_000 });
+// here rather than global. The budget scales with the depth `COSYTE_PROPERTY_RUNS` sets
+// (see `./_property.ts`), so the nightly run at 10,000 cases is not cut off.
+vi.setConfig({ testTimeout: propertyTimeout() });
 
 const fatalCodes = new Set<string>(Object.values(FATAL_CODES));
 const knownWarningCodes = new Set<string>(Object.values(WARNING_CODES));
@@ -45,6 +46,7 @@ function hostileInput(): fc.Arbitrary<string> {
 describe("ccda conformance (archetype invariants)", () => {
   it("is lenient, arbitrary input never throws a non-fatal, and every warning has a known code", () => {
     lenientNeverThrowsProperty({
+      ...propertyRun("archetype: never throws in lenient mode"),
       arbitrary: hostileInput(),
       parse: (raw: string) => parseCcda(raw),
       // Only Tier-3 fatals (a code in FATAL_CODES) may escape as a throw.
@@ -62,13 +64,13 @@ describe("ccda conformance (archetype invariants)", () => {
 
   it("round-trips, parse(serialize(x)) is canonically equal to x", () => {
     roundTripProperty<CcdaDocument>({
+      ...propertyRun("archetype: round trip", { numRuns: 80 }),
       arbitrary: specCleanCcdaXml().map((xml) => parseCcda(xml)),
       serialize: (doc) => doc.toString(),
       parse: (raw) => parseCcda(raw),
       // The serialized XML is the canonical form, so structural equality is
       // equality of that form (mirrors @cosyte/hl7's round-trip equals).
       equals: (a, b) => a.toString() === b.toString(),
-      numRuns: 80,
     });
   });
 });

@@ -16,7 +16,7 @@ import { CcdaParseError } from "../src/parser/errors.js";
 import { parseSecureSource, parseSecureXml, resolveLimits } from "../src/parser/secure-xml.js";
 import type { CcdaWarning } from "../src/parser/warnings.js";
 import { readTree } from "../src/parser/xml-tree.js";
-import { assertProperty, propertyTimeout } from "./property/_runner.js";
+import { checkProperty, propertyTimeout } from "./property/_property.js";
 
 /** What a limit check ended in: the fatal and its position, or the warnings it reported. */
 function outcome(run: (report: (w: CcdaWarning) => void) => unknown): unknown {
@@ -87,7 +87,7 @@ const documents = fc
 
 describe("limits and the namespace sweep from the reader's shape", () => {
   it("agree with the walk of the @xmldom/xmldom tree", { timeout: propertyTimeout() }, () => {
-    assertProperty(
+    checkProperty(
       "shape limits agree with the tree walk",
       fc.property(
         documents,

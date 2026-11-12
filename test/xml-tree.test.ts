@@ -19,7 +19,7 @@ import { TreeElement, readTree, type TreeCharacterData } from "../src/parser/xml
 import { text } from "../src/index.js";
 import { outputCorpus } from "./_output-corpus.js";
 import { generatedDocument } from "./_helpers/generated-xml.js";
-import { assertProperty, propertyTimeout } from "./property/_runner.js";
+import { checkProperty, propertyTimeout } from "./property/_property.js";
 
 const XML_NS = "http://www.w3.org/XML/1998/namespace";
 const XMLNS_NS = "http://www.w3.org/2000/xmlns/";
@@ -300,7 +300,7 @@ describe("the compact reader against @xmldom/xmldom", () => {
   it("agrees with @xmldom/xmldom on generated XML", { timeout: propertyTimeout() }, () => {
     let read = 0;
     let total = 0;
-    assertProperty(
+    checkProperty(
       "compact reader agrees with @xmldom/xmldom",
       fc.property(generatedDocument(), (source) => {
         total += 1;
